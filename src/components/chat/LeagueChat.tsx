@@ -68,36 +68,36 @@ function MessageBubble({ msg, isOwn, showAvatar }: {
       const data = JSON.parse(msg.message.replace('TRADE_COMPLETED:', ''))
       return (
         <div className="flex justify-center my-3 px-2">
-          <div className="w-full max-w-sm bg-emerald-900/30 border border-emerald-500/40 rounded-2xl overflow-hidden">
+          <div className="trade-chat-card w-full max-w-sm rounded-2xl overflow-hidden border">
             {/* Header */}
-            <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 border-b border-emerald-500/30">
+            <div className="trade-chat-header flex items-center gap-2 px-4 py-2.5 border-b">
               <span className="text-base">🤝</span>
-              <span className="font-cond font-black text-sm uppercase tracking-wider text-emerald-300">
+              <span className="font-cond font-black text-sm uppercase tracking-wider trade-chat-title">
                 Trade Completed
               </span>
-              <span className="ml-auto text-[10px] text-emerald-500">{formatTime(msg.created_at)}</span>
+              <span className="ml-auto text-[10px] trade-chat-time">{formatTime(msg.created_at)}</span>
             </div>
             {/* Trade body */}
-            <div className="grid grid-cols-2 divide-x divide-emerald-500/20 px-0">
-              <div className="px-3 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-2">
+            <div className="grid grid-cols-2 trade-chat-body">
+              <div className="px-3 py-3 border-r trade-chat-divider">
+                <div className="text-[10px] font-bold uppercase tracking-wider trade-chat-label mb-2">
                   {data.proposerName} receives
                 </div>
                 {(data.proposerGets ?? []).length === 0
-                  ? <div className="text-field-500 text-xs italic">nothing</div>
+                  ? <div className="text-xs italic trade-chat-empty">nothing</div>
                   : (data.proposerGets as string[]).map((name, i) => (
-                    <div key={i} className="text-xs font-bold text-white leading-snug">{name}</div>
+                    <div key={i} className="text-xs font-bold trade-chat-player leading-snug">{name}</div>
                   ))
                 }
               </div>
               <div className="px-3 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider trade-chat-label mb-2">
                   {data.receiverName} receives
                 </div>
                 {(data.receiverGets ?? []).length === 0
-                  ? <div className="text-field-500 text-xs italic">nothing</div>
+                  ? <div className="text-xs italic trade-chat-empty">nothing</div>
                   : (data.receiverGets as string[]).map((name, i) => (
-                    <div key={i} className="text-xs font-bold text-white leading-snug">{name}</div>
+                    <div key={i} className="text-xs font-bold trade-chat-player leading-snug">{name}</div>
                   ))
                 }
               </div>

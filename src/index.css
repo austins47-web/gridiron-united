@@ -180,6 +180,22 @@
   }
   .ai-dot:nth-child(2) { animation-delay: 0.15s; }
   .ai-dot:nth-child(3) { animation-delay: 0.3s; }
+
+  /* ── Trade chat card (dark mode default) ── */
+  .trade-chat-card {
+    background-color: rgba(6, 78, 59, 0.25);
+    border-color: rgba(16, 185, 129, 0.35);
+  }
+  .trade-chat-header {
+    background-color: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.25);
+  }
+  .trade-chat-title  { color: #6ee7b7; }
+  .trade-chat-time   { color: #34d399; }
+  .trade-chat-label  { color: #6ee7b7; }
+  .trade-chat-player { color: #f3f4f6; }
+  .trade-chat-empty  { color: #6b7280; }
+  .trade-chat-divider { border-color: rgba(16, 185, 129, 0.2); }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -342,3 +358,19 @@
   background-color: #ffffff;
   color: #111827;
 }
+
+/* ── Trade chat card light mode overrides ── */
+[data-theme="light"] .trade-chat-card {
+  background-color: #f0fdf4 !important;
+  border-color: #86efac !important;
+}
+[data-theme="light"] .trade-chat-header {
+  background-color: #dcfce7 !important;
+  border-color: #86efac !important;
+}
+[data-theme="light"] .trade-chat-title  { color: #15803d !important; }
+[data-theme="light"] .trade-chat-time   { color: #16a34a !important; }
+[data-theme="light"] .trade-chat-label  { color: #166534 !important; }
+[data-theme="light"] .trade-chat-player { color: #111827 !important; }
+[data-theme="light"] .trade-chat-empty  { color: #6b7280 !important; }
+[data-theme="light"] .trade-chat-divider { border-color: #86efac !important; }

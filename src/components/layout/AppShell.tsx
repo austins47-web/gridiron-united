@@ -33,7 +33,7 @@ export function AppShell() {
     ] : [
       { to: '/app/pickem',  label: "Pick'Em",   emoji: '🏈' },
     ]),
-    { to: '/app/trades', label: 'Trades', emoji: '🔄' },
+    ...(!isPickEm ? [{ to: '/app/trades', label: 'Trades', emoji: '🔄' }] : []),
     { to: '/app/chat', label: 'Chat', emoji: '💬' },
     ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commissioner', emoji: '⚙️' }] : []),
   ] : []
