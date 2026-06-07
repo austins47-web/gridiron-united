@@ -810,14 +810,19 @@ function PicksChart({
     (a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime()
   )
 
+  // Others' picks revealed after kickoff (or commissioner deadline)
   const isGameRevealed = (game: any): boolean => {
-    // Picks are visible after kickoff (or after deadline if set)
     const kickoff = new Date(game.game_date)
     if (deadline) {
       const dl = new Date(deadline)
       return now >= dl || now >= kickoff
     }
     return now >= kickoff
+  }
+
+  // Current user's own pick is always visible regardless of kickoff
+  const isPickVisibleForUser = (_game: any, memberId: string): boolean => {
+    return memberId === userId || isGameRevealed(_game)
   }
 
   // Count correct picks per user across all final games
@@ -847,7 +852,7 @@ function PicksChart({
       {!hasAnyRevealed && (
         <div className="flex items-center gap-2 text-xs text-field-400 bg-field-800/50 border border-field-700 rounded-lg px-3 py-1.5">
           <EyeOff className="w-3 h-3 shrink-0" />
-          <span>Other players' picks hidden until each game kicks off</span>
+          <span>Your picks are always visible — others' picks reveal at kickoff</span>
         </div>
       )}
 
@@ -903,10 +908,10 @@ function PicksChart({
           : 'TBD'
 
         const awayCount = sortedMembers.filter(
-          m => revealed && pickMap[game.id]?.[m.user_id] === game.away_team
+          m => isPickVisibleForUser(game, m.user_id) && pickMap[game.id]?.[m.user_id] === game.away_team
         ).length
         const homeCount = sortedMembers.filter(
-          m => revealed && pickMap[game.id]?.[m.user_id] === game.home_team
+          m => isPickVisibleForUser(game, m.user_id) && pickMap[game.id]?.[m.user_id] === game.home_team
         ).length
         const total = awayCount + homeCount
         const awayPct = total > 0 ? Math.round((awayCount / total) * 100) : 50
@@ -957,7 +962,7 @@ function PicksChart({
             </div>
 
             {/* Pick bar */}
-            {revealed && total > 0 && (
+            {total > 0 && (
               <div className="space-y-0.5">
                 <div className="flex rounded overflow-hidden h-3.5 text-[9px] font-black">
                   {awayPct > 0 && (
@@ -1017,7 +1022,7 @@ function PicksChart({
                       {short}
                     </span>
                     <span className="text-field-700 mx-0.5">·</span>
-                    {!revealed ? (
+                    {!isPickVisibleForUser(game, m.user_id) ? (
                       <span className="text-field-600 text-[9px]">🔒</span>
                     ) : !picked ? (
                       <span className="text-field-600 italic">—</span>
@@ -1037,7 +1042,7 @@ function PicksChart({
             </div>
 
             {/* Tiebreaker guesses */}
-            {game.is_tiebreaker && revealed && (
+            {game.is_tiebreaker && (revealed || allPicks.some((p: any) => p.game_id === game.id && p.user_id === userId)) && (
               <div className="flex flex-wrap items-center gap-1.5 border-t border-field-700/60 pt-1.5">
                 <span className="text-[9px] font-bold text-gold uppercase tracking-wider flex items-center gap-1">
                   <Target className="w-2.5 h-2.5" /> TB:
@@ -1047,6 +1052,7 @@ function PicksChart({
                   const isMe = m.user_id === userId
                   const actual = isFinal ? (game.home_score ?? 0) + (game.away_score ?? 0) : null
                   const guess = pick?.tiebreaker_score
+                  const canSee = isPickVisibleForUser(game, m.user_id)
                   const name = isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?').slice(0, 5)
                   return (
                     <span key={m.user_id} className={clsx(
@@ -1054,8 +1060,8 @@ function PicksChart({
                       isMe ? 'bg-gold/10 text-gold' : 'bg-field-800 text-field-400'
                     )}>
                       <span className="font-bold">{name}</span>
-                      {' '}<span className="font-black">{guess ?? '—'}</span>
-                      {isFinal && guess != null && actual != null && (
+                      {' '}<span className="font-black">{canSee ? (guess ?? '—') : '🔒'}</span>
+                      {isFinal && canSee && guess != null && actual != null && (
                         <span className="text-field-600"> ±{Math.abs(guess - actual)}</span>
                       )}
                     </span>
