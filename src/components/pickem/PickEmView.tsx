@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import {
-  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar
+  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -158,6 +158,37 @@ export function PickEmView() {
         .eq('user_id', user!.id)
         .eq('week', week)
         .eq('season', 2026)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+
+  // All league members' picks for this week (revealed only after each game kicks off)
+  const { data: allPicks = [] } = useQuery({
+    queryKey: ['all-pickem-picks', activeLeagueId, week],
+    enabled: !!activeLeagueId && tab === 'results',
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pickem_picks')
+        .select('*, profile:profiles(username, display_name)')
+        .eq('league_id', activeLeagueId!)
+        .eq('week', week)
+        .eq('season', 2026)
+      if (error) throw error
+      return data ?? []
+    },
+    refetchInterval: 30_000, // refresh every 30s during live games
+  })
+
+  // League members for display
+  const { data: leagueMembers = [] } = useQuery({
+    queryKey: ['league-members-list', activeLeagueId],
+    enabled: !!activeLeagueId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('league_members')
+        .select('user_id, profile:profiles(username, display_name)')
+        .eq('league_id', activeLeagueId!)
       if (error) throw error
       return data ?? []
     },
@@ -596,63 +627,15 @@ export function PickEmView() {
 
       {/* ── RESULTS TAB ── */}
       {tab === 'results' && (
-        <div className="space-y-3">
-          {games.filter((g: any) => g.status === 'final').length === 0 ? (
-            <div className="panel text-center py-8">
-              <p className="text-field-400">No final results yet for Week {week}</p>
-            </div>
-          ) : (
-            games.filter((g: any) => g.status === 'final').map((game: any) => {
-              const myPick = myPicks.find((p: any) => p.game_id === game.id)
-              const winner = game.home_score > game.away_score ? game.home_team
-                : game.away_score > game.home_score ? game.away_team : 'TIE'
-              const correct = myPick?.picked_team === winner
-              return (
-                <div key={game.id} className={clsx(
-                  'panel flex items-center justify-between gap-4',
-                  correct ? 'border-emerald-500/30 bg-emerald-500/5'
-                  : myPick ? 'border-red-500/20 bg-red-500/5' : '',
-                )}>
-                  <div className="flex items-center gap-3">
-                    <div className="text-center">
-                      <div className="font-cond font-bold text-white text-sm">{game.away_team}</div>
-                      <div className="text-2xl font-black text-white">{game.away_score ?? '—'}</div>
-                    </div>
-                    <div className="text-field-400 font-bold text-sm">@</div>
-                    <div className="text-center">
-                      <div className="font-cond font-bold text-white text-sm">{game.home_team}</div>
-                      <div className="text-2xl font-black text-white">{game.home_score ?? '—'}</div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    {myPick ? (
-                      <div className="flex items-center gap-2 justify-end">
-                        <span className="text-sm text-field-300">
-                          Picked: <span className="font-bold text-white">{myPick.picked_team}</span>
-                        </span>
-                        {correct
-                          ? <Check className="w-5 h-5 text-emerald-400" />
-                          : <X className="w-5 h-5 text-red-400" />
-                        }
-                      </div>
-                    ) : (
-                      <span className="text-xs text-field-500 italic">No pick</span>
-                    )}
-                    {game.is_tiebreaker && myPick?.tiebreaker_score != null && (
-                      <div className="text-xs text-field-400 mt-1">
-                        TB guess: <span className="text-gold font-bold">{myPick.tiebreaker_score}</span>
-                        {' '}· actual:{' '}
-                        <span className="text-white font-bold">
-                          {(game.home_score ?? 0) + (game.away_score ?? 0)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
+        <PicksChart
+          games={games}
+          allPicks={allPicks}
+          myPicks={myPicks}
+          leagueMembers={leagueMembers}
+          userId={user?.id}
+          deadline={weekDeadline}
+          week={week}
+        />
       )}
     </div>
   )
@@ -777,6 +760,329 @@ function GamePickCard({
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── PICKS CHART ─────────────────────────────────────────────
+// Shows every game for the week with a per-user pick grid.
+// Other users' picks are hidden (🔒) until that game's kickoff.
+
+function PicksChart({
+  games, allPicks, myPicks, leagueMembers, userId, deadline, week
+}: {
+  games: any[]
+  allPicks: any[]
+  myPicks: any[]
+  leagueMembers: any[]
+  userId: string | undefined
+  deadline: string | null
+  week: number
+}) {
+  const now = new Date()
+
+  if (games.length === 0) {
+    return (
+      <div className="panel text-center py-8">
+        <p className="text-field-400">No games scheduled for Week {week}</p>
+      </div>
+    )
+  }
+
+  // Sort members: current user first, then alphabetical
+  const sortedMembers = [...leagueMembers].sort((a, b) => {
+    if (a.user_id === userId) return -1
+    if (b.user_id === userId) return 1
+    const nameA = a.profile?.display_name || a.profile?.username || ''
+    const nameB = b.profile?.display_name || b.profile?.username || ''
+    return nameA.localeCompare(nameB)
+  })
+
+  // Build pick lookup: { gameId: { userId: pickedTeam } }
+  const pickMap: Record<string, Record<string, string>> = {}
+  allPicks.forEach((p: any) => {
+    if (!pickMap[p.game_id]) pickMap[p.game_id] = {}
+    pickMap[p.game_id][p.user_id] = p.picked_team
+  })
+
+  // Sort games by date
+  const sortedGames = [...games].sort(
+    (a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime()
+  )
+
+  const isGameRevealed = (game: any): boolean => {
+    // Picks are visible after kickoff (or after deadline if set)
+    const kickoff = new Date(game.game_date)
+    if (deadline) {
+      const dl = new Date(deadline)
+      return now >= dl || now >= kickoff
+    }
+    return now >= kickoff
+  }
+
+  // Count correct picks per user across all final games
+  const userScores: Record<string, { correct: number; total: number }> = {}
+  sortedMembers.forEach(m => {
+    userScores[m.user_id] = { correct: 0, total: 0 }
+  })
+  sortedGames.forEach(game => {
+    if (game.status !== 'final') return
+    const winner = game.home_score > game.away_score ? game.home_team
+      : game.away_score > game.home_score ? game.away_team : 'TIE'
+    sortedMembers.forEach(m => {
+      const picked = pickMap[game.id]?.[m.user_id]
+      if (picked) {
+        userScores[m.user_id].total++
+        if (picked === winner) userScores[m.user_id].correct++
+      }
+    })
+  })
+
+  const hasAnyFinal = sortedGames.some(g => g.status === 'final')
+  const hasAnyRevealed = sortedGames.some(g => isGameRevealed(g))
+
+  return (
+    <div className="space-y-4">
+      {/* Info banner */}
+      {!hasAnyRevealed && (
+        <div className="flex items-center gap-2 text-xs text-field-400 bg-field-800/50 border border-field-700 rounded-lg px-3 py-2">
+          <EyeOff className="w-3.5 h-3.5 shrink-0" />
+          <span>Other players' picks are hidden until each game kicks off</span>
+        </div>
+      )}
+
+      {/* Weekly scoreboard if any games are final */}
+      {hasAnyFinal && sortedMembers.length > 1 && (
+        <div className="panel !p-0 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-field-700 flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-gold" />
+            <span className="font-cond font-bold text-sm text-white uppercase tracking-wider">Week {week} Standings</span>
+          </div>
+          <div className="flex divide-x divide-field-700 overflow-x-auto">
+            {sortedMembers.map((m, i) => {
+              const score = userScores[m.user_id]
+              const isMe = m.user_id === userId
+              const pct = score.total > 0 ? Math.round((score.correct / score.total) * 100) : null
+              return (
+                <div
+                  key={m.user_id}
+                  className={clsx(
+                    'flex flex-col items-center px-4 py-3 min-w-[90px]',
+                    isMe && 'bg-gold/[0.04]'
+                  )}
+                >
+                  <span className={clsx(
+                    'font-cond font-bold text-xs uppercase tracking-wider truncate max-w-[80px]',
+                    isMe ? 'text-gold' : 'text-field-300'
+                  )}>
+                    {isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?')}
+                  </span>
+                  <span className="text-2xl font-black text-white mt-1">
+                    {score.correct}<span className="text-field-500 text-sm font-bold">/{score.total}</span>
+                  </span>
+                  {pct !== null && (
+                    <span className="text-[11px] text-field-400">{pct}%</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Per-game pick grid */}
+      {sortedGames.map((game: any) => {
+        const revealed = isGameRevealed(game)
+        const isFinal = game.status === 'final'
+        const winner = isFinal
+          ? (game.home_score > game.away_score ? game.home_team
+            : game.away_score > game.home_score ? game.away_team : 'TIE')
+          : null
+
+        const kickoffTime = game.game_date
+          ? new Date(game.game_date).toLocaleString('en-US', {
+              weekday: 'short', month: 'short', day: 'numeric',
+              hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+            })
+          : 'TBD'
+
+        // Tally: how many picked each team
+        const awayCount = sortedMembers.filter(
+          m => revealed && pickMap[game.id]?.[m.user_id] === game.away_team
+        ).length
+        const homeCount = sortedMembers.filter(
+          m => revealed && pickMap[game.id]?.[m.user_id] === game.home_team
+        ).length
+        const total = awayCount + homeCount
+        const awayPct = total > 0 ? Math.round((awayCount / total) * 100) : 50
+        const homePct = total > 0 ? 100 - awayPct : 50
+
+        return (
+          <div key={game.id} className={clsx(
+            'panel space-y-3',
+            game.is_tiebreaker && 'border-gold/20',
+          )}>
+            {/* Game header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="text-center min-w-[44px]">
+                  <div className="font-cond font-black text-white text-base">{game.away_team}</div>
+                  {isFinal && (
+                    <div className={clsx(
+                      'text-xl font-black',
+                      winner === game.away_team ? 'text-emerald-400' : 'text-field-500'
+                    )}>{game.away_score}</div>
+                  )}
+                </div>
+                <span className="text-field-500 text-xs font-bold">@</span>
+                <div className="text-center min-w-[44px]">
+                  <div className="font-cond font-black text-white text-base">{game.home_team}</div>
+                  {isFinal && (
+                    <div className={clsx(
+                      'text-xl font-black',
+                      winner === game.home_team ? 'text-emerald-400' : 'text-field-500'
+                    )}>{game.home_score}</div>
+                  )}
+                </div>
+              </div>
+              <div className="text-right">
+                {isFinal
+                  ? <span className="text-xs font-bold text-emerald-400">Final</span>
+                  : revealed
+                  ? <span className="text-xs text-yellow-400 flex items-center gap-1"><Eye className="w-3 h-3" /> Picks revealed</span>
+                  : <span className="text-xs text-field-500">{kickoffTime}</span>
+                }
+              </div>
+            </div>
+
+            {/* Pick breakdown bar */}
+            {revealed && total > 0 && (
+              <div className="space-y-1">
+                <div className="flex rounded-lg overflow-hidden h-5 text-[10px] font-black">
+                  {awayPct > 0 && (
+                    <div
+                      className={clsx(
+                        'flex items-center justify-center transition-all',
+                        winner === game.away_team ? 'bg-emerald-500' : isFinal ? 'bg-red-500/60' : 'bg-field-500'
+                      )}
+                      style={{ width: `${awayPct}%` }}
+                    >
+                      {awayPct >= 20 && `${game.away_team} ${awayPct}%`}
+                    </div>
+                  )}
+                  {homePct > 0 && (
+                    <div
+                      className={clsx(
+                        'flex items-center justify-center transition-all',
+                        winner === game.home_team ? 'bg-emerald-500' : isFinal ? 'bg-red-500/60' : 'bg-gold/70'
+                      )}
+                      style={{ width: `${homePct}%` }}
+                    >
+                      {homePct >= 20 && `${game.home_team} ${homePct}%`}
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-between text-[10px] text-field-400">
+                  <span>{awayCount} {awayCount === 1 ? 'pick' : 'picks'}</span>
+                  <span>{homeCount} {homeCount === 1 ? 'pick' : 'picks'}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Per-user picks grid */}
+            <div className="flex flex-wrap gap-1.5">
+              {sortedMembers.map((m) => {
+                const isMe = m.user_id === userId
+                const picked = pickMap[game.id]?.[m.user_id]
+                const displayName = isMe
+                  ? 'You'
+                  : (m.profile?.display_name || m.profile?.username || '?')
+                const isCorrect = isFinal && picked === winner
+                const isWrong = isFinal && picked && picked !== winner
+                const noPick = !picked
+
+                return (
+                  <div
+                    key={m.user_id}
+                    className={clsx(
+                      'flex flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 min-w-[56px] border text-center',
+                      isMe ? 'border-gold/40 bg-gold/[0.06]' : 'border-field-700 bg-field-800/50',
+                    )}
+                    title={displayName}
+                  >
+                    <span className={clsx(
+                      'text-[10px] font-bold truncate max-w-[52px]',
+                      isMe ? 'text-gold' : 'text-field-400'
+                    )}>
+                      {displayName.length > 6 ? displayName.slice(0, 6) + '…' : displayName}
+                    </span>
+                    {!revealed ? (
+                      <span className="text-field-600 text-xs">🔒</span>
+                    ) : noPick ? (
+                      <span className="text-field-600 text-[10px] italic">—</span>
+                    ) : (
+                      <div className="flex items-center gap-0.5">
+                        <span className={clsx(
+                          'font-cond font-black text-xs',
+                          isCorrect ? 'text-emerald-400'
+                          : isWrong ? 'text-red-400'
+                          : 'text-white'
+                        )}>
+                          {picked}
+                        </span>
+                        {isCorrect && <Check className="w-3 h-3 text-emerald-400 shrink-0" />}
+                        {isWrong && <X className="w-3 h-3 text-red-400 shrink-0" />}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Tiebreaker info */}
+            {game.is_tiebreaker && revealed && (
+              <div className="border-t border-field-700 pt-2 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs text-gold font-bold">
+                  <Target className="w-3.5 h-3.5" />
+                  Tiebreaker guesses
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {sortedMembers.map(m => {
+                    const pick = allPicks.find(
+                      (p: any) => p.game_id === game.id && p.user_id === m.user_id
+                    )
+                    const isMe = m.user_id === userId
+                    const actual = isFinal ? (game.home_score ?? 0) + (game.away_score ?? 0) : null
+                    const guess = pick?.tiebreaker_score
+                    return (
+                      <div key={m.user_id} className={clsx(
+                        'flex items-center gap-1 rounded px-2 py-1 text-[11px]',
+                        isMe ? 'bg-gold/10 text-gold' : 'bg-field-800 text-field-300'
+                      )}>
+                        <span className="font-bold">
+                          {isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?').slice(0, 8)}:
+                        </span>
+                        <span className="font-black">{guess ?? '—'}</span>
+                        {isFinal && guess != null && actual != null && (
+                          <span className="text-field-500 ml-0.5">
+                            (off by {Math.abs(guess - actual)})
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {isFinal && (
+                    <div className="flex items-center gap-1 rounded px-2 py-1 text-[11px] bg-emerald-500/10 text-emerald-400">
+                      <span className="font-bold">Actual:</span>
+                      <span className="font-black">{(game.home_score ?? 0) + (game.away_score ?? 0)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
