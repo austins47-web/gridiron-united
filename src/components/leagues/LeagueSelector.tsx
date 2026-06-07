@@ -95,7 +95,7 @@ export function LeagueSelector() {
 
           <div className="absolute left-0 top-full mt-1 w-72 bg-field-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
             <div className="px-3 py-2 border-b border-white/10">
-              <span className="font-cond font-bold text-[10px] uppercase tracking-wider text-gray-500">
+              <span className="font-cond font-bold text-xs uppercase tracking-wider text-gray-500">
                 Your Leagues ({leagues.length})
               </span>
             </div>
@@ -134,7 +134,7 @@ export function LeagueSelector() {
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className={clsx(
-                            'font-cond font-bold text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded',
+                            'font-cond font-bold text-xs uppercase tracking-wider px-1.5 py-0.5 rounded',
                             league.scoring_type === 'ppr'
                               ? 'bg-nfl/15 text-nfl'
                               : league.scoring_type === 'half_ppr'
@@ -143,9 +143,9 @@ export function LeagueSelector() {
                           )}>
                             {league.scoring_type?.toUpperCase().replace('_', '-')}
                           </span>
-                          <span className="text-[10px] text-gray-600">{league.num_teams} teams</span>
-                          <span className="text-[10px] text-gray-600 capitalize">{league.draft_status}</span>
-                          <span className="text-[10px] text-gray-500">
+                          <span className="text-xs text-gray-600">{league.num_teams} teams</span>
+                          <span className="text-xs text-gray-600 capitalize">{league.draft_status}</span>
+                          <span className="text-xs text-gray-500">
                             {membership.wins}-{membership.losses}
                           </span>
                         </div>

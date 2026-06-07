@@ -164,7 +164,7 @@ function CfpManager() {
                 <span className="text-[10px] font-black text-cfb">{team.seed ?? '?'}</span>
               </div>
               <span className="font-cond font-bold text-white flex-1">{team.team_name}</span>
-              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-400/10 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-emerald-400 font-bold bg-emerald-400/10 px-2 py-0.5 rounded-full">
                 Scoring Active
               </span>
               {/* Eliminate by round */}
@@ -197,12 +197,12 @@ function CfpManager() {
           {eliminatedTeams.map(team => (
             <div key={team.id} className="flex items-center gap-3 bg-field-800/40 border border-field-700/50 rounded-xl px-3 py-2 opacity-60">
               <span className="font-cond font-bold text-field-400 flex-1">{team.team_name}</span>
-              <span className="text-[10px] text-field-500 capitalize">
+              <span className="text-xs text-field-500 capitalize">
                 Out: {team.eliminated_round ?? 'unknown'}
               </span>
               <button
                 onClick={() => toggleEliminated.mutate({ id: team.id, is_eliminated: false })}
-                className="text-[10px] text-gold hover:text-gold-light font-bold transition-colors"
+                className="text-xs text-gold hover:text-gold-light font-bold transition-colors"
               >
                 Restore
               </button>

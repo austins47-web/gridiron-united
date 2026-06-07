@@ -70,7 +70,7 @@
 
   /* ── Position badges ── */
   .pos-badge {
-    @apply font-cond font-bold text-[11px] uppercase tracking-wider px-1.5 py-0.5 rounded;
+    @apply font-cond font-bold text-xs uppercase tracking-wider px-1.5 py-0.5 rounded;
   }
   .pos-QB   { @apply bg-amber-500/20 text-amber-400; }
   .pos-RB   { @apply bg-emerald-500/20 text-emerald-400; }
@@ -96,7 +96,7 @@
   /* ── Table ── */
   .data-table { @apply w-full text-sm border-collapse; }
   .data-table th {
-    @apply font-cond font-bold text-[11px] uppercase tracking-wider text-field-300
+    @apply font-cond font-bold text-xs uppercase tracking-wider text-field-300
            px-3 py-2.5 border-b border-field-700 text-left cursor-pointer
            hover:text-gold transition-colors select-none whitespace-nowrap bg-field-900/50;
   }
@@ -153,7 +153,7 @@
     @apply font-cond font-black text-5xl text-gold leading-none;
   }
   .score-label {
-    @apply font-cond font-bold text-[10px] uppercase tracking-widest text-field-300 mb-1;
+    @apply font-cond font-bold text-xs uppercase tracking-widest text-field-300 mb-1;
   }
 
   /* ── Nav tab ── */

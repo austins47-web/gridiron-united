@@ -200,7 +200,7 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
           {game.redZone && isLive && <span className="text-[9px] font-black text-red-400">RZ</span>}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {game.broadcast && <span className="text-[10px] text-field-300 font-bold">{game.broadcast}</span>}
+          {game.broadcast && <span className="text-xs text-field-300 font-bold">{game.broadcast}</span>}
           <button onClick={() => onToggleFav(awayIsFav ? game.away.abbr : game.home.abbr)}
             className="text-field-500 hover:text-gold transition-colors">
             <Star className={clsx('w-3.5 h-3.5', (homeIsFav || awayIsFav) && 'fill-gold text-gold')} />
@@ -231,12 +231,12 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
               isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
             )}>
               {team.abbr}
-              <span className="text-field-300 font-normal text-[10px] ml-1 hidden sm:inline">
+              <span className="text-field-300 font-normal text-xs ml-1 hidden sm:inline">
                 {team.name !== team.abbr ? team.name : ''}
               </span>
             </span>
             {game.status === 'pre' && team.record && (
-              <span className="text-[10px] text-field-300 shrink-0">{team.record}</span>
+              <span className="text-xs text-field-300 shrink-0">{team.record}</span>
             )}
             {game.status !== 'pre' && (
               <span className={clsx(
@@ -250,13 +250,13 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
 
       {/* Down & distance / venue */}
       {isLive && game.downDistance && (
-        <div className="text-[10px] text-field-300 border-t border-field-700/60 pt-1.5 truncate">
+        <div className="text-xs text-field-300 border-t border-field-700/60 pt-1.5 truncate">
           {game.downDistance}
           {game.venue && <span className="text-field-300 ml-2">· {game.venue.split(',')[0]}</span>}
         </div>
       )}
       {game.status === 'pre' && game.venue && (
-        <div className="text-[10px] text-field-300 border-t border-field-700/60 pt-1.5 truncate">
+        <div className="text-xs text-field-300 border-t border-field-700/60 pt-1.5 truncate">
           {game.venue.split(',')[0]}
         </div>
       )}
@@ -270,7 +270,7 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
             <div>
               <div className="flex items-center gap-1 mb-1">
                 <TrendingUp className="w-3 h-3 text-field-400" />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-field-400">Spread</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-field-400">Spread</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
@@ -299,7 +299,7 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
           {/* Win probability */}
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-field-400 block mb-1">Win %</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-field-400 block mb-1">Win %</span>
               <div className="flex rounded-lg overflow-hidden h-5 text-[10px] font-black">
                 <div
                   className="flex items-center justify-center bg-field-600 transition-all"
@@ -319,8 +319,8 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
                 </div>
               </div>
               <div className="flex justify-between mt-1">
-                <span className="text-[10px] font-bold text-field-300">{game.away.abbr} {odds.awayWinPct}%</span>
-                <span className="text-[10px] font-bold text-field-300">{odds.homeWinPct}% {game.home.abbr}</span>
+                <span className="text-xs font-bold text-field-300">{game.away.abbr} {odds.awayWinPct}%</span>
+                <span className="text-xs font-bold text-field-300">{odds.homeWinPct}% {game.home.abbr}</span>
               </div>
             </div>
           )}
@@ -366,7 +366,7 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
         )}>{team.abbr}</span>
         <span className="text-field-300 text-xs truncate hidden md:block">{team.name}</span>
         {game.status === 'pre' && team.record && (
-          <span className="text-field-300 text-[10px] shrink-0 hidden sm:block">({team.record})</span>
+          <span className="text-field-300 text-xs shrink-0 hidden sm:block">({team.record})</span>
         )}
       </div>
     )
@@ -476,13 +476,13 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
       {/* Down/distance + broadcast */}
       <div className="shrink-0 hidden sm:flex flex-col items-end gap-0.5 w-[120px]">
         {isLive && game.downDistance && (
-          <span className="text-[10px] text-field-300 truncate">{game.downDistance}</span>
+          <span className="text-xs text-field-300 truncate">{game.downDistance}</span>
         )}
         {game.venue && (
-          <span className="text-[10px] text-field-300 truncate">{game.venue.split(',')[0]}</span>
+          <span className="text-xs text-field-300 truncate">{game.venue.split(',')[0]}</span>
         )}
         {game.broadcast && (
-          <span className="text-[10px] text-field-300 font-bold">{game.broadcast}</span>
+          <span className="text-xs text-field-300 font-bold">{game.broadcast}</span>
         )}
       </div>
 
@@ -684,7 +684,7 @@ export function LiveScoresView() {
         </div>
         <div className="flex items-center gap-2">
           {lastUpdated && (
-            <span className="text-[10px] text-field-300">
+            <span className="text-xs text-field-300">
               {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
@@ -752,7 +752,7 @@ export function LiveScoresView() {
         {viewMode === 'grid' && <ColsPicker value={cols} onChange={setCols} />}
 
         {favCount > 0 && (
-          <span className="text-[11px] text-gold flex items-center gap-1 ml-1">
+          <span className="text-xs text-gold flex items-center gap-1 ml-1">
             <Star className="w-3 h-3 fill-gold" />
             {favCount} favorited
           </span>
@@ -828,7 +828,7 @@ export function LiveScoresView() {
               {favGames.length > 0 && (
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-cond font-bold text-xs uppercase tracking-wider text-field-300">All Games</span>
-                  <span className="text-[10px] text-field-400">tap ⭐ to favorite a team</span>
+                  <span className="text-xs text-field-400">tap ⭐ to favorite a team</span>
                 </div>
               )}
               <GameGroup games={otherGames} {...sharedProps} />

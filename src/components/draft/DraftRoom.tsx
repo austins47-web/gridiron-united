@@ -548,7 +548,7 @@ export function DraftRoom() {
                     <div className="space-y-1">
                       {queuedPlayers.map((p, idx) => (
                         <div key={p.id} className="flex items-center gap-1.5 bg-field-800 rounded-lg p-2">
-                          <span className="text-field-500 text-[10px] font-bold w-4 shrink-0">{idx + 1}</span>
+                          <span className="text-field-500 text-xs font-bold w-4 shrink-0">{idx + 1}</span>
                           <span className={`pos-badge pos-${p.pos} text-[10px]`}>{p.pos}</span>
                           <span className="text-white text-xs font-bold truncate flex-1">{p.name}</span>
                           <div className="flex items-center gap-0.5 shrink-0">
@@ -558,7 +558,7 @@ export function DraftRoom() {
                           </div>
                         </div>
                       ))}
-                      <p className="text-field-600 text-[10px] text-center mt-1">First queued player auto-picks when timer expires.</p>
+                      <p className="text-field-600 text-xs text-center mt-1">First queued player auto-picks when timer expires.</p>
                     </div>
                   )}
                 </div>
@@ -572,11 +572,11 @@ export function DraftRoom() {
                     : <div className="space-y-1 max-h-[360px] overflow-y-auto">
                         {myPicks.map(pick => (
                           <div key={pick.id} className="flex items-center gap-2 bg-field-800 rounded p-1.5">
-                            <span className="text-field-500 text-[10px] w-5 shrink-0">R{pick.round_number}</span>
+                            <span className="text-field-500 text-xs w-5 shrink-0">R{pick.round_number}</span>
                             <span className={`pos-badge pos-${pick.player?.pos} text-[10px]`}>{pick.player?.pos}</span>
                             <div className="min-w-0 flex-1">
                               <div className="text-white text-xs font-bold truncate">{pick.player?.name}</div>
-                              <div className="text-field-500 text-[10px]">{pick.player?.team}</div>
+                              <div className="text-field-500 text-xs">{pick.player?.team}</div>
                             </div>
                           </div>
                         ))}
@@ -596,7 +596,7 @@ export function DraftRoom() {
                           <span className="text-field-500 shrink-0 w-6">#{pick.pick_number}</span>
                           <span className={`pos-badge pos-${pick.player?.pos} text-[10px]`}>{pick.player?.pos}</span>
                           <span className="text-white font-bold truncate">{pick.player?.name}</span>
-                          <span className="text-field-400 shrink-0 truncate max-w-[55px] text-[10px]">
+                          <span className="text-field-400 shrink-0 truncate max-w-[55px] text-xs">
                             {(picker as any)?.profile?.display_name || (picker as any)?.profile?.username}
                           </span>
                         </div>
@@ -691,10 +691,10 @@ function DraftBoard({ picks, members, totalTeams, numRounds, currentPick }: {
         <table className="border-collapse" style={{ width: '100%', minWidth: `${totalTeams * 112 + 48}px` }}>
           <thead>
             <tr className="bg-field-900 border-b border-field-700">
-              <th className="text-field-500 text-[10px] font-bold uppercase tracking-wider p-2 w-10 text-center">Rd</th>
+              <th className="text-field-500 text-xs font-bold uppercase tracking-wider p-2 w-10 text-center">Rd</th>
               {members.map((m: any, i: number) => (
                 <th key={m.id} className="text-center px-1 py-2" style={{ width: 112 }}>
-                  <div className="text-[10px] font-bold text-field-300 truncate" style={{ maxWidth: 100, margin: '0 auto' }}>
+                  <div className="text-xs font-bold text-field-300 truncate" style={{ maxWidth: 100, margin: '0 auto' }}>
                     {m.profile?.display_name || m.profile?.username || `Team ${i + 1}`}
                   </div>
                 </th>
@@ -707,7 +707,7 @@ function DraftBoard({ picks, members, totalTeams, numRounds, currentPick }: {
               const displayMembers = isEvenRound ? [...members].reverse() : members
               return (
                 <tr key={r} className="border-b border-field-800">
-                  <td className="text-field-500 text-[10px] font-bold text-center p-2 bg-field-900">
+                  <td className="text-field-500 text-xs font-bold text-center p-2 bg-field-900">
                     {r}{isEvenRound && <div className="text-[8px] text-field-600">↩</div>}
                   </td>
                   {displayMembers.map((m: any, colIdx: number) => {
@@ -915,7 +915,7 @@ function CompletedDraft({ picks, members, totalTeams, numRounds }: {
                         {pick ? (
                           <div>
                             <span className={clsx('pos-badge text-[10px]', `pos-${pick.player?.pos}`)}>{pick.player?.pos}</span>
-                            <div className="text-white font-bold truncate max-w-[80px] mx-auto text-[11px] mt-0.5">{pick.player?.name}</div>
+                            <div className="text-white font-bold truncate max-w-[80px] mx-auto text-xs mt-0.5">{pick.player?.name}</div>
                           </div>
                         ) : <span className="text-field-700">—</span>}
                       </td>

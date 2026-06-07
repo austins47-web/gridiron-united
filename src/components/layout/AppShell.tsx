@@ -85,7 +85,7 @@ export function AppShell() {
           {activeLeague && (
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-field-400">
               <div className="live-dot" />
-              <span className="font-cond font-bold uppercase tracking-wider text-[10px]">Live</span>
+              <span className="font-cond font-bold uppercase tracking-wider text-xs">Live</span>
             </div>
           )}
 
@@ -172,7 +172,7 @@ export function AppShell() {
         <nav className="app-shell-sub-nav sticky top-[calc(3.5rem+41px)] z-20 bg-field-800 border-b border-field-700 flex overflow-x-auto shrink-0">
           {/* League name pill */}
           <div className="flex items-center px-3 border-r border-field-700 shrink-0">
-            <span className="font-cond font-bold text-[11px] uppercase tracking-wider text-gold/70 truncate max-w-[120px]">
+            <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold/70 truncate max-w-[120px]">
               {activeLeague?.name ?? 'League'}
             </span>
           </div>

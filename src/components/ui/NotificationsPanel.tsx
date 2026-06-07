@@ -90,7 +90,7 @@ export function NotificationsPanel({ onClose }: Props) {
                 {n.body && (
                   <div className="text-xs text-gray-500 mt-0.5 leading-snug">{n.body}</div>
                 )}
-                <div className="text-[10px] text-gray-600 mt-1">
+                <div className="text-xs text-gray-600 mt-1">
                   {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
                 </div>
               </div>

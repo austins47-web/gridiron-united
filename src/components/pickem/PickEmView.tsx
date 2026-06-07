@@ -371,7 +371,7 @@ export function PickEmView() {
               Week {week}
             </span>
             {week === activeWeek && (
-              <span className="text-[10px] font-bold text-gold bg-gold/10 border border-gold/30 rounded px-1.5 py-0.5 uppercase tracking-wider">
+              <span className="text-xs font-bold text-gold bg-gold/10 border border-gold/30 rounded px-1.5 py-0.5 uppercase tracking-wider">
                 Current
               </span>
             )}
@@ -399,7 +399,7 @@ export function PickEmView() {
                       )}
                     >
                       <span className="font-cond font-bold text-sm">Week {w}</span>
-                      <span className={clsx('text-[10px] font-bold uppercase tracking-wider', 
+                      <span className={clsx('text-xs font-bold uppercase tracking-wider', 
                         isCurrent ? 'text-gold' : isOver ? 'text-field-500' : 'text-emerald-400'
                       )}>
                         {isCurrent ? 'Current' : isOver ? 'Complete' : 'Upcoming'}
@@ -614,7 +614,7 @@ export function PickEmView() {
                         {s.profile?.display_name || s.profile?.username}
                       </span>
                       {s.user_id === user?.id && (
-                        <span className="ml-1.5 text-[10px] text-gold font-bold">(you)</span>
+                        <span className="ml-1.5 text-xs text-gold font-bold">(you)</span>
                       )}
                     </td>
                     <td className="text-center text-white font-bold">{s.total_correct}</td>
@@ -700,7 +700,7 @@ function GamePickCard({
         )}
         {isFinal && <span className="text-xs text-emerald-400 font-bold">Final</span>}
         {odds && !isFinal && (
-          <span className="flex items-center gap-1 text-[10px] text-field-500">
+          <span className="flex items-center gap-1 text-xs text-field-500">
             <TrendingUp className="w-3 h-3 text-gold/50" />
             <span className="text-gold/60">Live odds</span>
           </span>
@@ -747,9 +747,9 @@ function GamePickCard({
                 locked && !isPicked && 'cursor-not-allowed',
               )}
             >
-              <span className="text-[10px] text-field-500 uppercase tracking-wider">{label}</span>
+              <span className="text-xs text-field-500 uppercase tracking-wider">{label}</span>
               <span className="text-2xl font-black tracking-wide">{team}</span>
-              <span className="text-[11px] text-field-400 truncate max-w-full">
+              <span className="text-xs text-field-400 truncate max-w-full">
                 {info.name.split(' ').slice(-1)[0]}
               </span>
 
@@ -953,15 +953,15 @@ function PicksChart({
                   isMe && 'bg-gold/[0.05]'
                 )}>
                   <span className={clsx(
-                    'font-bold text-[10px] uppercase tracking-wide truncate max-w-[64px]',
+                    'font-bold text-xs uppercase tracking-wide truncate max-w-[64px]',
                     isMe ? 'text-gold' : 'text-field-400'
                   )}>
                     {name.length > 7 ? name.slice(0, 7) + '…' : name}
                   </span>
                   <span className="text-base font-black text-white leading-tight">
-                    {score.correct}<span className="text-field-500 text-[11px] font-bold">/{score.total}</span>
+                    {score.correct}<span className="text-field-500 text-xs font-bold">/{score.total}</span>
                   </span>
-                  {pct !== null && <span className="text-[10px] text-field-500">{pct}%</span>}
+                  {pct !== null && <span className="text-xs text-field-500">{pct}%</span>}
                 </div>
               )
             })}
@@ -1014,7 +1014,7 @@ function PicksChart({
                     )}>{game.away_score}</span>
                   )}
                 </div>
-                <span className="text-field-600 text-[10px]">@</span>
+                <span className="text-field-600 text-xs">@</span>
                 {/* Home */}
                 <div className="flex items-center gap-1">
                   <span className="font-cond font-black text-sm text-white">{game.home_team}</span>
@@ -1031,10 +1031,10 @@ function PicksChart({
               </div>
               <div className="text-right shrink-0">
                 {isFinal
-                  ? <span className="text-[10px] font-bold text-emerald-400">Final</span>
+                  ? <span className="text-xs font-bold text-emerald-400">Final</span>
                   : revealed
-                  ? <span className="text-[10px] text-yellow-400/80 flex items-center gap-0.5"><Eye className="w-2.5 h-2.5" /> Live</span>
-                  : <span className="text-[10px] text-field-500">{kickoffTime}</span>
+                  ? <span className="text-xs text-yellow-400/80 flex items-center gap-0.5"><Eye className="w-2.5 h-2.5" /> Live</span>
+                  : <span className="text-xs text-field-500">{kickoffTime}</span>
                 }
               </div>
             </div>
@@ -1090,7 +1090,7 @@ function PicksChart({
                     key={m.user_id}
                     title={displayName}
                     className={clsx(
-                      'flex items-center gap-0.5 rounded px-1.5 py-0.5 border text-[10px]',
+                      'flex items-center gap-0.5 rounded px-1.5 py-0.5 border text-xs',
                       isMe
                         ? 'border-gold/40 bg-gold/[0.07]'
                         : 'border-field-700 bg-field-800/60',
@@ -1134,7 +1134,7 @@ function PicksChart({
                   const name = isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?').slice(0, 5)
                   return (
                     <span key={m.user_id} className={clsx(
-                      'text-[10px] rounded px-1.5 py-0.5',
+                      'text-xs rounded px-1.5 py-0.5',
                       isMe ? 'bg-gold/10 text-gold' : 'bg-field-800 text-field-400'
                     )}>
                       <span className="font-bold">{name}</span>
@@ -1146,7 +1146,7 @@ function PicksChart({
                   )
                 })}
                 {isFinal && (
-                  <span className="text-[10px] rounded px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold">
+                  <span className="text-xs rounded px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold">
                     Actual: {(game.home_score ?? 0) + (game.away_score ?? 0)}
                   </span>
                 )}

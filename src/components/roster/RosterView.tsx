@@ -318,7 +318,7 @@ export function RosterView() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-bold text-cfb uppercase tracking-wider">🎓 CFB Offseason</span>
-            <span className="text-[10px] text-field-500">— players held here don't score but don't count vs active roster</span>
+            <span className="text-xs text-field-500">— players held here don't score but don't count vs active roster</span>
           </div>
           <div className="grid gap-1">
             {cfbOsSlots.map(slot => (
@@ -468,7 +468,7 @@ function RosterSlotRow({
 
       {/* Locked indicator */}
       {effectiveLocked && entry && (
-        <div className="shrink-0 text-red-400/60 text-[10px] font-bold px-1" title="Drop a player to unlock moves">
+        <div className="shrink-0 text-red-400/60 text-xs font-bold px-1" title="Drop a player to unlock moves">
           🔒
         </div>
       )}

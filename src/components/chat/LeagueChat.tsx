@@ -33,7 +33,7 @@ function MiniAvatar({ profile }: { profile?: ChatMessage['profiles'] }) {
     />
   ) : (
     <div className="chat-avatar-fallback w-7 h-7 rounded-full bg-field-700 border border-field-600 flex items-center justify-center shrink-0">
-      <span className="text-[10px] font-black text-field-300 chat-avatar-fallback">{initials}</span>
+      <span className="text-xs font-black text-field-300 chat-avatar-fallback">{initials}</span>
     </div>
   )
 }
@@ -75,7 +75,7 @@ function MessageBubble({ msg, isOwn, showAvatar }: {
               <span className="font-cond font-black text-base uppercase tracking-wider trade-chat-title">
                 Trade Completed
               </span>
-              <span className="ml-auto text-[10px] trade-chat-time">{formatTime(msg.created_at)}</span>
+              <span className="ml-auto text-xs trade-chat-time">{formatTime(msg.created_at)}</span>
             </div>
             {/* Trade body */}
             <div className="grid grid-cols-2 trade-chat-body">
@@ -114,7 +114,7 @@ function MessageBubble({ msg, isOwn, showAvatar }: {
   if (msg.is_system) {
     return (
       <div className="flex justify-center my-1">
-        <span className="chat-system-pill text-[10px] text-field-500 bg-field-800/60 border border-field-700/50 rounded-full px-3 py-1">
+        <span className="chat-system-pill text-xs text-field-500 bg-field-800/60 border border-field-700/50 rounded-full px-3 py-1">
           {msg.message}
         </span>
       </div>
@@ -132,10 +132,10 @@ function MessageBubble({ msg, isOwn, showAvatar }: {
         {/* Name + time — only on first of group */}
         {showAvatar && (
           <div className={clsx('flex items-baseline gap-1.5 mb-1', isOwn ? 'flex-row-reverse' : 'flex-row')}>
-            <span className={clsx('text-[11px] font-bold', isOwn ? 'text-gold chat-sender-name-own' : 'text-field-200 chat-sender-name')}>
+            <span className={clsx('text-xs font-bold', isOwn ? 'text-gold chat-sender-name-own' : 'text-field-200 chat-sender-name')}>
               {isOwn ? 'You' : (msg.profiles?.display_name || msg.profiles?.username || 'Unknown')}
             </span>
-            <span className="text-[10px] text-field-500 chat-time">{formatTime(msg.created_at)}</span>
+            <span className="text-xs text-field-500 chat-time">{formatTime(msg.created_at)}</span>
           </div>
         )}
 
@@ -292,7 +292,7 @@ export function LeagueChat() {
         <span className="text-field-500 text-xs ml-1">— {activeLeague?.name}</span>
         <div className="ml-auto flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-          <span className="text-[10px] text-field-400 font-bold">Live</span>
+          <span className="text-xs text-field-400 font-bold">Live</span>
         </div>
       </div>
 
@@ -368,8 +368,8 @@ export function LeagueChat() {
           </button>
         </div>
         <div className="flex justify-between mt-1 px-1">
-          <span className="text-[10px] text-field-600">Enter to send · Shift+Enter for newline</span>
-          <span className={clsx('text-[10px]', text.length > 450 ? 'text-yellow-400' : 'text-field-600')}>
+          <span className="text-xs text-field-600">Enter to send · Shift+Enter for newline</span>
+          <span className={clsx('text-xs', text.length > 450 ? 'text-yellow-400' : 'text-field-600')}>
             {text.length}/500
           </span>
         </div>

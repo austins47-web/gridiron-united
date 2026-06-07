@@ -204,7 +204,7 @@ export function LandingPage() {
             ].map(({ n, l }) => (
               <div key={l} className="text-center">
                 <div className="font-cond font-black text-4xl md:text-5xl text-gold leading-none">{n}</div>
-                <div className="font-cond font-bold text-[10px] uppercase tracking-widest text-field-500 mt-1">{l}</div>
+                <div className="font-cond font-bold text-xs uppercase tracking-widest text-field-500 mt-1">{l}</div>
               </div>
             ))}
           </div>
@@ -350,8 +350,8 @@ export function LandingPage() {
             <span className="text-white"> United</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-cond font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-cfb/20 text-cfb border border-cfb/20">CFB</span>
-            <span className="font-cond font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-nfl/20 text-nfl border border-nfl/20">NFL</span>
+            <span className="font-cond font-bold text-xs uppercase tracking-wider px-2 py-0.5 rounded bg-cfb/20 text-cfb border border-cfb/20">CFB</span>
+            <span className="font-cond font-bold text-xs uppercase tracking-wider px-2 py-0.5 rounded bg-nfl/20 text-nfl border border-nfl/20">NFL</span>
           </div>
           <p className="text-field-600 text-xs text-center sm:text-right">
             Fantasy football reimagined — pros + prospects, one roster.

@@ -633,7 +633,7 @@ function CreateMockDraft({ onCreated, onBack }: {
               >
                 <span className="text-base mb-1">{isMe ? '👤' : isHuman ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}</span>
                 <span>#{slot}</span>
-                <span className="font-normal text-[10px] mt-0.5">
+                <span className="font-normal text-xs mt-0.5">
                   {isMe ? 'You' : isHuman ? 'Open' : 'AI'}
                 </span>
               </button>
@@ -1213,7 +1213,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                 <span className={clsx('pos-badge text-xs', `pos-${(pk.player as any)?.pos}`)}>{(pk.player as any)?.pos}</span>
                 <div className="min-w-0">
                   <div className="text-white text-xs font-bold truncate">{(pk.player as any)?.name}</div>
-                  <div className="text-field-400 text-[10px]">Rd {pk.round_number}, Pk {pk.pick_number}</div>
+                  <div className="text-field-400 text-xs">Rd {pk.round_number}, Pk {pk.pick_number}</div>
                 </div>
               </div>
             ))}
@@ -1554,7 +1554,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                       </div>
                     </div>
                   ))}
-                  <p className="text-field-600 text-[10px] mt-1 text-center">First queued player auto-drafts on your turn or timer expiry.</p>
+                  <p className="text-field-600 text-xs mt-1 text-center">First queued player auto-drafts on your turn or timer expiry.</p>
                 </div>
               )}
             </div>
@@ -1583,7 +1583,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                   <div className="space-y-3">
                     {allPos.map(pos => (
                       <div key={pos}>
-                        <div className="text-[10px] font-bold text-field-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                        <div className="text-xs font-bold text-field-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                           <span className={clsx('pos-badge text-[9px]', `pos-${pos}`)}>{pos}</span>
                           <span>{byPos[pos].length}</span>
                         </div>
@@ -1592,7 +1592,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                             <div key={pk.id} className="flex items-center gap-2 text-xs py-1 border-b border-field-800 last:border-0">
                               <span className="text-white font-bold flex-1 truncate">{(pk.player as any)?.name}</span>
                               <span className="text-field-500 shrink-0">{(pk.player as any)?.team}</span>
-                              <span className="text-field-500 shrink-0 text-[10px]">R{pk.round_number}</span>
+                              <span className="text-field-500 shrink-0 text-xs">R{pk.round_number}</span>
                             </div>
                           ))}
                         </div>

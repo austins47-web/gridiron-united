@@ -717,7 +717,7 @@ function Conversation({ friend, onBack }: { friend: Profile; onBack: () => void 
                       : 'bg-field-800 text-white rounded-bl-sm',
                   )}>
                     {msg.body}
-                    <div className={clsx('text-[10px] mt-0.5 flex items-center gap-1 justify-end', isOwn ? 'text-field-700' : 'text-field-500')}>
+                    <div className={clsx('text-xs mt-0.5 flex items-center gap-1 justify-end', isOwn ? 'text-field-700' : 'text-field-500')}>
                       {formatTime(msg.created_at)}
                       {isOwn && <CheckCheck className="w-3 h-3" />}
                     </div>
@@ -913,7 +913,7 @@ function FriendProfile({ friend, onBack, onMessage }: {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={clsx(
-                      'text-[10px] font-bold px-1.5 py-0.5 rounded uppercase',
+                      'text-xs font-bold px-1.5 py-0.5 rounded uppercase',
                       league.draft_status === 'completed' ? 'bg-green-400/10 text-green-400' :
                       league.draft_status === 'in_progress' ? 'bg-gold/20 text-gold' :
                       'bg-field-700 text-field-400',
@@ -946,7 +946,7 @@ function FriendProfile({ friend, onBack, onMessage }: {
                         {/* Starters */}
                         {starters.length > 0 && (
                           <div>
-                            <div className="text-[10px] font-bold text-field-500 uppercase tracking-wider mb-1">Starters</div>
+                            <div className="text-xs font-bold text-field-500 uppercase tracking-wider mb-1">Starters</div>
                             <div className="space-y-1">
                               {starters.map(r => <RosterRow key={r.slot} entry={r} />)}
                             </div>
@@ -955,7 +955,7 @@ function FriendProfile({ friend, onBack, onMessage }: {
                         {/* Bench */}
                         {bench.length > 0 && (
                           <div>
-                            <div className="text-[10px] font-bold text-field-500 uppercase tracking-wider mb-1 mt-2">Bench</div>
+                            <div className="text-xs font-bold text-field-500 uppercase tracking-wider mb-1 mt-2">Bench</div>
                             <div className="space-y-1">
                               {bench.map(r => <RosterRow key={r.slot} entry={r} />)}
                             </div>
@@ -964,7 +964,7 @@ function FriendProfile({ friend, onBack, onMessage }: {
                         {/* IR */}
                         {ir.length > 0 && (
                           <div>
-                            <div className="text-[10px] font-bold text-field-500 uppercase tracking-wider mb-1 mt-2">IR</div>
+                            <div className="text-xs font-bold text-field-500 uppercase tracking-wider mb-1 mt-2">IR</div>
                             <div className="space-y-1">
                               {ir.map(r => <RosterRow key={r.slot} entry={r} />)}
                             </div>
@@ -990,7 +990,7 @@ function RosterRow({ entry }: { entry: FriendRosterEntry }) {
   return (
     <div className="flex items-center gap-2 text-xs py-1 border-b border-field-800 last:border-0">
       <span className="text-field-500 w-8 text-right shrink-0">{entry.slot}</span>
-      <span className={clsx('pos-badge text-[10px]', `pos-${p.pos}`)}>{p.pos}</span>
+      <span className={clsx('pos-badge text-xs', `pos-${p.pos}`)}>{p.pos}</span>
       <span className="text-white font-bold flex-1 truncate flex items-center gap-1">
         {p.name}
         {p.is_rookie && (
@@ -999,7 +999,7 @@ function RosterRow({ entry }: { entry: FriendRosterEntry }) {
       </span>
       <span className="text-field-400 truncate hidden sm:block">{p.team}</span>
       <span className={clsx(
-        'text-[10px] font-bold shrink-0',
+        'text-xs font-bold shrink-0',
         p.status === 'questionable' ? 'text-yellow-400' :
         p.status === 'out' || p.status === 'ir' ? 'text-red-400' : 'text-white',
       )}>

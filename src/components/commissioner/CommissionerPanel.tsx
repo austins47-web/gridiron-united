@@ -1065,7 +1065,7 @@ function TradeSettings({ league }: { league: League }) {
               <div className="flex items-center gap-2">
                 <span className="font-bold text-white text-sm">{opt.label}</span>
                 {mode === opt.id && (
-                  <span className="text-[10px] font-black uppercase tracking-wider text-gold bg-gold/20 px-2 py-0.5 rounded-full">Active</span>
+                  <span className="text-xs font-black uppercase tracking-wider text-gold bg-gold/20 px-2 py-0.5 rounded-full">Active</span>
                 )}
               </div>
               <p className="text-field-400 text-xs mt-0.5 leading-relaxed">{opt.desc}</p>
