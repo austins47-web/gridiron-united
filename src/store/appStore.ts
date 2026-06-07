@@ -27,6 +27,7 @@ interface AppState {
   setActiveLeague: (league: League | null, membership: LeagueMember | null) => void
   setActiveLeagueId: (id: string | null) => void
   setNotifications: (notifications: Notification[]) => void
+  addNotification: (notification: Notification) => void
   markAllRead: () => Promise<void>
   signOut: () => Promise<void>
 }
@@ -54,6 +55,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setNotifications: (notifications) =>
     set({ notifications, unreadCount: notifications.filter(n => !n.is_read).length }),
+
+  addNotification: (notification) =>
+    set(s => ({
+      notifications: [notification, ...s.notifications],
+      unreadCount: s.unreadCount + (notification.is_read ? 0 : 1),
+    })),
 
   markAllRead: async () => {
     const { user } = get()

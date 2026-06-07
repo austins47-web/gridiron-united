@@ -44,7 +44,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 function AppInitializer({ children }: { children: React.ReactNode }) {
-  const { setUser, setSession, setProfile, setAuthLoading, setNotifications } = useAppStore()
+  const { setUser, setSession, setProfile, setAuthLoading, setNotifications, addNotification } = useAppStore()
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -95,6 +95,24 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
 
     return () => subscription.unsubscribe()
   }, [setUser, setSession, setProfile, setAuthLoading, setNotifications])
+
+  // Realtime: push new notifications into store as they arrive
+  useEffect(() => {
+    const { user } = useAppStore.getState()
+    if (!user) return
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`,
+      }, (payload) => {
+        addNotification(payload.new as any)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [addNotification])
 
   return <>{children}</>
 }
