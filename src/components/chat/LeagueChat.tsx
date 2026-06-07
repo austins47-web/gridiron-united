@@ -235,7 +235,6 @@ export function LeagueChat() {
 
     setSending(true)
     setText('')
-    inputRef.current?.focus()
 
     try {
       const { error } = await supabase
@@ -252,6 +251,8 @@ export function LeagueChat() {
       setText(trimmed) // restore on failure
     } finally {
       setSending(false)
+      // Always refocus so user can immediately type another message
+      requestAnimationFrame(() => inputRef.current?.focus())
     }
   }
 
