@@ -104,9 +104,8 @@ function LeagueRouter() {
   const activeLeagueId = useAppStore(s => s.activeLeagueId)
 
   return (
-    // key={activeLeagueId} forces React to fully unmount and remount when league changes
     <Routes key={activeLeagueId ?? 'no-league'}>
-      <Route index element={<Navigate to="/leagues" replace />} />
+      <Route index element={<Navigate to="/app/leagues" replace />} />
       <Route path="roster" element={<RosterView />} />
       <Route path="players" element={<PlayersView />} />
       <Route path="draft" element={<DraftRoom />} />
@@ -133,6 +132,8 @@ function App() {
                 </AuthGuard>
               }
             >
+              {/* Default /app → /app/leagues */}
+              <Route index element={<Navigate to="/app/leagues" replace />} />
               {/* These routes don't need league isolation */}
               <Route path="leagues" element={<LeaguesView />} />
               <Route path="scores" element={<LiveScoresView />} />
