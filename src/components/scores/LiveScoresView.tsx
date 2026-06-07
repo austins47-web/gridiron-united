@@ -505,7 +505,7 @@ function ColsPicker({ value, onChange }: { value: ColCount, onChange: (v: ColCou
     { val: 5, icon: <LayoutGrid className="w-3.5 h-3.5" />, label: '5' },
   ]
   return (
-    <div className="flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+    <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
       {options.map(({ val, icon, label }) => (
         <button key={val} onClick={() => onChange(val)} title={`${label} per row`}
           className={clsx(
@@ -701,7 +701,7 @@ export function LiveScoresView() {
       {/* ── Controls bar ── */}
       <div className="flex flex-wrap gap-2 items-center">
         {/* League filter */}
-        <div className="flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+        <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
           {(['All', 'NFL', 'CFB'] as LeagueFilter[]).map(f => (
             <button key={f} onClick={() => setLeagueFilter(f)}
               className={clsx(
@@ -716,7 +716,7 @@ export function LiveScoresView() {
         </div>
 
         {/* Status filter */}
-        <div className="flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+        <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
           {(['All', 'Live', 'Final', 'Upcoming'] as StatusFilter[]).map(f => (
             <button key={f} onClick={() => setStatusFilter(f)}
               className={clsx(
@@ -729,7 +729,7 @@ export function LiveScoresView() {
         </div>
 
         {/* View mode toggle */}
-        <div className="flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+        <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
           <button onClick={() => setViewMode('grid')} title="Grid view"
             className={clsx(
               'flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',

@@ -571,7 +571,7 @@ export function CfbPostseasonManager({ league }: { league: any }) {
   return (
     <div className="space-y-4">
       {/* Sub-tabs */}
-      <div className="flex gap-1 bg-field-800 border border-field-700 rounded-lg p-0.5">
+      <div className="pill-tabs flex gap-1 bg-field-800 border border-field-700 rounded-lg p-0.5">
         {sections.map(s => (
           <button key={s.id} onClick={() => setSection(s.id)}
             className={clsx(

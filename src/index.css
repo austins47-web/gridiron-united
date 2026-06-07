@@ -526,3 +526,158 @@
 [data-theme="light"] .league-selector-loading .bg-field-600 {
   background-color: #e5e7eb !important;
 }
+
+/* ── Commissioner info cards (bg-field-800/60 dark boxes) ── */
+[data-theme="light"] .bg-field-800\/60 {
+  background-color: #f3f4f6 !important;
+}
+[data-theme="light"] .bg-field-800\/40 {
+  background-color: #f3f4f6 !important;
+}
+[data-theme="light"] .bg-field-900\/50 {
+  background-color: #e8ecf4 !important;
+}
+[data-theme="light"] .bg-field-700\/50 {
+  background-color: #edf0f7 !important;
+}
+[data-theme="light"] .bg-field-700\/40 {
+  background-color: #edf0f7 !important;
+}
+[data-theme="light"] .bg-field-700\/30 {
+  background-color: rgba(237,240,247,0.6) !important;
+}
+
+/* ── Sub nav tab active state ── */
+[data-theme="light"] .app-shell-sub-nav .nav-tab.active,
+[data-theme="light"] .app-shell-sub-nav [class*="bg-field-700"] {
+  background-color: rgba(232,149,14,0.08) !important;
+}
+
+/* ── Commissioner tab strip (inner tabs: Scoring / Rosters / etc) ── */
+[data-theme="light"] [class*="bg-field-700\/40"] {
+  background-color: #edf0f7 !important;
+}
+[data-theme="light"] [class*="bg-field-800"] {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+}
+
+/* ── text-white inside light mode panels → dark ── */
+[data-theme="light"] .bg-field-800\/60 .text-white,
+[data-theme="light"] .bg-field-800\/40 .text-white,
+[data-theme="light"] .bg-field-900\/50 .text-white {
+  color: #111827 !important;
+}
+
+/* ── User profile hover / menu dropdown ── */
+[data-theme="light"] .hover\:bg-field-700:hover {
+  background-color: #e8ecf4 !important;
+}
+
+/* User menu dropdown */
+[data-theme="light"] .user-menu-dropdown {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important;
+}
+[data-theme="light"] .user-menu-dropdown .text-white {
+  color: #111827 !important;
+}
+[data-theme="light"] .user-menu-dropdown .text-field-200 {
+  color: #374151 !important;
+}
+[data-theme="light"] .user-menu-dropdown .border-field-700 {
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .user-menu-dropdown .bg-field-900\/50 {
+  background-color: #f9fafb !important;
+}
+[data-theme="light"] .user-menu-dropdown button:hover {
+  background-color: #f3f4f6 !important;
+  color: #e8950e !important;
+}
+
+/* ── Notification bell hover ── */
+[data-theme="light"] .notif-btn:hover {
+  background-color: #e8ecf4 !important;
+}
+
+/* ── Commissioner inner tab strip ── */
+[data-theme="light"] .comm-tab-strip {
+  background-color: #f3f4f6 !important;
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .comm-tab-strip button {
+  color: #4b5563 !important;
+}
+[data-theme="light"] .comm-tab-strip button:hover {
+  color: #111827 !important;
+  background-color: #e5e7eb !important;
+}
+[data-theme="light"] .comm-tab-strip button.active-tab {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* ── Pill-style tab strips (used in Commissioner, Trades, Scores, etc.) ── */
+[data-theme="light"] .pill-tabs {
+  background-color: #f3f4f6 !important;
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .pill-tabs button {
+  color: #4b5563 !important;
+}
+[data-theme="light"] .pill-tabs button:hover {
+  color: #111827 !important;
+}
+/* Active button inside pill tab strip */
+[data-theme="light"] .pill-tabs .bg-field-700,
+[data-theme="light"] .pill-tabs [class*="bg-field-700"] {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+}
+
+/* ── Commissioner info cards (the dark grey stat boxes) ── */
+[data-theme="light"] .bg-field-800\/60 {
+  background-color: #f3f4f6 !important;
+}
+[data-theme="light"] .bg-field-800\/60 .text-white { color: #111827 !important; }
+[data-theme="light"] .bg-field-800\/60 .text-field-400 { color: #4b5563 !important; }
+
+[data-theme="light"] .bg-field-800\/40 {
+  background-color: #f3f4f6 !important;
+}
+[data-theme="light"] .bg-field-900\/50 {
+  background-color: #f9fafb !important;
+}
+[data-theme="light"] .bg-field-700\/50 { background-color: #edf0f7 !important; }
+[data-theme="light"] .bg-field-700\/40 { background-color: #edf0f7 !important; }
+[data-theme="light"] .bg-field-700\/30 { background-color: rgba(237,240,247,0.6) !important; }
+
+/* ── Generic hover bg-field-700 (buttons, nav items) ── */
+[data-theme="light"] .hover\:bg-field-700:hover {
+  background-color: #e8ecf4 !important;
+  color: #111827 !important;
+}
+[data-theme="light"] .hover\:bg-field-700\/50:hover { background-color: rgba(237,240,247,0.8) !important; }
+[data-theme="light"] .hover\:bg-field-700\/30:hover { background-color: rgba(237,240,247,0.5) !important; }
+
+/* ── User profile menu dropdown ── */
+[data-theme="light"] .user-menu-dropdown {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important;
+}
+[data-theme="light"] .user-menu-dropdown .text-white { color: #111827 !important; }
+[data-theme="light"] .user-menu-dropdown .text-field-200 { color: #374151 !important; }
+[data-theme="light"] .user-menu-dropdown .text-field-400 { color: #6b7280 !important; }
+[data-theme="light"] .user-menu-dropdown .border-field-700 { border-color: #e5e7eb !important; }
+[data-theme="light"] .user-menu-dropdown .bg-field-900\/50 { background-color: #f9fafb !important; }
+[data-theme="light"] .user-menu-dropdown button:hover { background-color: #f3f4f6 !important; }
+
+/* ── Notification bell button hover ── */
+[data-theme="light"] .notif-btn:hover {
+  background-color: #e8ecf4 !important;
+  color: #374151 !important;
+}

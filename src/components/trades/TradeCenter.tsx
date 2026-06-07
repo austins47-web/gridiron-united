@@ -25,7 +25,7 @@ const POS_COLOR: Record<string, string> = {
 
 function PosBadge({ pos }: { pos: string }) {
   return (
-    <span className={clsx('text-[10px] font-black uppercase rounded px-1.5 py-0.5 shrink-0',
+    <span className={clsx('text-xs font-black uppercase rounded px-1.5 py-0.5 shrink-0',
       POS_COLOR[pos] ?? 'bg-field-700 text-field-300')}>
       {pos}
     </span>
@@ -46,7 +46,7 @@ function PlayerRow({ player, selected, onToggle, disabled }: {
       <PosBadge pos={player.pos} />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-bold text-white truncate">{player.name}</div>
-        <div className="text-[10px] text-field-400">{player.team}</div>
+        <div className="text-xs text-field-400">{player.team}</div>
       </div>
       {selected && <Check className="w-3.5 h-3.5 text-gold shrink-0" />}
     </button>
@@ -64,7 +64,7 @@ function StatusBadge({ status }: { status: TStatus }) {
     expired:   { label: 'Expired',  cls: 'bg-field-600/20 text-field-400 border-field-600/30' },
   }
   const { label, cls } = map[status] ?? { label: status, cls: 'bg-field-700 text-field-300 border-field-600' }
-  return <span className={clsx('text-[10px] font-black uppercase px-2 py-0.5 rounded-full border', cls)}>{label}</span>
+  return <span className={clsx('text-xs font-black uppercase px-2 py-0.5 rounded-full border', cls)}>{label}</span>
 }
 
 function timeLeft(exp: string) {
@@ -121,7 +121,7 @@ function TradeCard({ trade, myId, isCommissioner, leagueId }: {
             </span>
             <StatusBadge status={trade.status} />
           </div>
-          <div className="text-[11px] text-field-400 mt-0.5">
+          <div className="text-xs text-field-400 mt-0.5">
             {iGive.length} for {iReceive.length}
             {isPending && !isExpired ? ` · ${timeLeft(trade.expires_at)}` : isExpired && isPending ? ' · Expired' : ''}
           </div>
@@ -519,7 +519,7 @@ export function TradeCenter() {
         </div>
       )}
 
-      <div className="flex gap-1 bg-field-800 border border-field-700 rounded-lg p-0.5">
+      <div className="pill-tabs flex gap-1 bg-field-800 border border-field-700 rounded-lg p-0.5">
         {(['pending', 'mine', 'all'] as const).map(f => {
           const label = f === 'pending'
             ? `Pending${trades.filter(t => t.status === 'pending').length > 0 ? ` (${trades.filter(t => t.status === 'pending').length})` : ''}`

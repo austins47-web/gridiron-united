@@ -93,7 +93,7 @@ export function AppShell() {
           <div className="relative">
             <button
               onClick={() => { setShowNotifs(!showNotifs); setShowUserMenu(false) }}
-              className="relative p-2 rounded-lg hover:bg-field-700 transition-colors text-field-400 hover:text-white"
+              className="notif-btn relative p-2 rounded-lg hover:bg-field-700 transition-colors text-field-400 hover:text-white"
             >
               <Bell size={18} />
               {unreadCount > 0 && (
@@ -125,7 +125,7 @@ export function AppShell() {
             </button>
 
             {showUserMenu && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl z-50">
+              <div className="user-menu-dropdown absolute right-0 top-full mt-1 w-48 bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl z-50">
                 <div className="px-3 py-2.5 border-b border-field-700 bg-field-900/50">
                   <div className="font-cond font-bold text-sm text-white">{profile?.display_name}</div>
                   <div className="text-xs text-field-400">@{profile?.username}</div>

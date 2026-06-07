@@ -1491,7 +1491,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
         {/* Right sidebar */}
         <div className="space-y-3">
           {/* Sidebar tab bar */}
-          <div className="flex gap-0.5 bg-field-800 rounded-lg p-0.5">
+          <div className="pill-tabs flex gap-0.5 bg-field-800 rounded-lg p-0.5">
             {([
               { id: 'queue', label: 'Queue', badge: queue.length },
               { id: 'roster', label: 'Roster', badge: picks.filter(p => p.slot_number === mySlot.slot_number).length },
