@@ -11,6 +11,7 @@ import { useAppStore } from '@/store/appStore'
 // Pages / Layouts
 import { AppShell } from '@/components/layout/AppShell'
 import { AuthPage } from '@/components/auth/AuthPage'
+import { LandingPage } from '@/components/landing/LandingPage'
 import { RosterView } from '@/components/roster/RosterView'
 import { PlayersView } from '@/components/players/PlayersView'
 import { LeaguesView } from '@/components/leagues/LeaguesView'
@@ -22,6 +23,7 @@ import { CommissionerPanel } from '@/components/commissioner/CommissionerPanel'
 import { MockDraftHub } from '@/components/mock/MockDraftHub'
 import { SocialHub } from '@/components/social/SocialHub'
 import { PickEmView } from '@/components/pickem/PickEmView'
+import { LeagueChat } from '@/components/chat/LeagueChat'
 import { LiveScoresView } from '@/components/scores/LiveScoresView'
 
 const queryClient = new QueryClient({
@@ -110,6 +112,7 @@ function LeagueRouter() {
       <Route path="draft" element={<DraftRoom />} />
       <Route path="scoring" element={<ScoringView />} />
       <Route path="commissioner" element={<CommissionerPanel />} />
+      <Route path="chat" element={<LeagueChat />} />
     </Routes>
   )
 }
@@ -120,9 +123,10 @@ function App() {
       <BrowserRouter>
         <AppInitializer>
           <Routes>
+            <Route path="/" element={<LandingPage />} />
             <Route path="/auth" element={<AuthPage />} />
             <Route
-              path="/"
+              path="/app"
               element={
                 <AuthGuard>
                   <AppShell />
@@ -139,7 +143,7 @@ function App() {
               {/* All league-specific routes go through LeagueRouter */}
               <Route path="/*" element={<LeagueRouter />} />
             </Route>
-            <Route path="*" element={<Navigate to="/leagues" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AppInitializer>
       </BrowserRouter>

@@ -17,28 +17,30 @@ export function AppShell() {
 
   // ── Global tabs — always visible ──────────────────────────
   const globalTabs = [
-    { to: '/leagues', label: 'My Leagues', emoji: '🏆' },
-    { to: '/scores',  label: 'Live Scores', emoji: '📡' },
-    { to: '/mock',    label: 'Mock Draft',  emoji: '🧪' },
-    { to: '/social',  label: 'Social',      emoji: '👥' },
+    { to: "/app/leagues", label: "My Leagues", emoji: "🏆" },
+    { to: '/app/scores',  label: 'Live Scores', emoji: '📡' },
+    { to: '/app/mock',    label: 'Mock Draft',  emoji: '🧪' },
+    { to: '/app/social',  label: 'Social',      emoji: '👥' },
   ]
 
   // ── League tabs — only when a league is selected ──────────
   const leagueTabs = activeLeagueId ? [
     ...(!isPickEm ? [
-      { to: '/roster',  label: 'Roster',    emoji: '📋' },
-      { to: '/players', label: 'Players',   emoji: '🔍' },
-      { to: '/draft',   label: 'Draft Room', emoji: '🎯' },
-      { to: '/scoring', label: 'Scoring',   emoji: '📊' },
+      { to: '/app/roster',  label: 'Roster',    emoji: '📋' },
+      { to: '/app/players', label: 'Players',   emoji: '🔍' },
+      { to: '/app/draft',   label: 'Draft Room', emoji: '🎯' },
+      { to: '/app/scoring', label: 'Scoring',   emoji: '📊' },
     ] : [
-      { to: '/pickem',  label: "Pick'Em",   emoji: '🏈' },
+      { to: '/app/pickem',  label: "Pick'Em",   emoji: '🏈' },
     ]),
-    ...(isCommissioner ? [{ to: '/commissioner', label: 'Commissioner', emoji: '⚙️' }] : []),
+    { to: '/app/chat', label: 'Chat', emoji: '💬' },
+    ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commissioner', emoji: '⚙️' }] : []),
   ] : []
 
   // Detect if we're on a league-specific route
-  const leagueRoutes = ['/roster', '/players', '/draft', '/scoring', '/commissioner', '/pickem']
+  const leagueRoutes = ['/app/roster', '/app/players', '/app/draft', '/app/scoring', '/app/commissioner', '/app/pickem', '/app/chat']
   const isOnLeagueRoute = leagueRoutes.some(r => location.pathname.startsWith(r))
+  const isChat = location.pathname.startsWith('/app/chat')
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -47,7 +49,7 @@ export function AppShell() {
       <header className="sticky top-0 z-40 bg-field-950 border-b border-field-700 flex items-center justify-between px-4 h-14 shrink-0">
         {/* Logo */}
         <button
-          onClick={() => navigate('/leagues')}
+          onClick={() => navigate('/app/leagues')}
           className="flex items-center gap-3 hover:opacity-80 transition-opacity"
         >
           <div className="font-cond font-black text-xl uppercase tracking-wider">
@@ -66,7 +68,7 @@ export function AppShell() {
             <>
               {/* Breadcrumb: Leagues > League Name */}
               <button
-                onClick={() => navigate('/leagues')}
+                onClick={() => navigate('/app/leagues')}
                 className="text-field-500 hover:text-field-300 transition-colors font-cond font-bold text-xs uppercase tracking-wider"
               >
                 Leagues
@@ -128,7 +130,7 @@ export function AppShell() {
                   <div className="text-xs text-field-400">@{profile?.username}</div>
                 </div>
                 <button
-                  onClick={() => { navigate('/account'); setShowUserMenu(false) }}
+                  onClick={() => { navigate('/app/account'); setShowUserMenu(false) }}
                   className="w-full text-left px-3 py-2.5 text-sm text-field-200 hover:bg-field-700 hover:text-gold transition-colors flex items-center gap-2"
                 >
                   <User size={14} /> Account Settings
@@ -194,7 +196,7 @@ export function AppShell() {
       )}
 
       {/* ── Main content ── */}
-      <main className="flex-1 overflow-auto bg-field-900">
+      <main className="flex-1 flex flex-col min-h-0 bg-field-900">
         {/* No league selected + on a league route → prompt */}
         {!activeLeagueId && isOnLeagueRoute ? (
           <div className="max-w-md mx-auto text-center py-20 px-6">
@@ -206,15 +208,22 @@ export function AppShell() {
               Choose a league from the top bar to view your roster, players, draft room, and more.
             </p>
             <button
-              onClick={() => navigate('/leagues')}
+              onClick={() => navigate('/app/leagues')}
               className="btn-gold"
             >
               Go to My Leagues
             </button>
           </div>
-        ) : (
-          <div className="max-w-[1400px] mx-auto p-4 md:p-6">
+        ) : isChat ? (
+          /* Chat gets full remaining height with no padding */
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <Outlet />
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <div className="max-w-[1400px] mx-auto p-4 md:p-6">
+              <Outlet />
+            </div>
           </div>
         )}
       </main>
