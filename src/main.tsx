@@ -24,6 +24,7 @@ import { MockDraftHub } from '@/components/mock/MockDraftHub'
 import { SocialHub } from '@/components/social/SocialHub'
 import { PickEmView } from '@/components/pickem/PickEmView'
 import { LeagueChat } from '@/components/chat/LeagueChat'
+import { TradeCenter } from '@/components/trades/TradeCenter'
 import { LiveScoresView } from '@/components/scores/LiveScoresView'
 
 const queryClient = new QueryClient({
@@ -136,6 +137,7 @@ function App() {
               <Route path="scoring" element={<LeagueWrapper><ScoringView /></LeagueWrapper>} />
               <Route path="commissioner" element={<LeagueWrapper><CommissionerPanel /></LeagueWrapper>} />
               <Route path="chat" element={<LeagueWrapper><LeagueChat /></LeagueWrapper>} />
+              <Route path="trades" element={<LeagueWrapper><TradeCenter /></LeagueWrapper>} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
