@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/appStore'
-import { Star, RefreshCw, WifiOff } from 'lucide-react'
+import { Star, RefreshCw, WifiOff, TrendingUp } from 'lucide-react'
 import clsx from 'clsx'
+import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -131,10 +132,11 @@ function StatusBadge({ game }: { game: LiveGame }) {
   )
 }
 
-function GameCard({ game, favTeams, onToggleFav }: {
+function GameCard({ game, favTeams, onToggleFav, odds }: {
   game: LiveGame
   favTeams: Set<string>
   onToggleFav: (abbr: string) => void
+  odds?: GameOdds | null
 }) {
   const isLive = game.status === 'in'
   const isFinal = game.status === 'post'
@@ -259,6 +261,67 @@ function GameCard({ game, favTeams, onToggleFav }: {
           {game.venue.split(',')[0]}
         </div>
       )}
+
+      {/* Odds — spread + win probability */}
+      {odds && game.status !== 'post' && (
+        <div className="border-t border-field-700/60 pt-1.5 space-y-1.5">
+          {/* Spread row */}
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="text-field-600 flex items-center gap-1">
+              <TrendingUp className="w-2.5 h-2.5" /> Spread
+            </span>
+            <div className="flex items-center gap-2 font-cond font-black">
+              {/* Away spread */}
+              <span className={clsx(
+                odds.spread !== null && -odds.spread > 0 ? 'text-white' : 'text-field-400'
+              )}>
+                {game.away.abbr}{' '}
+                <span className="text-white">
+                  {odds.spread !== null
+                    ? (-odds.spread === 0 ? 'PK' : -odds.spread > 0 ? `+${-odds.spread}` : `${-odds.spread}`)
+                    : '—'}
+                </span>
+              </span>
+              <span className="text-field-700">|</span>
+              {/* Home spread */}
+              <span className={clsx(
+                odds.spread !== null && odds.spread > 0 ? 'text-white' : 'text-field-400'
+              )}>
+                {game.home.abbr}{' '}
+                <span className="text-white">
+                  {odds.spread !== null
+                    ? (odds.spread === 0 ? 'PK' : odds.spread > 0 ? `+${odds.spread}` : `${odds.spread}`)
+                    : '—'}
+                </span>
+              </span>
+            </div>
+          </div>
+
+          {/* Win probability bar */}
+          {odds.awayWinPct !== null && odds.homeWinPct !== null && (
+            <div className="space-y-0.5">
+              <div className="flex rounded overflow-hidden h-3 text-[8px] font-black">
+                <div
+                  className="flex items-center justify-center bg-field-500 transition-all"
+                  style={{ width: `${odds.awayWinPct}%` }}
+                >
+                  {odds.awayWinPct >= 25 && `${odds.awayWinPct}%`}
+                </div>
+                <div
+                  className="flex items-center justify-center bg-gold/70 transition-all"
+                  style={{ width: `${odds.homeWinPct}%` }}
+                >
+                  {odds.homeWinPct >= 25 && `${odds.homeWinPct}%`}
+                </div>
+              </div>
+              <div className="flex justify-between text-[9px] text-field-500">
+                <span>{game.away.abbr} {odds.awayWinPct}%</span>
+                <span>{odds.homeWinPct}% {game.home.abbr}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -302,6 +365,8 @@ export function LiveScoresView() {
   // Determine refetch interval based on live games
   const getInterval = (games: LiveGame[]) =>
     games.some(g => g.status === 'in') ? 30_000 : 120_000
+
+  const { data: oddsMap } = useNflOdds()
 
   const nflQuery = useQuery({
     queryKey: ['scores-nfl', refreshTick],
@@ -490,7 +555,9 @@ export function LiveScoresView() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {favGames.map(g => (
-                  <GameCard key={g.id} game={g} favTeams={favTeams} onToggleFav={toggleFav} />
+                  <GameCard key={g.id} game={g} favTeams={favTeams} onToggleFav={toggleFav}
+                    odds={g.league === 'NFL' ? (oddsMap?.get(`${g.away.abbr}@${g.home.abbr}`) ?? null) : null}
+                  />
                 ))}
               </div>
             </div>
@@ -507,7 +574,9 @@ export function LiveScoresView() {
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {otherGames.map(g => (
-                  <GameCard key={g.id} game={g} favTeams={favTeams} onToggleFav={toggleFav} />
+                  <GameCard key={g.id} game={g} favTeams={favTeams} onToggleFav={toggleFav}
+                    odds={g.league === 'NFL' ? (oddsMap?.get(`${g.away.abbr}@${g.home.abbr}`) ?? null) : null}
+                  />
                 ))}
               </div>
             </div>
