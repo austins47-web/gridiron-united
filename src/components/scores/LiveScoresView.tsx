@@ -263,42 +263,64 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
 
       {/* Odds */}
       {odds && game.status !== 'post' && (
-        <div className="border-t border-field-700/60 pt-1.5 space-y-1.5">
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="text-field-300 flex items-center gap-1">
-              <TrendingUp className="w-2.5 h-2.5" /> Spread
-            </span>
-            <div className="flex items-center gap-2 font-cond font-black">
-              <span className="text-field-200">
-                {game.away.abbr}{' '}
-                {odds.spread !== null
-                  ? (-odds.spread === 0 ? 'PK' : -odds.spread > 0 ? `+${-odds.spread}` : `${-odds.spread}`)
-                  : '—'}
-              </span>
-              <span className="text-field-600">|</span>
-              <span className="text-field-200">
-                {game.home.abbr}{' '}
-                {odds.spread !== null
-                  ? (odds.spread === 0 ? 'PK' : odds.spread > 0 ? `+${odds.spread}` : `${odds.spread}`)
-                  : '—'}
-              </span>
+        <div className="border-t border-field-700/60 pt-2 space-y-2">
+
+          {/* Spread row */}
+          {odds.spread !== null && (
+            <div>
+              <div className="flex items-center gap-1 mb-1">
+                <TrendingUp className="w-3 h-3 text-field-400" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-field-400">Spread</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { team: game.away.abbr, pts: -odds.spread },
+                  { team: game.home.abbr, pts:  odds.spread },
+                ].map(({ team, pts }) => {
+                  const label = pts === 0 ? 'PK' : pts > 0 ? `+${pts}` : `${pts}`
+                  const favored = pts < 0
+                  return (
+                    <div key={team} className={clsx(
+                      'flex items-center justify-between px-2 py-1 rounded-lg',
+                      favored ? 'bg-field-700 border border-field-600' : 'bg-field-800/60 border border-field-700/50',
+                    )}>
+                      <span className="font-cond font-bold text-xs text-field-200">{team}</span>
+                      <span className={clsx(
+                        'font-cond font-black text-sm',
+                        favored ? 'text-white' : 'text-field-300',
+                      )}>{label}</span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Win probability */}
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (
-            <div className="space-y-0.5">
-              <div className="flex rounded overflow-hidden h-3 text-[8px] font-black">
-                <div className="flex items-center justify-center bg-field-500 transition-all"
-                  style={{ width: `${odds.awayWinPct}%` }}>
-                  {odds.awayWinPct >= 25 && `${odds.awayWinPct}%`}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-field-400 block mb-1">Win %</span>
+              <div className="flex rounded-lg overflow-hidden h-5 text-[10px] font-black">
+                <div
+                  className="flex items-center justify-center bg-field-600 transition-all"
+                  style={{ width: `${odds.awayWinPct}%` }}
+                >
+                  {odds.awayWinPct >= 20 && (
+                    <span className="text-white">{odds.awayWinPct}%</span>
+                  )}
                 </div>
-                <div className="flex items-center justify-center bg-gold/70 transition-all"
-                  style={{ width: `${odds.homeWinPct}%` }}>
-                  {odds.homeWinPct >= 25 && `${odds.homeWinPct}%`}
+                <div
+                  className="flex items-center justify-center bg-gold/80 transition-all"
+                  style={{ width: `${odds.homeWinPct}%` }}
+                >
+                  {odds.homeWinPct >= 20 && (
+                    <span className="text-field-950">{odds.homeWinPct}%</span>
+                  )}
                 </div>
               </div>
-              <div className="flex justify-between text-[9px] text-field-300">
-                <span>{game.away.abbr} {odds.awayWinPct}%</span>
-                <span>{odds.homeWinPct}% {game.home.abbr}</span>
+              <div className="flex justify-between mt-1">
+                <span className="text-[10px] font-bold text-field-300">{game.away.abbr} {odds.awayWinPct}%</span>
+                <span className="text-[10px] font-bold text-field-300">{odds.homeWinPct}% {game.home.abbr}</span>
               </div>
             </div>
           )}
@@ -400,23 +422,51 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
 
       {/* Odds — spread + win% */}
       {odds && game.status !== 'post' && (
-        <div className="shrink-0 hidden lg:flex items-center gap-3 w-[180px] justify-end">
+        <div className="shrink-0 hidden lg:flex items-center gap-4 w-[220px] justify-end">
+
+          {/* Spread pill pair */}
           {odds.spread !== null && (
-            <span className="text-[10px] text-field-200 font-cond font-bold">
-              {game.away.abbr} {-odds.spread === 0 ? 'PK' : -odds.spread > 0 ? `+${-odds.spread}` : `${-odds.spread}`}
-              <span className="text-field-500 mx-1">/</span>
-              {game.home.abbr} {odds.spread === 0 ? 'PK' : odds.spread > 0 ? `+${odds.spread}` : `${odds.spread}`}
-            </span>
-          )}
-          {odds.awayWinPct !== null && odds.homeWinPct !== null && (
-            <div className="w-20">
-              <div className="flex rounded overflow-hidden h-2">
-                <div className="bg-field-500 transition-all" style={{ width: `${odds.awayWinPct}%` }} />
-                <div className="bg-gold/70 transition-all" style={{ width: `${odds.homeWinPct}%` }} />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-field-500 text-right">Spread</span>
+              <div className="flex items-center gap-1.5">
+                {[
+                  { team: game.away.abbr, pts: -odds.spread },
+                  { team: game.home.abbr, pts:  odds.spread },
+                ].map(({ team, pts }) => {
+                  const label = pts === 0 ? 'PK' : pts > 0 ? `+${pts}` : `${pts}`
+                  const favored = pts < 0
+                  return (
+                    <span key={team} className={clsx(
+                      'font-cond font-bold text-xs px-1.5 py-0.5 rounded',
+                      favored
+                        ? 'bg-field-600 text-white border border-field-500'
+                        : 'bg-field-800 text-field-300 border border-field-700',
+                    )}>
+                      {team} <span className={clsx('font-black', favored ? 'text-white' : 'text-field-400')}>{label}</span>
+                    </span>
+                  )
+                })}
               </div>
-              <div className="flex justify-between text-[9px] text-field-300 mt-0.5">
-                <span>{odds.awayWinPct}%</span>
-                <span>{odds.homeWinPct}%</span>
+            </div>
+          )}
+
+          {/* Win % bar */}
+          {odds.awayWinPct !== null && odds.homeWinPct !== null && (
+            <div className="w-24 shrink-0">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-field-500 block text-right mb-0.5">Win %</span>
+              <div className="flex rounded overflow-hidden h-3 text-[8px] font-black">
+                <div className="flex items-center justify-center bg-field-600 transition-all"
+                  style={{ width: `${odds.awayWinPct}%` }}>
+                  {odds.awayWinPct >= 30 && <span className="text-white">{odds.awayWinPct}</span>}
+                </div>
+                <div className="flex items-center justify-center bg-gold/80 transition-all"
+                  style={{ width: `${odds.homeWinPct}%` }}>
+                  {odds.homeWinPct >= 30 && <span className="text-field-950">{odds.homeWinPct}</span>}
+                </div>
+              </div>
+              <div className="flex justify-between mt-0.5">
+                <span className="text-[9px] font-bold text-field-300">{odds.awayWinPct}%</span>
+                <span className="text-[9px] font-bold text-field-300">{odds.homeWinPct}%</span>
               </div>
             </div>
           )}
