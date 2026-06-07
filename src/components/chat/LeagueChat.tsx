@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { Send, MessageSquare, User } from 'lucide-react'
 import clsx from 'clsx'
+import { UserProfileModal } from './UserProfileModal'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -59,8 +60,11 @@ function formatTime(iso: string): string {
 
 // ── Render message text with @mention highlights ──────────────
 
-function MessageText({ text, myUsername }: { text: string; myUsername?: string }) {
-  // Split on @word boundaries and highlight mentions
+function MessageText({ text, myUsername, onMentionClick }: {
+  text: string
+  myUsername?: string
+  onMentionClick: (username: string) => void
+}) {
   const parts = text.split(/(@\w+)/g)
   return (
     <>
@@ -69,14 +73,16 @@ function MessageText({ text, myUsername }: { text: string; myUsername?: string }
           const handle = part.slice(1).toLowerCase()
           const isMe = myUsername && handle === myUsername.toLowerCase()
           return (
-            <span key={i} className={clsx(
-              'font-bold rounded px-0.5',
-              isMe
-                ? 'bg-gold/30 text-gold'        // highlight when you're mentioned
-                : 'text-gold/80',               // other mentions
-            )}>
+            <button
+              key={i}
+              onClick={e => { e.stopPropagation(); onMentionClick(part.slice(1)) }}
+              className={clsx(
+                'font-bold rounded px-0.5 cursor-pointer hover:underline transition-opacity hover:opacity-80',
+                isMe ? 'bg-gold/30 text-gold' : 'text-gold/80',
+              )}
+            >
               {part}
-            </span>
+            </button>
           )
         }
         return <span key={i}>{part}</span>
@@ -87,11 +93,12 @@ function MessageText({ text, myUsername }: { text: string; myUsername?: string }
 
 // ── Message bubble ────────────────────────────────────────────
 
-function MessageBubble({ msg, isOwn, showAvatar, myUsername }: {
+function MessageBubble({ msg, isOwn, showAvatar, myUsername, onMentionClick }: {
   msg: ChatMessage
   isOwn: boolean
   showAvatar: boolean
   myUsername?: string
+  onMentionClick: (username: string) => void
 }) {
   // Trade completed card
   if (msg.is_system && msg.message.startsWith('TRADE_COMPLETED:')) {
@@ -166,7 +173,7 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername }: {
             ? 'chat-bubble-own bg-gold/20 border border-gold/30 text-white rounded-br-sm'
             : 'chat-bubble-other bg-field-700 border border-field-600 text-field-100 rounded-bl-sm',
         )}>
-          <MessageText text={msg.message} myUsername={myUsername} />
+          <MessageText text={msg.message} myUsername={myUsername} onMentionClick={onMentionClick} />
         </div>
       </div>
     </div>
@@ -234,6 +241,7 @@ export function LeagueChat() {
   const inputRef = useRef<HTMLInputElement>(null)
   const inputWrapRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
+  const [profileUsername, setProfileUsername] = useState<string | null>(null)
 
   // ── @ mention state ─────────────────────────────────────────
   const [mentionQuery, setMentionQuery] = useState<string | null>(null) // null = not active
@@ -461,6 +469,7 @@ export function LeagueChat() {
             isOwn={msg.user_id === user?.id}
             showAvatar={isFirst}
             myUsername={myUsername}
+            onMentionClick={setProfileUsername}
           />
         ))}
         <div ref={bottomRef} />
@@ -525,6 +534,14 @@ export function LeagueChat() {
           </span>
         </div>
       </div>
+
+      {/* User profile modal — opens when @mention is clicked */}
+      {profileUsername && (
+        <UserProfileModal
+          username={profileUsername}
+          onClose={() => setProfileUsername(null)}
+        />
+      )}
     </div>
   )
 }
