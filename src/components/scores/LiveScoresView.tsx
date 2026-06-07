@@ -485,7 +485,15 @@ type StatusFilter = 'All' | 'Live' | 'Final' | 'Upcoming'
 export function LiveScoresView() {
   const { profile } = useAppStore()
 
-  const [favTeams, setFavTeams]       = useState<Set<string>>(loadFavs)
+  // Merge profile favorites immediately at init — no delay
+  const [favTeams, setFavTeams] = useState<Set<string>>(() => {
+    const favs = loadFavs()
+    // profile may already be in the store at mount time — add them immediately
+    const profileTeams = [profile?.favorite_nfl_team, profile?.favorite_cfb_team].filter(Boolean) as string[]
+    profileTeams.forEach(t => favs.add(t))
+    if (profileTeams.length) saveFavs(favs)
+    return favs
+  })
   const [leagueFilter, setLeagueFilter] = useState<LeagueFilter>('All')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
   const [viewMode, setViewMode]       = useState<ViewMode>(() =>
@@ -546,24 +554,26 @@ export function LiveScoresView() {
   const hasError   = nflQuery.isError && cfbQuery.isError
   const liveCount  = allGames.filter(g => g.status === 'in').length
 
-  const filtered = allGames.filter(g => {
-    if (leagueFilter !== 'All' && g.league !== leagueFilter) return false
-    if (statusFilter === 'Live'     && g.status !== 'in')   return false
-    if (statusFilter === 'Final'    && g.status !== 'post') return false
-    if (statusFilter === 'Upcoming' && g.status !== 'pre')  return false
-    return true
-  })
+  const statusOrder: Record<string, number> = { in: 0, pre: 1, post: 2 }
 
-  const sorted = [...filtered].sort((a, b) => {
-    const aFav = favTeams.has(a.home.abbr) || favTeams.has(a.away.abbr)
-    const bFav = favTeams.has(b.home.abbr) || favTeams.has(b.away.abbr)
-    if (aFav !== bFav) return aFav ? -1 : 1
-    const order: Record<string, number> = { in: 0, pre: 1, post: 2 }
-    return (order[a.status] ?? 1) - (order[b.status] ?? 1)
-  })
+  // Favorited games: ALWAYS shown at top, bypass filters, sorted live→upcoming→final
+  const favGames = allGames
+    .filter(g => favTeams.has(g.home.abbr) || favTeams.has(g.away.abbr))
+    .sort((a, b) => (statusOrder[a.status] ?? 1) - (statusOrder[b.status] ?? 1))
 
-  const favGames   = sorted.filter(g => favTeams.has(g.home.abbr) || favTeams.has(g.away.abbr))
-  const otherGames = sorted.filter(g => !favTeams.has(g.home.abbr) && !favTeams.has(g.away.abbr))
+  // All other games: filtered normally, favs excluded so they don't appear twice
+  const otherGames = allGames
+    .filter(g => {
+      if (favTeams.has(g.home.abbr) || favTeams.has(g.away.abbr)) return false
+      if (leagueFilter !== 'All' && g.league !== leagueFilter) return false
+      if (statusFilter === 'Live'     && g.status !== 'in')   return false
+      if (statusFilter === 'Final'    && g.status !== 'post') return false
+      if (statusFilter === 'Upcoming' && g.status !== 'pre')  return false
+      return true
+    })
+    .sort((a, b) => (statusOrder[a.status] ?? 1) - (statusOrder[b.status] ?? 1))
+
+  const sorted = [...favGames, ...otherGames]
 
   const sharedProps = { viewMode, cols, favTeams, onToggleFav: toggleFav, oddsMap }
 
