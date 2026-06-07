@@ -39,7 +39,8 @@ const NFL_TEAMS = ['AFC NORTH', 'RAVENS', 'STEELERS', 'BENGALS', 'BROWNS', 'AFC 
 const CFB_TEAMS = ['SEC', 'ALABAMA', 'GEORGIA', 'LSU', 'TENNESSEE', 'TEXAS', 'BIG TEN', 'MICHIGAN', 'OHIO STATE', 'PENN STATE', 'OREGON', 'BIG 12', 'KANSAS STATE', 'OKLAHOMA', 'TEXAS TECH', 'ACC', 'CLEMSON', 'FSU', 'MIAMI', 'PAC-12', 'UTAH', 'WASHINGTON', 'USC', 'NOTRE DAME', 'FLORIDA STATE', 'AUBURN', 'OLE MISS']
 
 function Ticker({ teams, reverse = false, speed = 40 }: { teams: string[], reverse?: boolean, speed?: number }) {
-  const doubled = [...teams, ...teams, ...teams]
+  // Two copies only — translate by exactly -50% so the reset is pixel-perfect
+  const items = [...teams, ...teams]
   return (
     <div className="overflow-hidden whitespace-nowrap select-none">
       <div style={{
@@ -47,8 +48,9 @@ function Ticker({ teams, reverse = false, speed = 40 }: { teams: string[], rever
         gap: '1.5rem',
         alignItems: 'center',
         animation: `${reverse ? 'tickerRight' : 'tickerLeft'} ${speed}s linear infinite`,
+        willChange: 'transform',
       }}>
-        {doubled.map((t, i) => (
+        {items.map((t, i) => (
           <span key={i} className="font-cond font-black text-xs uppercase tracking-[0.2em] text-white/20">
             {t} <span className="text-white/10">·</span>
           </span>
@@ -84,10 +86,10 @@ export function LandingPage() {
       <style>{`
         @keyframes tickerLeft {
           0% { transform: translateX(0); }
-          100% { transform: translateX(-33.333%); }
+          100% { transform: translateX(-50%); }
         }
         @keyframes tickerRight {
-          0% { transform: translateX(-33.333%); }
+          0% { transform: translateX(-50%); }
           100% { transform: translateX(0); }
         }
         @keyframes floatA {
