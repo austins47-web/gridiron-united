@@ -136,6 +136,14 @@ function loadFavs(): Set<string> {
 }
 function saveFavs(s: Set<string>) { localStorage.setItem(FAV_KEY, JSON.stringify([...s])) }
 
+// Check if a team is favorited by abbr OR full name (CFB abbrs are unreliable)
+function teamIsFav(favs: Set<string>, team: GameTeam): boolean {
+  return favs.has(team.abbr) || favs.has(team.name) || favs.has(FULL_NAME_TO_ABBR[team.name] ?? '')
+}
+function gameHasFav(favs: Set<string>, game: LiveGame): boolean {
+  return teamIsFav(favs, game.home) || teamIsFav(favs, game.away)
+}
+
 // ── Status badge ─────────────────────────────────────────────
 
 function StatusBadge({ game, compact = false }: { game: LiveGame, compact?: boolean }) {
@@ -170,8 +178,8 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
   const isFinal = game.status === 'post'
   const awayScore = parseInt(game.away.score) || 0
   const homeScore = parseInt(game.home.score) || 0
-  const homeIsFav = favTeams.has(game.home.abbr)
-  const awayIsFav = favTeams.has(game.away.abbr)
+  const homeIsFav = teamIsFav(favTeams, game.home)
+  const awayIsFav = teamIsFav(favTeams, game.away)
 
   return (
     <div className={clsx(
@@ -205,7 +213,7 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
         { team: game.away, ahead: awayScore > homeScore },
         { team: game.home, ahead: homeScore > awayScore },
       ].map(({ team, ahead }) => {
-        const isFav    = favTeams.has(team.abbr)
+        const isFav    = teamIsFav(favTeams, team)
         const hasBall  = isLive && game.possession === team.abbr
         const winning  = (isLive || isFinal) && ahead
         const losing   = (isLive || isFinal) && !ahead && awayScore !== homeScore
@@ -312,12 +320,12 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
   const isFinal = game.status === 'post'
   const awayScore = parseInt(game.away.score) || 0
   const homeScore = parseInt(game.home.score) || 0
-  const homeIsFav = favTeams.has(game.home.abbr)
-  const awayIsFav = favTeams.has(game.away.abbr)
+  const homeIsFav = teamIsFav(favTeams, game.home)
+  const awayIsFav = teamIsFav(favTeams, game.away)
   const anyFav    = homeIsFav || awayIsFav
 
   const TeamBlock = ({ team, ahead }: { team: GameTeam, ahead: boolean }) => {
-    const isFav   = favTeams.has(team.abbr)
+    const isFav   = teamIsFav(favTeams, team)
     const hasBall = isLive && game.possession === team.abbr
     const winning = (isLive || isFinal) && ahead
     const losing  = (isLive || isFinal) && !ahead && awayScore !== homeScore
@@ -525,11 +533,11 @@ export function LiveScoresView() {
   // Manual favorites from localStorage (user-toggled)
   const [manualFavs, setManualFavs] = useState<Set<string>>(loadFavs)
 
-  // Profile teams — convert full names to abbreviations used by ESPN
-  const profileTeams = new Set(
+  // Profile teams — store raw value (abbr or full name) so teamIsFav() can match either way
+  const profileTeams = new Set<string>(
     [profile?.favorite_nfl_team, profile?.favorite_cfb_team]
       .filter(Boolean)
-      .map(t => toAbbr(t as string))
+      .flatMap(t => [t as string, toAbbr(t as string)]) // store both forms
   )
 
   // Combined: profile teams always in, plus anything user has manually starred
@@ -577,13 +585,13 @@ export function LiveScoresView() {
 
   // Favorited games: ALWAYS shown at top, bypass filters, sorted live→upcoming→final
   const favGames = allGames
-    .filter(g => favTeams.has(g.home.abbr) || favTeams.has(g.away.abbr))
+    .filter(g => gameHasFav(favTeams, g))
     .sort((a, b) => (statusOrder[a.status] ?? 1) - (statusOrder[b.status] ?? 1))
 
   // All other games: filtered normally, favs excluded so they don't appear twice
   const otherGames = allGames
     .filter(g => {
-      if (favTeams.has(g.home.abbr) || favTeams.has(g.away.abbr)) return false
+      if (gameHasFav(favTeams, g)) return false
       if (leagueFilter !== 'All' && g.league !== leagueFilter) return false
       if (statusFilter === 'Live'     && g.status !== 'in')   return false
       if (statusFilter === 'Final'    && g.status !== 'post') return false
