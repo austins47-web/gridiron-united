@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/appStore'
-import { Star, RefreshCw, WifiOff, TrendingUp } from 'lucide-react'
+import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4 } from 'lucide-react'
 import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
 
@@ -31,6 +31,9 @@ interface LiveGame {
   downDistance?: string
   redZone?: boolean
 }
+
+type ViewMode = 'grid' | 'list'
+type ColCount = 2 | 3 | 4 | 5
 
 // ── ESPN parsers ─────────────────────────────────────────────
 
@@ -76,9 +79,7 @@ function parseGame(event: any, league: 'NFL' | 'CFB'): LiveGame {
   } catch {
     return {
       id: event.id ?? 'unknown',
-      league,
-      status: 'pre',
-      statusText: '',
+      league, status: 'pre', statusText: '',
       home: { abbr: '??', name: '??', score: '0' },
       away: { abbr: '??', name: '??', score: '0' },
     }
@@ -89,7 +90,6 @@ async function fetchLeague(league: 'NFL' | 'CFB'): Promise<LiveGame[]> {
   const url = league === 'NFL'
     ? 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard'
     : 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=50'
-
   const res = await fetch(url)
   if (!res.ok) throw new Error(`ESPN ${league} fetch failed: ${res.status}`)
   const data = await res.json()
@@ -99,46 +99,46 @@ async function fetchLeague(league: 'NFL' | 'CFB'): Promise<LiveGame[]> {
 // ── Favorites ────────────────────────────────────────────────
 
 const FAV_KEY = 'gu_fav_teams_v2'
+const VIEW_KEY = 'gu_scores_view'
+const COLS_KEY = 'gu_scores_cols'
 
 function loadFavs(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]')) }
   catch { return new Set() }
 }
-function saveFavs(s: Set<string>) {
-  localStorage.setItem(FAV_KEY, JSON.stringify([...s]))
-}
+function saveFavs(s: Set<string>) { localStorage.setItem(FAV_KEY, JSON.stringify([...s])) }
 
-// ── Sub-components ───────────────────────────────────────────
+// ── Status badge ─────────────────────────────────────────────
 
-function StatusBadge({ game }: { game: LiveGame }) {
+function StatusBadge({ game, compact = false }: { game: LiveGame, compact?: boolean }) {
   if (game.status === 'post') {
-    return <span className="text-[10px] font-bold text-emerald-400">Final</span>
+    return <span className={clsx('font-bold text-emerald-400', compact ? 'text-[10px]' : 'text-xs')}>Final</span>
   }
   if (game.status === 'pre') {
-    return <span className="text-[10px] text-field-400">{game.statusText}</span>
+    return <span className={clsx('text-field-300', compact ? 'text-[10px]' : 'text-xs')}>{game.statusText}</span>
   }
   const quarters = ['', 'Q1', 'Q2', 'Q3', 'Q4', 'OT', '2OT']
-  const halves = ['', '1st', '2nd', 'OT']
+  const halves   = ['', '1st', '2nd', 'OT']
   const p = game.period ?? 1
-  const label = game.league === 'NFL'
-    ? (quarters[p] ?? `P${p}`)
-    : (halves[p] ?? `P${p}`)
+  const label = game.league === 'NFL' ? (quarters[p] ?? `P${p}`) : (halves[p] ?? `P${p}`)
   return (
     <div className="flex items-center gap-1">
       <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
-      <span className="text-[10px] font-bold text-red-400">{label}</span>
-      {game.clock && <span className="text-[10px] text-field-400">{game.clock}</span>}
+      <span className={clsx('font-bold text-red-400', compact ? 'text-[10px]' : 'text-xs')}>{label}</span>
+      {game.clock && <span className={clsx('text-field-300', compact ? 'text-[10px]' : 'text-xs')}>{game.clock}</span>}
     </div>
   )
 }
 
-function GameCard({ game, favTeams, onToggleFav, odds }: {
+// ── GRID CARD ────────────────────────────────────────────────
+
+function GridCard({ game, favTeams, onToggleFav, odds }: {
   game: LiveGame
   favTeams: Set<string>
   onToggleFav: (abbr: string) => void
   odds?: GameOdds | null
 }) {
-  const isLive = game.status === 'in'
+  const isLive  = game.status === 'in'
   const isFinal = game.status === 'post'
   const awayScore = parseInt(game.away.score) || 0
   const homeScore = parseInt(game.home.score) || 0
@@ -148,173 +148,119 @@ function GameCard({ game, favTeams, onToggleFav, odds }: {
   return (
     <div className={clsx(
       'bg-field-800 border rounded-xl p-3 flex flex-col gap-2 min-w-0',
-      isLive && game.redZone
-        ? 'border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.12)]'
-        : isLive
-        ? 'border-gold/30'
-        : 'border-field-700',
+      isLive && game.redZone ? 'border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.12)]'
+      : isLive ? 'border-gold/30'
+      : 'border-field-700',
     )}>
 
-      {/* Top row: league · status · broadcast · fav star */}
-      <div className="flex items-center justify-between gap-1 min-w-0">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           <span className={clsx(
             'shrink-0 font-cond font-black text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded',
             game.league === 'NFL' ? 'bg-nfl/20 text-nfl' : 'bg-cfb/20 text-cfb',
-          )}>
-            {game.league}
-          </span>
-          <StatusBadge game={game} />
-          {game.redZone && isLive && (
-            <span className="text-[9px] font-black text-red-400 shrink-0">RZ</span>
-          )}
+          )}>{game.league}</span>
+          <StatusBadge game={game} compact />
+          {game.redZone && isLive && <span className="text-[9px] font-black text-red-400">RZ</span>}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {game.broadcast && (
-            <span className="text-[9px] text-field-600 font-bold">{game.broadcast}</span>
-          )}
-          <button
-            onClick={() => onToggleFav(awayIsFav ? game.away.abbr : game.home.abbr)}
-            title="Toggle favorite"
-            className="text-field-600 hover:text-gold transition-colors"
-          >
-            <Star className={clsx(
-              'w-3.5 h-3.5',
-              (homeIsFav || awayIsFav) ? 'fill-gold text-gold' : ''
-            )} />
+          {game.broadcast && <span className="text-[10px] text-field-300 font-bold">{game.broadcast}</span>}
+          <button onClick={() => onToggleFav(awayIsFav ? game.away.abbr : game.home.abbr)}
+            className="text-field-500 hover:text-gold transition-colors">
+            <Star className={clsx('w-3.5 h-3.5', (homeIsFav || awayIsFav) && 'fill-gold text-gold')} />
           </button>
         </div>
       </div>
 
       {/* Teams */}
-      {([
-        { team: game.away, isHome: false, ahead: awayScore > homeScore },
-        { team: game.home, isHome: true,  ahead: homeScore > awayScore },
-      ] as const).map(({ team, isHome, ahead }) => {
-        const isFav = favTeams.has(team.abbr)
-        const hasBall = isLive && game.possession === team.abbr
-        const winning = (isLive || isFinal) && ahead
-        const losing = (isLive || isFinal) && !ahead && awayScore !== homeScore
+      {[
+        { team: game.away, ahead: awayScore > homeScore },
+        { team: game.home, ahead: homeScore > awayScore },
+      ].map(({ team, ahead }) => {
+        const isFav    = favTeams.has(team.abbr)
+        const hasBall  = isLive && game.possession === team.abbr
+        const winning  = (isLive || isFinal) && ahead
+        const losing   = (isLive || isFinal) && !ahead && awayScore !== homeScore
 
         return (
           <div key={team.abbr} className="flex items-center gap-1.5">
-            {/* possession dot */}
             <div className="w-2 shrink-0 flex justify-center">
               {hasBall && <div className="w-1.5 h-1.5 rounded-full bg-gold" />}
             </div>
-
-            {/* rank */}
-            {team.rank ? (
-              <span className="text-[9px] font-black text-cfb/80 w-5 shrink-0 text-right">
-                #{team.rank}
-              </span>
-            ) : (
-              <span className="w-5 shrink-0" />
-            )}
-
-            {/* abbr + name */}
+            {team.rank
+              ? <span className="text-[9px] font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
+              : <span className="w-5 shrink-0" />}
             <span className={clsx(
               'font-cond font-bold text-sm flex-1 truncate',
-              isFav ? 'text-gold'
-              : winning ? 'text-white'
-              : losing ? 'text-field-500'
-              : 'text-field-300',
+              isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
             )}>
               {team.abbr}
-              <span className="text-field-600 font-normal text-[10px] ml-1 hidden sm:inline">
+              <span className="text-field-300 font-normal text-[10px] ml-1 hidden sm:inline">
                 {team.name !== team.abbr ? team.name : ''}
               </span>
             </span>
-
-            {/* record (pre-game) */}
             {game.status === 'pre' && team.record && (
-              <span className="text-[10px] text-field-600 shrink-0">{team.record}</span>
+              <span className="text-[10px] text-field-300 shrink-0">{team.record}</span>
             )}
-
-            {/* score */}
             {game.status !== 'pre' && (
               <span className={clsx(
                 'font-cond font-black text-lg leading-none w-7 text-right shrink-0',
-                isFav ? 'text-gold'
-                : winning ? 'text-white'
-                : losing ? 'text-field-500'
-                : 'text-field-300',
-              )}>
-                {team.score}
-              </span>
+                isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+              )}>{team.score}</span>
             )}
           </div>
         )
       })}
 
-      {/* Down & distance / venue footer */}
+      {/* Down & distance / venue */}
       {isLive && game.downDistance && (
-        <div className="text-[10px] text-field-500 border-t border-field-700/60 pt-1.5 truncate">
+        <div className="text-[10px] text-field-300 border-t border-field-700/60 pt-1.5 truncate">
           {game.downDistance}
-          {game.venue && (
-            <span className="text-field-600 ml-2">· {game.venue.split(',')[0]}</span>
-          )}
+          {game.venue && <span className="text-field-300 ml-2">· {game.venue.split(',')[0]}</span>}
         </div>
       )}
       {game.status === 'pre' && game.venue && (
-        <div className="text-[10px] text-field-600 border-t border-field-700/60 pt-1.5 truncate">
+        <div className="text-[10px] text-field-300 border-t border-field-700/60 pt-1.5 truncate">
           {game.venue.split(',')[0]}
         </div>
       )}
 
-      {/* Odds — spread + win probability */}
+      {/* Odds */}
       {odds && game.status !== 'post' && (
         <div className="border-t border-field-700/60 pt-1.5 space-y-1.5">
-          {/* Spread row */}
           <div className="flex items-center justify-between text-[10px]">
-            <span className="text-field-600 flex items-center gap-1">
+            <span className="text-field-300 flex items-center gap-1">
               <TrendingUp className="w-2.5 h-2.5" /> Spread
             </span>
             <div className="flex items-center gap-2 font-cond font-black">
-              {/* Away spread */}
-              <span className={clsx(
-                odds.spread !== null && -odds.spread > 0 ? 'text-white' : 'text-field-400'
-              )}>
+              <span className="text-field-200">
                 {game.away.abbr}{' '}
-                <span className="text-white">
-                  {odds.spread !== null
-                    ? (-odds.spread === 0 ? 'PK' : -odds.spread > 0 ? `+${-odds.spread}` : `${-odds.spread}`)
-                    : '—'}
-                </span>
+                {odds.spread !== null
+                  ? (-odds.spread === 0 ? 'PK' : -odds.spread > 0 ? `+${-odds.spread}` : `${-odds.spread}`)
+                  : '—'}
               </span>
-              <span className="text-field-700">|</span>
-              {/* Home spread */}
-              <span className={clsx(
-                odds.spread !== null && odds.spread > 0 ? 'text-white' : 'text-field-400'
-              )}>
+              <span className="text-field-600">|</span>
+              <span className="text-field-200">
                 {game.home.abbr}{' '}
-                <span className="text-white">
-                  {odds.spread !== null
-                    ? (odds.spread === 0 ? 'PK' : odds.spread > 0 ? `+${odds.spread}` : `${odds.spread}`)
-                    : '—'}
-                </span>
+                {odds.spread !== null
+                  ? (odds.spread === 0 ? 'PK' : odds.spread > 0 ? `+${odds.spread}` : `${odds.spread}`)
+                  : '—'}
               </span>
             </div>
           </div>
-
-          {/* Win probability bar */}
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (
             <div className="space-y-0.5">
               <div className="flex rounded overflow-hidden h-3 text-[8px] font-black">
-                <div
-                  className="flex items-center justify-center bg-field-500 transition-all"
-                  style={{ width: `${odds.awayWinPct}%` }}
-                >
+                <div className="flex items-center justify-center bg-field-500 transition-all"
+                  style={{ width: `${odds.awayWinPct}%` }}>
                   {odds.awayWinPct >= 25 && `${odds.awayWinPct}%`}
                 </div>
-                <div
-                  className="flex items-center justify-center bg-gold/70 transition-all"
-                  style={{ width: `${odds.homeWinPct}%` }}
-                >
+                <div className="flex items-center justify-center bg-gold/70 transition-all"
+                  style={{ width: `${odds.homeWinPct}%` }}>
                   {odds.homeWinPct >= 25 && `${odds.homeWinPct}%`}
                 </div>
               </div>
-              <div className="flex justify-between text-[9px] text-field-500">
+              <div className="flex justify-between text-[9px] text-field-300">
                 <span>{game.away.abbr} {odds.awayWinPct}%</span>
                 <span>{odds.homeWinPct}% {game.home.abbr}</span>
               </div>
@@ -322,6 +268,211 @@ function GameCard({ game, favTeams, onToggleFav, odds }: {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── LIST ROW ─────────────────────────────────────────────────
+
+function ListRow({ game, favTeams, onToggleFav, odds }: {
+  game: LiveGame
+  favTeams: Set<string>
+  onToggleFav: (abbr: string) => void
+  odds?: GameOdds | null
+}) {
+  const isLive  = game.status === 'in'
+  const isFinal = game.status === 'post'
+  const awayScore = parseInt(game.away.score) || 0
+  const homeScore = parseInt(game.home.score) || 0
+  const homeIsFav = favTeams.has(game.home.abbr)
+  const awayIsFav = favTeams.has(game.away.abbr)
+  const anyFav    = homeIsFav || awayIsFav
+
+  const TeamBlock = ({ team, ahead }: { team: GameTeam, ahead: boolean }) => {
+    const isFav   = favTeams.has(team.abbr)
+    const hasBall = isLive && game.possession === team.abbr
+    const winning = (isLive || isFinal) && ahead
+    const losing  = (isLive || isFinal) && !ahead && awayScore !== homeScore
+
+    return (
+      <div className="flex items-center gap-2 min-w-0">
+        {hasBall
+          ? <div className="w-1.5 h-1.5 rounded-full bg-gold shrink-0" />
+          : <div className="w-1.5 shrink-0" />}
+        {team.rank
+          ? <span className="text-[9px] font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
+          : <span className="w-5 shrink-0" />}
+        <span className={clsx(
+          'font-cond font-bold text-sm shrink-0 w-8',
+          isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+        )}>{team.abbr}</span>
+        <span className="text-field-300 text-xs truncate hidden md:block">{team.name}</span>
+        {game.status === 'pre' && team.record && (
+          <span className="text-field-300 text-[10px] shrink-0 hidden sm:block">({team.record})</span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className={clsx(
+      'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all',
+      isLive && game.redZone ? 'border-red-500/30 bg-red-500/[0.03]'
+      : isLive ? 'border-gold/25 bg-field-800'
+      : anyFav ? 'border-field-600 bg-field-800'
+      : 'border-field-700 bg-field-800/60',
+    )}>
+
+      {/* League + status — fixed width */}
+      <div className="flex items-center gap-1.5 shrink-0 w-[110px]">
+        <span className={clsx(
+          'font-cond font-black text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
+          game.league === 'NFL' ? 'bg-nfl/20 text-nfl' : 'bg-cfb/20 text-cfb',
+        )}>{game.league}</span>
+        <StatusBadge game={game} compact />
+        {game.redZone && isLive && <span className="text-[9px] font-black text-red-400">RZ</span>}
+      </div>
+
+      {/* Away team */}
+      <div className="flex-1 min-w-0">
+        <TeamBlock team={game.away} ahead={awayScore > homeScore} />
+      </div>
+
+      {/* Scores — center */}
+      <div className="shrink-0 flex items-center gap-1 w-16 justify-center">
+        {game.status !== 'pre' ? (
+          <>
+            <span className={clsx(
+              'font-cond font-black text-xl w-6 text-right leading-none',
+              awayScore > homeScore ? 'text-white' : 'text-field-400',
+            )}>{game.away.score}</span>
+            <span className="text-field-500 text-xs">–</span>
+            <span className={clsx(
+              'font-cond font-black text-xl w-6 text-left leading-none',
+              homeScore > awayScore ? 'text-white' : 'text-field-400',
+            )}>{game.home.score}</span>
+          </>
+        ) : (
+          <span className="text-field-300 text-xs font-bold">vs</span>
+        )}
+      </div>
+
+      {/* Home team */}
+      <div className="flex-1 min-w-0 justify-end flex">
+        <TeamBlock team={game.home} ahead={homeScore > awayScore} />
+      </div>
+
+      {/* Odds — spread + win% */}
+      {odds && game.status !== 'post' && (
+        <div className="shrink-0 hidden lg:flex items-center gap-3 w-[180px] justify-end">
+          {odds.spread !== null && (
+            <span className="text-[10px] text-field-200 font-cond font-bold">
+              {game.away.abbr} {-odds.spread === 0 ? 'PK' : -odds.spread > 0 ? `+${-odds.spread}` : `${-odds.spread}`}
+              <span className="text-field-500 mx-1">/</span>
+              {game.home.abbr} {odds.spread === 0 ? 'PK' : odds.spread > 0 ? `+${odds.spread}` : `${odds.spread}`}
+            </span>
+          )}
+          {odds.awayWinPct !== null && odds.homeWinPct !== null && (
+            <div className="w-20">
+              <div className="flex rounded overflow-hidden h-2">
+                <div className="bg-field-500 transition-all" style={{ width: `${odds.awayWinPct}%` }} />
+                <div className="bg-gold/70 transition-all" style={{ width: `${odds.homeWinPct}%` }} />
+              </div>
+              <div className="flex justify-between text-[9px] text-field-300 mt-0.5">
+                <span>{odds.awayWinPct}%</span>
+                <span>{odds.homeWinPct}%</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Down/distance + broadcast */}
+      <div className="shrink-0 hidden sm:flex flex-col items-end gap-0.5 w-[120px]">
+        {isLive && game.downDistance && (
+          <span className="text-[10px] text-field-300 truncate">{game.downDistance}</span>
+        )}
+        {game.venue && (
+          <span className="text-[10px] text-field-300 truncate">{game.venue.split(',')[0]}</span>
+        )}
+        {game.broadcast && (
+          <span className="text-[10px] text-field-300 font-bold">{game.broadcast}</span>
+        )}
+      </div>
+
+      {/* Star */}
+      <button onClick={() => onToggleFav(awayIsFav ? game.away.abbr : game.home.abbr)}
+        className="text-field-500 hover:text-gold transition-colors shrink-0">
+        <Star className={clsx('w-3.5 h-3.5', anyFav && 'fill-gold text-gold')} />
+      </button>
+    </div>
+  )
+}
+
+// ── COLS PICKER ──────────────────────────────────────────────
+
+function ColsPicker({ value, onChange }: { value: ColCount, onChange: (v: ColCount) => void }) {
+  const options: { val: ColCount, icon: React.ReactNode, label: string }[] = [
+    { val: 2, icon: <Columns2 className="w-3.5 h-3.5" />, label: '2' },
+    { val: 3, icon: <Columns3 className="w-3.5 h-3.5" />, label: '3' },
+    { val: 4, icon: <Columns4 className="w-3.5 h-3.5" />, label: '4' },
+    { val: 5, icon: <LayoutGrid className="w-3.5 h-3.5" />, label: '5' },
+  ]
+  return (
+    <div className="flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+      {options.map(({ val, icon, label }) => (
+        <button key={val} onClick={() => onChange(val)} title={`${label} per row`}
+          className={clsx(
+            'flex items-center gap-1 font-cond font-bold text-xs px-2 py-1.5 rounded-md transition-colors',
+            value === val ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white',
+          )}>
+          {icon}
+          <span className="hidden sm:inline">{label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── COLS → Tailwind class map ────────────────────────────────
+
+const GRID_COLS: Record<ColCount, string> = {
+  2: 'grid-cols-2',
+  3: 'grid-cols-2 sm:grid-cols-3',
+  4: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
+  5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+}
+
+// ── GAME GROUP (shared between fav / all sections) ───────────
+
+function GameGroup({
+  games, viewMode, cols, favTeams, onToggleFav, oddsMap,
+}: {
+  games: LiveGame[]
+  viewMode: ViewMode
+  cols: ColCount
+  favTeams: Set<string>
+  onToggleFav: (abbr: string) => void
+  oddsMap?: Map<string, GameOdds>
+}) {
+  const getOdds = (g: LiveGame) =>
+    g.league === 'NFL' ? (oddsMap?.get(`${g.away.abbr}@${g.home.abbr}`) ?? null) : null
+
+  if (viewMode === 'list') {
+    return (
+      <div className="space-y-1.5">
+        {games.map(g => (
+          <ListRow key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className={clsx('grid gap-3', GRID_COLS[cols])}>
+      {games.map(g => (
+        <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} />
+      ))}
     </div>
   )
 }
@@ -334,11 +485,18 @@ type StatusFilter = 'All' | 'Live' | 'Final' | 'Upcoming'
 export function LiveScoresView() {
   const { profile } = useAppStore()
 
-  const [favTeams, setFavTeams] = useState<Set<string>>(loadFavs)
+  const [favTeams, setFavTeams]       = useState<Set<string>>(loadFavs)
   const [leagueFilter, setLeagueFilter] = useState<LeagueFilter>('All')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
+  const [viewMode, setViewMode]       = useState<ViewMode>(() =>
+    (localStorage.getItem(VIEW_KEY) as ViewMode | null) ?? 'grid')
+  const [cols, setCols]               = useState<ColCount>(() =>
+    (Number(localStorage.getItem(COLS_KEY)) as ColCount | 0) || 4)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
+
+  useEffect(() => { localStorage.setItem(VIEW_KEY, viewMode) }, [viewMode])
+  useEffect(() => { localStorage.setItem(COLS_KEY, String(cols)) }, [cols])
 
   // Auto-add profile favorites
   useEffect(() => {
@@ -362,58 +520,40 @@ export function LiveScoresView() {
     })
   }, [])
 
-  // Determine refetch interval based on live games
-  const getInterval = (games: LiveGame[]) =>
-    games.some(g => g.status === 'in') ? 30_000 : 120_000
-
   const { data: oddsMap } = useNflOdds()
 
   const nflQuery = useQuery({
     queryKey: ['scores-nfl', refreshTick],
-    queryFn: async () => {
-      const games = await fetchLeague('NFL')
-      setLastUpdated(new Date())
-      return games
-    },
-    staleTime: 25_000,
-    retry: 2,
+    queryFn: async () => { const g = await fetchLeague('NFL'); setLastUpdated(new Date()); return g },
+    staleTime: 25_000, retry: 2,
   })
-
   const cfbQuery = useQuery({
     queryKey: ['scores-cfb', refreshTick],
-    queryFn: async () => {
-      const games = await fetchLeague('CFB')
-      setLastUpdated(new Date())
-      return games
-    },
-    staleTime: 25_000,
-    retry: 2,
+    queryFn: async () => { const g = await fetchLeague('CFB'); setLastUpdated(new Date()); return g },
+    staleTime: 25_000, retry: 2,
   })
 
-  // Manual auto-refresh using a timer (avoids TQ v5 refetchInterval callback issues)
+  // Auto-refresh timer
   useEffect(() => {
-    const allGames = [...(nflQuery.data ?? []), ...(cfbQuery.data ?? [])]
-    const interval = getInterval(allGames)
-    const timer = setTimeout(() => setRefreshTick(t => t + 1), interval)
-    return () => clearTimeout(timer)
+    const all = [...(nflQuery.data ?? []), ...(cfbQuery.data ?? [])]
+    const ms = all.some(g => g.status === 'in') ? 30_000 : 120_000
+    const t = setTimeout(() => setRefreshTick(n => n + 1), ms)
+    return () => clearTimeout(t)
   }, [nflQuery.data, cfbQuery.data])
 
-  const nflGames = nflQuery.data ?? []
-  const cfbGames = cfbQuery.data ?? []
-  const allGames = [...nflGames, ...cfbGames]
+  const allGames   = [...(nflQuery.data ?? []), ...(cfbQuery.data ?? [])]
   const isFetching = nflQuery.isFetching || cfbQuery.isFetching
-  const hasError = nflQuery.isError && cfbQuery.isError
-  const liveCount = allGames.filter(g => g.status === 'in').length
+  const hasError   = nflQuery.isError && cfbQuery.isError
+  const liveCount  = allGames.filter(g => g.status === 'in').length
 
   const filtered = allGames.filter(g => {
     if (leagueFilter !== 'All' && g.league !== leagueFilter) return false
-    if (statusFilter === 'Live' && g.status !== 'in') return false
-    if (statusFilter === 'Final' && g.status !== 'post') return false
-    if (statusFilter === 'Upcoming' && g.status !== 'pre') return false
+    if (statusFilter === 'Live'     && g.status !== 'in')   return false
+    if (statusFilter === 'Final'    && g.status !== 'post') return false
+    if (statusFilter === 'Upcoming' && g.status !== 'pre')  return false
     return true
   })
 
-  // Sort: favs first → live → upcoming → final
   const sorted = [...filtered].sort((a, b) => {
     const aFav = favTeams.has(a.home.abbr) || favTeams.has(a.away.abbr)
     const bFav = favTeams.has(b.home.abbr) || favTeams.has(b.away.abbr)
@@ -422,13 +562,15 @@ export function LiveScoresView() {
     return (order[a.status] ?? 1) - (order[b.status] ?? 1)
   })
 
-  const favGames = sorted.filter(g => favTeams.has(g.home.abbr) || favTeams.has(g.away.abbr))
+  const favGames   = sorted.filter(g => favTeams.has(g.home.abbr) || favTeams.has(g.away.abbr))
   const otherGames = sorted.filter(g => !favTeams.has(g.home.abbr) && !favTeams.has(g.away.abbr))
+
+  const sharedProps = { viewMode, cols, favTeams, onToggleFav: toggleFav, oddsMap }
 
   return (
     <div className="space-y-4">
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <h1 className="section-title !mb-0">Live Scores</h1>
@@ -441,25 +583,23 @@ export function LiveScoresView() {
         </div>
         <div className="flex items-center gap-2">
           {lastUpdated && (
-            <span className="text-[10px] text-field-500">
+            <span className="text-[10px] text-field-300">
               {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
-          <button
-            onClick={() => setRefreshTick(t => t + 1)}
-            disabled={isFetching}
+          <button onClick={() => setRefreshTick(n => n + 1)} disabled={isFetching}
             className={clsx(
               'p-1.5 rounded-lg border border-field-700 text-field-400 hover:text-white hover:border-field-500 transition-colors',
               isFetching && 'animate-spin opacity-50 pointer-events-none',
-            )}
-          >
+            )}>
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* ── Controls bar ── */}
       <div className="flex flex-wrap gap-2 items-center">
+        {/* League filter */}
         <div className="flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
           {(['All', 'NFL', 'CFB'] as LeagueFilter[]).map(f => (
             <button key={f} onClick={() => setLeagueFilter(f)}
@@ -470,11 +610,11 @@ export function LiveScoresView() {
                     : f === 'CFB' ? 'bg-cfb/20 text-cfb'
                     : 'bg-field-700 text-white'
                   : 'text-field-400 hover:text-white',
-              )}>
-              {f}
-            </button>
+              )}>{f}</button>
           ))}
         </div>
+
+        {/* Status filter */}
         <div className="flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
           {(['All', 'Live', 'Final', 'Upcoming'] as StatusFilter[]).map(f => (
             <button key={f} onClick={() => setStatusFilter(f)}
@@ -483,25 +623,48 @@ export function LiveScoresView() {
                 statusFilter === f
                   ? f === 'Live' ? 'bg-red-500/20 text-red-400' : 'bg-field-700 text-white'
                   : 'text-field-400 hover:text-white',
-              )}>
-              {f}
-            </button>
+              )}>{f}</button>
           ))}
         </div>
+
+        {/* View mode toggle */}
+        <div className="flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+          <button onClick={() => setViewMode('grid')} title="Grid view"
+            className={clsx(
+              'flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+              viewMode === 'grid' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white',
+            )}>
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Grid</span>
+          </button>
+          <button onClick={() => setViewMode('list')} title="List view"
+            className={clsx(
+              'flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+              viewMode === 'list' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white',
+            )}>
+            <List className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">List</span>
+          </button>
+        </div>
+
+        {/* Columns picker — grid mode only */}
+        {viewMode === 'grid' && <ColsPicker value={cols} onChange={setCols} />}
+
         {favTeams.size > 0 && (
-          <span className="text-[11px] text-gold flex items-center gap-1">
-            <Star className="w-3 h-3 fill-gold" />{favTeams.size} team{favTeams.size !== 1 ? 's' : ''} favorited
+          <span className="text-[11px] text-gold flex items-center gap-1 ml-1">
+            <Star className="w-3 h-3 fill-gold" />
+            {favTeams.size} favorited
           </span>
         )}
       </div>
 
       {/* Profile favorites notice */}
       {(profile?.favorite_nfl_team || profile?.favorite_cfb_team) && (
-        <div className="flex items-center gap-2 text-xs text-field-400 bg-field-800/40 border border-field-700/50 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 text-xs text-field-300 bg-field-800/40 border border-field-700/50 rounded-lg px-3 py-2">
           <Star className="w-3 h-3 text-gold fill-gold shrink-0" />
-          <span>Auto-pinned from your profile:
+          <span>Auto-pinned:
             {profile.favorite_nfl_team && <span className="text-nfl font-bold ml-1">{profile.favorite_nfl_team}</span>}
-            {profile.favorite_nfl_team && profile.favorite_cfb_team && <span className="text-field-600 mx-1">·</span>}
+            {profile.favorite_nfl_team && profile.favorite_cfb_team && <span className="text-field-500 mx-1">·</span>}
             {profile.favorite_cfb_team && <span className="text-cfb font-bold">{profile.favorite_cfb_team}</span>}
           </span>
         </div>
@@ -513,72 +676,61 @@ export function LiveScoresView() {
           <WifiOff className="w-4 h-4 shrink-0" />
           <div>
             <p className="font-bold">Could not load scores</p>
-            <p className="text-xs text-red-400/70 mt-0.5">ESPN scores API is unavailable. Try refreshing.</p>
+            <p className="text-xs text-red-400/70 mt-0.5">ESPN scores API unavailable. Try refreshing.</p>
           </div>
         </div>
       )}
 
       {/* Loading skeletons */}
       {isFetching && allGames.length === 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="bg-field-800 border border-field-700 rounded-xl p-3 h-28 animate-pulse" />
-          ))}
-        </div>
+        viewMode === 'list'
+          ? <div className="space-y-2">{Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-12 animate-pulse" />
+            ))}</div>
+          : <div className={clsx('grid gap-3', GRID_COLS[cols])}>
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-28 animate-pulse" />
+              ))}
+            </div>
       )}
 
-      {/* No games today */}
+      {/* No games */}
       {!isFetching && !hasError && allGames.length === 0 && (
         <div className="panel text-center py-14 space-y-2">
           <div className="text-4xl">🏈</div>
           <p className="text-white font-bold text-lg">No games today</p>
-          <p className="text-field-400 text-sm">Check back on game days — scores update live every 30 seconds</p>
+          <p className="text-field-300 text-sm">Check back on game days — scores update live</p>
         </div>
       )}
 
-      {/* No results for current filter */}
+      {/* No filter match */}
       {!isFetching && !hasError && allGames.length > 0 && sorted.length === 0 && (
         <div className="panel text-center py-8">
-          <p className="text-field-400 text-sm">No games match the selected filters</p>
+          <p className="text-field-300 text-sm">No games match the selected filters</p>
         </div>
       )}
 
       {/* Games */}
       {sorted.length > 0 && (
         <div className="space-y-5">
-          {/* Favorited games */}
           {favGames.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Star className="w-3.5 h-3.5 text-gold fill-gold" />
                 <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">My Teams</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {favGames.map(g => (
-                  <GameCard key={g.id} game={g} favTeams={favTeams} onToggleFav={toggleFav}
-                    odds={g.league === 'NFL' ? (oddsMap?.get(`${g.away.abbr}@${g.home.abbr}`) ?? null) : null}
-                  />
-                ))}
-              </div>
+              <GameGroup games={favGames} {...sharedProps} />
             </div>
           )}
-
-          {/* All other games */}
           {otherGames.length > 0 && (
             <div>
               {favGames.length > 0 && (
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-cond font-bold text-xs uppercase tracking-wider text-field-400">All Games</span>
-                  <span className="text-[10px] text-field-600">tap ⭐ to favorite a team</span>
+                  <span className="font-cond font-bold text-xs uppercase tracking-wider text-field-300">All Games</span>
+                  <span className="text-[10px] text-field-400">tap ⭐ to favorite a team</span>
                 </div>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {otherGames.map(g => (
-                  <GameCard key={g.id} game={g} favTeams={favTeams} onToggleFav={toggleFav}
-                    odds={g.league === 'NFL' ? (oddsMap?.get(`${g.away.abbr}@${g.home.abbr}`) ?? null) : null}
-                  />
-                ))}
-              </div>
+              <GameGroup games={otherGames} {...sharedProps} />
             </div>
           )}
         </div>
