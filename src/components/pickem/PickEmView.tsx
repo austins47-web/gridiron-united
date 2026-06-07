@@ -1,70 +1,135 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
-import { Trophy, ChevronLeft, ChevronRight, Lock, Check, X, Target } from 'lucide-react'
+import {
+  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar
+} from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
-// NFL team logos / colors map
-const TEAM_INFO: Record<string, { name: string; color: string; emoji: string }> = {
-  ARI: { name: 'Arizona Cardinals',      color: '#97233F', emoji: '🔴' },
-  ATL: { name: 'Atlanta Falcons',        color: '#A71930', emoji: '🔴' },
-  BAL: { name: 'Baltimore Ravens',       color: '#241773', emoji: '🟣' },
-  BUF: { name: 'Buffalo Bills',          color: '#00338D', emoji: '🔵' },
-  CAR: { name: 'Carolina Panthers',      color: '#0085CA', emoji: '🔵' },
-  CHI: { name: 'Chicago Bears',          color: '#0B162A', emoji: '🐻' },
-  CIN: { name: 'Cincinnati Bengals',     color: '#FB4F14', emoji: '🟠' },
-  CLE: { name: 'Cleveland Browns',       color: '#311D00', emoji: '🟤' },
-  DAL: { name: 'Dallas Cowboys',         color: '#003594', emoji: '⭐' },
-  DEN: { name: 'Denver Broncos',         color: '#FB4F14', emoji: '🟠' },
-  DET: { name: 'Detroit Lions',          color: '#0076B6', emoji: '🔵' },
-  GB:  { name: 'Green Bay Packers',      color: '#203731', emoji: '🟢' },
-  HOU: { name: 'Houston Texans',         color: '#03202F', emoji: '🔵' },
-  IND: { name: 'Indianapolis Colts',     color: '#002C5F', emoji: '🔵' },
-  JAX: { name: 'Jacksonville Jaguars',   color: '#006778', emoji: '🟢' },
-  KC:  { name: 'Kansas City Chiefs',     color: '#E31837', emoji: '🔴' },
-  LAC: { name: 'LA Chargers',            color: '#0080C6', emoji: '🔵' },
-  LAR: { name: 'LA Rams',               color: '#003594', emoji: '🔵' },
-  LV:  { name: 'Las Vegas Raiders',      color: '#000000', emoji: '⚫' },
-  MIA: { name: 'Miami Dolphins',         color: '#008E97', emoji: '🐬' },
-  MIN: { name: 'Minnesota Vikings',      color: '#4F2683', emoji: '🟣' },
-  NE:  { name: 'New England Patriots',   color: '#002244', emoji: '🔵' },
-  NO:  { name: 'New Orleans Saints',     color: '#D3BC8D', emoji: '⚜️' },
-  NYG: { name: 'NY Giants',             color: '#0B2265', emoji: '🔵' },
-  NYJ: { name: 'NY Jets',               color: '#125740', emoji: '🟢' },
-  PHI: { name: 'Philadelphia Eagles',    color: '#004C54', emoji: '🦅' },
-  PIT: { name: 'Pittsburgh Steelers',    color: '#FFB612', emoji: '🟡' },
-  SF:  { name: 'San Francisco 49ers',    color: '#AA0000', emoji: '🔴' },
-  SEA: { name: 'Seattle Seahawks',       color: '#002244', emoji: '🔵' },
-  TB:  { name: 'Tampa Bay Buccaneers',   color: '#D50A0A', emoji: '🔴' },
-  TEN: { name: 'Tennessee Titans',       color: '#0C2340', emoji: '🔵' },
-  WSH: { name: 'Washington Commanders', color: '#5A1414', emoji: '🔴' },
+const TEAM_INFO: Record<string, { name: string }> = {
+  ARI: { name: 'Arizona Cardinals' },
+  ATL: { name: 'Atlanta Falcons' },
+  BAL: { name: 'Baltimore Ravens' },
+  BUF: { name: 'Buffalo Bills' },
+  CAR: { name: 'Carolina Panthers' },
+  CHI: { name: 'Chicago Bears' },
+  CIN: { name: 'Cincinnati Bengals' },
+  CLE: { name: 'Cleveland Browns' },
+  DAL: { name: 'Dallas Cowboys' },
+  DEN: { name: 'Denver Broncos' },
+  DET: { name: 'Detroit Lions' },
+  GB:  { name: 'Green Bay Packers' },
+  HOU: { name: 'Houston Texans' },
+  IND: { name: 'Indianapolis Colts' },
+  JAX: { name: 'Jacksonville Jaguars' },
+  KC:  { name: 'Kansas City Chiefs' },
+  LAC: { name: 'LA Chargers' },
+  LAR: { name: 'LA Rams' },
+  LV:  { name: 'Las Vegas Raiders' },
+  MIA: { name: 'Miami Dolphins' },
+  MIN: { name: 'Minnesota Vikings' },
+  NE:  { name: 'New England Patriots' },
+  NO:  { name: 'New Orleans Saints' },
+  NYG: { name: 'NY Giants' },
+  NYJ: { name: 'NY Jets' },
+  PHI: { name: 'Philadelphia Eagles' },
+  PIT: { name: 'Pittsburgh Steelers' },
+  SF:  { name: 'San Francisco 49ers' },
+  SEA: { name: 'Seattle Seahawks' },
+  TB:  { name: 'Tampa Bay Buccaneers' },
+  TEN: { name: 'Tennessee Titans' },
+  WSH: { name: 'Washington Commanders' },
 }
 
-const CURRENT_WEEK = getCurrentNFLWeek()
+// Week 1 starts Sep 4 2025. Each week runs Thu–Mon.
+// Week is "over" when the final MNF game (Mon ~10:15pm ET) has passed.
+// Week boundaries (approximate Mon night end):
+const WEEK_END_DATES: Record<number, string> = {
+  1:  '2025-09-09T03:00:00Z', // Tue 3am UTC ≈ Mon 11pm ET
+  2:  '2025-09-16T03:00:00Z',
+  3:  '2025-09-23T03:00:00Z',
+  4:  '2025-09-30T03:00:00Z',
+  5:  '2025-10-07T03:00:00Z',
+  6:  '2025-10-14T03:00:00Z',
+  7:  '2025-10-21T03:00:00Z',
+  8:  '2025-10-28T03:00:00Z',
+  9:  '2025-11-04T03:00:00Z',
+  10: '2025-11-11T03:00:00Z',
+  11: '2025-11-18T03:00:00Z',
+  12: '2025-11-25T03:00:00Z',
+  13: '2025-12-02T03:00:00Z',
+  14: '2025-12-09T03:00:00Z',
+  15: '2025-12-16T03:00:00Z',
+  16: '2025-12-23T03:00:00Z',
+  17: '2025-12-30T03:00:00Z',
+  18: '2026-01-06T03:00:00Z',
+}
 
-function getCurrentNFLWeek(): number {
+function getActiveWeek(): number {
   const now = new Date()
-  const seasonStart = new Date('2025-09-04')
-  if (now < seasonStart) return 1
-  const diff = Math.floor((now.getTime() - seasonStart.getTime()) / (7 * 24 * 60 * 60 * 1000))
-  return Math.min(18, Math.max(1, diff + 1))
+  // Before season starts → Week 1
+  if (now < new Date('2025-09-04T00:00:00Z')) return 1
+  for (let w = 1; w <= 18; w++) {
+    const end = new Date(WEEK_END_DATES[w])
+    if (now < end) return w
+  }
+  return 18
 }
 
-function isGameLocked(gameDate: string | null): boolean {
+function isGameLocked(gameDate: string | null, deadline: string | null): boolean {
   if (!gameDate) return false
-  return new Date(gameDate) <= new Date()
+  const now = new Date()
+  // If commissioner set a custom deadline, use whichever is earlier
+  const kickoff = new Date(gameDate)
+  if (deadline) {
+    const dl = new Date(deadline)
+    return now >= dl || now >= kickoff
+  }
+  return now >= kickoff
+}
+
+function formatDeadline(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  })
 }
 
 export function PickEmView() {
-  const { activeLeagueId, activeLeague, user } = useAppStore()
+  const { activeLeagueId, activeLeague, user, myMembership } = useAppStore()
   const qc = useQueryClient()
-  const [week, setWeek] = useState(CURRENT_WEEK)
+  const isCommissioner = myMembership?.is_commissioner
+
+  const activeWeek = getActiveWeek()
+  const [week, setWeek] = useState(activeWeek)
+  const [weekDropdownOpen, setWeekDropdownOpen] = useState(false)
   const [tab, setTab] = useState<'picks' | 'standings' | 'results'>('picks')
-  const [pendingPicks, setPendingPicks] = useState<Record<string, string>>({}) // gameId → team
-  const [tiebreakerScore, setTiebreakerScore] = useState<Record<string, string>>({}) // gameId → score
+  const [pendingPicks, setPendingPicks] = useState<Record<string, string>>({})
+  const [tiebreakerScore, setTiebreakerScore] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [showDeadlineEditor, setShowDeadlineEditor] = useState(false)
+  const [deadlineInput, setDeadlineInput] = useState('')
+  const [savingDeadline, setSavingDeadline] = useState(false)
+
+  // League-level pick deadline (stored in league settings via a separate table or reusing existing)
+  const { data: leagueSettings, refetch: refetchSettings } = useQuery({
+    queryKey: ['pickem-settings', activeLeagueId, week],
+    enabled: !!activeLeagueId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('pickem_week_settings')
+        .select('*')
+        .eq('league_id', activeLeagueId!)
+        .eq('week', week)
+        .eq('season', 2025)
+        .maybeSingle()
+      return data
+    },
+  })
+
+  const weekDeadline = leagueSettings?.pick_deadline ?? null
 
   // Games for this week
   const { data: games = [] } = useQuery({
@@ -81,7 +146,7 @@ export function PickEmView() {
     },
   })
 
-  // My existing picks for this week
+  // My picks for this week
   const { data: myPicks = [] } = useQuery({
     queryKey: ['my-pickem-picks', activeLeagueId, week],
     enabled: !!activeLeagueId && !!user,
@@ -114,7 +179,7 @@ export function PickEmView() {
     },
   })
 
-  // Sync pending picks from saved picks
+  // Sync picks into state
   useEffect(() => {
     const existing: Record<string, string> = {}
     const existingTb: Record<string, string> = {}
@@ -125,6 +190,69 @@ export function PickEmView() {
     setPendingPicks(existing)
     setTiebreakerScore(existingTb)
   }, [myPicks])
+
+  // Sync deadline input when editor opens
+  useEffect(() => {
+    if (showDeadlineEditor && weekDeadline) {
+      // Convert UTC to local datetime-local format
+      const d = new Date(weekDeadline)
+      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+        .toISOString().slice(0, 16)
+      setDeadlineInput(local)
+    } else if (showDeadlineEditor) {
+      // Default to first game of the week
+      const firstGame = games[0]
+      if (firstGame?.game_date) {
+        const d = new Date(firstGame.game_date)
+        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 16)
+        setDeadlineInput(local)
+      }
+    }
+  }, [showDeadlineEditor, weekDeadline, games])
+
+  const saveDeadline = async () => {
+    if (!activeLeagueId || !deadlineInput) return
+    setSavingDeadline(true)
+    try {
+      const isoDeadline = new Date(deadlineInput).toISOString()
+      const { error } = await supabase
+        .from('pickem_week_settings')
+        .upsert({
+          league_id: activeLeagueId,
+          week,
+          season: 2025,
+          pick_deadline: isoDeadline,
+        }, { onConflict: 'league_id,week,season' })
+      if (error) throw error
+      await refetchSettings()
+      toast.success(`Deadline set for Week ${week}`)
+      setShowDeadlineEditor(false)
+    } catch (e: any) {
+      toast.error('Failed to save deadline: ' + e.message)
+    } finally {
+      setSavingDeadline(false)
+    }
+  }
+
+  const clearDeadline = async () => {
+    if (!activeLeagueId) return
+    try {
+      await supabase
+        .from('pickem_week_settings')
+        .upsert({
+          league_id: activeLeagueId,
+          week,
+          season: 2025,
+          pick_deadline: null,
+        }, { onConflict: 'league_id,week,season' })
+      await refetchSettings()
+      toast.success('Deadline cleared — picks lock at kickoff')
+      setShowDeadlineEditor(false)
+    } catch (e: any) {
+      toast.error(e.message)
+    }
+  }
 
   const savePicks = async () => {
     if (!activeLeagueId || !user) return
@@ -139,12 +267,10 @@ export function PickEmView() {
         picked_team: team,
         tiebreaker_score: tiebreakerScore[gameId] ? parseInt(tiebreakerScore[gameId]) : null,
       }))
-
       const { error } = await supabase
         .from('pickem_picks')
         .upsert(rows, { onConflict: 'league_id,user_id,game_id' })
       if (error) throw error
-
       qc.invalidateQueries({ queryKey: ['my-pickem-picks', activeLeagueId, week] })
       toast.success('Picks saved!')
     } catch (e: any) {
@@ -156,15 +282,18 @@ export function PickEmView() {
 
   const tiebreakerGame = games.find((g: any) => g.is_tiebreaker)
   const regularGames = games.filter((g: any) => !g.is_tiebreaker)
-  const lockedCount = games.filter((g: any) => isGameLocked(g.game_date)).length
+  const lockedCount = games.filter((g: any) => isGameLocked(g.game_date, weekDeadline)).length
   const pickedCount = Object.keys(pendingPicks).filter(id => games.some((g: any) => g.id === id)).length
   const totalGames = games.length
+
+  // Determine if the whole week is still open for picks
+  const anyUnlocked = games.some((g: any) => !isGameLocked(g.game_date, weekDeadline))
 
   if (!activeLeagueId || activeLeague?.league_type !== 'pickem') {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 text-center">
         <Trophy className="w-12 h-12 text-gold/40 mx-auto mb-4" />
-        <h2 className="text-white font-bold text-lg mb-2">Pick'Em League</h2>
+        <h2 className="text-white font-bold text-lg mb-2">Pick'Em</h2>
         <p className="text-field-400">Select a Pick'Em league to make your picks.</p>
       </div>
     )
@@ -172,48 +301,91 @@ export function PickEmView() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="section-title">Pick'Em</h1>
-          <p className="text-field-400 text-sm">{activeLeague.name} · 2025 Season</p>
+          <p className="text-field-400 text-sm">{activeLeague.name} · 2025 NFL Season</p>
         </div>
-        <div className="flex items-center gap-2 bg-field-800 border border-field-700 rounded-xl px-4 py-2">
-          <span className="text-field-300 text-sm font-bold">{pickedCount}/{totalGames} picked</span>
-          {pickedCount === totalGames && totalGames > 0 && (
-            <Check className="w-4 h-4 text-emerald-400" />
+        <div className="flex items-center gap-2">
+          {pickedCount > 0 && (
+            <div className={clsx(
+              'flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-bold border',
+              pickedCount === totalGames
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-field-800 border-field-700 text-field-300'
+            )}>
+              {pickedCount === totalGames && <Check className="w-3.5 h-3.5" />}
+              {pickedCount}/{totalGames} picked
+            </div>
           )}
         </div>
       </div>
 
-      {/* Week selector + tabs */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      {/* Week selector dropdown + tabs */}
+      <div className="flex items-center justify-between gap-3">
+
+        {/* Week dropdown */}
+        <div className="relative">
           <button
-            onClick={() => setWeek(w => Math.max(1, w - 1))}
-            disabled={week <= 1}
-            className="btn-ghost !py-1.5 !px-2 disabled:opacity-30"
+            onClick={() => setWeekDropdownOpen(o => !o)}
+            className="flex items-center gap-2 bg-field-800 border border-field-600 rounded-xl px-4 py-2.5 hover:border-field-500 transition-colors"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <Calendar className="w-4 h-4 text-field-400" />
+            <span className="font-cond font-black text-white text-base uppercase tracking-wider">
+              Week {week}
+            </span>
+            {week === activeWeek && (
+              <span className="text-[10px] font-bold text-gold bg-gold/10 border border-gold/30 rounded px-1.5 py-0.5 uppercase tracking-wider">
+                Current
+              </span>
+            )}
+            <ChevronDown className="w-4 h-4 text-field-400" />
           </button>
-          <span className="font-cond font-black text-white text-lg uppercase tracking-wider min-w-[80px] text-center">
-            Week {week}
-          </span>
-          <button
-            onClick={() => setWeek(w => Math.min(18, w + 1))}
-            disabled={week >= 18}
-            className="btn-ghost !py-1.5 !px-2 disabled:opacity-30"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+
+          {weekDropdownOpen && (
+            <div className="absolute left-0 top-full mt-1 z-30 bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl w-48">
+              <div className="px-3 py-2 border-b border-field-700">
+                <span className="text-field-400 text-xs font-bold uppercase tracking-wider">Select Week</span>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {Array.from({ length: 18 }, (_, i) => i + 1).map(w => {
+                  const isOver = new Date() >= new Date(WEEK_END_DATES[w])
+                  const isCurrent = w === activeWeek
+                  return (
+                    <button
+                      key={w}
+                      onClick={() => { setWeek(w); setWeekDropdownOpen(false) }}
+                      className={clsx(
+                        'w-full text-left px-4 py-2.5 flex items-center justify-between transition-colors',
+                        week === w
+                          ? 'bg-gold/10 text-gold'
+                          : 'text-field-200 hover:bg-field-700',
+                      )}
+                    >
+                      <span className="font-cond font-bold text-sm">Week {w}</span>
+                      <span className={clsx('text-[10px] font-bold uppercase tracking-wider', 
+                        isCurrent ? 'text-gold' : isOver ? 'text-field-500' : 'text-emerald-400'
+                      )}>
+                        {isCurrent ? 'Current' : isOver ? 'Complete' : 'Upcoming'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Tabs */}
         <div className="flex gap-1">
           {(['picks', 'standings', 'results'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={clsx(
-                'font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-lg border transition-colors',
+                'font-cond font-bold text-xs uppercase tracking-wider px-3 py-2 rounded-lg border transition-colors',
                 tab === t
                   ? 'border-gold/50 text-gold bg-gold/10'
                   : 'border-field-600 text-field-400 bg-field-800 hover:text-white',
@@ -225,13 +397,99 @@ export function PickEmView() {
         </div>
       </div>
 
+      {/* Deadline banner */}
+      {weekDeadline && (
+        <div className="flex items-center gap-2 text-xs bg-field-800/60 border border-field-700 rounded-lg px-3 py-2">
+          <Clock className="w-3.5 h-3.5 text-gold shrink-0" />
+          <span className="text-field-300">
+            <span className="text-gold font-bold">Pick deadline:</span> {formatDeadline(weekDeadline)}
+          </span>
+          {isCommissioner && (
+            <button
+              onClick={() => setShowDeadlineEditor(true)}
+              className="ml-auto text-field-500 hover:text-gold transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Commissioner tools */}
+      {isCommissioner && !weekDeadline && (
+        <div className="flex items-center justify-between bg-field-800/40 border border-field-700/50 rounded-lg px-3 py-2">
+          <div className="flex items-center gap-2 text-xs text-field-400">
+            <Settings className="w-3.5 h-3.5" />
+            <span>Commissioner — picks currently lock at each game's kickoff</span>
+          </div>
+          <button
+            onClick={() => setShowDeadlineEditor(true)}
+            className="text-xs font-bold text-gold hover:text-gold-light transition-colors ml-3 whitespace-nowrap"
+          >
+            Set deadline
+          </button>
+        </div>
+      )}
+
+      {/* Deadline editor modal */}
+      {showDeadlineEditor && (
+        <div className="modal-overlay" onClick={() => setShowDeadlineEditor(false)}>
+          <div className="modal-box modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <Clock className="w-5 h-5 text-gold" />
+              <h2 className="font-cond font-black text-lg text-white uppercase tracking-wider">
+                Week {week} Pick Deadline
+              </h2>
+            </div>
+            <p className="text-field-400 text-sm mb-4">
+              Set a single deadline for all Week {week} picks. After this time, no picks can be submitted or changed — even for games that haven't started yet.
+            </p>
+            <label className="label">Deadline (your local time)</label>
+            <input
+              type="datetime-local"
+              value={deadlineInput}
+              onChange={e => setDeadlineInput(e.target.value)}
+              className="input mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={saveDeadline}
+                disabled={savingDeadline || !deadlineInput}
+                className="btn-gold flex-1"
+              >
+                {savingDeadline ? 'Saving…' : 'Set Deadline'}
+              </button>
+              {weekDeadline && (
+                <button onClick={clearDeadline} className="btn-ghost">
+                  Clear
+                </button>
+              )}
+              <button onClick={() => setShowDeadlineEditor(false)} className="btn-ghost">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Close dropdown when clicking outside */}
+      {weekDropdownOpen && (
+        <div className="fixed inset-0 z-20" onClick={() => setWeekDropdownOpen(false)} />
+      )}
+
       {/* ── PICKS TAB ── */}
       {tab === 'picks' && (
         <div className="space-y-3">
-          {lockedCount > 0 && (
+          {lockedCount > 0 && lockedCount < totalGames && (
+            <div className="flex items-center gap-2 text-xs text-yellow-400/80 bg-yellow-500/5 border border-yellow-500/20 rounded-lg px-3 py-2">
+              <Lock className="w-3.5 h-3.5 shrink-0" />
+              <span>{lockedCount} of {totalGames} games locked</span>
+            </div>
+          )}
+          {lockedCount === totalGames && totalGames > 0 && (
             <div className="flex items-center gap-2 text-xs text-field-400 bg-field-800/50 border border-field-700 rounded-lg px-3 py-2">
-              <Lock className="w-3.5 h-3.5" />
-              <span>{lockedCount} game{lockedCount !== 1 ? 's' : ''} locked — picks can't be changed after kickoff</span>
+              <Lock className="w-3.5 h-3.5 shrink-0" />
+              <span>All picks are locked for Week {week}</span>
             </div>
           )}
 
@@ -241,54 +499,53 @@ export function PickEmView() {
             </div>
           )}
 
-          {/* Regular games */}
           {regularGames.map((game: any) => (
             <GamePickCard
               key={game.id}
               game={game}
               pickedTeam={pendingPicks[game.id]}
+              deadline={weekDeadline}
               onPick={(team) => {
-                if (isGameLocked(game.game_date)) return
+                if (isGameLocked(game.game_date, weekDeadline)) return
                 setPendingPicks(p => ({ ...p, [game.id]: team }))
               }}
             />
           ))}
 
-          {/* Tiebreaker */}
           {tiebreakerGame && (
-            <div className="mt-4">
+            <div className="mt-2">
               <div className="flex items-center gap-2 mb-2">
                 <Target className="w-4 h-4 text-gold" />
-                <span className="font-cond font-bold text-gold text-sm uppercase tracking-wider">Tiebreaker Game</span>
-                <span className="text-field-400 text-xs">— Predict total combined points scored</span>
+                <span className="font-cond font-bold text-gold text-sm uppercase tracking-wider">Tiebreaker</span>
+                <span className="text-field-500 text-xs">— predict total combined score</span>
               </div>
               <GamePickCard
                 key={tiebreakerGame.id}
                 game={tiebreakerGame}
                 pickedTeam={pendingPicks[tiebreakerGame.id]}
+                deadline={weekDeadline}
                 onPick={(team) => {
-                  if (isGameLocked(tiebreakerGame.game_date)) return
+                  if (isGameLocked(tiebreakerGame.game_date, weekDeadline)) return
                   setPendingPicks(p => ({ ...p, [tiebreakerGame.id]: team }))
                 }}
                 isTiebreaker
                 tiebreakerScore={tiebreakerScore[tiebreakerGame.id] ?? ''}
-                onTiebreakerScore={(val) => {
-                  setTiebreakerScore(s => ({ ...s, [tiebreakerGame.id]: val }))
-                }}
+                onTiebreakerScore={(val) => setTiebreakerScore(s => ({ ...s, [tiebreakerGame.id]: val }))}
               />
             </div>
           )}
 
-          {/* Save button */}
-          <div className="pt-2">
-            <button
-              className="btn-gold w-full py-3 text-base"
-              onClick={savePicks}
-              disabled={saving || pickedCount === 0}
-            >
-              {saving ? 'Saving…' : `Save Picks (${pickedCount}/${totalGames})`}
-            </button>
-          </div>
+          {anyUnlocked && (
+            <div className="pt-1">
+              <button
+                className="btn-gold w-full py-3 text-base"
+                onClick={savePicks}
+                disabled={saving || pickedCount === 0}
+              >
+                {saving ? 'Saving…' : `Save Picks (${pickedCount}/${totalGames})`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -306,10 +563,10 @@ export function PickEmView() {
               <thead>
                 <tr>
                   <th className="w-8">#</th>
-                  <th>Team</th>
+                  <th>Player</th>
                   <th className="text-center">Correct</th>
                   <th className="text-center">Total</th>
-                  <th className="text-center">Pct</th>
+                  <th className="text-center">%</th>
                 </tr>
               </thead>
               <tbody>
@@ -317,10 +574,12 @@ export function PickEmView() {
                   <tr key={s.id} className={s.user_id === user?.id ? 'bg-gold/[0.04]' : ''}>
                     <td className="text-field-400 font-bold">{i + 1}</td>
                     <td>
-                      <div className="font-bold text-white">
+                      <span className="font-bold text-white">
                         {s.profile?.display_name || s.profile?.username}
-                        {s.user_id === user?.id && <span className="ml-1.5 text-[10px] text-gold font-bold">(you)</span>}
-                      </div>
+                      </span>
+                      {s.user_id === user?.id && (
+                        <span className="ml-1.5 text-[10px] text-gold font-bold">(you)</span>
+                      )}
                     </td>
                     <td className="text-center text-white font-bold">{s.total_correct}</td>
                     <td className="text-center text-field-400">{s.total_picks}</td>
@@ -351,7 +610,8 @@ export function PickEmView() {
               return (
                 <div key={game.id} className={clsx(
                   'panel flex items-center justify-between gap-4',
-                  correct ? 'border-emerald-500/30 bg-emerald-500/5' : myPick ? 'border-red-500/20 bg-red-500/5' : '',
+                  correct ? 'border-emerald-500/30 bg-emerald-500/5'
+                  : myPick ? 'border-red-500/20 bg-red-500/5' : '',
                 )}>
                   <div className="flex items-center gap-3">
                     <div className="text-center">
@@ -366,8 +626,10 @@ export function PickEmView() {
                   </div>
                   <div className="text-right">
                     {myPick ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-field-300">Picked: <span className="font-bold text-white">{myPick.picked_team}</span></span>
+                      <div className="flex items-center gap-2 justify-end">
+                        <span className="text-sm text-field-300">
+                          Picked: <span className="font-bold text-white">{myPick.picked_team}</span>
+                        </span>
                         {correct
                           ? <Check className="w-5 h-5 text-emerald-400" />
                           : <X className="w-5 h-5 text-red-400" />
@@ -376,10 +638,13 @@ export function PickEmView() {
                     ) : (
                       <span className="text-xs text-field-500 italic">No pick</span>
                     )}
-                    {game.is_tiebreaker && myPick?.tiebreaker_score && (
+                    {game.is_tiebreaker && myPick?.tiebreaker_score != null && (
                       <div className="text-xs text-field-400 mt-1">
                         TB guess: <span className="text-gold font-bold">{myPick.tiebreaker_score}</span>
-                        {' '}(actual: <span className="text-white font-bold">{(game.home_score ?? 0) + (game.away_score ?? 0)}</span>)
+                        {' '}· actual:{' '}
+                        <span className="text-white font-bold">
+                          {(game.home_score ?? 0) + (game.away_score ?? 0)}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -394,36 +659,35 @@ export function PickEmView() {
 }
 
 function GamePickCard({
-  game, pickedTeam, onPick, isTiebreaker, tiebreakerScore, onTiebreakerScore
+  game, pickedTeam, onPick, deadline, isTiebreaker, tiebreakerScore, onTiebreakerScore
 }: {
   game: any
   pickedTeam: string | undefined
   onPick: (team: string) => void
+  deadline: string | null
   isTiebreaker?: boolean
   tiebreakerScore?: string
   onTiebreakerScore?: (val: string) => void
 }) {
-  const locked = isGameLocked(game.game_date)
-  const gameTime = game.game_date ? new Date(game.game_date).toLocaleString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
-  }) : 'TBD'
+  const locked = isGameLocked(game.game_date, deadline)
+  const gameTime = game.game_date
+    ? new Date(game.game_date).toLocaleString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+      })
+    : 'TBD'
 
-  const homeInfo = TEAM_INFO[game.home_team] ?? { name: game.home_team, color: '#888', emoji: '🏈' }
-  const awayInfo = TEAM_INFO[game.away_team] ?? { name: game.away_team, color: '#888', emoji: '🏈' }
-
+  const homeInfo = TEAM_INFO[game.home_team] ?? { name: game.home_team }
+  const awayInfo = TEAM_INFO[game.away_team] ?? { name: game.away_team }
   const isFinal = game.status === 'final'
-  const winner = isFinal ? (
-    game.home_score > game.away_score ? game.home_team :
-    game.away_score > game.home_score ? game.away_team : 'TIE'
-  ) : null
+  const winner = isFinal
+    ? game.home_score > game.away_score ? game.home_team
+      : game.away_score > game.home_score ? game.away_team
+      : 'TIE'
+    : null
 
   return (
-    <div className={clsx(
-      'panel space-y-3',
-      isTiebreaker && 'border-gold/30 bg-gold/[0.03]',
-    )}>
-      {/* Game time */}
+    <div className={clsx('panel space-y-3', isTiebreaker && 'border-gold/30 bg-gold/[0.02]')}>
       <div className="flex items-center justify-between">
         <span className="text-field-400 text-xs">{gameTime}</span>
         {locked && !isFinal && (
@@ -431,17 +695,14 @@ function GamePickCard({
             <Lock className="w-3 h-3" /> Locked
           </span>
         )}
-        {isFinal && (
-          <span className="text-xs text-emerald-400 font-bold">Final</span>
-        )}
+        {isFinal && <span className="text-xs text-emerald-400 font-bold">Final</span>}
       </div>
 
-      {/* Team buttons */}
       <div className="grid grid-cols-2 gap-3">
         {[
-          { team: game.away_team, info: awayInfo, label: 'Away' },
-          { team: game.home_team, info: homeInfo, label: 'Home' },
-        ].map(({ team, info, label }) => {
+          { team: game.away_team, info: awayInfo, label: 'Away', score: game.away_score },
+          { team: game.home_team, info: homeInfo, label: 'Home', score: game.home_score },
+        ].map(({ team, info, label, score }) => {
           const isPicked = pickedTeam === team
           const isWinner = winner === team
           const isLoser = isFinal && winner !== 'TIE' && winner !== team
@@ -452,25 +713,27 @@ function GamePickCard({
               onClick={() => onPick(team)}
               disabled={locked}
               className={clsx(
-                'relative flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all font-bold',
+                'relative flex flex-col items-center gap-1 p-4 rounded-xl border-2 transition-all',
                 isPicked && !isFinal
                   ? 'border-gold bg-gold/15 text-gold scale-[1.02]'
                   : isPicked && isWinner
                   ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
                   : isPicked && isFinal && !isWinner
-                  ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                  ? 'border-red-500/40 bg-red-500/10 text-red-400'
                   : isLoser
-                  ? 'border-field-700 bg-field-800/50 text-field-600 opacity-50'
+                  ? 'border-field-700 bg-field-800/40 text-field-600 opacity-40'
                   : 'border-field-600 bg-field-800 text-white hover:border-field-400 hover:bg-field-700',
                 locked && !isPicked && 'cursor-not-allowed',
               )}
             >
-              <span className="text-xs text-field-400 uppercase tracking-wider">{label}</span>
-              <span className="text-2xl font-black tracking-wider">{team}</span>
-              <span className="text-xs text-field-400 truncate max-w-full">{info.name.split(' ').slice(-1)[0]}</span>
+              <span className="text-[10px] text-field-500 uppercase tracking-wider">{label}</span>
+              <span className="text-2xl font-black tracking-wide">{team}</span>
+              <span className="text-[11px] text-field-400 truncate max-w-full">
+                {info.name.split(' ').slice(-1)[0]}
+              </span>
               {isFinal && (
-                <span className={clsx('text-lg font-black', isWinner ? 'text-white' : 'text-field-500')}>
-                  {team === game.away_team ? game.away_score : game.home_score}
+                <span className={clsx('text-xl font-black mt-0.5', isWinner ? 'text-white' : 'text-field-600')}>
+                  {score ?? '—'}
                 </span>
               )}
               {isPicked && !isFinal && (
@@ -493,12 +756,11 @@ function GamePickCard({
         })}
       </div>
 
-      {/* Tiebreaker input */}
       {isTiebreaker && onTiebreakerScore && (
-        <div className="border-t border-field-700 pt-3">
-          <label className="label mb-1">
+        <div className="border-t border-field-700 pt-3 space-y-1">
+          <label className="label">
             <Target className="w-3.5 h-3.5 inline mr-1 text-gold" />
-            Tiebreaker — predict total combined points scored in this game
+            Tiebreaker — combined total points scored
           </label>
           <input
             type="number"
@@ -508,10 +770,10 @@ function GamePickCard({
             value={tiebreakerScore ?? ''}
             onChange={e => onTiebreakerScore(e.target.value)}
             disabled={locked}
-            className="input w-32 text-center text-lg font-bold"
+            className="input w-28 text-center text-lg font-bold"
           />
-          <p className="text-field-500 text-xs mt-1">
-            Used only to break ties when two players finish the week with the same number of correct picks.
+          <p className="text-field-500 text-xs">
+            Closest guess wins when two players tie on correct picks.
           </p>
         </div>
       )}
