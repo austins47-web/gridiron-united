@@ -590,15 +590,22 @@ export function LiveScoresView() {
   // Manual favorites from localStorage (user-toggled)
   const [manualFavs, setManualFavs] = useState<Set<string>>(loadFavs)
 
-  // Profile teams — store raw value (abbr or full name) so teamIsFav() can match either way
-  const profileTeams = new Set<string>(
+  // Profile team abbreviations (canonical form for matching)
+  const profileAbbrs = new Set<string>(
     [profile?.favorite_nfl_team, profile?.favorite_cfb_team]
       .filter(Boolean)
-      .flatMap(t => [t as string, toAbbr(t as string)]) // store both forms
+      .flatMap(t => [t as string, toAbbr(t as string)]) // store both raw + abbr for matching
   )
 
-  // Combined: profile teams always in, plus anything user has manually starred
-  const favTeams = new Set([...profileTeams, ...manualFavs])
+  // Combined set for matching — includes all lookup forms
+  const favTeams = new Set([...profileAbbrs, ...manualFavs])
+
+  // Count only distinct display-level favorites for the badge
+  // (profile has max 2, plus any manual ones not already in profile)
+  const profileDisplayCount = [profile?.favorite_nfl_team, profile?.favorite_cfb_team]
+    .filter(Boolean).length
+  const manualExtra = [...manualFavs].filter(t => !profileAbbrs.has(t)).length
+  const favCount = profileDisplayCount + manualExtra
 
   useEffect(() => { localStorage.setItem(VIEW_KEY, viewMode) }, [viewMode])
   useEffect(() => { localStorage.setItem(COLS_KEY, String(cols)) }, [cols])
@@ -744,10 +751,10 @@ export function LiveScoresView() {
         {/* Columns picker — grid mode only */}
         {viewMode === 'grid' && <ColsPicker value={cols} onChange={setCols} />}
 
-        {favTeams.size > 0 && (
+        {favCount > 0 && (
           <span className="text-[11px] text-gold flex items-center gap-1 ml-1">
             <Star className="w-3 h-3 fill-gold" />
-            {favTeams.size} favorited
+            {favCount} favorited
           </span>
         )}
       </div>
