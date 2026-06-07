@@ -98,22 +98,10 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// LeagueRouter: remounts all league-specific pages when the active league changes.
-// This guarantees each league has completely isolated state — roster, draft, players, scoring.
-function LeagueRouter() {
+// Wraps league-specific pages so they remount when the active league changes
+function LeagueWrapper({ children }: { children: React.ReactNode }) {
   const activeLeagueId = useAppStore(s => s.activeLeagueId)
-
-  return (
-    <Routes key={activeLeagueId ?? 'no-league'}>
-      <Route index element={<Navigate to="/app/leagues" replace />} />
-      <Route path="roster" element={<RosterView />} />
-      <Route path="players" element={<PlayersView />} />
-      <Route path="draft" element={<DraftRoom />} />
-      <Route path="scoring" element={<ScoringView />} />
-      <Route path="commissioner" element={<CommissionerPanel />} />
-      <Route path="chat" element={<LeagueChat />} />
-    </Routes>
-  )
+  return <React.Fragment key={activeLeagueId ?? 'no-league'}>{children}</React.Fragment>
 }
 
 function App() {
@@ -141,8 +129,13 @@ function App() {
               <Route path="social" element={<SocialHub />} />
               <Route path="account" element={<AccountPage />} />
               <Route path="pickem" element={<PickEmView />} />
-              {/* All league-specific routes go through LeagueRouter */}
-              <Route path="/*" element={<LeagueRouter />} />
+              {/* League-specific routes */}
+              <Route path="roster" element={<LeagueWrapper><RosterView /></LeagueWrapper>} />
+              <Route path="players" element={<LeagueWrapper><PlayersView /></LeagueWrapper>} />
+              <Route path="draft" element={<LeagueWrapper><DraftRoom /></LeagueWrapper>} />
+              <Route path="scoring" element={<LeagueWrapper><ScoringView /></LeagueWrapper>} />
+              <Route path="commissioner" element={<LeagueWrapper><CommissionerPanel /></LeagueWrapper>} />
+              <Route path="chat" element={<LeagueWrapper><LeagueChat /></LeagueWrapper>} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
