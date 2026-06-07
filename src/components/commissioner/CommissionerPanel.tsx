@@ -4,6 +4,7 @@ import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
 import { useDeleteLeague } from '@/hooks/useLeague'
 import { buildSlotDefs } from '@/types/database'
+import { CfbPostseasonManager } from './CfbPostseasonManager'
 import type { League, Player, RosterSlotConfig } from '@/types/database'
 import {
   Shield, Users, Zap, TrendingUp, Trash2, Plus, Search,
@@ -13,7 +14,7 @@ import {
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
-type CommTab = 'scoring' | 'rosters' | 'players' | 'members' | 'league'
+type CommTab = 'scoring' | 'rosters' | 'players' | 'members' | 'league' | 'cfb_postseason'
 
 // ─── Scoring row defaults ───────────────────────────────────────────
 const SCORING_SECTIONS = [
@@ -151,6 +152,7 @@ export function CommissionerPanel() {
       {tab === 'players' && <PlayerScoreEditor />}
       {tab === 'members' && <MembersManager leagueId={activeLeagueId} league={activeLeague!} />}
       {tab === 'league' && <LeagueManager league={activeLeague!} />}
+      {tab === 'cfb_postseason' && <CfbPostseasonManager league={activeLeague!} />}
     </div>
   )
 }
@@ -505,6 +507,7 @@ function RosterEditor({ leagueId, league }: { leagueId: string; league: League }
             { key: 'slots_k',     label: 'Kicker',     note: '0–2' },
             { key: 'slots_bench', label: 'Bench',      note: '0–16' },
             { key: 'slots_ir',    label: 'IR',         note: '0–5' },
+            { key: 'slots_cfb_os', label: 'CFB OS',     note: '0–10' },
           ] as { key: keyof RosterSlotConfig; label: string; note: string }[]).map(({ key, label, note }) => (
             <div key={key} className="bg-field-800 rounded-lg p-2.5">
               <div className="text-xs text-field-400 mb-1">{label} <span className="text-field-600">({note})</span></div>

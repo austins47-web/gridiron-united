@@ -8,6 +8,32 @@ export type PlayerLeague = 'NFL' | 'CFB'
 export type PlayerStatus = 'active' | 'questionable' | 'out' | 'ir'
 export type ScoringType = 'standard' | 'half_ppr' | 'ppr'
 export type LeagueType = 'redraft' | 'keeper' | 'dynasty' | 'pickem'
+
+export interface CfpTeam {
+  id: string
+  season: number
+  team_name: string
+  seed: number | null
+  is_eliminated: boolean
+  eliminated_round: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface BowlGame {
+  id: string
+  season: number
+  bowl_name: string
+  game_date: string | null
+  home_team: string
+  away_team: string
+  home_score: number | null
+  away_score: number | null
+  status: 'scheduled' | 'in_progress' | 'final'
+  is_cfp: boolean
+  cfp_round: string | null
+  created_at: string
+}
 export type DraftType = 'snake' | 'auction' | 'linear'
 export type DraftStatus = 'pre_draft' | 'in_progress' | 'completed' | 'scheduled' | 'paused'
 
@@ -173,6 +199,10 @@ export interface League extends ScoringRules, RosterSlotConfig {
   draft_status: DraftStatus
   draft_pick_timer: number
   player_pool: PlayerPool
+  slots_cfb_os: number
+  cfb_postseason_scoring: boolean
+  cfb_bowl_scoring: boolean
+  cfb_cfp_only: boolean
   current_week: number
   season: number
   is_public: boolean
@@ -352,6 +382,8 @@ export function buildSlotDefs(league: RosterSlotConfig): SlotDef[] {
     slots.push({ key: `BN${i+1}`, label: 'BN', pos: ['QB','RB','WR','TE','K','DST'], type: 'bench' })
   for (let i = 0; i < league.slots_ir; i++)
     slots.push({ key: `IR${i+1}`, label: 'IR', pos: ['QB','RB','WR','TE','K','DST'], type: 'ir' })
+  for (let i = 0; i < (league.slots_cfb_os ?? 0); i++)
+    slots.push({ key: `CFB_OS${i+1}`, label: 'CFB OS', pos: ['QB','RB','WR','TE','K','DST'], type: 'cfb_os' })
   return slots
 }
 
