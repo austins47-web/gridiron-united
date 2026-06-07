@@ -114,6 +114,7 @@ export function CommissionerPanel() {
     { id: 'players', label: 'Player Scores', icon: <Zap className="w-4 h-4" /> },
     { id: 'members', label: 'Members', icon: <Crown className="w-4 h-4" /> },
     { id: 'league', label: 'League', icon: <Shield className="w-4 h-4" /> },
+    { id: 'cfb_postseason', label: 'CFB Playoffs', icon: <span className="text-sm">🎓</span> },
   ]
 
   return (
