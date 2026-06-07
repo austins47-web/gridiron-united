@@ -18,6 +18,7 @@ export function AppShell() {
   // ── Global tabs — always visible ──────────────────────────
   const globalTabs = [
     { to: '/leagues', label: 'My Leagues', emoji: '🏆' },
+    { to: '/scores',  label: 'Live Scores', emoji: '📡' },
     { to: '/mock',    label: 'Mock Draft',  emoji: '🧪' },
     { to: '/social',  label: 'Social',      emoji: '👥' },
   ]

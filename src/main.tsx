@@ -22,6 +22,7 @@ import { CommissionerPanel } from '@/components/commissioner/CommissionerPanel'
 import { MockDraftHub } from '@/components/mock/MockDraftHub'
 import { SocialHub } from '@/components/social/SocialHub'
 import { PickEmView } from '@/components/pickem/PickEmView'
+import { LiveScoresView } from '@/components/scores/LiveScoresView'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -130,6 +131,7 @@ function App() {
             >
               {/* These routes don't need league isolation */}
               <Route path="leagues" element={<LeaguesView />} />
+              <Route path="scores" element={<LiveScoresView />} />
               <Route path="mock" element={<MockDraftHub />} />
               <Route path="social" element={<SocialHub />} />
               <Route path="account" element={<AccountPage />} />
