@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import {
   useLeagueTrades, useProposeTrade, useRespondTrade,
-  useVetoTrade, useTradesRealtime, type TradeWithDetails
+  useCommissionerTrade, useVoteTrade, useTradesRealtime, type TradeWithDetails
 } from '@/hooks/useTrades'
 import { useMyRoster, useRoster } from '@/hooks/useRoster'
 import type { LeagueMember, Player } from '@/types/database'
@@ -84,8 +84,11 @@ function TradeCard({ trade, myId, isCommissioner, leagueId }: {
   const [cMine, setCMine]   = useState<number[]>([])
   const [cTheirs, setCTheirs] = useState<number[]>([])
 
-  const respond  = useRespondTrade(leagueId)
-  const veto     = useVetoTrade(leagueId)
+  const respond     = useRespondTrade(leagueId)
+  const commTrade   = useCommissionerTrade(leagueId)
+  const voteTrade   = useVoteTrade(leagueId)
+  const { activeLeague } = useAppStore()
+  const tradeMode   = activeLeague?.trade_mode ?? 'instant'
 
   const isProposer = trade.proposer_id === myId
   const isReceiver = trade.receiver_id === myId
@@ -201,7 +204,7 @@ function TradeCard({ trade, myId, isCommissioner, leagueId }: {
             </div>
           )}
 
-          {/* Actions */}
+          {/* Actions — pending & not expired */}
           {isPending && !isExpired && !countering && (
             <div className="flex gap-2 flex-wrap">
               {isReceiver && <>
@@ -227,15 +230,77 @@ function TradeCard({ trade, myId, isCommissioner, leagueId }: {
                   <X className="w-3.5 h-3.5" /> Withdraw
                 </button>
               )}
-              {isCommissioner && !isProposer && !isReceiver && (
-                <button className="btn-ghost text-sm flex items-center gap-1.5 !border-red-500/30 !text-red-400 hover:!bg-red-500/10"
-                  disabled={veto.isPending}
-                  onClick={() => veto.mutate(trade.id)}>
-                  <Shield className="w-3.5 h-3.5" /> Veto
-                </button>
+            </div>
+          )}
+
+          {/* Commissioner review queue */}
+          {trade.status === 'countered' && tradeMode === 'commissioner_review' && (
+            <div className="space-y-2">
+              <p className="text-xs text-yellow-300 font-bold flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" /> Awaiting commissioner review
+              </p>
+              {isCommissioner && (
+                <div className="flex gap-2">
+                  <button className="btn-gold text-sm flex items-center gap-1.5"
+                    disabled={commTrade.isPending}
+                    onClick={() => commTrade.mutate({ tradeId: trade.id, decision: 'approve' })}>
+                    <Check className="w-3.5 h-3.5" /> Approve Trade
+                  </button>
+                  <button className="btn-ghost text-sm flex items-center gap-1.5 !border-red-500/30 !text-red-400 hover:!bg-red-500/10"
+                    disabled={commTrade.isPending}
+                    onClick={() => commTrade.mutate({ tradeId: trade.id, decision: 'veto' })}>
+                    <Shield className="w-3.5 h-3.5" /> Veto
+                  </button>
+                </div>
               )}
             </div>
           )}
+
+          {/* League vote mode */}
+          {trade.status === 'countered' && tradeMode === 'league_vote' && (() => {
+            const votes = trade.votes ?? []
+            const vetoCount    = votes.filter(v => v.vote === 'veto').length
+            const approveCount = votes.filter(v => v.vote === 'approve').length
+            const myVote       = votes.find(v => v.user_id === useAppStore.getState().user?.id)
+            const required     = activeLeague?.trade_votes_required ?? 4
+            const notInvolved  = !isProposer && !isReceiver
+            return (
+              <div className="space-y-2">
+                <p className="text-xs text-blue-300 font-bold flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5" />
+                  League vote — {vetoCount}/{required} vetoes to block · {approveCount} approvals
+                </p>
+                {/* Vote progress bar */}
+                <div className="h-1.5 bg-field-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-red-500 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, (vetoCount / required) * 100)}%` }} />
+                </div>
+                {notInvolved && (
+                  <div className="flex gap-2">
+                    <button
+                      className={clsx('text-sm flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-bold transition-colors',
+                        myVote?.vote === 'approve'
+                          ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                          : 'btn-ghost !border-emerald-500/30 !text-emerald-400 hover:!bg-emerald-500/10')}
+                      onClick={() => voteTrade.mutate({ tradeId: trade.id, vote: 'approve' })}>
+                      <Check className="w-3.5 h-3.5" /> Approve
+                    </button>
+                    <button
+                      className={clsx('text-sm flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-bold transition-colors',
+                        myVote?.vote === 'veto'
+                          ? 'bg-red-500/20 border-red-500/40 text-red-300'
+                          : 'btn-ghost !border-red-500/30 !text-red-400 hover:!bg-red-500/10')}
+                      onClick={() => voteTrade.mutate({ tradeId: trade.id, vote: 'veto' })}>
+                      <Shield className="w-3.5 h-3.5" /> Veto
+                    </button>
+                  </div>
+                )}
+                {(isProposer || isReceiver) && !myVote && (
+                  <p className="text-xs text-field-500 italic">You're involved — other members vote</p>
+                )}
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>
@@ -491,11 +556,31 @@ export function TradeCenter() {
       )}
 
       <div className="panel text-xs text-field-500 space-y-1">
-        <p className="font-bold text-field-400 mb-1">Trade Rules</p>
+        <p className="font-bold text-field-400 mb-1">Trade Rules
+          <span className="ml-2 font-normal text-field-500">·</span>
+          <span className={clsx('ml-2 font-black uppercase', {
+            'text-emerald-400': activeLeague?.trade_mode === 'instant' || !activeLeague?.trade_mode,
+            'text-yellow-400':  activeLeague?.trade_mode === 'commissioner_review',
+            'text-blue-400':    activeLeague?.trade_mode === 'league_vote',
+          })}>
+            {activeLeague?.trade_mode === 'commissioner_review'
+              ? `Commissioner Review (${activeLeague.trade_review_hours}h)`
+              : activeLeague?.trade_mode === 'league_vote'
+              ? `League Vote (${activeLeague.trade_votes_required} vetoes)`
+              : 'Instant'}
+          </span>
+        </p>
         <p>• Proposals expire after 48 hours if not responded to</p>
         <p>• You can counter any incoming offer with different players</p>
-        <p>• Accepted trades execute immediately and update both rosters</p>
-        {isCommissioner && <p>• As commissioner you can veto any pending trade before it's accepted</p>}
+        {(!activeLeague?.trade_mode || activeLeague.trade_mode === 'instant') &&
+          <p>• Accepted trades execute immediately</p>}
+        {activeLeague?.trade_mode === 'commissioner_review' &&
+          <p>• Accepted trades enter a {activeLeague.trade_review_hours}h review window — commissioner can veto</p>}
+        {activeLeague?.trade_mode === 'league_vote' &&
+          <p>• Accepted trades go to a league vote — {activeLeague.trade_votes_required} vetoes blocks the trade</p>}
+        {isCommissioner && activeLeague?.trade_mode === 'commissioner_review' &&
+          <p className="text-yellow-400">• You have commissioner review access for all pending trades</p>}
+        <p>• Trade deadline: Week {activeLeague?.trade_deadline_week ?? 13}</p>
       </div>
 
       {showPropose && <ProposeModal leagueId={activeLeagueId} onClose={() => setShowPropose(false)} />}

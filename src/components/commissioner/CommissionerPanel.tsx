@@ -14,7 +14,7 @@ import {
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
-type CommTab = 'scoring' | 'rosters' | 'players' | 'members' | 'league' | 'cfb_postseason'
+type CommTab = 'scoring' | 'rosters' | 'players' | 'members' | 'league' | 'cfb_postseason' | 'trades'
 
 // ─── Scoring row defaults ───────────────────────────────────────────
 const SCORING_SECTIONS = [
@@ -115,6 +115,7 @@ export function CommissionerPanel() {
     { id: 'members', label: 'Members', icon: <Crown className="w-4 h-4" /> },
     { id: 'league', label: 'League', icon: <Shield className="w-4 h-4" /> },
     { id: 'cfb_postseason', label: 'CFB Playoffs', icon: <span className="text-sm">🎓</span> },
+    { id: 'trades', label: 'Trades', icon: <span className="text-sm">🔄</span> },
   ]
 
   return (
@@ -154,6 +155,7 @@ export function CommissionerPanel() {
       {tab === 'members' && <MembersManager leagueId={activeLeagueId} league={activeLeague!} />}
       {tab === 'league' && <LeagueManager league={activeLeague!} />}
       {tab === 'cfb_postseason' && <CfbPostseasonManager league={activeLeague!} />}
+      {tab === 'trades' && <TradeSettings league={activeLeague!} />}
     </div>
   )
 }
@@ -984,6 +986,137 @@ function MembersManager({ leagueId, league }: { leagueId: string; league: League
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ─── Trade Settings ──────────────────────────────────────────────────────────
+function TradeSettings({ league }: { league: League }) {
+  const qc = useQueryClient()
+  const [mode,     setMode]     = useState<'instant' | 'commissioner_review' | 'league_vote'>(
+    (league.trade_mode as any) ?? 'instant'
+  )
+  const [hours,    setHours]    = useState(league.trade_review_hours ?? 24)
+  const [deadline, setDeadline] = useState(league.trade_deadline_week ?? 13)
+  const [vetoes,   setVetoes]   = useState(league.trade_votes_required ?? 4)
+  const [saving,   setSaving]   = useState(false)
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('leagues').update({
+        trade_mode: mode,
+        trade_review_hours: hours,
+        trade_deadline_week: deadline,
+        trade_votes_required: vetoes,
+      }).eq('id', league.id)
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['my-leagues'] })
+      toast.success('Trade settings saved')
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const modeOptions = [
+    {
+      id: 'instant' as const,
+      label: 'Instant',
+      emoji: '⚡',
+      desc: 'Trades execute immediately when both parties agree. No review period.',
+    },
+    {
+      id: 'commissioner_review' as const,
+      label: 'Commissioner Review',
+      emoji: '🛡️',
+      desc: 'After both parties agree, the commissioner has a window to veto before the trade completes.',
+    },
+    {
+      id: 'league_vote' as const,
+      label: 'League Vote',
+      emoji: '🗳️',
+      desc: 'After both parties agree, league members can vote to veto. Trade completes when the review window closes without enough vetoes.',
+    },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="font-cond font-black text-white uppercase tracking-wider">Trade Settings</h3>
+        <p className="text-field-400 text-xs mt-0.5">Control how trades are processed in this league.</p>
+      </div>
+
+      {/* Mode selector */}
+      <div className="space-y-2">
+        <label className="label">Trade Processing Mode</label>
+        {modeOptions.map(opt => (
+          <button key={opt.id} onClick={() => setMode(opt.id)}
+            className={clsx(
+              'w-full flex items-start gap-3 p-4 rounded-xl border text-left transition-all',
+              mode === opt.id
+                ? 'bg-gold/10 border-gold/40 ring-1 ring-gold/20'
+                : 'bg-field-800 border-field-700 hover:border-field-600',
+            )}>
+            <span className="text-2xl shrink-0">{opt.emoji}</span>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-white text-sm">{opt.label}</span>
+                {mode === opt.id && (
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gold bg-gold/20 px-2 py-0.5 rounded-full">Active</span>
+                )}
+              </div>
+              <p className="text-field-400 text-xs mt-0.5 leading-relaxed">{opt.desc}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Commissioner review hours */}
+      {mode === 'commissioner_review' && (
+        <div className="bg-field-800 border border-field-700 rounded-xl p-4 space-y-2">
+          <label className="label">Review Window</label>
+          <div className="flex items-center gap-3">
+            <input type="number" min={1} max={168} value={hours}
+              onChange={e => setHours(parseInt(e.target.value) || 24)}
+              className="input w-24" />
+            <span className="text-field-400 text-sm">hours after acceptance</span>
+          </div>
+          <p className="text-field-500 text-xs">Commissioner can veto within this window. After it expires, trade auto-completes.</p>
+        </div>
+      )}
+
+      {/* League vote vetoes required */}
+      {mode === 'league_vote' && (
+        <div className="bg-field-800 border border-field-700 rounded-xl p-4 space-y-2">
+          <label className="label">Vetoes Required to Block</label>
+          <div className="flex items-center gap-3">
+            <input type="number" min={1} max={league.num_teams - 2} value={vetoes}
+              onChange={e => setVetoes(parseInt(e.target.value) || 4)}
+              className="input w-20" />
+            <span className="text-field-400 text-sm">member votes (not counting involved parties)</span>
+          </div>
+          <p className="text-field-500 text-xs">If this many members vote to veto, the trade is blocked. Otherwise it completes after the review window.</p>
+        </div>
+      )}
+
+      {/* Trade deadline */}
+      <div className="bg-field-800 border border-field-700 rounded-xl p-4 space-y-2">
+        <label className="label">Trade Deadline</label>
+        <div className="flex items-center gap-3">
+          <span className="text-field-400 text-sm">After Week</span>
+          <input type="number" min={1} max={18} value={deadline}
+            onChange={e => setDeadline(parseInt(e.target.value) || 13)}
+            className="input w-20" />
+          <span className="text-field-400 text-sm">no new trades can be proposed</span>
+        </div>
+        <p className="text-field-500 text-xs">Standard is Week 13 (before fantasy playoffs begin). Set to 18 to allow all-season trading.</p>
+      </div>
+
+      <button className="btn-gold w-full" onClick={save} disabled={saving}>
+        {saving ? 'Saving…' : 'Save Trade Settings'}
+      </button>
     </div>
   )
 }

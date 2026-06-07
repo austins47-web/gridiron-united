@@ -203,6 +203,10 @@ export interface League extends ScoringRules, RosterSlotConfig {
   cfb_postseason_scoring: boolean
   cfb_bowl_scoring: boolean
   cfb_cfp_only: boolean
+  trade_mode: 'instant' | 'commissioner_review' | 'league_vote'
+  trade_review_hours: number
+  trade_deadline_week: number
+  trade_votes_required: number
   current_week: number
   season: number
   is_public: boolean
