@@ -3,10 +3,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import {
-  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff
+  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
+import { useNflOdds } from '@/hooks/useNflOdds'
 
 const TEAM_INFO: Record<string, { name: string }> = {
   ARI: { name: 'Arizona Cardinals' },
@@ -311,6 +312,8 @@ export function PickEmView() {
     }
   }
 
+  const { data: oddsMap } = useNflOdds()
+
   const tiebreakerGame = games.find((g: any) => g.is_tiebreaker)
   const regularGames = games.filter((g: any) => !g.is_tiebreaker)
   const lockedCount = games.filter((g: any) => isGameLocked(g.game_date, weekDeadline)).length
@@ -536,6 +539,7 @@ export function PickEmView() {
               game={game}
               pickedTeam={pendingPicks[game.id]}
               deadline={weekDeadline}
+              odds={oddsMap?.get(`${game.away_team}@${game.home_team}`) ?? null}
               onPick={(team) => {
                 if (isGameLocked(game.game_date, weekDeadline)) return
                 setPendingPicks(p => ({ ...p, [game.id]: team }))
@@ -555,6 +559,7 @@ export function PickEmView() {
                 game={tiebreakerGame}
                 pickedTeam={pendingPicks[tiebreakerGame.id]}
                 deadline={weekDeadline}
+                odds={oddsMap?.get(`${tiebreakerGame.away_team}@${tiebreakerGame.home_team}`) ?? null}
                 onPick={(team) => {
                   if (isGameLocked(tiebreakerGame.game_date, weekDeadline)) return
                   setPendingPicks(p => ({ ...p, [tiebreakerGame.id]: team }))
@@ -642,12 +647,13 @@ export function PickEmView() {
 }
 
 function GamePickCard({
-  game, pickedTeam, onPick, deadline, isTiebreaker, tiebreakerScore, onTiebreakerScore
+  game, pickedTeam, onPick, deadline, odds, isTiebreaker, tiebreakerScore, onTiebreakerScore
 }: {
   game: any
   pickedTeam: string | undefined
   onPick: (team: string) => void
   deadline: string | null
+  odds?: { spread: number | null; homeWinPct: number | null; awayWinPct: number | null; homeMoneyline: number | null; awayMoneyline: number | null } | null
   isTiebreaker?: boolean
   tiebreakerScore?: string
   onTiebreakerScore?: (val: string) => void
@@ -669,6 +675,20 @@ function GamePickCard({
       : 'TIE'
     : null
 
+  // Spread display: from away team perspective
+  // spread is stored as home team point (e.g. -3 = home favored by 3)
+  const homeSpread = odds?.spread ?? null
+  const awaySpread = homeSpread !== null ? -homeSpread : null
+  const formatSpread = (s: number | null) => {
+    if (s === null) return null
+    if (s === 0) return 'PK'
+    return s > 0 ? `+${s}` : `${s}`
+  }
+  const formatML = (ml: number | null) => {
+    if (ml === null) return null
+    return ml > 0 ? `+${ml}` : `${ml}`
+  }
+
   return (
     <div className={clsx('panel space-y-3', isTiebreaker && 'border-gold/30 bg-gold/[0.02]')}>
       <div className="flex items-center justify-between">
@@ -679,13 +699,31 @@ function GamePickCard({
           </span>
         )}
         {isFinal && <span className="text-xs text-emerald-400 font-bold">Final</span>}
+        {odds && !isFinal && (
+          <span className="flex items-center gap-1 text-[10px] text-field-500">
+            <TrendingUp className="w-3 h-3 text-gold/50" />
+            <span className="text-gold/60">Live odds</span>
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         {[
-          { team: game.away_team, info: awayInfo, label: 'Away', score: game.away_score },
-          { team: game.home_team, info: homeInfo, label: 'Home', score: game.home_score },
-        ].map(({ team, info, label, score }) => {
+          {
+            team: game.away_team, info: awayInfo, label: 'Away',
+            score: game.away_score,
+            spread: formatSpread(awaySpread),
+            winPct: odds?.awayWinPct ?? null,
+            ml: formatML(odds?.awayMoneyline ?? null),
+          },
+          {
+            team: game.home_team, info: homeInfo, label: 'Home',
+            score: game.home_score,
+            spread: formatSpread(homeSpread),
+            winPct: odds?.homeWinPct ?? null,
+            ml: formatML(odds?.homeMoneyline ?? null),
+          },
+        ].map(({ team, info, label, score, spread, winPct, ml }) => {
           const isPicked = pickedTeam === team
           const isWinner = winner === team
           const isLoser = isFinal && winner !== 'TIE' && winner !== team
@@ -696,7 +734,7 @@ function GamePickCard({
               onClick={() => onPick(team)}
               disabled={locked}
               className={clsx(
-                'relative flex flex-col items-center gap-1 p-4 rounded-xl border-2 transition-all',
+                'relative flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all',
                 isPicked && !isFinal
                   ? 'border-gold bg-gold/15 text-gold scale-[1.02]'
                   : isPicked && isWinner
@@ -714,6 +752,46 @@ function GamePickCard({
               <span className="text-[11px] text-field-400 truncate max-w-full">
                 {info.name.split(' ').slice(-1)[0]}
               </span>
+
+              {/* Odds info — spread + win % */}
+              {odds && !isFinal && (
+                <div className="mt-1 flex flex-col items-center gap-0.5 w-full border-t border-white/10 pt-1.5">
+                  <div className="flex items-center gap-2 flex-wrap justify-center">
+                    {spread !== null && (
+                      <span className={clsx(
+                        'font-cond font-black text-sm',
+                        isPicked ? 'text-current' : 'text-white'
+                      )}>
+                        {spread}
+                      </span>
+                    )}
+                    {ml !== null && (
+                      <span className="font-cond text-xs text-field-400">{ml}</span>
+                    )}
+                  </div>
+                  {winPct !== null && (
+                    <div className="w-full">
+                      <div className="flex justify-between text-[9px] text-field-500 mb-0.5">
+                        <span>Win%</span>
+                        <span className={clsx(
+                          'font-black',
+                          winPct >= 60 ? 'text-emerald-400' : winPct <= 40 ? 'text-field-400' : 'text-white'
+                        )}>{winPct}%</span>
+                      </div>
+                      <div className="w-full h-1 bg-field-700 rounded-full overflow-hidden">
+                        <div
+                          className={clsx(
+                            'h-full rounded-full transition-all',
+                            winPct >= 60 ? 'bg-emerald-500' : winPct <= 40 ? 'bg-field-500' : 'bg-gold'
+                          )}
+                          style={{ width: `${winPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {isFinal && (
                 <span className={clsx('text-xl font-black mt-0.5', isWinner ? 'text-white' : 'text-field-600')}>
                   {score ?? '—'}
