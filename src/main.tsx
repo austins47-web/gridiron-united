@@ -103,7 +103,7 @@ function LeagueRouter() {
   return (
     // key={activeLeagueId} forces React to fully unmount and remount when league changes
     <Routes key={activeLeagueId ?? 'no-league'}>
-      <Route index element={<Navigate to="/roster" replace />} />
+      <Route index element={<Navigate to="/leagues" replace />} />
       <Route path="roster" element={<RosterView />} />
       <Route path="players" element={<PlayersView />} />
       <Route path="draft" element={<DraftRoom />} />
@@ -137,7 +137,7 @@ function App() {
               {/* All league-specific routes go through LeagueRouter */}
               <Route path="/*" element={<LeagueRouter />} />
             </Route>
-            <Route path="*" element={<Navigate to="/roster" replace />} />
+            <Route path="*" element={<Navigate to="/leagues" replace />} />
           </Routes>
         </AppInitializer>
       </BrowserRouter>

@@ -1,5 +1,5 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Bell, User, ChevronDown, Zap } from 'lucide-react'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { Bell, User, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { NotificationsPanel } from '@/components/ui/NotificationsPanel'
@@ -8,30 +8,47 @@ import { LeagueSelector } from '@/components/leagues/LeagueSelector'
 export function AppShell() {
   const { profile, unreadCount, signOut, activeLeague, activeLeagueId, myMembership } = useAppStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const [showNotifs, setShowNotifs] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
 
   const isCommissioner = myMembership?.is_commissioner
+  const isPickEm = activeLeague?.league_type === 'pickem'
 
-  const navItems = [
-    { to: '/roster',       label: 'Roster',      emoji: '🏟' },
-    { to: '/players',      label: 'Players',     emoji: '🔍' },
-    { to: '/leagues',      label: 'Leagues',     emoji: '🏆' },
-    { to: '/draft',        label: 'Draft Room',  emoji: '📋' },
-    { to: '/mock',         label: 'Mock Draft',  emoji: '🧪' },
-    { to: '/social',       label: 'Social',      emoji: '👥' },
-    { to: '/pickem',       label: "Pick'Em",     emoji: '🎯' },
-    { to: '/scoring',      label: 'Scoring',     emoji: '📊' },
-    ...(isCommissioner ? [{ to: '/commissioner', label: 'Commissioner', emoji: '⚙️' }] : []),
+  // ── Global tabs — always visible ──────────────────────────
+  const globalTabs = [
+    { to: '/leagues', label: 'My Leagues', emoji: '🏆' },
+    { to: '/mock',    label: 'Mock Draft',  emoji: '🧪' },
+    { to: '/social',  label: 'Social',      emoji: '👥' },
   ]
+
+  // ── League tabs — only when a league is selected ──────────
+  const leagueTabs = activeLeagueId ? [
+    ...(!isPickEm ? [
+      { to: '/roster',  label: 'Roster',    emoji: '📋' },
+      { to: '/players', label: 'Players',   emoji: '🔍' },
+      { to: '/draft',   label: 'Draft Room', emoji: '🎯' },
+      { to: '/scoring', label: 'Scoring',   emoji: '📊' },
+    ] : [
+      { to: '/pickem',  label: "Pick'Em",   emoji: '🏈' },
+    ]),
+    ...(isCommissioner ? [{ to: '/commissioner', label: 'Commissioner', emoji: '⚙️' }] : []),
+  ] : []
+
+  // Detect if we're on a league-specific route
+  const leagueRoutes = ['/roster', '/players', '/draft', '/scoring', '/commissioner', '/pickem']
+  const isOnLeagueRoute = leagueRoutes.some(r => location.pathname.startsWith(r))
 
   return (
     <div className="min-h-screen flex flex-col">
 
-      {/* Header — darkest layer */}
+      {/* ── Header ── */}
       <header className="sticky top-0 z-40 bg-field-950 border-b border-field-700 flex items-center justify-between px-4 h-14 shrink-0">
         {/* Logo */}
-        <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate('/leagues')}
+          className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+        >
           <div className="font-cond font-black text-xl uppercase tracking-wider">
             <span className="text-gold">Gridiron</span>
             <span className="text-white"> United</span>
@@ -40,10 +57,22 @@ export function AppShell() {
             <span className="font-cond font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md bg-cfb/20 text-cfb border border-cfb/30">CFB</span>
             <span className="font-cond font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md bg-nfl/20 text-nfl border border-nfl/30">NFL</span>
           </div>
-        </div>
+        </button>
 
-        {/* League selector */}
-        <div className="hidden md:block">
+        {/* League selector — center */}
+        <div className="hidden md:flex items-center gap-2">
+          {activeLeague && (
+            <>
+              {/* Breadcrumb: Leagues > League Name */}
+              <button
+                onClick={() => navigate('/leagues')}
+                className="text-field-500 hover:text-field-300 transition-colors font-cond font-bold text-xs uppercase tracking-wider"
+              >
+                Leagues
+              </button>
+              <ChevronRight size={12} className="text-field-600" />
+            </>
+          )}
           <LeagueSelector />
         </div>
 
@@ -103,12 +132,6 @@ export function AppShell() {
                 >
                   <User size={14} /> Account Settings
                 </button>
-                <button
-                  onClick={() => { navigate('/draft'); setShowUserMenu(false) }}
-                  className="w-full text-left px-3 py-2.5 text-sm text-field-200 hover:bg-field-700 hover:text-gold transition-colors flex items-center gap-2"
-                >
-                  <Zap size={14} /> Draft Room
-                </button>
                 <div className="border-t border-field-700" />
                 <button
                   onClick={() => { signOut(); setShowUserMenu(false) }}
@@ -123,13 +146,13 @@ export function AppShell() {
       </header>
 
       {/* Mobile league selector */}
-      <div className="md:hidden px-4 py-2 bg-field-900 border-b border-field-700">
+      <div className="md:hidden px-4 py-2 bg-field-950 border-b border-field-700">
         <LeagueSelector />
       </div>
 
-      {/* Nav — middle layer, clearly distinct from header and content */}
+      {/* ── Global nav ── */}
       <nav className="sticky top-14 z-30 bg-field-900 border-b border-field-700 flex overflow-x-auto shrink-0">
-        {navItems.map(({ to, label, emoji }) => (
+        {globalTabs.map(({ to, label, emoji }) => (
           <NavLink
             key={to}
             to={to}
@@ -140,11 +163,59 @@ export function AppShell() {
         ))}
       </nav>
 
-      {/* Main content — lightest layer */}
+      {/* ── League sub-nav — only when a league is selected ── */}
+      {activeLeagueId && leagueTabs.length > 0 && (
+        <nav className="sticky top-[calc(3.5rem+41px)] z-20 bg-field-800 border-b border-field-700 flex overflow-x-auto shrink-0">
+          {/* League name pill */}
+          <div className="flex items-center px-3 border-r border-field-700 shrink-0">
+            <span className="font-cond font-bold text-[11px] uppercase tracking-wider text-gold/70 truncate max-w-[120px]">
+              {activeLeague?.name ?? 'League'}
+            </span>
+          </div>
+
+          {leagueTabs.map(({ to, label, emoji }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `font-cond font-bold text-xs uppercase tracking-wider px-4 py-2.5
+                 border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5
+                 ${isActive
+                   ? 'text-gold border-b-gold bg-field-700/40'
+                   : 'text-field-400 border-transparent hover:text-white hover:bg-field-700/30'
+                 }`
+              }
+            >
+              <span>{emoji}</span>{label}
+            </NavLink>
+          ))}
+        </nav>
+      )}
+
+      {/* ── Main content ── */}
       <main className="flex-1 overflow-auto bg-field-900">
-        <div className="max-w-[1400px] mx-auto p-4 md:p-6">
-          <Outlet />
-        </div>
+        {/* No league selected + on a league route → prompt */}
+        {!activeLeagueId && isOnLeagueRoute ? (
+          <div className="max-w-md mx-auto text-center py-20 px-6">
+            <div className="text-5xl mb-4">🏆</div>
+            <h2 className="font-cond font-black text-2xl text-white uppercase tracking-wider mb-2">
+              Select a League
+            </h2>
+            <p className="text-field-400 text-sm mb-6">
+              Choose a league from the top bar to view your roster, players, draft room, and more.
+            </p>
+            <button
+              onClick={() => navigate('/leagues')}
+              className="btn-gold"
+            >
+              Go to My Leagues
+            </button>
+          </div>
+        ) : (
+          <div className="max-w-[1400px] mx-auto p-4 md:p-6">
+            <Outlet />
+          </div>
+        )}
       </main>
 
     </div>
