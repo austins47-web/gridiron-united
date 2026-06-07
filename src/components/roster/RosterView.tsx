@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/appStore'
 import { buildSlotDefs, canFillSlot } from '@/types/database'
 import type { RosterEntryWithPlayer } from '@/hooks/useRoster'
 import type { SlotDef } from '@/types/database'
-import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -374,7 +374,7 @@ export function RosterView() {
 }
 
 function RosterSlotRow({
-  slot, entry, moving, onMove, onDropToSlot, onDrop,
+  slot, entry, moving, locked, onMove, onDropToSlot, onDrop,
 }: {
   slot: SlotDef
   entry: RosterEntryWithPlayer | undefined
@@ -385,7 +385,6 @@ function RosterSlotRow({
   onDrop: (e: RosterEntryWithPlayer) => void
 }) {
   const player = entry?.player
-  const pos = player?.pos as any
 
   // Is this a valid target for the player being moved?
   const isValidTarget = moving && canFillSlot(slot, moving.player?.pos as any, moving.player?.league as any)
