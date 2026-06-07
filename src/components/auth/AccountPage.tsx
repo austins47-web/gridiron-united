@@ -142,6 +142,8 @@ export function AccountPage() {
   const handleSave = async () => {
     if (!user) return
     if (!form.username.trim()) return toast.error('Username required')
+    if (form.username.trim().length > 20) return toast.error('Username must be 20 characters or less')
+    if (form.display_name.trim().length > 30) return toast.error('Display name must be 30 characters or less')
     setSaving(true)
     try {
       const clean = form.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
@@ -339,8 +341,14 @@ export function AccountPage() {
                 value={form.username}
                 onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
                 placeholder="coolteam"
+                maxLength={20}
               />
-              <p className="text-field-500 text-xs mt-1">Lowercase, letters/numbers/underscores</p>
+              <div className="flex justify-between mt-1">
+                <p className="text-field-500 text-xs">Lowercase, letters/numbers/underscores</p>
+                <span className={clsx('text-xs font-mono', form.username.length >= 18 ? 'text-yellow-400' : 'text-field-600')}>
+                  {form.username.length}/20
+                </span>
+              </div>
             </div>
             <div>
               <label className="label">Display Name</label>
@@ -349,7 +357,13 @@ export function AccountPage() {
                 value={form.display_name}
                 onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))}
                 placeholder="Your Name"
+                maxLength={30}
               />
+              <div className="flex justify-end mt-1">
+                <span className={clsx('text-xs font-mono', form.display_name.length >= 27 ? 'text-yellow-400' : 'text-field-600')}>
+                  {form.display_name.length}/30
+                </span>
+              </div>
             </div>
           </div>
 
