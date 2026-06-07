@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import toast from 'react-hot-toast'
@@ -8,11 +8,13 @@ type Mode = 'signin' | 'signup' | 'forgot'
 
 export function AuthPage() {
   const { user, authLoading } = useAppStore()
-  const [mode, setMode] = useState<Mode>('signin')
+  const [searchParams] = useSearchParams()
+  const initialMode = (searchParams.get('mode') === 'signup' ? 'signup' : 'signin') as Mode
+  const [mode, setMode] = useState<Mode>(initialMode)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ email: '', password: '', username: '', displayName: '' })
 
-  if (!authLoading && user) return <Navigate to="/roster" replace />
+  if (!authLoading && user) return <Navigate to="/app/leagues" replace />
 
   const update = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [field]: e.target.value }))

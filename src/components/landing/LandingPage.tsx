@@ -124,13 +124,13 @@ export function LandingPage() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/auth')}
+            onClick={() => navigate('/auth?mode=signin')}
             className="font-cond font-bold text-sm uppercase tracking-wider text-field-400 hover:text-white transition-colors px-4 py-2 hidden sm:block"
           >
             Sign In
           </button>
           <button
-            onClick={() => navigate('/auth')}
+            onClick={() => navigate('/auth?mode=signup')}
             className="font-cond font-bold text-sm uppercase tracking-wider px-5 py-2.5 rounded-xl bg-gold text-field-950 hover:bg-gold-light transition-all hover:scale-105 active:scale-100"
           >
             Get Started
@@ -179,7 +179,7 @@ export function LandingPage() {
           {/* CTAs */}
           <div className="anim-fade-up d5 flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <button
-              onClick={() => navigate('/auth')}
+              onClick={() => navigate('/auth?mode=signup')}
               className="w-full sm:w-auto font-cond font-black text-base uppercase tracking-widest px-10 py-4 rounded-xl bg-gold text-field-950 hover:bg-gold-light transition-all hover:scale-105 hover:shadow-[0_8px_40px_rgba(245,166,35,0.4)] active:scale-100"
             >
               Start Playing Free
@@ -331,7 +331,7 @@ export function LandingPage() {
             Create your league, invite your friends, and experience fantasy football the way it was meant to be played — with the full world of football at your fingertips.
           </p>
           <button
-            onClick={() => navigate('/auth')}
+            onClick={() => navigate('/auth?mode=signup')}
             className="font-cond font-black text-lg uppercase tracking-widest px-14 py-5 rounded-xl bg-gold text-field-950 hover:bg-gold-light transition-all hover:scale-105 hover:shadow-[0_14px_50px_rgba(245,166,35,0.45)] active:scale-100"
           >
             Create Free Account
