@@ -363,7 +363,7 @@ export interface SlotDef {
   key: string    // e.g. "QB1", "BN3" - used as slot value in DB
   label: string  // e.g. "QB", "BN"
   pos: string[]  // eligible positions
-  type: 'starter' | 'flex' | 'bench' | 'ir'
+  type: 'starter' | 'flex' | 'bench' | 'ir' | 'cfb_os'
 }
 
 export function buildSlotDefs(league: RosterSlotConfig): SlotDef[] {
@@ -391,9 +391,11 @@ export function buildSlotDefs(league: RosterSlotConfig): SlotDef[] {
   return slots
 }
 
-export function canFillSlot(slot: SlotDef, pos: PlayerPos): boolean {
+export function canFillSlot(slot: SlotDef, pos: PlayerPos, playerLeague?: 'NFL' | 'CFB'): boolean {
   if (slot.type === 'bench') return true
   if (slot.type === 'ir') return false
+  // CFB Offseason slots only accept CFB players
+  if (slot.type === 'cfb_os') return playerLeague === 'CFB'
   return slot.pos.includes(pos)
 }
 

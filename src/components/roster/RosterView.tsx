@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
 import { useMyRoster, useDropPlayer, useMovePlayer, useRosterRealtime } from '@/hooks/useRoster'
 import { useAppStore } from '@/store/appStore'
 import { buildSlotDefs, canFillSlot } from '@/types/database'
@@ -50,31 +51,18 @@ export function RosterView() {
     setLoadingAI(true)
     setAiAnalysis(null)
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: 'You are an expert fantasy football analyst for Gridiron United, combining NFL and College Football. Give concise, actionable roster analysis in 3-4 short paragraphs.',
-          messages: [{
-            role: 'user',
-            content: `Analyze my fantasy roster:\n\nStarters:\n${
-              roster.filter(r => !r.slot.startsWith('BN') && !r.slot.startsWith('IR'))
-                .map(r => `${r.slot}: ${r.player.name} (${r.player.pos}, ${r.player.team}) - Proj: ${r.player.proj_pts?.toFixed(1)} pts`)
-                .join('\n')
-            }\n\nBench:\n${
-              roster.filter(r => r.slot.startsWith('BN'))
-                .map(r => `${r.slot}: ${r.player.name} (${r.player.pos}, ${r.player.team}) - Avg: ${r.player.avg_pts?.toFixed(1)} pts`)
-                .join('\n')
-            }\n\nScoring: ${activeLeague?.scoring_type ?? 'PPR'}\nProjected: ${totalProj.toFixed(1)} pts`,
-          }],
-        }),
+      // Call via Supabase Edge Function — keeps the API key server-side and avoids CORS
+      const { data, error } = await supabase.functions.invoke('ai-roster-analysis', {
+        body: {
+          roster,
+          scoringType: activeLeague?.scoring_type ?? 'ppr',
+          totalProj,
+        },
       })
-      const data = await res.json()
-      setAiAnalysis(data.content?.map((b: any) => b.text).join('') ?? 'No analysis available.')
-    } catch {
-      setAiAnalysis('Unable to load AI analysis right now.')
+      if (error) throw error
+      setAiAnalysis(data?.analysis ?? 'No analysis available.')
+    } catch (err: any) {
+      setAiAnalysis('Unable to load AI analysis right now. ' + (err?.message ?? ''))
     } finally {
       setLoadingAI(false)
     }
@@ -87,8 +75,13 @@ export function RosterView() {
     setMoving(null)
 
     const pos = movingEntry.player?.pos
-    if (!pos || !canFillSlot(targetSlot, pos as any)) {
-      toast.error(`${pos} can't play in ${targetSlot.label} slot`)
+    const league = movingEntry.player?.league
+    if (!pos || !canFillSlot(targetSlot, pos as any, league as any)) {
+      toast.error(
+        targetSlot.type === 'cfb_os'
+          ? 'Only CFB players can go in the Offseason slot'
+          : `${pos} can't play in ${targetSlot.label} slot`
+      )
       return
     }
 
@@ -113,6 +106,7 @@ export function RosterView() {
   const starterSlots = slots.filter(s => s.type === 'starter' || s.type === 'flex')
   const benchSlots = slots.filter(s => s.type === 'bench')
   const irSlots = slots.filter(s => s.type === 'ir')
+  const cfbOsSlots = slots.filter(s => s.type === 'cfb_os')
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
@@ -227,6 +221,29 @@ export function RosterView() {
         </div>
       )}
 
+      {/* CFB Offseason — only show if league has these slots configured */}
+      {cfbOsSlots.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-bold text-cfb uppercase tracking-wider">🎓 CFB Offseason</span>
+            <span className="text-[10px] text-field-500">— players held here don't score but don't count vs active roster</span>
+          </div>
+          <div className="grid gap-1">
+            {cfbOsSlots.map(slot => (
+              <RosterSlotRow
+                key={slot.key}
+                slot={slot}
+                entry={rosterBySlot.get(slot.key)}
+                moving={moving}
+                onMove={setMoving}
+                onDropToSlot={handleMoveToSlot}
+                onDrop={setConfirmDrop}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {roster.length === 0 && (
         <div className="panel text-center py-8">
           <TrendingUp className="w-10 h-10 text-gold/30 mx-auto mb-3" />
@@ -277,7 +294,7 @@ function RosterSlotRow({
   const pos = player?.pos as any
 
   // Is this a valid target for the player being moved?
-  const isValidTarget = moving && canFillSlot(slot, moving.player?.pos as any)
+  const isValidTarget = moving && canFillSlot(slot, moving.player?.pos as any, moving.player?.league as any)
   // Is this the slot the moving player is currently in? (source)
   const isSource = moving && entry?.id === moving.id
   // Is this an occupied slot we could swap with?

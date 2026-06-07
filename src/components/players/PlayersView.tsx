@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { usePlayers, useTeamList, DEFAULT_FILTERS, type PlayerFilters } from '@/hooks/usePlayers'
-import { useRosteredPlayerIds, useAddPlayer } from '@/hooks/useRoster'
+import { useRosteredPlayerIds, useAddPlayer, useMyRoster } from '@/hooks/useRoster'
 import { useAppStore } from '@/store/appStore'
 import { buildSlotDefs } from '@/types/database'
 import type { Player } from '@/types/database'
@@ -24,6 +24,7 @@ export function PlayersView() {
   const { data, isFetching } = usePlayers(filters)
   const { data: teamList = [] } = useTeamList(filters.league)
   const { data: rosteredIds } = useRosteredPlayerIds(activeLeagueId)
+  const { data: myRoster = [] } = useMyRoster(activeLeagueId)
   const addPlayer = useAddPlayer(activeLeagueId)
 
   const players = data?.players ?? []
@@ -441,6 +442,7 @@ export function PlayersView() {
         <SlotPickerModal
           player={showSlotPicker}
           slots={slots}
+          filledSlots={new Set(myRoster.map(r => r.slot))}
           onPick={async (slot) => {
             await addPlayer.mutateAsync({
               playerId: showSlotPicker.id,
@@ -484,38 +486,80 @@ function StatusBadge({ status, note }: { status: string; note?: string | null })
   )
 }
 
-function SlotPickerModal({ player, slots, onPick, onClose }: {
+function SlotPickerModal({ player, slots, filledSlots, onPick, onClose }: {
   player: Player
-  slots: { key: string; label: string; pos: string[] }[]
+  slots: { key: string; label: string; pos: string[]; type?: string }[]
+  filledSlots: Set<string>
   onPick: (slot: string) => void
   onClose: () => void
 }) {
-  const eligible = slots.filter(s =>
-    s.key.startsWith('BN') || s.key.startsWith('IR') ||
-    s.pos.includes(player.pos) ||
-    (s.key === 'FLEX' && ['RB', 'WR', 'TE'].includes(player.pos))
-  )
+  // Build eligible slots:
+  // 1. Must be positionally valid for this player
+  // 2. Must not be already filled
+  // 3. CFB_OS slots only shown if league has them (they appear in slots array)
+  //    and only if player is CFB
+  const eligible = slots.filter(s => {
+    // Skip filled slots entirely
+    if (filledSlots.has(s.key)) return false
+
+    // CFB Offseason slots: only CFB players allowed
+    if (s.type === 'cfb_os' || s.key.startsWith('CFB_OS')) {
+      return player.league === 'CFB'
+    }
+
+    // IR slots: skip in add flow (can't add directly to IR)
+    if (s.type === 'ir' || s.key.startsWith('IR')) return false
+
+    // Bench always eligible
+    if (s.type === 'bench' || s.key.startsWith('BN')) return true
+
+    // Flex eligible for RB/WR/TE
+    if ((s.type === 'flex' || s.key.startsWith('FLEX')) && ['RB', 'WR', 'TE'].includes(player.pos)) return true
+
+    // Starter slot: position must match
+    return s.pos.includes(player.pos)
+  })
+
+  const hasNoCfbOs = !slots.some(s => s.type === 'cfb_os' || s.key.startsWith('CFB_OS'))
+  const isNflBlockedFromCfbOs = player.league === 'NFL' && slots.some(s => s.type === 'cfb_os')
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box w-full max-w-xs" onClick={e => e.stopPropagation()}>
         <h3 className="section-title mb-1">Add {player.name}</h3>
-        <p className="text-field-400 text-sm mb-4">Choose a roster slot</p>
+        <p className="text-field-400 text-sm mb-4">Choose an open roster slot</p>
+
         <div className="space-y-1">
-          {eligible.map(s => (
-            <button
-              key={s.key}
-              className="w-full text-left btn-ghost"
-              onClick={() => onPick(s.key)}
-            >
-              <span className="font-bold text-white">{s.label}</span>
-              <span className="text-field-400 ml-2 text-xs">({s.pos.join(', ')})</span>
-            </button>
-          ))}
-          {eligible.length === 0 && (
-            <p className="text-field-400 text-sm text-center py-4">No eligible slots</p>
+          {eligible.length === 0 ? (
+            <div className="text-center py-6 space-y-2">
+              <p className="text-field-400 text-sm">No open eligible slots</p>
+              <p className="text-field-500 text-xs">Drop a player first to free up space</p>
+            </div>
+          ) : (
+            eligible.map(s => (
+              <button
+                key={s.key}
+                className="w-full text-left btn-ghost flex items-center justify-between"
+                onClick={() => onPick(s.key)}
+              >
+                <span className="font-bold text-white">{s.label}</span>
+                <span className="text-field-400 text-xs">
+                  {s.type === 'bench' || s.key.startsWith('BN') ? 'Bench' :
+                   s.type === 'cfb_os' || s.key.startsWith('CFB_OS') ? 'CFB Offseason' :
+                   s.pos.join(', ')}
+                </span>
+              </button>
+            ))
           )}
         </div>
+
+        {/* Info message if NFL player can't use CFB_OS */}
+        {isNflBlockedFromCfbOs && (
+          <p className="text-yellow-400/80 text-xs mt-3 text-center">
+            NFL players cannot be placed in CFB Offseason slots
+          </p>
+        )}
+
         <button className="btn-ghost w-full mt-3" onClick={onClose}>Cancel</button>
       </div>
     </div>
