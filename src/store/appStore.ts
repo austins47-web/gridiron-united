@@ -29,6 +29,7 @@ interface AppState {
   setNotifications: (notifications: Notification[]) => void
   addNotification: (notification: Notification) => void
   markAllRead: () => Promise<void>
+  clearAllNotifications: () => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -74,6 +75,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       notifications: s.notifications.map(n => ({ ...n, is_read: true })),
       unreadCount: 0,
     }))
+  },
+
+  clearAllNotifications: async () => {
+    const { user } = get()
+    if (!user) return
+    await supabase
+      .from('notifications')
+      .delete()
+      .eq('user_id', user.id)
+    set({ notifications: [], unreadCount: 0 })
   },
 
   signOut: async () => {

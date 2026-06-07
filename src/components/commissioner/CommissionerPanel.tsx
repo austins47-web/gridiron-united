@@ -361,6 +361,7 @@ function RosterEditor({ leagueId, league }: { leagueId: string; league: League }
     slots_qb: league.slots_qb, slots_rb: league.slots_rb, slots_wr: league.slots_wr,
     slots_te: league.slots_te, slots_flex: league.slots_flex, slots_dst: league.slots_dst,
     slots_k: league.slots_k, slots_bench: league.slots_bench, slots_ir: league.slots_ir,
+    slots_cfb_os: league.slots_cfb_os ?? 0,
   })
   const [slotDirty, setSlotDirty] = useState(false)
   const [slotSaving, setSlotSaving] = useState(false)
@@ -370,7 +371,7 @@ function RosterEditor({ leagueId, league }: { leagueId: string; league: League }
       const bounds: Record<keyof RosterSlotConfig, [number, number]> = {
         slots_qb: [0, 4], slots_rb: [0, 6], slots_wr: [0, 6], slots_te: [0, 4],
         slots_flex: [0, 5], slots_dst: [0, 2], slots_k: [0, 2],
-        slots_bench: [0, 16], slots_ir: [0, 5],
+        slots_bench: [0, 16], slots_ir: [0, 5], slots_cfb_os: [0, 10],
       }
       const [min, max] = bounds[key]
       const next = Math.max(min, Math.min(max, (prev[key] ?? 0) + delta))

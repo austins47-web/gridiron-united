@@ -183,6 +183,7 @@ export interface RosterSlotConfig {
   slots_k: number
   slots_bench: number
   slots_ir: number
+  slots_cfb_os: number
 }
 
 export type PlayerPool = 'nfl' | 'cfb' | 'both'

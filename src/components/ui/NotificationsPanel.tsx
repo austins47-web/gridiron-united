@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { X, Bell, CheckCheck } from 'lucide-react'
+import { X, Bell, CheckCheck, Trash2 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -17,7 +17,7 @@ interface Props {
 }
 
 export function NotificationsPanel({ onClose }: Props) {
-  const { notifications, unreadCount, markAllRead } = useAppStore()
+  const { notifications, unreadCount, markAllRead, clearAllNotifications } = useAppStore()
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -50,6 +50,13 @@ export function NotificationsPanel({ onClose }: Props) {
               className="p-1.5 rounded hover:bg-white/5 text-gray-500 hover:text-gold transition-colors"
               title="Mark all read">
               <CheckCheck size={14} />
+            </button>
+          )}
+          {notifications.length > 0 && (
+            <button onClick={clearAllNotifications}
+              className="p-1.5 rounded hover:bg-white/5 text-gray-500 hover:text-red-400 transition-colors"
+              title="Clear all notifications">
+              <Trash2 size={14} />
             </button>
           )}
           <button onClick={onClose}
