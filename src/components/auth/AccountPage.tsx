@@ -5,15 +5,40 @@ import { User, Camera, Shield, LogOut, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
-const NFL_TEAMS = [
-  'Arizona Cardinals','Atlanta Falcons','Baltimore Ravens','Buffalo Bills',
-  'Carolina Panthers','Chicago Bears','Cincinnati Bengals','Cleveland Browns',
-  'Dallas Cowboys','Denver Broncos','Detroit Lions','Green Bay Packers',
-  'Houston Texans','Indianapolis Colts','Jacksonville Jaguars','Kansas City Chiefs',
-  'Las Vegas Raiders','Los Angeles Chargers','Los Angeles Rams','Miami Dolphins',
-  'Minnesota Vikings','New England Patriots','New Orleans Saints','New York Giants',
-  'New York Jets','Philadelphia Eagles','Pittsburgh Steelers','San Francisco 49ers',
-  'Seattle Seahawks','Tampa Bay Buccaneers','Tennessee Titans','Washington Commanders',
+// label → stored abbreviation
+const NFL_TEAMS: { label: string; value: string }[] = [
+  { label: 'Arizona Cardinals',    value: 'ARI' },
+  { label: 'Atlanta Falcons',      value: 'ATL' },
+  { label: 'Baltimore Ravens',     value: 'BAL' },
+  { label: 'Buffalo Bills',        value: 'BUF' },
+  { label: 'Carolina Panthers',    value: 'CAR' },
+  { label: 'Chicago Bears',        value: 'CHI' },
+  { label: 'Cincinnati Bengals',   value: 'CIN' },
+  { label: 'Cleveland Browns',     value: 'CLE' },
+  { label: 'Dallas Cowboys',       value: 'DAL' },
+  { label: 'Denver Broncos',       value: 'DEN' },
+  { label: 'Detroit Lions',        value: 'DET' },
+  { label: 'Green Bay Packers',    value: 'GB'  },
+  { label: 'Houston Texans',       value: 'HOU' },
+  { label: 'Indianapolis Colts',   value: 'IND' },
+  { label: 'Jacksonville Jaguars', value: 'JAX' },
+  { label: 'Kansas City Chiefs',   value: 'KC'  },
+  { label: 'Las Vegas Raiders',    value: 'LV'  },
+  { label: 'Los Angeles Chargers', value: 'LAC' },
+  { label: 'Los Angeles Rams',     value: 'LAR' },
+  { label: 'Miami Dolphins',       value: 'MIA' },
+  { label: 'Minnesota Vikings',    value: 'MIN' },
+  { label: 'New England Patriots', value: 'NE'  },
+  { label: 'New Orleans Saints',   value: 'NO'  },
+  { label: 'New York Giants',      value: 'NYG' },
+  { label: 'New York Jets',        value: 'NYJ' },
+  { label: 'Philadelphia Eagles',  value: 'PHI' },
+  { label: 'Pittsburgh Steelers',  value: 'PIT' },
+  { label: 'San Francisco 49ers',  value: 'SF'  },
+  { label: 'Seattle Seahawks',     value: 'SEA' },
+  { label: 'Tampa Bay Buccaneers', value: 'TB'  },
+  { label: 'Tennessee Titans',     value: 'TEN' },
+  { label: 'Washington Commanders',value: 'WSH' },
 ]
 
 const CFB_TEAMS = [
@@ -191,7 +216,7 @@ export function AccountPage() {
                 onChange={e => setForm(f => ({ ...f, favorite_nfl_team: e.target.value }))}
               >
                 <option value="">— None —</option>
-                {NFL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+                {NFL_TEAMS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>

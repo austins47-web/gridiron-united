@@ -102,6 +102,34 @@ const FAV_KEY = 'gu_fav_teams_v2'
 const VIEW_KEY = 'gu_scores_view'
 const COLS_KEY = 'gu_scores_cols'
 
+// Maps full team names (stored in profiles) → ESPN abbreviations
+const FULL_NAME_TO_ABBR: Record<string, string> = {
+  'Arizona Cardinals': 'ARI', 'Atlanta Falcons': 'ATL', 'Baltimore Ravens': 'BAL',
+  'Buffalo Bills': 'BUF', 'Carolina Panthers': 'CAR', 'Chicago Bears': 'CHI',
+  'Cincinnati Bengals': 'CIN', 'Cleveland Browns': 'CLE', 'Dallas Cowboys': 'DAL',
+  'Denver Broncos': 'DEN', 'Detroit Lions': 'DET', 'Green Bay Packers': 'GB',
+  'Houston Texans': 'HOU', 'Indianapolis Colts': 'IND', 'Jacksonville Jaguars': 'JAX',
+  'Kansas City Chiefs': 'KC', 'Las Vegas Raiders': 'LV', 'Los Angeles Chargers': 'LAC',
+  'Los Angeles Rams': 'LAR', 'Miami Dolphins': 'MIA', 'Minnesota Vikings': 'MIN',
+  'New England Patriots': 'NE', 'New Orleans Saints': 'NO', 'New York Giants': 'NYG',
+  'New York Jets': 'NYJ', 'Philadelphia Eagles': 'PHI', 'Pittsburgh Steelers': 'PIT',
+  'San Francisco 49ers': 'SF', 'Seattle Seahawks': 'SEA', 'Tampa Bay Buccaneers': 'TB',
+  'Tennessee Titans': 'TEN', 'Washington Commanders': 'WSH',
+  // CFB teams stored as short names — ESPN abbreviations vary; map common ones
+  'Alabama': 'ALA', 'Auburn': 'AUB', 'Georgia': 'UGA', 'LSU': 'LSU',
+  'Tennessee': 'TENN', 'Texas A&M': 'TAMU', 'Florida': 'FLA', 'South Carolina': 'SC',
+  'Ohio State': 'OSU', 'Michigan': 'MICH', 'Penn State': 'PSU', 'Michigan State': 'MSU',
+  'Iowa': 'IOWA', 'Wisconsin': 'WIS', 'Notre Dame': 'ND', 'Texas': 'TEX',
+  'Oklahoma': 'OU', 'Kansas State': 'KSU', 'Baylor': 'BAY', 'TCU': 'TCU',
+  'Oregon': 'ORE', 'Washington': 'WASH', 'USC': 'USC', 'Utah': 'UTAH',
+  'Clemson': 'CLEM', 'Florida State': 'FSU', 'Miami': 'MIA', 'NC State': 'NCSU',
+  'Colorado': 'COLO', 'Boise State': 'BSU',
+}
+
+function toAbbr(nameOrAbbr: string): string {
+  return FULL_NAME_TO_ABBR[nameOrAbbr] ?? nameOrAbbr
+}
+
 function loadFavs(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]')) }
   catch { return new Set() }
@@ -497,9 +525,11 @@ export function LiveScoresView() {
   // Manual favorites from localStorage (user-toggled)
   const [manualFavs, setManualFavs] = useState<Set<string>>(loadFavs)
 
-  // Profile teams — always favorited automatically, no user action needed
+  // Profile teams — convert full names to abbreviations used by ESPN
   const profileTeams = new Set(
-    [profile?.favorite_nfl_team, profile?.favorite_cfb_team].filter(Boolean) as string[]
+    [profile?.favorite_nfl_team, profile?.favorite_cfb_team]
+      .filter(Boolean)
+      .map(t => toAbbr(t as string))
   )
 
   // Combined: profile teams always in, plus anything user has manually starred
