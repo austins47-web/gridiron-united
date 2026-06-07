@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/appStore'
 import { buildSlotDefs, canFillSlot } from '@/types/database'
 import type { RosterEntryWithPlayer } from '@/hooks/useRoster'
 import type { SlotDef } from '@/types/database'
-import { Zap, Trash2, TrendingUp, AlertCircle, ArrowLeftRight, X } from 'lucide-react'
+import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronDown, ChevronUp } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -104,9 +104,31 @@ export function RosterView() {
 
   // Sections
   const starterSlots = slots.filter(s => s.type === 'starter' || s.type === 'flex')
-  const benchSlots = slots.filter(s => s.type === 'bench')
-  const irSlots = slots.filter(s => s.type === 'ir')
-  const cfbOsSlots = slots.filter(s => s.type === 'cfb_os')
+  const benchSlots   = slots.filter(s => s.type === 'bench')
+  const irSlots      = slots.filter(s => s.type === 'ir')
+  const cfbOsSlots   = slots.filter(s => s.type === 'cfb_os')
+
+  // ── Roster limit logic (Sleeper-style) ───────────────────────────────
+  // IR and CFB_OS slots do NOT count against roster limit
+  const rosterLimit = starterSlots.length + benchSlots.length
+  const activePlayers = roster.filter(r =>
+    !r.slot.startsWith('IR') && !r.slot.startsWith('CFB_OS')
+  )
+  const isOverRosterLimit = activePlayers.length > rosterLimit
+  const overBy = activePlayers.length - rosterLimit
+  // While over limit: moves are locked (must drop first)
+  const rosterLocked = isOverRosterLimit && !moving
+
+  // ── IR / CFB_OS health warning logic ─────────────────────────────────
+  // IR warning: player in IR slot who is now healthy (status === 'active')
+  const healthyOnIR = roster.filter(r =>
+    r.slot.startsWith('IR') && r.player?.status === 'active'
+  )
+  // CFB_OS warning: player in CFB_OS slot whose team's season has started
+  // (proj_pts > 0 means they are in-season — simple heuristic)
+  const activeOnCfbOs = roster.filter(r =>
+    r.slot.startsWith('CFB_OS') && (r.player?.proj_pts ?? 0) > 0
+  )
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
@@ -144,6 +166,73 @@ export function RosterView() {
         </div>
       )}
 
+      {/* Over roster limit banner */}
+      {isOverRosterLimit && (
+        <div className="bg-red-500/10 border border-red-500/40 rounded-xl px-4 py-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+            <span className="text-red-300 font-bold text-sm">
+              You are {overBy} player{overBy > 1 ? 's' : ''} over the roster limit ({rosterLimit} active spots)
+            </span>
+          </div>
+          <p className="text-red-400/80 text-xs pl-6">
+            Moving players is locked until you drop {overBy} player{overBy > 1 ? 's' : ''}.
+            IR and CFB Offseason slots do not count toward the limit — you can move players there without dropping.
+          </p>
+          <div className="pl-6 flex flex-wrap gap-2 mt-1">
+            {activePlayers.slice(0, overBy + 2).map(r => (
+              <span key={r.id} className="text-xs bg-red-500/20 border border-red-500/30 text-red-300 px-2 py-0.5 rounded-full font-bold">
+                {r.player?.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Healthy player on IR banner */}
+      {healthyOnIR.length > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/40 rounded-xl px-4 py-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+            <span className="text-yellow-300 font-bold text-sm">
+              {healthyOnIR.length} player{healthyOnIR.length > 1 ? 's' : ''} in IR {healthyOnIR.length > 1 ? 'are' : 'is'} healthy
+            </span>
+          </div>
+          <p className="text-yellow-400/80 text-xs pl-6">
+            Move {healthyOnIR.length > 1 ? 'these players' : 'this player'} back to your active roster or bench — IR is only for injured players.
+          </p>
+          <div className="pl-6 flex flex-wrap gap-2">
+            {healthyOnIR.map(r => (
+              <span key={r.id} className="text-xs bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 px-2 py-0.5 rounded-full font-bold">
+                {r.player?.name} ({r.player?.team})
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active player stuck in CFB Offseason banner */}
+      {activeOnCfbOs.length > 0 && (
+        <div className="bg-blue-500/10 border border-blue-500/40 rounded-xl px-4 py-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-blue-400 shrink-0" />
+            <span className="text-blue-300 font-bold text-sm">
+              {activeOnCfbOs.length} player{activeOnCfbOs.length > 1 ? 's' : ''} in CFB Offseason {activeOnCfbOs.length > 1 ? 'have' : 'has'} started their season
+            </span>
+          </div>
+          <p className="text-blue-400/80 text-xs pl-6">
+            {activeOnCfbOs.length > 1 ? 'These players are' : 'This player is'} earning points but stuck in your CFB Offseason slot — move {activeOnCfbOs.length > 1 ? 'them' : 'them'} to an active slot to count their score.
+          </p>
+          <div className="pl-6 flex flex-wrap gap-2">
+            {activeOnCfbOs.map(r => (
+              <span key={r.id} className="text-xs bg-blue-500/20 border border-blue-500/30 text-blue-300 px-2 py-0.5 rounded-full font-bold">
+                {r.player?.name} ({r.player?.team})
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* AI Analysis */}
       <div className="panel">
         <div className="flex items-center justify-between mb-2">
@@ -172,7 +261,8 @@ export function RosterView() {
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
                 moving={moving}
-                onMove={setMoving}
+                locked={rosterLocked}
+                onMove={(e) => { if (!rosterLocked) setMoving(e) }}
                 onDropToSlot={handleMoveToSlot}
                 onDrop={setConfirmDrop}
               />
@@ -192,7 +282,8 @@ export function RosterView() {
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
                 moving={moving}
-                onMove={setMoving}
+                locked={rosterLocked}
+                onMove={(e) => { if (!rosterLocked) setMoving(e) }}
                 onDropToSlot={handleMoveToSlot}
                 onDrop={setConfirmDrop}
               />
@@ -212,7 +303,8 @@ export function RosterView() {
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
                 moving={moving}
-                onMove={setMoving}
+                locked={rosterLocked}
+                onMove={(e) => { if (!rosterLocked) setMoving(e) }}
                 onDropToSlot={handleMoveToSlot}
                 onDrop={setConfirmDrop}
               />
@@ -235,7 +327,8 @@ export function RosterView() {
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
                 moving={moving}
-                onMove={setMoving}
+                locked={rosterLocked}
+                onMove={(e) => { if (!rosterLocked) setMoving(e) }}
                 onDropToSlot={handleMoveToSlot}
                 onDrop={setConfirmDrop}
               />
@@ -286,6 +379,7 @@ function RosterSlotRow({
   slot: SlotDef
   entry: RosterEntryWithPlayer | undefined
   moving: RosterEntryWithPlayer | null
+  locked: boolean
   onMove: (e: RosterEntryWithPlayer) => void
   onDropToSlot: (slot: SlotDef) => void
   onDrop: (e: RosterEntryWithPlayer) => void
@@ -300,9 +394,14 @@ function RosterSlotRow({
   // Is this an occupied slot we could swap with?
   const isSwapTarget = isValidTarget && entry && !isSource
 
+  // IR and CFB_OS slots are always moveable even when over roster limit
+  const isExemptSlot = slot.type === 'ir' || slot.type === 'cfb_os'
+  const effectiveLocked = locked && !isExemptSlot && !moving
+
   const handleClick = () => {
+    if (effectiveLocked) return
     if (moving) {
-      if (isSource) { return } // clicking source cancels implicitly via cancel button
+      if (isSource) { return }
       if (isValidTarget) onDropToSlot(slot)
       return
     }
@@ -314,12 +413,15 @@ function RosterSlotRow({
       onClick={handleClick}
       className={clsx(
         'roster-slot group transition-all',
-        // Move mode visual states
-        moving && isSource && 'ring-2 ring-gold/60 bg-gold/5 opacity-70',
-        moving && isValidTarget && !isSource && 'ring-2 ring-green-400/50 bg-green-400/5 cursor-pointer hover:bg-green-400/10',
-        moving && !isValidTarget && !isSource && 'opacity-40 cursor-not-allowed',
-        !moving && entry && 'cursor-pointer hover:bg-field-800/60',
-        !player && 'opacity-60',
+        // Locked state (over roster limit, non-exempt slot)
+        effectiveLocked && entry && 'opacity-50 cursor-not-allowed',
+        effectiveLocked && !entry && 'opacity-30',
+        // Move mode visual states (only when not locked)
+        !effectiveLocked && moving && isSource && 'ring-2 ring-gold/60 bg-gold/5 opacity-70',
+        !effectiveLocked && moving && isValidTarget && !isSource && 'ring-2 ring-green-400/50 bg-green-400/5 cursor-pointer hover:bg-green-400/10',
+        !effectiveLocked && moving && !isValidTarget && !isSource && 'opacity-40 cursor-not-allowed',
+        !effectiveLocked && !moving && entry && 'cursor-pointer hover:bg-field-800/60',
+        !player && !effectiveLocked && 'opacity-60',
       )}
     >
       {/* Slot label */}
@@ -365,6 +467,13 @@ function RosterSlotRow({
         <div className="shrink-0 text-green-400 text-xs font-bold px-1">↕ Swap</div>
       )}
 
+      {/* Locked indicator */}
+      {effectiveLocked && entry && (
+        <div className="shrink-0 text-red-400/60 text-[10px] font-bold px-1" title="Drop a player to unlock moves">
+          🔒
+        </div>
+      )}
+
       {/* Points */}
       {player && !moving && (
         <div className="text-right shrink-0 hidden sm:block">
@@ -376,13 +485,15 @@ function RosterSlotRow({
       {/* Actions — only shown when NOT in move mode */}
       {entry && !moving && (
         <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            className="btn-ghost !py-1 !px-2 text-field-400 hover:text-white"
-            onClick={e => { e.stopPropagation(); onMove(entry) }}
-            title="Move player"
-          >
-            <ArrowLeftRight className="w-3.5 h-3.5" />
-          </button>
+          {!effectiveLocked && (
+            <button
+              className="btn-ghost !py-1 !px-2 text-field-400 hover:text-white"
+              onClick={e => { e.stopPropagation(); onMove(entry) }}
+              title="Move player"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             className="btn-ghost !py-1 !px-2 text-red-400 hover:text-red-300"
             onClick={e => { e.stopPropagation(); onDrop(entry) }}
