@@ -32,8 +32,8 @@ function MiniAvatar({ profile }: { profile?: ChatMessage['profiles'] }) {
       className="w-7 h-7 rounded-full object-cover shrink-0 ring-1 ring-field-600"
     />
   ) : (
-    <div className="w-7 h-7 rounded-full bg-field-700 border border-field-600 flex items-center justify-center shrink-0">
-      <span className="text-[10px] font-black text-field-300">{initials}</span>
+    <div className="chat-avatar-fallback w-7 h-7 rounded-full bg-field-700 border border-field-600 flex items-center justify-center shrink-0">
+      <span className="text-[10px] font-black text-field-300 chat-avatar-fallback">{initials}</span>
     </div>
   )
 }
@@ -114,7 +114,7 @@ function MessageBubble({ msg, isOwn, showAvatar }: {
   if (msg.is_system) {
     return (
       <div className="flex justify-center my-1">
-        <span className="text-[10px] text-field-500 bg-field-800/60 border border-field-700/50 rounded-full px-3 py-1">
+        <span className="chat-system-pill text-[10px] text-field-500 bg-field-800/60 border border-field-700/50 rounded-full px-3 py-1">
           {msg.message}
         </span>
       </div>
@@ -132,10 +132,10 @@ function MessageBubble({ msg, isOwn, showAvatar }: {
         {/* Name + time — only on first of group */}
         {showAvatar && (
           <div className={clsx('flex items-baseline gap-1.5 mb-1', isOwn ? 'flex-row-reverse' : 'flex-row')}>
-            <span className={clsx('text-[11px] font-bold', isOwn ? 'text-gold' : 'text-field-200')}>
+            <span className={clsx('text-[11px] font-bold', isOwn ? 'text-gold chat-sender-name-own' : 'text-field-200 chat-sender-name')}>
               {isOwn ? 'You' : (msg.profiles?.display_name || msg.profiles?.username || 'Unknown')}
             </span>
-            <span className="text-[10px] text-field-500">{formatTime(msg.created_at)}</span>
+            <span className="text-[10px] text-field-500 chat-time">{formatTime(msg.created_at)}</span>
           </div>
         )}
 
@@ -143,8 +143,8 @@ function MessageBubble({ msg, isOwn, showAvatar }: {
         <div className={clsx(
           'px-3 py-2 rounded-2xl text-sm leading-relaxed break-words',
           isOwn
-            ? 'bg-gold/20 border border-gold/30 text-white rounded-br-sm'
-            : 'bg-field-700 border border-field-600 text-field-100 rounded-bl-sm',
+            ? 'chat-bubble-own bg-gold/20 border border-gold/30 text-white rounded-br-sm'
+            : 'chat-bubble-other bg-field-700 border border-field-600 text-field-100 rounded-bl-sm',
         )}>
           {msg.message}
         </div>
@@ -298,14 +298,14 @@ export function LeagueChat() {
 
       {/* Messages area */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-3 space-y-1.5 min-h-0"
+        className="chat-area flex-1 overflow-y-auto px-4 py-3 space-y-1.5 min-h-0"
         onScroll={handleScroll}
       >
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 text-center gap-2">
             <MessageSquare className="w-8 h-8 text-field-600" />
-            <p className="text-field-400 text-sm">No messages yet</p>
-            <p className="text-field-600 text-xs">Be the first to say something!</p>
+            <p className="chat-empty text-field-400 text-sm">No messages yet</p>
+            <p className="chat-empty text-field-600 text-xs">Be the first to say something!</p>
           </div>
         )}
 
@@ -328,7 +328,7 @@ export function LeagueChat() {
             setAutoScroll(true)
             bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
           }}
-          className="mx-4 mb-2 text-xs text-gold bg-gold/10 border border-gold/30 rounded-full px-3 py-1 font-bold hover:bg-gold/20 transition-colors"
+          className="chat-scroll-btn mx-4 mb-2 text-xs text-gold bg-gold/10 border border-gold/30 rounded-full px-3 py-1 font-bold hover:bg-gold/20 transition-colors"
         >
           ↓ New messages
         </button>
@@ -336,7 +336,7 @@ export function LeagueChat() {
 
       {/* Input */}
       <div className="px-3 pb-3 pt-2 border-t border-field-700 shrink-0">
-        <div className="flex items-center gap-2 bg-field-700 border border-field-600 rounded-xl px-3 py-2 focus-within:border-gold/50 transition-colors">
+        <div className="chat-input-wrap flex items-center gap-2 bg-field-700 border border-field-600 rounded-xl px-3 py-2 focus-within:border-gold/50 transition-colors">
           <div className="w-6 h-6 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
@@ -346,7 +346,7 @@ export function LeagueChat() {
           </div>
           <input
             ref={inputRef}
-            className="flex-1 bg-transparent text-sm text-white placeholder-field-500 outline-none min-w-0"
+            className="chat-input flex-1 bg-transparent text-sm text-white placeholder-field-500 outline-none min-w-0"
             placeholder="Message the league…"
             value={text}
             onChange={e => setText(e.target.value)}

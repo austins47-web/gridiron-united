@@ -374,3 +374,80 @@
 [data-theme="light"] .trade-chat-player { color: #111827 !important; }
 [data-theme="light"] .trade-chat-empty  { color: #6b7280 !important; }
 [data-theme="light"] .trade-chat-divider { border-color: #86efac !important; }
+
+/* ── Chat light mode fixes ── */
+
+/* Whole chat area background */
+[data-theme="light"] .chat-area {
+  background-color: #f0f2f7 !important;
+}
+
+/* My message bubbles (gold tint) */
+[data-theme="light"] .chat-bubble-own {
+  background-color: rgba(232, 149, 14, 0.15) !important;
+  border-color: rgba(232, 149, 14, 0.4) !important;
+  color: #111827 !important;
+}
+
+/* Other people's bubbles */
+[data-theme="light"] .chat-bubble-other {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+  color: #111827 !important;
+}
+
+/* Sender name */
+[data-theme="light"] .chat-sender-name {
+  color: #374151 !important;
+}
+[data-theme="light"] .chat-sender-name-own {
+  color: #e8950e !important;
+}
+
+/* Timestamp */
+[data-theme="light"] .chat-time {
+  color: #6b7280 !important;
+}
+
+/* System message pill */
+[data-theme="light"] .chat-system-pill {
+  background-color: #e5e7eb !important;
+  border-color: #d1d5db !important;
+  color: #374151 !important;
+}
+
+/* Chat input area */
+[data-theme="light"] .chat-input-wrap {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .chat-input-wrap:focus-within {
+  border-color: rgba(232,149,14,0.5) !important;
+}
+[data-theme="light"] .chat-input {
+  color: #111827 !important;
+}
+[data-theme="light"] .chat-input::placeholder {
+  color: #9ca3af !important;
+}
+
+/* Avatar initials */
+[data-theme="light"] .chat-avatar-fallback {
+  background-color: #e5e7eb !important;
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .chat-avatar-fallback span {
+  color: #374151 !important;
+}
+
+/* Empty state */
+[data-theme="light"] .chat-empty {
+  color: #6b7280 !important;
+}
+
+/* New messages button */
+[data-theme="light"] .chat-scroll-btn {
+  background-color: rgba(232,149,14,0.1) !important;
+  border-color: rgba(232,149,14,0.3) !important;
+  color: #e8950e !important;
+}
