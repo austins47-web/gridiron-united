@@ -447,9 +447,9 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
         <TeamBlock team={game.home} ahead={homeScore > awayScore} reverse />
       </div>
 
-      {/* Odds — spread + win% */}
-      {odds && game.status !== 'post' && (
-        <div className="shrink-0 hidden lg:flex items-center gap-5 w-[260px] justify-end">
+      {/* Odds — always fixed width so venue/star stay aligned */}
+      <div className="shrink-0 hidden lg:flex items-center gap-5 w-[260px] justify-end">
+        {odds && game.status !== 'post' && (<>
 
           {/* Spread pill pair */}
           {odds.spread !== null && (
@@ -503,10 +503,10 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
               </div>
             </div>
           )}
-        </div>
-      )}
+        </>)}
+      </div>
 
-      {/* Venue + broadcast — stacked, truncated */}
+      {/* Venue + broadcast — always fixed width, always aligned */}
       <div className="shrink-0 hidden sm:flex flex-col items-end gap-0.5 w-[140px]">
         {isLive && game.downDistance && (
           <span className="text-xs text-field-300 font-bold truncate w-full text-right">{game.downDistance}</span>
