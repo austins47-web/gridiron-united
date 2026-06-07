@@ -485,15 +485,6 @@ type StatusFilter = 'All' | 'Live' | 'Final' | 'Upcoming'
 export function LiveScoresView() {
   const { profile } = useAppStore()
 
-  // Merge profile favorites immediately at init — no delay
-  const [favTeams, setFavTeams] = useState<Set<string>>(() => {
-    const favs = loadFavs()
-    // profile may already be in the store at mount time — add them immediately
-    const profileTeams = [profile?.favorite_nfl_team, profile?.favorite_cfb_team].filter(Boolean) as string[]
-    profileTeams.forEach(t => favs.add(t))
-    if (profileTeams.length) saveFavs(favs)
-    return favs
-  })
   const [leagueFilter, setLeagueFilter] = useState<LeagueFilter>('All')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
   const [viewMode, setViewMode]       = useState<ViewMode>(() =>
@@ -503,24 +494,22 @@ export function LiveScoresView() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
 
+  // Manual favorites from localStorage (user-toggled)
+  const [manualFavs, setManualFavs] = useState<Set<string>>(loadFavs)
+
+  // Profile teams — always favorited automatically, no user action needed
+  const profileTeams = new Set(
+    [profile?.favorite_nfl_team, profile?.favorite_cfb_team].filter(Boolean) as string[]
+  )
+
+  // Combined: profile teams always in, plus anything user has manually starred
+  const favTeams = new Set([...profileTeams, ...manualFavs])
+
   useEffect(() => { localStorage.setItem(VIEW_KEY, viewMode) }, [viewMode])
   useEffect(() => { localStorage.setItem(COLS_KEY, String(cols)) }, [cols])
 
-  // Auto-add profile favorites
-  useEffect(() => {
-    const toAdd = [profile?.favorite_nfl_team, profile?.favorite_cfb_team].filter(Boolean) as string[]
-    if (!toAdd.length) return
-    setFavTeams(prev => {
-      const next = new Set(prev)
-      let changed = false
-      toAdd.forEach(t => { if (!next.has(t)) { next.add(t); changed = true } })
-      if (changed) saveFavs(next)
-      return changed ? next : prev
-    })
-  }, [profile?.favorite_nfl_team, profile?.favorite_cfb_team])
-
   const toggleFav = useCallback((abbr: string) => {
-    setFavTeams(prev => {
+    setManualFavs(prev => {
       const next = new Set(prev)
       next.has(abbr) ? next.delete(abbr) : next.add(abbr)
       saveFavs(next)
