@@ -61,7 +61,7 @@ export function LeagueSelector() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-field-700 border border-white/[0.06]">
+      <div className="league-selector-loading flex items-center gap-2 px-3 py-1.5 rounded bg-field-700 border border-white/[0.06]">
         <div className="w-24 h-3 bg-field-600 rounded animate-pulse" />
       </div>
     )
@@ -79,10 +79,10 @@ export function LeagueSelector() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded bg-field-700 border border-white/[0.06] hover:border-gold/30 transition-colors"
+        className="league-selector-btn flex items-center gap-2 px-3 py-1.5 rounded bg-field-700 border border-white/[0.06] hover:border-gold/30 transition-colors"
       >
         <Trophy size={13} className="text-gold shrink-0" />
-        <span className="font-cond font-bold text-sm text-gray-200 max-w-[180px] truncate">
+        <span className="league-selector-name font-cond font-bold text-sm text-gray-200 max-w-[180px] truncate">
           {activeLeague?.name ?? 'Select League'}
         </span>
         <ChevronDown size={13} className={clsx('text-gray-500 shrink-0 transition-transform', open && 'rotate-180')} />
@@ -93,8 +93,8 @@ export function LeagueSelector() {
           {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
-          <div className="absolute left-0 top-full mt-1 w-72 bg-field-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/10">
+          <div className="league-selector-dropdown absolute left-0 top-full mt-1 w-72 bg-field-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+            <div className="league-selector-header px-3 py-2 border-b border-white/10">
               <span className="font-cond font-bold text-xs uppercase tracking-wider text-gray-500">
                 Your Leagues ({leagues.length})
               </span>
@@ -108,22 +108,22 @@ export function LeagueSelector() {
                     key={league.id}
                     onClick={() => switchLeague(league, membership)}
                     className={clsx(
-                      'w-full text-left px-3 py-3 transition-colors hover:bg-white/5 flex items-center justify-between gap-3 border-b border-white/5 last:border-0',
-                      isActive && 'bg-gold/[0.06]',
+                      'league-selector-row w-full text-left px-3 py-3 transition-colors hover:bg-white/5 flex items-center justify-between gap-3 border-b border-white/5 last:border-0',
+                      isActive && 'active bg-gold/[0.06]',
                     )}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       {/* League initial avatar */}
                       <div className={clsx(
                         'w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm shrink-0',
-                        isActive ? 'bg-gold text-field-950' : 'bg-field-700 text-gold',
+                        isActive ? 'bg-gold text-field-950' : 'league-selector-avatar-inactive bg-field-700 text-gold',
                       )}>
                         {league.name[0].toUpperCase()}
                       </div>
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-cond font-bold text-sm text-gray-200 truncate">
+                          <span className="league-selector-name font-cond font-bold text-sm text-gray-200 truncate">
                             {league.name}
                           </span>
                           {isActive && (

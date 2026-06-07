@@ -451,3 +451,78 @@
   border-color: rgba(232,149,14,0.3) !important;
   color: #e8950e !important;
 }
+
+/* ── LeagueSelector light mode ── */
+
+/* Trigger button */
+[data-theme="light"] .league-selector-btn {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .league-selector-btn:hover {
+  border-color: rgba(232,149,14,0.5) !important;
+}
+
+/* Dropdown panel */
+[data-theme="light"] .league-selector-dropdown {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important;
+}
+
+/* Header "Your Leagues (N)" */
+[data-theme="light"] .league-selector-header {
+  border-color: #e5e7eb !important;
+  color: #6b7280 !important;
+}
+
+/* Each league row */
+[data-theme="light"] .league-selector-row {
+  border-color: #f3f4f6 !important;
+}
+[data-theme="light"] .league-selector-row:hover {
+  background-color: #f9fafb !important;
+}
+[data-theme="light"] .league-selector-row.active {
+  background-color: rgba(232,149,14,0.06) !important;
+}
+
+/* Inactive league avatar */
+[data-theme="light"] .league-selector-avatar-inactive {
+  background-color: #f3f4f6 !important;
+}
+
+/* League name text */
+[data-theme="light"] .league-selector-name {
+  color: #111827 !important;
+}
+
+/* Meta text (teams, draft_status, record) */
+[data-theme="light"] .league-selector-meta {
+  color: #4b5563 !important;
+}
+
+/* gray-600 text used for team count / draft status */
+[data-theme="light"] .league-selector-dropdown .text-gray-600 {
+  color: #4b5563 !important;
+}
+[data-theme="light"] .league-selector-dropdown .text-gray-500 {
+  color: #6b7280 !important;
+}
+[data-theme="light"] .league-selector-dropdown .text-gray-200 {
+  color: #111827 !important;
+}
+
+/* Scoring badge backgrounds */
+[data-theme="light"] .league-selector-dropdown .bg-nfl\/15 { background-color: rgba(74,159,232,0.15) !important; }
+[data-theme="light"] .league-selector-dropdown .bg-cfb\/15 { background-color: rgba(232,160,32,0.15) !important; }
+[data-theme="light"] .league-selector-dropdown .bg-gray-600\/20 { background-color: #f3f4f6 !important; }
+
+/* Loading skeleton */
+[data-theme="light"] .league-selector-loading {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .league-selector-loading .bg-field-600 {
+  background-color: #e5e7eb !important;
+}
