@@ -1,0 +1,190 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { @apply bg-field-900 text-gray-100; }
+
+  body {
+    font-family: 'Barlow', sans-serif;
+    background-color: #0f1f0f;
+    background-image:
+      repeating-linear-gradient(
+        90deg,
+        transparent 0,
+        transparent calc(10% - 1px),
+        rgba(245,197,24,.025) calc(10% - 1px),
+        rgba(245,197,24,.025) 10%
+      );
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-field-600 rounded; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-field-500; }
+}
+
+@layer components {
+  /* ── Typography ── */
+  .font-cond { font-family: 'Barlow Condensed', sans-serif; }
+
+  /* ── Buttons ── */
+  .btn-gold {
+    @apply font-cond font-bold text-sm uppercase tracking-wider px-4 py-2 rounded
+           bg-gold text-field-900 hover:bg-gold-light transition-colors;
+  }
+  .btn-outline {
+    @apply font-cond font-bold text-sm uppercase tracking-wider px-4 py-2 rounded
+           border border-gold/40 text-gold bg-transparent hover:bg-gold/10 transition-colors;
+  }
+  .btn-ghost {
+    @apply font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded
+           border border-white/10 text-gray-400 bg-transparent hover:border-gold/40 hover:text-gold transition-colors;
+  }
+  .btn-danger {
+    @apply font-cond font-bold text-sm uppercase tracking-wider px-4 py-2 rounded
+           bg-red-700 text-white hover:bg-red-600 transition-colors;
+  }
+
+  /* ── Inputs ── */
+  .input {
+    @apply w-full bg-field-800 border border-white/10 rounded px-3 py-2
+           text-sm text-gray-100 placeholder-gray-500
+           focus:outline-none focus:border-gold/40 transition-colors;
+  }
+  .label {
+    @apply block font-cond font-bold text-xs uppercase tracking-wider text-gray-500 mb-1;
+  }
+
+  /* ── Cards / Panels ── */
+  .card {
+    @apply bg-field-800 border border-white/[0.06] rounded-lg;
+  }
+  .panel {
+    @apply bg-field-800 border border-white/[0.06] rounded-lg p-4;
+  }
+
+  /* ── Section headings ── */
+  .section-title {
+    @apply font-cond font-black text-xl uppercase tracking-wider text-gold
+           flex items-center gap-3 mb-4;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    @apply bg-white/[0.06];
+  }
+
+  /* ── Position badges ── */
+  .pos-badge {
+    @apply font-cond font-bold text-[11px] uppercase tracking-wider px-1.5 py-0.5 rounded;
+  }
+  .pos-QB  { @apply bg-gold/15 text-gold; }
+  .pos-RB  { @apply bg-green-500/15 text-green-400; }
+  .pos-WR  { @apply bg-blue-500/15 text-blue-400; }
+  .pos-TE  { @apply bg-orange-500/15 text-orange-400; }
+  .pos-K   { @apply bg-purple-500/15 text-purple-400; }
+  .pos-DST { @apply bg-red-500/15 text-red-400; }
+  .pos-FLEX { @apply bg-gray-500/15 text-gray-400; }
+  .pos-BN  { @apply bg-gray-600/15 text-gray-500; }
+  .pos-IR  { @apply bg-pink-500/15 text-pink-400; }
+
+  /* ── League badges ── */
+  .league-cfb { @apply bg-cfb/15 text-cfb; }
+  .league-nfl { @apply bg-nfl/15 text-nfl; }
+
+  /* ── Status badges ── */
+  .status-active     { @apply bg-green-500/20 text-green-400; }
+  .status-questionable { @apply bg-yellow-500/20 text-yellow-400; }
+  .status-out        { @apply bg-red-500/20 text-red-400; }
+  .status-ir         { @apply bg-pink-500/20 text-pink-400; }
+
+  /* ── Table ── */
+  .data-table { @apply w-full text-sm border-collapse; }
+  .data-table th {
+    @apply font-cond font-bold text-[11px] uppercase tracking-wider text-gray-500
+           px-3 py-2 border-b border-white/[0.06] text-left cursor-pointer
+           hover:text-gold transition-colors select-none whitespace-nowrap;
+  }
+  .data-table td {
+    @apply px-3 py-2.5 border-b border-white/[0.03];
+  }
+  .data-table tbody tr:hover td { @apply bg-gold/[0.03]; }
+
+  /* ── Roster slot ── */
+  .roster-slot {
+    @apply flex items-center gap-3 p-2.5 rounded border border-white/[0.06]
+           bg-field-800 min-h-[52px] transition-all;
+  }
+  .roster-slot.filled { @apply border-l-2 border-l-gold; }
+  .roster-slot.filled-bench { @apply border-l-2 border-l-nfl; }
+  .roster-slot.filled-ir { @apply border-l-2 border-l-ir; }
+  .roster-slot:hover { @apply border-white/20; }
+
+  /* ── Draft pick cell ── */
+  .draft-cell {
+    @apply text-center p-1 rounded border border-white/[0.06] bg-field-700
+           text-[10px] min-h-[44px] flex flex-col items-center justify-center gap-0.5
+           transition-all cursor-pointer hover:border-white/20;
+  }
+  .draft-cell.my-pick { @apply border-gold/20 bg-gold/[0.04]; }
+  .draft-cell.drafted { @apply bg-field-800; }
+  .draft-cell.current-pick {
+    @apply border-gold bg-gold/[0.08] animate-pulse;
+  }
+
+  /* ── Notification dot ── */
+  .notif-dot {
+    @apply absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-gold;
+  }
+
+  /* ── Realtime indicator ── */
+  .live-dot {
+    @apply w-2 h-2 rounded-full bg-green-400 animate-pulse;
+  }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4;
+  }
+  .modal-box {
+    @apply bg-field-800 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh]
+           overflow-y-auto shadow-2xl p-6;
+  }
+  .modal-lg { @apply max-w-3xl; }
+  .modal-sm { @apply max-w-sm; }
+
+  /* ── Score display ── */
+  .score-big {
+    @apply font-cond font-black text-5xl text-gold leading-none;
+  }
+  .score-label {
+    @apply font-cond font-bold text-[10px] uppercase tracking-widest text-gray-500 mb-1;
+  }
+
+  /* ── Nav tab ── */
+  .nav-tab {
+    @apply font-cond font-bold text-sm uppercase tracking-wider px-5 py-3.5
+           border-b-2 border-transparent text-gray-500 cursor-pointer
+           hover:text-gray-200 transition-colors whitespace-nowrap;
+  }
+  .nav-tab.active { @apply text-gold border-b-gold; }
+
+  /* ── Filter chip ── */
+  .filter-chip {
+    @apply font-cond font-semibold text-xs uppercase tracking-wider px-3 py-1.5
+           rounded border border-white/10 text-gray-500 bg-transparent cursor-pointer
+           transition-all hover:border-white/20 hover:text-gray-300;
+  }
+  .filter-chip.active { @apply border-gold/50 text-gold bg-gold/[0.08]; }
+  .filter-chip.active-cfb { @apply border-cfb/50 text-cfb bg-cfb/[0.08]; }
+  .filter-chip.active-nfl { @apply border-nfl/50 text-nfl bg-nfl/[0.08]; }
+
+  /* ── Thinking dots (AI) ── */
+  .ai-dot {
+    @apply w-1.5 h-1.5 rounded-full bg-gold animate-bounce;
+  }
+  .ai-dot:nth-child(2) { animation-delay: 0.15s; }
+  .ai-dot:nth-child(3) { animation-delay: 0.3s; }
+}
