@@ -2,7 +2,8 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
-import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X, Sun, Moon } from 'lucide-react'
+import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X, Sun, Moon, ImageIcon } from 'lucide-react'
+import { AVATAR_PRESETS, presetToDataUrl } from './AvatarPresets'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -129,6 +130,7 @@ export function AccountPage() {
   const [confirmPw, setConfirmPw]     = useState('')
   const [uploading, setUploading]     = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [showPresetPicker, setShowPresetPicker] = useState(false)
   const [showDelete, setShowDelete]   = useState(false)
   const [deleting, setDeleting]       = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -166,6 +168,30 @@ export function AccountPage() {
       toast.error(e.message ?? 'Save failed')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // ── Select a preset avatar ─────────────────────────────────
+  const handlePresetSelect = async (svgString: string) => {
+    if (!user) return
+    setShowPresetPicker(false)
+    setUploading(true)
+    try {
+      // Convert SVG to a Blob, upload as PNG-sized SVG
+      const blob = new Blob([svgString], { type: 'image/svg+xml' })
+      const file = new File([blob], 'preset.svg', { type: 'image/svg+xml' })
+      const path = `avatars/${user.id}.svg`
+      await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: 'image/svg+xml' })
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+      const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`
+      await supabase.from('profiles').update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() }).eq('id', user.id)
+      setProfile({ ...profile!, avatar_url: avatarUrl })
+      setAvatarPreview(null)
+      toast.success('Avatar updated!')
+    } catch (e: any) {
+      toast.error(e.message ?? 'Failed to set avatar')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -288,19 +314,21 @@ export function AccountPage() {
               )}
             </div>
 
-            {/* Camera button */}
-            <button
-              className={clsx(
-                'absolute -bottom-1 -right-1 bg-gold text-field-950 rounded-full p-1.5',
-                'hover:bg-gold-light transition-all hover:scale-110',
-                uploading && 'animate-spin opacity-60 pointer-events-none',
-              )}
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              title="Change profile picture"
-            >
-              <Camera className="w-3.5 h-3.5" />
-            </button>
+            {/* Avatar action buttons */}
+            <div className="flex flex-col gap-1 absolute -bottom-1 -right-1">
+              <button
+                className={clsx(
+                  'bg-gold text-field-950 rounded-full p-1.5',
+                  'hover:bg-gold-light transition-all hover:scale-110',
+                  uploading && 'opacity-60 pointer-events-none',
+                )}
+                onClick={() => setShowPresetPicker(true)}
+                disabled={uploading}
+                title="Choose avatar"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
             <input
               ref={fileRef}
@@ -322,11 +350,11 @@ export function AccountPage() {
             <div className="text-field-400 text-sm">@{profile?.username}</div>
             <div className="text-field-500 text-xs mt-1">{user?.email}</div>
             <button
-              onClick={() => fileRef.current?.click()}
+              onClick={() => setShowPresetPicker(true)}
               disabled={uploading}
               className="text-xs text-gold/70 hover:text-gold transition-colors mt-1.5 font-bold"
             >
-              {uploading ? 'Uploading…' : 'Change photo'}
+              {uploading ? 'Uploading…' : 'Change avatar'}
             </button>
           </div>
         </div>
@@ -598,6 +626,65 @@ export function AccountPage() {
           onConfirm={handleDeleteAccount}
           deleting={deleting}
         />
+      )}
+
+      {/* Avatar preset picker modal */}
+      {showPresetPicker && (
+        <div className="modal-overlay" onClick={() => setShowPresetPicker(false)}>
+          <div className="modal-box w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-cond font-black text-lg uppercase tracking-wider text-white">
+                Choose Avatar
+              </h3>
+              <button onClick={() => setShowPresetPicker(false)} className="text-field-400 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Preset grid */}
+            <div className="mb-5">
+              <p className="text-xs text-field-400 uppercase tracking-wider font-bold mb-3">Preset Avatars</p>
+              <div className="grid grid-cols-6 gap-3">
+                {AVATAR_PRESETS.map(preset => (
+                  <button
+                    key={preset.id}
+                    onClick={() => handlePresetSelect(preset.svg)}
+                    className="flex flex-col items-center gap-1.5 group"
+                    title={preset.label}
+                  >
+                    <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-transparent group-hover:ring-gold/60 transition-all group-hover:scale-110">
+                      <img
+                        src={presetToDataUrl(preset.svg)}
+                        alt={preset.label}
+                        className="w-full h-full"
+                      />
+                    </div>
+                    <span className="text-[10px] text-field-500 group-hover:text-field-300 transition-colors leading-none text-center">
+                      {preset.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 my-4">
+              <div className="flex-1 h-px bg-field-700" />
+              <span className="text-xs text-field-500 font-bold uppercase tracking-wider">or</span>
+              <div className="flex-1 h-px bg-field-700" />
+            </div>
+
+            {/* Upload custom */}
+            <button
+              onClick={() => { setShowPresetPicker(false); fileRef.current?.click() }}
+              className="w-full flex items-center justify-center gap-2 btn-ghost py-3"
+            >
+              <Camera className="w-4 h-4" />
+              Upload your own photo
+            </button>
+            <p className="text-xs text-field-500 text-center mt-2">JPEG, PNG, GIF or WebP · Max 5MB</p>
+          </div>
+        </div>
       )}
     </div>
   )
