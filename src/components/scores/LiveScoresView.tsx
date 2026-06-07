@@ -491,8 +491,15 @@ function GameGroup({
   onToggleFav: (abbr: string) => void
   oddsMap?: Map<string, GameOdds>
 }) {
-  const getOdds = (g: LiveGame) =>
-    g.league === 'NFL' ? (oddsMap?.get(`${g.away.abbr}@${g.home.abbr}`) ?? null) : null
+  const getOdds = (g: LiveGame) => {
+    if (!oddsMap) return null
+    if (g.league === 'NFL') {
+      return oddsMap.get(`${g.away.abbr}@${g.home.abbr}`) ?? null
+    } else {
+      // CFB keyed by ESPN short name e.g. "Georgia@Ohio State"
+      return oddsMap.get(`${g.away.name}@${g.home.name}`) ?? null
+    }
+  }
 
   if (viewMode === 'list') {
     return (
