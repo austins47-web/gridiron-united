@@ -177,16 +177,15 @@ export function AccountPage() {
     setShowPresetPicker(false)
     setUploading(true)
     try {
-      // Convert SVG to a Blob, upload as PNG-sized SVG
-      const blob = new Blob([svgString], { type: 'image/svg+xml' })
-      const file = new File([blob], 'preset.svg', { type: 'image/svg+xml' })
-      const path = `avatars/${user.id}.svg`
-      await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: 'image/svg+xml' })
-      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
-      const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`
-      await supabase.from('profiles').update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() }).eq('id', user.id)
-      setProfile({ ...profile!, avatar_url: avatarUrl })
-      setAvatarPreview(null)
+      // Store as data URL directly in the profile — no storage needed
+      const dataUrl = presetToDataUrl(svgString)
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: dataUrl, updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+      if (error) throw error
+      setProfile({ ...profile!, avatar_url: dataUrl })
+      setAvatarPreview(dataUrl)
       toast.success('Avatar updated!')
     } catch (e: any) {
       toast.error(e.message ?? 'Failed to set avatar')

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
-import { Send, MessageSquare, User } from 'lucide-react'
+import { Send, MessageSquare } from 'lucide-react'
 import clsx from 'clsx'
 import { UserProfileModal } from './UserProfileModal'
 
@@ -93,11 +93,12 @@ function MessageText({ text, myUsername, onMentionClick }: {
 
 // ── Message bubble ────────────────────────────────────────────
 
-function MessageBubble({ msg, isOwn, showAvatar, myUsername, onMentionClick }: {
+function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick }: {
   msg: ChatMessage
   isOwn: boolean
   showAvatar: boolean
   myUsername?: string
+  myAvatarUrl?: string | null
   onMentionClick: (username: string) => void
 }) {
   // Trade completed card
@@ -157,6 +158,17 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, onMentionClick }: {
     <div className={clsx('flex gap-2 items-end', isOwn ? 'flex-row-reverse' : 'flex-row')}>
       <div className="w-7 shrink-0">
         {showAvatar && !isOwn && <MiniAvatar profile={msg.profiles} />}
+        {showAvatar && isOwn && (
+          myAvatarUrl ? (
+            <img src={myAvatarUrl} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 ring-1 ring-gold/40" />
+          ) : (
+            <div className="chat-avatar-fallback w-7 h-7 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
+              <span className="text-xs font-black text-gold">
+                {(myUsername || '?').slice(0, 2).toUpperCase()}
+              </span>
+            </div>
+          )
+        )}
       </div>
       <div className={clsx('flex flex-col max-w-[75%]', isOwn ? 'items-end' : 'items-start')}>
         {showAvatar && (
@@ -438,6 +450,7 @@ export function LeagueChat() {
   })
 
   const myUsername = profile?.username
+  const myAvatarUrl = profile?.avatar_url
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -469,6 +482,7 @@ export function LeagueChat() {
             isOwn={msg.user_id === user?.id}
             showAvatar={isFirst}
             myUsername={myUsername}
+            myAvatarUrl={myAvatarUrl}
             onMentionClick={setProfileUsername}
           />
         ))}
@@ -498,10 +512,10 @@ export function LeagueChat() {
           )}
 
           <div className="chat-input-wrap flex items-center gap-2 bg-field-700 border border-field-600 rounded-xl px-3 py-2 focus-within:border-gold/50 transition-colors">
-            <div className="w-6 h-6 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
+            <div className="w-6 h-6 rounded-full overflow-hidden bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
               {profile?.avatar_url
                 ? <img src={profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                : <User className="w-3 h-3 text-gold" />
+                : <span className="text-[10px] font-black text-gold">{(profile?.username || '?').slice(0,2).toUpperCase()}</span>
               }
             </div>
             <input
