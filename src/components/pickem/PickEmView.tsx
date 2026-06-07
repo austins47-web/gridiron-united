@@ -47,30 +47,30 @@ const TEAM_INFO: Record<string, { name: string }> = {
 // Week is "over" when the final MNF game (Mon ~10:15pm ET) has passed.
 // Week boundaries (approximate Mon night end):
 const WEEK_END_DATES: Record<number, string> = {
-  1:  '2025-09-09T03:00:00Z', // Tue 3am UTC ≈ Mon 11pm ET
-  2:  '2025-09-16T03:00:00Z',
-  3:  '2025-09-23T03:00:00Z',
-  4:  '2025-09-30T03:00:00Z',
-  5:  '2025-10-07T03:00:00Z',
-  6:  '2025-10-14T03:00:00Z',
-  7:  '2025-10-21T03:00:00Z',
-  8:  '2025-10-28T03:00:00Z',
-  9:  '2025-11-04T03:00:00Z',
-  10: '2025-11-11T03:00:00Z',
-  11: '2025-11-18T03:00:00Z',
-  12: '2025-11-25T03:00:00Z',
-  13: '2025-12-02T03:00:00Z',
-  14: '2025-12-09T03:00:00Z',
-  15: '2025-12-16T03:00:00Z',
-  16: '2025-12-23T03:00:00Z',
-  17: '2025-12-30T03:00:00Z',
-  18: '2026-01-06T03:00:00Z',
+  1:  '2026-09-15T03:00:00Z', // Tue 3am UTC after Mon Sep 14 MNF
+  2:  '2026-09-22T03:00:00Z',
+  3:  '2026-09-29T03:00:00Z',
+  4:  '2026-10-06T03:00:00Z',
+  5:  '2026-10-13T03:00:00Z',
+  6:  '2026-10-20T03:00:00Z',
+  7:  '2026-10-27T03:00:00Z',
+  8:  '2026-11-03T03:00:00Z',
+  9:  '2026-11-10T03:00:00Z',
+  10: '2026-11-17T03:00:00Z',
+  11: '2026-11-24T03:00:00Z',
+  12: '2026-12-01T03:00:00Z',
+  13: '2026-12-08T03:00:00Z',
+  14: '2026-12-15T03:00:00Z',
+  15: '2026-12-22T03:00:00Z',
+  16: '2026-12-29T03:00:00Z',
+  17: '2027-01-06T03:00:00Z',
+  18: '2027-01-11T03:00:00Z',
 }
 
 function getActiveWeek(): number {
   const now = new Date()
   // Before season starts → Week 1
-  if (now < new Date('2025-09-04T00:00:00Z')) return 1
+  if (now < new Date('2026-09-09T00:00:00Z')) return 1
   for (let w = 1; w <= 18; w++) {
     const end = new Date(WEEK_END_DATES[w])
     if (now < end) return w
@@ -123,7 +123,7 @@ export function PickEmView() {
         .select('*')
         .eq('league_id', activeLeagueId!)
         .eq('week', week)
-        .eq('season', 2025)
+        .eq('season', 2026)
         .maybeSingle()
       return data
     },
@@ -138,7 +138,7 @@ export function PickEmView() {
       const { data, error } = await supabase
         .from('nfl_games')
         .select('*')
-        .eq('season', 2025)
+        .eq('season', 2026)
         .eq('week', week)
         .order('game_date', { ascending: true })
       if (error) throw error
@@ -157,7 +157,7 @@ export function PickEmView() {
         .eq('league_id', activeLeagueId!)
         .eq('user_id', user!.id)
         .eq('week', week)
-        .eq('season', 2025)
+        .eq('season', 2026)
       if (error) throw error
       return data ?? []
     },
@@ -172,7 +172,7 @@ export function PickEmView() {
         .from('pickem_standings')
         .select('*, profile:profiles(username, display_name)')
         .eq('league_id', activeLeagueId!)
-        .eq('season', 2025)
+        .eq('season', 2026)
         .order('total_correct', { ascending: false })
       if (error) throw error
       return data ?? []
@@ -221,7 +221,7 @@ export function PickEmView() {
         .upsert({
           league_id: activeLeagueId,
           week,
-          season: 2025,
+          season: 2026,
           pick_deadline: isoDeadline,
         }, { onConflict: 'league_id,week,season' })
       if (error) throw error
@@ -243,7 +243,7 @@ export function PickEmView() {
         .upsert({
           league_id: activeLeagueId,
           week,
-          season: 2025,
+          season: 2026,
           pick_deadline: null,
         }, { onConflict: 'league_id,week,season' })
       await refetchSettings()
@@ -263,7 +263,7 @@ export function PickEmView() {
         user_id: user.id,
         game_id: gameId,
         week,
-        season: 2025,
+        season: 2026,
         picked_team: team,
         tiebreaker_score: tiebreakerScore[gameId] ? parseInt(tiebreakerScore[gameId]) : null,
       }))
@@ -306,7 +306,7 @@ export function PickEmView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="section-title">Pick'Em</h1>
-          <p className="text-field-400 text-sm">{activeLeague.name} · 2025 NFL Season</p>
+          <p className="text-field-400 text-sm">{activeLeague.name} · 2026 NFL Season</p>
         </div>
         <div className="flex items-center gap-2">
           {pickedCount > 0 && (
@@ -554,7 +554,7 @@ export function PickEmView() {
         <div className="panel !p-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-field-700 flex items-center justify-between">
             <span className="font-bold text-white">Season Standings</span>
-            <span className="text-field-400 text-xs">2025 NFL Season</span>
+            <span className="text-field-400 text-xs">2026 NFL Season</span>
           </div>
           {standings.length === 0 ? (
             <div className="text-center py-8 text-field-400 text-sm">No picks submitted yet</div>
