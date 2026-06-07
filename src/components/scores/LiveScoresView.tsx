@@ -300,9 +300,9 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-field-400 block mb-1">Win %</span>
-              <div className="flex rounded-lg overflow-hidden h-5 text-[10px] font-black">
+              <div className="flex rounded-lg overflow-hidden h-5 text-xs font-black">
                 <div
-                  className="flex items-center justify-center bg-field-600 transition-all"
+                  className="flex items-center justify-center bg-field-500 transition-all"
                   style={{ width: `${odds.awayWinPct}%` }}
                 >
                   {odds.awayWinPct >= 20 && (
@@ -319,8 +319,14 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
                 </div>
               </div>
               <div className="flex justify-between mt-1">
-                <span className="text-xs font-bold text-field-300">{game.away.abbr} {odds.awayWinPct}%</span>
-                <span className="text-xs font-bold text-field-300">{odds.homeWinPct}% {game.home.abbr}</span>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-sm bg-field-500 shrink-0" />
+                  <span className="text-xs font-bold text-field-300">{game.away.abbr} {odds.awayWinPct}%</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-bold text-field-300">{odds.homeWinPct}% {game.home.abbr}</span>
+                  <div className="w-2 h-2 rounded-sm bg-gold/80 shrink-0" />
+                </div>
               </div>
             </div>
           )}
@@ -346,11 +352,32 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
   const awayIsFav = teamIsFav(favTeams, game.away)
   const anyFav    = homeIsFav || awayIsFav
 
-  const TeamBlock = ({ team, ahead }: { team: GameTeam, ahead: boolean }) => {
+  const TeamBlock = ({ team, ahead, reverse = false }: { team: GameTeam, ahead: boolean, reverse?: boolean }) => {
     const isFav   = teamIsFav(favTeams, team)
     const hasBall = isLive && game.possession === team.abbr
     const winning = (isLive || isFinal) && ahead
     const losing  = (isLive || isFinal) && !ahead && awayScore !== homeScore
+
+    if (reverse) {
+      return (
+        <div className="flex items-center gap-2 min-w-0 flex-row-reverse">
+          {hasBall
+            ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" />
+            : <div className="w-2 shrink-0" />}
+          {team.rank
+            ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-left">#{team.rank}</span>
+            : <span className="w-5 shrink-0" />}
+          <span className={clsx(
+            'font-cond font-black text-base shrink-0 w-10 text-right',
+            isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+          )}>{team.abbr}</span>
+          <span className="text-field-300 text-sm truncate text-right">{team.name !== team.abbr ? team.name : ''}</span>
+          {game.status === 'pre' && team.record && (
+            <span className="text-field-400 text-xs shrink-0">({team.record})</span>
+          )}
+        </div>
+      )
+    }
 
     return (
       <div className="flex items-center gap-2 min-w-0">
@@ -374,7 +401,7 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
 
   return (
     <div className={clsx(
-      'flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all',
+      'flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all w-full',
       isLive && game.redZone ? 'border-red-500/30 bg-red-500/[0.03]'
       : isLive ? 'border-gold/25 bg-field-800'
       : anyFav ? 'border-field-600 bg-field-800'
@@ -392,7 +419,7 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
       </div>
 
       {/* Away team */}
-      <div className="flex-1 min-w-0">
+      <div className="shrink-0 w-[180px] min-w-0">
         <TeamBlock team={game.away} ahead={awayScore > homeScore} />
       </div>
 
@@ -416,8 +443,8 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
       </div>
 
       {/* Home team */}
-      <div className="flex-1 min-w-0 justify-end flex">
-        <TeamBlock team={game.home} ahead={homeScore > awayScore} />
+      <div className="shrink-0 w-[180px] min-w-0 flex justify-end">
+        <TeamBlock team={game.home} ahead={homeScore > awayScore} reverse />
       </div>
 
       {/* Odds — spread + win% */}
@@ -452,7 +479,7 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
 
           {/* Win % bar */}
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (
-            <div className="w-28 shrink-0">
+            <div className="w-32 shrink-0">
               <span className="text-xs font-bold uppercase tracking-wider text-field-400 block text-right mb-1">Win %</span>
               <div className="flex rounded-lg overflow-hidden h-5 text-xs font-black">
                 <div className="flex items-center justify-center bg-field-500 transition-all"
@@ -464,21 +491,33 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
                   {odds.homeWinPct >= 25 && <span className="text-field-950 text-xs font-black">{odds.homeWinPct}%</span>}
                 </div>
               </div>
+              <div className="flex justify-between mt-1">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-sm bg-field-500 shrink-0" />
+                  <span className="text-[10px] text-field-400">{game.away.abbr}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-field-400">{game.home.abbr}</span>
+                  <div className="w-2 h-2 rounded-sm bg-gold/80 shrink-0" />
+                </div>
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Down/distance + broadcast */}
-      <div className="shrink-0 hidden sm:flex flex-col items-end gap-1 w-[130px]">
+      {/* Venue + broadcast — stacked, truncated */}
+      <div className="shrink-0 hidden sm:flex flex-col items-end gap-0.5 w-[140px]">
         {isLive && game.downDistance && (
-          <span className="text-xs text-field-300 truncate">{game.downDistance}</span>
-        )}
-        {game.venue && (
-          <span className="text-xs text-field-300 truncate">{game.venue.split(',')[0]}</span>
+          <span className="text-xs text-field-300 font-bold truncate w-full text-right">{game.downDistance}</span>
         )}
         {game.broadcast && (
-          <span className="text-xs text-field-300 font-bold">{game.broadcast}</span>
+          <span className="text-xs text-field-200 font-bold truncate w-full text-right">{game.broadcast}</span>
+        )}
+        {game.venue && (
+          <span className="text-[10px] text-field-500 truncate w-full text-right leading-tight" title={game.venue}>
+            {game.venue.split(',')[0]}
+          </span>
         )}
       </div>
 
