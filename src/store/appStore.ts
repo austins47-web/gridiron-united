@@ -19,6 +19,10 @@ interface AppState {
   notifications: Notification[]
   unreadCount: number
 
+  // Theme
+  theme: 'dark' | 'light'
+  setTheme: (theme: 'dark' | 'light') => void
+
   // Actions
   setUser: (user: User | null) => void
   setSession: (session: Session | null) => void
@@ -44,6 +48,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   notifications: [],
   unreadCount: 0,
 
+  theme: (typeof window !== 'undefined'
+    ? (localStorage.getItem('gu-theme') as 'dark' | 'light' | null) ?? 'dark'
+    : 'dark'),
+
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session }),
   setProfile: (profile) => set({ profile }),
@@ -62,6 +70,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       notifications: [notification, ...s.notifications],
       unreadCount: s.unreadCount + (notification.is_read ? 0 : 1),
     })),
+
+  setTheme: (theme) => {
+    localStorage.setItem('gu-theme', theme)
+    document.documentElement.setAttribute('data-theme', theme)
+    set({ theme })
+  },
 
   markAllRead: async () => {
     const { user } = get()

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
-import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X } from 'lucide-react'
+import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X, Sun, Moon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -114,7 +114,7 @@ function DeleteProfileModal({ onClose, onConfirm, deleting }: {
 
 // ── Main ─────────────────────────────────────────────────────
 export function AccountPage() {
-  const { profile, user, setProfile, signOut } = useAppStore()
+  const { profile, user, setProfile, signOut, theme, setTheme } = useAppStore()
   const navigate = useNavigate()
 
   const [form, setForm] = useState({
@@ -462,6 +462,94 @@ export function AccountPage() {
               <div className="text-white font-mono text-xs">{value}</div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* ── Appearance ── */}
+      <div className="panel">
+        <div className="flex items-center gap-2 mb-4">
+          {theme === 'light' ? <Sun className="w-4 h-4 text-gold" /> : <Moon className="w-4 h-4 text-gold" />}
+          <span className="font-cond font-black text-sm uppercase tracking-wider text-white">Appearance</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {/* Dark mode */}
+          <button
+            onClick={() => setTheme('dark')}
+            className={clsx(
+              'relative flex flex-col items-center gap-3 rounded-xl border-2 p-4 transition-all',
+              theme === 'dark'
+                ? 'border-gold bg-gold/10'
+                : 'border-field-600 bg-field-700/50 hover:border-field-500'
+            )}
+          >
+            {/* Dark preview */}
+            <div className="w-full rounded-lg overflow-hidden border border-field-600 shadow-sm">
+              <div className="h-4 bg-field-950 flex items-center px-2 gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-field-600" />
+                <div className="w-8 h-1.5 rounded bg-field-700" />
+              </div>
+              <div className="h-10 bg-field-900 p-1.5 flex gap-1">
+                <div className="w-1/3 h-full rounded bg-field-800 border border-field-700" />
+                <div className="flex-1 h-full rounded bg-field-800 border border-field-700" />
+              </div>
+              <div className="h-3 bg-field-900 flex items-center px-1.5 gap-1">
+                <div className="w-4 h-1 rounded bg-gold/60" />
+                <div className="w-3 h-1 rounded bg-field-700" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Moon className="w-3.5 h-3.5 text-field-300" />
+              <span className={clsx('font-cond font-bold text-sm uppercase tracking-wider',
+                theme === 'dark' ? 'text-gold' : 'text-field-300')}>
+                Dark
+              </span>
+            </div>
+            {theme === 'dark' && (
+              <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-gold flex items-center justify-center">
+                <div className="w-1.5 h-1.5 rounded-full bg-field-950" />
+              </div>
+            )}
+          </button>
+
+          {/* Light mode */}
+          <button
+            onClick={() => setTheme('light')}
+            className={clsx(
+              'relative flex flex-col items-center gap-3 rounded-xl border-2 p-4 transition-all',
+              theme === 'light'
+                ? 'border-gold bg-gold/10'
+                : 'border-field-600 bg-field-700/50 hover:border-field-500'
+            )}
+          >
+            {/* Light preview */}
+            <div className="w-full rounded-lg overflow-hidden border border-gray-300 shadow-sm">
+              <div className="h-4 bg-white flex items-center px-2 gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                <div className="w-8 h-1.5 rounded bg-gray-200" />
+              </div>
+              <div className="h-10 bg-gray-100 p-1.5 flex gap-1">
+                <div className="w-1/3 h-full rounded bg-white border border-gray-200" />
+                <div className="flex-1 h-full rounded bg-white border border-gray-200" />
+              </div>
+              <div className="h-3 bg-gray-100 flex items-center px-1.5 gap-1">
+                <div className="w-4 h-1 rounded" style={{ background: '#e8950e', opacity: 0.8 }} />
+                <div className="w-3 h-1 rounded bg-gray-300" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Sun className="w-3.5 h-3.5 text-field-300" />
+              <span className={clsx('font-cond font-bold text-sm uppercase tracking-wider',
+                theme === 'light' ? 'text-gold' : 'text-field-300')}>
+                Light
+              </span>
+            </div>
+            {theme === 'light' && (
+              <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-gold flex items-center justify-center">
+                <div className="w-1.5 h-1.5 rounded-full bg-field-950" />
+              </div>
+            )}
+          </button>
         </div>
       </div>
 

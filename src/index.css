@@ -181,3 +181,164 @@
   .ai-dot:nth-child(2) { animation-delay: 0.15s; }
   .ai-dot:nth-child(3) { animation-delay: 0.3s; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   LIGHT MODE — applied when <html data-theme="light">
+   ══════════════════════════════════════════════════════════════ */
+
+[data-theme="light"] {
+  /* Base backgrounds */
+  --color-bg-base:    #f0f2f7;
+  --color-bg-surface: #ffffff;
+  --color-bg-raised:  #e8ecf4;
+  --color-bg-sunken:  #dde2ee;
+
+  /* Text */
+  --color-text-primary:   #111827;
+  --color-text-secondary: #374151;
+  --color-text-muted:     #6b7280;
+  --color-text-faint:     #9ca3af;
+
+  /* Borders */
+  --color-border:       #d1d5db;
+  --color-border-faint: #e5e7eb;
+
+  /* Keep gold accent */
+  --color-gold: #e8950e;
+}
+
+/* ── Base resets ── */
+[data-theme="light"] html,
+[data-theme="light"] body,
+[data-theme="light"] #root {
+  background-color: #f0f2f7;
+  color: #111827;
+}
+
+/* ── Field color overrides — remap dark palette to light ── */
+[data-theme="light"] .bg-field-950 { background-color: #dde2ee !important; }
+[data-theme="light"] .bg-field-900 { background-color: #e8ecf4 !important; }
+[data-theme="light"] .bg-field-800 { background-color: #ffffff !important; }
+[data-theme="light"] .bg-field-700 { background-color: #edf0f7 !important; }
+[data-theme="light"] .bg-field-600 { background-color: #d1d5db !important; }
+
+[data-theme="light"] .border-field-700 { border-color: #d1d5db !important; }
+[data-theme="light"] .border-field-600 { border-color: #c4c9d4 !important; }
+[data-theme="light"] .border-field-500 { border-color: #9ca3af !important; }
+
+[data-theme="light"] .text-field-100 { color: #111827 !important; }
+[data-theme="light"] .text-field-200 { color: #1f2937 !important; }
+[data-theme="light"] .text-field-300 { color: #374151 !important; }
+[data-theme="light"] .text-field-400 { color: #4b5563 !important; }
+[data-theme="light"] .text-field-500 { color: #6b7280 !important; }
+[data-theme="light"] .text-field-600 { color: #9ca3af !important; }
+
+[data-theme="light"] .text-white { color: #111827 !important; }
+[data-theme="light"] .text-gray-100 { color: #111827 !important; }
+
+/* ── Component overrides ── */
+[data-theme="light"] .btn-ghost {
+  border-color: #d1d5db !important;
+  color: #374151 !important;
+  background: transparent !important;
+}
+[data-theme="light"] .btn-ghost:hover {
+  border-color: #9ca3af !important;
+  color: #111827 !important;
+  background: #f3f4f6 !important;
+}
+
+[data-theme="light"] .input {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+  color: #111827 !important;
+}
+[data-theme="light"] .input::placeholder { color: #9ca3af !important; }
+[data-theme="light"] .input:focus {
+  border-color: #e8950e !important;
+  box-shadow: 0 0 0 2px rgba(232,149,14,0.15) !important;
+}
+
+[data-theme="light"] .label { color: #374151 !important; }
+
+[data-theme="light"] .panel,
+[data-theme="light"] .card {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .section-title { color: #111827 !important; }
+[data-theme="light"] .section-title::after { background-color: #d1d5db !important; }
+
+[data-theme="light"] .nav-tab {
+  color: #4b5563 !important;
+}
+[data-theme="light"] .nav-tab:hover {
+  color: #111827 !important;
+  background-color: #edf0f7 !important;
+}
+[data-theme="light"] .nav-tab.active {
+  color: #e8950e !important;
+  background-color: #fdf3e0 !important;
+  border-bottom-color: #e8950e !important;
+}
+
+[data-theme="light"] .filter-chip {
+  background-color: #f3f4f6 !important;
+  border-color: #d1d5db !important;
+  color: #374151 !important;
+}
+[data-theme="light"] .filter-chip:hover {
+  border-color: #9ca3af !important;
+  color: #111827 !important;
+}
+
+[data-theme="light"] .data-table th {
+  background-color: #f9fafb !important;
+  color: #374151 !important;
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .data-table td { border-color: #e5e7eb !important; }
+[data-theme="light"] .data-table tbody tr:hover td {
+  background-color: #f3f4f6 !important;
+}
+
+[data-theme="light"] .roster-slot {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .roster-slot:hover { border-color: #9ca3af !important; }
+
+[data-theme="light"] .modal-overlay { background-color: rgba(0,0,0,0.5) !important; }
+[data-theme="light"] .modal-box {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+}
+
+/* ── AppShell nav bars ── */
+[data-theme="light"] .app-shell-top-nav {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .app-shell-sub-nav {
+  background-color: #f9fafb !important;
+  border-color: #e5e7eb !important;
+}
+
+/* ── Scrollbar ── */
+[data-theme="light"] ::-webkit-scrollbar-thumb { background-color: #c4c9d4 !important; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background-color: #9ca3af !important; }
+
+/* ── Misc backgrounds common in the app ── */
+[data-theme="light"] .bg-\[\#0e1117\],
+[data-theme="light"] .bg-field-900\/50 { background-color: #f0f2f7 !important; }
+
+/* ── Gold tint backgrounds ── */
+[data-theme="light"] .bg-gold\/10 { background-color: rgba(232,149,14,0.08) !important; }
+[data-theme="light"] .bg-gold\/20 { background-color: rgba(232,149,14,0.15) !important; }
+
+/* ── Select / option elements ── */
+[data-theme="light"] select.input option {
+  background-color: #ffffff;
+  color: #111827;
+}

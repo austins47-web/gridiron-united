@@ -46,6 +46,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function AppInitializer({ children }: { children: React.ReactNode }) {
   const { setUser, setSession, setProfile, setAuthLoading, setNotifications, addNotification } = useAppStore()
 
+  // Apply saved theme immediately on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('gu-theme') ?? 'dark'
+    document.documentElement.setAttribute('data-theme', saved)
+  }, [])
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session)
