@@ -681,3 +681,18 @@
   background-color: #e8ecf4 !important;
   color: #374151 !important;
 }
+
+/* ── Live Scores list row light mode ── */
+[data-theme="light"] .bg-field-500 {
+  background-color: #6b7280 !important;
+}
+/* Spread pill — favored */
+[data-theme="light"] .bg-field-500.text-white {
+  color: #ffffff !important;
+}
+/* Spread pill — underdog */
+[data-theme="light"] .bg-field-700.text-field-200 {
+  background-color: #f3f4f6 !important;
+  border-color: #d1d5db !important;
+  color: #374151 !important;
+}

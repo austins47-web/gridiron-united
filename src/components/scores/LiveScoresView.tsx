@@ -355,18 +355,18 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
     return (
       <div className="flex items-center gap-2 min-w-0">
         {hasBall
-          ? <div className="w-1.5 h-1.5 rounded-full bg-gold shrink-0" />
-          : <div className="w-1.5 shrink-0" />}
+          ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" />
+          : <div className="w-2 shrink-0" />}
         {team.rank
-          ? <span className="text-[9px] font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
+          ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
           : <span className="w-5 shrink-0" />}
         <span className={clsx(
-          'font-cond font-bold text-sm shrink-0 w-8',
+          'font-cond font-black text-base shrink-0 w-10',
           isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
         )}>{team.abbr}</span>
-        <span className="text-field-300 text-xs truncate hidden md:block">{team.name}</span>
+        <span className="text-field-300 text-sm truncate">{team.name !== team.abbr ? team.name : ''}</span>
         {game.status === 'pre' && team.record && (
-          <span className="text-field-300 text-xs shrink-0 hidden sm:block">({team.record})</span>
+          <span className="text-field-400 text-xs shrink-0">({team.record})</span>
         )}
       </div>
     )
@@ -374,7 +374,7 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
 
   return (
     <div className={clsx(
-      'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all',
+      'flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all',
       isLive && game.redZone ? 'border-red-500/30 bg-red-500/[0.03]'
       : isLive ? 'border-gold/25 bg-field-800'
       : anyFav ? 'border-field-600 bg-field-800'
@@ -382,9 +382,9 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
     )}>
 
       {/* League + status — fixed width */}
-      <div className="flex items-center gap-1.5 shrink-0 w-[110px]">
+      <div className="flex items-center gap-1.5 shrink-0 w-[120px]">
         <span className={clsx(
-          'font-cond font-black text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
+          'font-cond font-black text-xs uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
           game.league === 'NFL' ? 'bg-nfl/20 text-nfl' : 'bg-cfb/20 text-cfb',
         )}>{game.league}</span>
         <StatusBadge game={game} compact />
@@ -397,21 +397,21 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
       </div>
 
       {/* Scores — center */}
-      <div className="shrink-0 flex items-center gap-1 w-16 justify-center">
+      <div className="shrink-0 flex items-center gap-1.5 w-20 justify-center">
         {game.status !== 'pre' ? (
           <>
             <span className={clsx(
-              'font-cond font-black text-xl w-6 text-right leading-none',
+              'font-cond font-black text-2xl w-7 text-right leading-none',
               awayScore > homeScore ? 'text-white' : 'text-field-400',
             )}>{game.away.score}</span>
-            <span className="text-field-500 text-xs">–</span>
+            <span className="text-field-500 text-sm font-bold">–</span>
             <span className={clsx(
-              'font-cond font-black text-xl w-6 text-left leading-none',
+              'font-cond font-black text-2xl w-7 text-left leading-none',
               homeScore > awayScore ? 'text-white' : 'text-field-400',
             )}>{game.home.score}</span>
           </>
         ) : (
-          <span className="text-field-300 text-xs font-bold">vs</span>
+          <span className="text-field-300 text-sm font-bold uppercase tracking-widest">vs</span>
         )}
       </div>
 
@@ -422,12 +422,12 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
 
       {/* Odds — spread + win% */}
       {odds && game.status !== 'post' && (
-        <div className="shrink-0 hidden lg:flex items-center gap-4 w-[220px] justify-end">
+        <div className="shrink-0 hidden lg:flex items-center gap-5 w-[260px] justify-end">
 
           {/* Spread pill pair */}
           {odds.spread !== null && (
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-field-500 text-right">Spread</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-field-400 text-right">Spread</span>
               <div className="flex items-center gap-1.5">
                 {[
                   { team: game.away.abbr, pts: -odds.spread },
@@ -437,12 +437,12 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
                   const favored = pts < 0
                   return (
                     <span key={team} className={clsx(
-                      'font-cond font-bold text-xs px-1.5 py-0.5 rounded',
+                      'font-cond font-bold text-sm px-2 py-1 rounded-lg',
                       favored
-                        ? 'bg-field-600 text-white border border-field-500'
-                        : 'bg-field-800 text-field-300 border border-field-700',
+                        ? 'bg-field-500 text-white border border-field-400'
+                        : 'bg-field-700 text-field-200 border border-field-600',
                     )}>
-                      {team} <span className={clsx('font-black', favored ? 'text-white' : 'text-field-400')}>{label}</span>
+                      {team} <span className={clsx('font-black', favored ? 'text-gold' : 'text-field-300')}>{label}</span>
                     </span>
                   )
                 })}
@@ -452,21 +452,17 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
 
           {/* Win % bar */}
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (
-            <div className="w-24 shrink-0">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-field-500 block text-right mb-0.5">Win %</span>
-              <div className="flex rounded overflow-hidden h-3 text-[8px] font-black">
-                <div className="flex items-center justify-center bg-field-600 transition-all"
+            <div className="w-28 shrink-0">
+              <span className="text-xs font-bold uppercase tracking-wider text-field-400 block text-right mb-1">Win %</span>
+              <div className="flex rounded-lg overflow-hidden h-5 text-xs font-black">
+                <div className="flex items-center justify-center bg-field-500 transition-all"
                   style={{ width: `${odds.awayWinPct}%` }}>
-                  {odds.awayWinPct >= 30 && <span className="text-white">{odds.awayWinPct}</span>}
+                  {odds.awayWinPct >= 25 && <span className="text-white text-xs font-black">{odds.awayWinPct}%</span>}
                 </div>
                 <div className="flex items-center justify-center bg-gold/80 transition-all"
                   style={{ width: `${odds.homeWinPct}%` }}>
-                  {odds.homeWinPct >= 30 && <span className="text-field-950">{odds.homeWinPct}</span>}
+                  {odds.homeWinPct >= 25 && <span className="text-field-950 text-xs font-black">{odds.homeWinPct}%</span>}
                 </div>
-              </div>
-              <div className="flex justify-between mt-0.5">
-                <span className="text-[9px] font-bold text-field-300">{odds.awayWinPct}%</span>
-                <span className="text-[9px] font-bold text-field-300">{odds.homeWinPct}%</span>
               </div>
             </div>
           )}
@@ -474,7 +470,7 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
       )}
 
       {/* Down/distance + broadcast */}
-      <div className="shrink-0 hidden sm:flex flex-col items-end gap-0.5 w-[120px]">
+      <div className="shrink-0 hidden sm:flex flex-col items-end gap-1 w-[130px]">
         {isLive && game.downDistance && (
           <span className="text-xs text-field-300 truncate">{game.downDistance}</span>
         )}
