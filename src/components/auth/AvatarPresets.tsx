@@ -1,353 +1,68 @@
-// ── Preset avatar SVGs — clean, modern, colorful ─────────────
-// Each is a self-contained 80×80 SVG with a circular clip
-
 export const AVATAR_PRESETS = [
   {
-    id: 'helmet',
-    label: 'Helmet',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1a2a4a"/>
-      <stop offset="100%" stop-color="#0d1826"/>
-    </linearGradient>
-    <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f7c948"/>
-      <stop offset="100%" stop-color="#d4920a"/>
-    </linearGradient>
-    <clipPath id="c1"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg1)"/>
-  <g clip-path="url(#c1)">
-    <ellipse cx="40" cy="50" rx="26" ry="22" fill="url(#hg)"/>
-    <rect x="14" y="44" width="52" height="9" rx="4.5" fill="#b8790a"/>
-    <path d="M40 24 C24 24 16 36 16 48 L64 48 C64 36 56 24 40 24Z" fill="url(#hg)"/>
-    <path d="M40 24 C40 24 44 28 44 34 L36 34 C36 28 40 24 40 24Z" fill="#f7c948"/>
-    <rect x="28" y="53" width="24" height="10" rx="3" fill="#b8790a"/>
-    <line x1="35" y1="53" x2="35" y2="63" stroke="#f7c948" stroke-width="2"/>
-    <line x1="40" y1="53" x2="40" y2="63" stroke="#f7c948" stroke-width="2"/>
-    <line x1="45" y1="53" x2="45" y2="63" stroke="#f7c948" stroke-width="2"/>
-    <rect x="30" y="63" width="20" height="4" rx="2" fill="#8a5c08"/>
-  </g>
-</svg>`,
-  },
-  {
-    id: 'football',
-    label: 'Football',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1a3320"/>
-      <stop offset="100%" stop-color="#0a1a10"/>
-    </linearGradient>
-    <linearGradient id="ball" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#c97a2f"/>
-      <stop offset="100%" stop-color="#8b4c10"/>
-    </linearGradient>
-    <clipPath id="c2"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg2)"/>
-  <g clip-path="url(#c2)" transform="rotate(-20 40 40)">
-    <ellipse cx="40" cy="40" rx="22" ry="14" fill="url(#ball)"/>
-    <line x1="18" y1="40" x2="62" y2="40" stroke="white" stroke-width="1.8"/>
-    <line x1="33" y1="27" x2="31" y2="53" stroke="white" stroke-width="1.4"/>
-    <line x1="40" y1="26" x2="40" y2="54" stroke="white" stroke-width="1.4"/>
-    <line x1="47" y1="27" x2="49" y2="53" stroke="white" stroke-width="1.4"/>
-    <ellipse cx="40" cy="40" rx="22" ry="14" fill="none" stroke="#7a3c08" stroke-width="1.5"/>
-  </g>
-</svg>`,
-  },
-  {
-    id: 'trophy',
-    label: 'Trophy',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg3" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#2a1a00"/>
-      <stop offset="100%" stop-color="#1a0e00"/>
-    </linearGradient>
-    <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffe066"/>
-      <stop offset="100%" stop-color="#d4920a"/>
-    </linearGradient>
-    <clipPath id="c3"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg3)"/>
-  <g clip-path="url(#c3)">
-    <path d="M27 17 h26 v22 q0 16-13 20 q-13-4-13-20 Z" fill="url(#tg)"/>
-    <path d="M27 22 q-12 0-10 14 q2 9 12 10" fill="none" stroke="#b8790a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M53 22 q12 0 10 14 q-2 9-12 10" fill="none" stroke="#b8790a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M34 59 h12" stroke="url(#tg)" stroke-width="5" stroke-linecap="round"/>
-    <rect x="37" y="55" width="6" height="6" fill="#d4920a"/>
-    <rect x="28" y="63" width="24" height="5" rx="2.5" fill="url(#tg)"/>
-    <text x="40" y="46" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#8a5c00" text-anchor="middle">1</text>
-  </g>
-</svg>`,
-  },
-  {
-    id: 'lightning',
-    label: 'Lightning',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg4" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1a1a2e"/>
-      <stop offset="100%" stop-color="#0f0f20"/>
-    </linearGradient>
-    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffe566"/>
-      <stop offset="100%" stop-color="#f5a623"/>
-    </linearGradient>
-    <clipPath id="c4"><circle cx="40" cy="40" r="40"/></clipPath>
-    <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg4)"/>
-  <g clip-path="url(#c4)">
-    <polygon points="44,12 24,44 41,44 36,68 56,36 39,36" fill="url(#bolt)" filter="url(#glow)"/>
-    <polygon points="44,12 24,44 41,44 36,68 56,36 39,36" fill="url(#bolt)" opacity="0.4"/>
-  </g>
-</svg>`,
-  },
-  {
-    id: 'star',
-    label: 'Star',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg5" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#2a1a00"/>
-      <stop offset="100%" stop-color="#1a0e00"/>
-    </linearGradient>
-    <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffe566"/>
-      <stop offset="100%" stop-color="#f5a623"/>
-    </linearGradient>
-    <clipPath id="c5"><circle cx="40" cy="40" r="40"/></clipPath>
-    <filter id="glow5"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg5)"/>
-  <g clip-path="url(#c5)" filter="url(#glow5)">
-    <polygon points="40,14 46,32 66,32 50,44 56,62 40,50 24,62 30,44 14,32 34,32"
-      fill="url(#sg)"/>
-  </g>
-</svg>`,
-  },
-  {
-    id: 'shield',
-    label: 'Shield',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg6" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0d1f3c"/>
-      <stop offset="100%" stop-color="#071426"/>
-    </linearGradient>
-    <linearGradient id="shield-g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f7c948"/>
-      <stop offset="100%" stop-color="#c4840a"/>
-    </linearGradient>
-    <clipPath id="c6"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg6)"/>
-  <g clip-path="url(#c6)">
-    <path d="M40 14 L58 22 L58 40 Q58 58 40 66 Q22 58 22 40 L22 22 Z" fill="url(#shield-g)"/>
-    <path d="M40 20 L54 27 L54 40 Q54 54 40 61 Q26 54 26 40 L26 27 Z" fill="#1a3a6e"/>
-    <path d="M40 20 L54 27 L54 40 Q54 54 40 61 Q26 54 26 40 L26 27 Z" fill="none" stroke="#f7c948" stroke-width="1.5"/>
-    <text x="40" y="48" font-family="Arial Black,sans-serif" font-size="20" font-weight="900" fill="#f7c948" text-anchor="middle">G</text>
-  </g>
-</svg>`,
-  },
-  {
-    id: 'rocket',
-    label: 'Rocket',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg7" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0a1628"/>
-      <stop offset="100%" stop-color="#040c18"/>
-    </linearGradient>
-    <linearGradient id="rocket-g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#e8f4ff"/>
-      <stop offset="100%" stop-color="#8ab4e8"/>
-    </linearGradient>
-    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffe566"/>
-      <stop offset="100%" stop-color="#ff6622"/>
-    </linearGradient>
-    <clipPath id="c7"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg7)"/>
-  <g clip-path="url(#c7)">
-    <circle cx="14" cy="20" r="1.5" fill="white" opacity="0.6"/>
-    <circle cx="64" cy="14" r="1" fill="white" opacity="0.5"/>
-    <circle cx="70" cy="35" r="1.2" fill="white" opacity="0.4"/>
-    <circle cx="8" cy="50" r="1" fill="white" opacity="0.5"/>
-    <path d="M40 14 Q52 20 52 38 L52 52 L40 60 L28 52 L28 38 Q28 20 40 14Z" fill="url(#rocket-g)"/>
-    <circle cx="40" cy="36" r="7" fill="#1a3a6e" stroke="#8ab4e8" stroke-width="1.5"/>
-    <path d="M28 50 L18 62 L33 57 Z" fill="#e8a020"/>
-    <path d="M52 50 L62 62 L47 57 Z" fill="#e8a020"/>
-    <path d="M34 60 Q40 68 46 60 L44 72 Q40 76 36 72 Z" fill="url(#flame)" opacity="0.9"/>
-  </g>
-</svg>`,
-  },
-  {
-    id: 'crown',
-    label: 'Crown',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg8" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1a1200"/>
-      <stop offset="100%" stop-color="#0d0a00"/>
-    </linearGradient>
-    <linearGradient id="crown-g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffe566"/>
-      <stop offset="100%" stop-color="#c4840a"/>
-    </linearGradient>
-    <clipPath id="c8"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg8)"/>
-  <g clip-path="url(#c8)">
-    <polygon points="14,54 14,34 28,46 40,22 52,46 66,34 66,54" fill="url(#crown-g)"/>
-    <rect x="14" y="54" width="52" height="10" rx="3" fill="#c4840a"/>
-    <circle cx="14" cy="34" r="5" fill="#ffe566"/>
-    <circle cx="40" cy="22" r="5" fill="#ffe566"/>
-    <circle cx="66" cy="34" r="5" fill="#ffe566"/>
-    <circle cx="14" cy="34" r="3" fill="#ff4444"/>
-    <circle cx="40" cy="22" r="3" fill="#4488ff"/>
-    <circle cx="66" cy="34" r="3" fill="#44cc44"/>
-  </g>
-</svg>`,
-  },
-  {
-    id: 'bear',
-    label: 'Bear',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg9" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1a1000"/>
-      <stop offset="100%" stop-color="#0d0800"/>
-    </linearGradient>
-    <clipPath id="c9"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg9)"/>
-  <g clip-path="url(#c9)">
-    <circle cx="24" cy="30" r="12" fill="#8B6010"/>
-    <circle cx="56" cy="30" r="12" fill="#8B6010"/>
-    <circle cx="24" cy="28" r="7" fill="#6b4a0c"/>
-    <circle cx="56" cy="28" r="7" fill="#6b4a0c"/>
-    <ellipse cx="40" cy="50" rx="22" ry="20" fill="#a07018"/>
-    <ellipse cx="40" cy="54" rx="14" ry="10" fill="#d4a050"/>
-    <circle cx="33" cy="44" r="4.5" fill="#1a0a00"/>
-    <circle cx="47" cy="44" r="4.5" fill="#1a0a00"/>
-    <circle cx="34.5" cy="42.5" r="1.5" fill="white"/>
-    <circle cx="48.5" cy="42.5" r="1.5" fill="white"/>
-    <ellipse cx="40" cy="52" rx="5" ry="3.5" fill="#1a0a00"/>
-    <path d="M36 56 Q40 60 44 56" stroke="#1a0a00" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-    <circle cx="38" cy="52" r="1" fill="#c4840a"/>
-    <circle cx="42" cy="52" r="1" fill="#c4840a"/>
-  </g>
-</svg>`,
+    id: 'lion',
+    label: 'Lion',
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#1a0e00"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><circle cx="40" cy="40" r="36" fill="#7a3c00"/><circle cx="40" cy="40" r="28" fill="#aa5800"/><circle cx="40" cy="40" r="21" fill="#cc7210"/><line x1="40" y1="4" x2="40" y2="19" stroke="#5a2c00" stroke-width="5" stroke-linecap="round"/><line x1="62" y1="10" x2="54" y2="21" stroke="#5a2c00" stroke-width="5" stroke-linecap="round"/><line x1="74" y1="30" x2="62" y2="35" stroke="#5a2c00" stroke-width="5" stroke-linecap="round"/><line x1="74" y1="52" x2="62" y2="47" stroke="#5a2c00" stroke-width="5" stroke-linecap="round"/><line x1="62" y1="70" x2="54" y2="59" stroke="#5a2c00" stroke-width="5" stroke-linecap="round"/><line x1="18" y1="10" x2="26" y2="21" stroke="#5a2c00" stroke-width="5" stroke-linecap="round"/><line x1="6" y1="30" x2="18" y2="35" stroke="#5a2c00" stroke-width="5" stroke-linecap="round"/><line x1="6" y1="52" x2="18" y2="47" stroke="#5a2c00" stroke-width="5" stroke-linecap="round"/><line x1="18" y1="70" x2="26" y2="59" stroke="#5a2c00" stroke-width="5" stroke-linecap="round"/><ellipse cx="40" cy="44" rx="19" ry="20" fill="#e8a040"/><ellipse cx="40" cy="33" rx="14" ry="7" fill="#c07820" opacity="0.45"/><ellipse cx="32" cy="38" rx="5" ry="4.5" fill="#2a1800"/><ellipse cx="48" cy="38" rx="5" ry="4.5" fill="#2a1800"/><ellipse cx="32" cy="38" rx="3.5" ry="3" fill="#c89020"/><ellipse cx="48" cy="38" rx="3.5" ry="3" fill="#c89020"/><circle cx="32" cy="38" r="2" fill="#080400"/><circle cx="48" cy="38" r="2" fill="#080400"/><circle cx="33" cy="37" r="0.9" fill="white"/><circle cx="49" cy="37" r="0.9" fill="white"/><ellipse cx="40" cy="51" rx="11" ry="9" fill="#e8b860"/><path d="M37 46 Q40 44 43 46 L41.5 50 Q40 51 38.5 50 Z" fill="#7a2828"/><line x1="40" y1="50" x2="40" y2="53" stroke="#7a2828" stroke-width="1.5" stroke-linecap="round"/><path d="M36 53 Q38 57 40 55 Q42 57 44 53" fill="none" stroke="#7a2828" stroke-width="1.8" stroke-linecap="round"/><circle cx="30" cy="50" r="1.3" fill="#b07020"/><circle cx="27" cy="49" r="1.3" fill="#b07020"/><circle cx="50" cy="50" r="1.3" fill="#b07020"/><circle cx="53" cy="49" r="1.3" fill="#b07020"/></g></svg>`,
   },
   {
     id: 'wolf',
     label: 'Wolf',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg10" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0f1520"/>
-      <stop offset="100%" stop-color="#080c14"/>
-    </linearGradient>
-    <clipPath id="c10"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg10)"/>
-  <g clip-path="url(#c10)">
-    <polygon points="22,34 30,16 38,32" fill="#6a7a9a"/>
-    <polygon points="58,34 50,16 42,32" fill="#6a7a9a"/>
-    <polygon points="24,32 30,20 36,32" fill="#3a4a6a"/>
-    <polygon points="56,32 50,20 44,32" fill="#3a4a6a"/>
-    <ellipse cx="40" cy="50" rx="20" ry="18" fill="#7a8aaa"/>
-    <ellipse cx="40" cy="54" rx="13" ry="10" fill="#c8d4e8"/>
-    <circle cx="32" cy="44" r="4.5" fill="#1a2030"/>
-    <circle cx="48" cy="44" r="4.5" fill="#1a2030"/>
-    <circle cx="33.5" cy="42.5" r="1.8" fill="white"/>
-    <circle cx="49.5" cy="42.5" r="1.8" fill="white"/>
-    <circle cx="34.2" cy="43.2" r="0.8" fill="#4488ff"/>
-    <circle cx="50.2" cy="43.2" r="0.8" fill="#4488ff"/>
-    <ellipse cx="40" cy="52" rx="5" ry="3" fill="#8a9aaa"/>
-    <path d="M36 56 Q40 60 44 56" stroke="#5a6a7a" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-    <line x1="28" y1="50" x2="22" y2="48" stroke="#6a7a9a" stroke-width="1"/>
-    <line x1="28" y1="52" x2="21" y2="51" stroke="#6a7a9a" stroke-width="1"/>
-    <line x1="52" y1="50" x2="58" y2="48" stroke="#6a7a9a" stroke-width="1"/>
-    <line x1="52" y1="52" x2="59" y2="51" stroke="#6a7a9a" stroke-width="1"/>
-  </g>
-</svg>`,
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#0a0c14"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><ellipse cx="40" cy="54" rx="30" ry="28" fill="#4a5260"/><polygon points="24,36 15,4 36,28" fill="#4a5260"/><polygon points="26,34 19,8 34,28" fill="#2a2438"/><polygon points="27,33 21,12 33,28" fill="#1a1028" opacity="0.7"/><polygon points="56,36 65,4 44,28" fill="#4a5260"/><polygon points="54,34 61,8 46,28" fill="#2a2438"/><polygon points="53,33 59,12 47,28" fill="#1a1028" opacity="0.7"/><ellipse cx="40" cy="40" rx="22" ry="22" fill="#5a6270"/><ellipse cx="40" cy="30" rx="17" ry="10" fill="#424e5c"/><ellipse cx="27" cy="47" rx="9" ry="7" fill="#78838f"/><ellipse cx="53" cy="47" rx="9" ry="7" fill="#78838f"/><ellipse cx="32" cy="36" rx="5.5" ry="4.5" fill="#1a1c22"/><ellipse cx="48" cy="36" rx="5.5" ry="4.5" fill="#1a1c22"/><ellipse cx="32" cy="36" rx="4" ry="3" fill="#c48c1c"/><ellipse cx="48" cy="36" rx="4" ry="3" fill="#c48c1c"/><circle cx="32" cy="36" r="2.2" fill="#080808"/><circle cx="48" cy="36" r="2.2" fill="#080808"/><circle cx="33" cy="35" r="0.9" fill="white"/><circle cx="49" cy="35" r="0.9" fill="white"/><ellipse cx="40" cy="51" rx="13" ry="10" fill="#b0bcc8"/><ellipse cx="40" cy="47" rx="9" ry="6" fill="#98a4b0"/><ellipse cx="40" cy="46" rx="5" ry="3.5" fill="#14141a"/><line x1="36" y1="46" x2="44" y2="46" stroke="#2a2a32" stroke-width="1"/><path d="M37 51 Q40 54 43 51" fill="none" stroke="#6a7480" stroke-width="2" stroke-linecap="round"/><line x1="27" y1="50" x2="9" y2="46" stroke="#8a94a0" stroke-width="1.2" stroke-linecap="round"/><line x1="27" y1="53" x2="8" y2="52" stroke="#8a94a0" stroke-width="1.2" stroke-linecap="round"/><line x1="53" y1="50" x2="71" y2="46" stroke="#8a94a0" stroke-width="1.2" stroke-linecap="round"/><line x1="53" y1="53" x2="72" y2="52" stroke="#8a94a0" stroke-width="1.2" stroke-linecap="round"/></g></svg>`,
   },
   {
     id: 'eagle',
     label: 'Eagle',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg11" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0a1828"/>
-      <stop offset="100%" stop-color="#050e18"/>
-    </linearGradient>
-    <clipPath id="c11"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg11)"/>
-  <g clip-path="url(#c11)">
-    <path d="M18 46 Q12 30 22 22 L34 40Z" fill="#8B6010"/>
-    <path d="M62 46 Q68 30 58 22 L46 40Z" fill="#8B6010"/>
-    <ellipse cx="40" cy="46" rx="18" ry="20" fill="#8B6010"/>
-    <circle cx="40" cy="32" r="14" fill="white"/>
-    <circle cx="34" cy="30" r="4.5" fill="#1a0a00"/>
-    <circle cx="46" cy="30" r="4.5" fill="#1a0a00"/>
-    <circle cx="35.5" cy="28.5" r="1.8" fill="white"/>
-    <circle cx="47.5" cy="28.5" r="1.8" fill="white"/>
-    <circle cx="36" cy="29" r="0.8" fill="#4488ff"/>
-    <circle cx="48" cy="29" r="0.8" fill="#4488ff"/>
-    <path d="M34 37 Q37 41 40 40 Q43 41 46 37 Q43 34 40 36 Q37 34 34 37Z" fill="#f5a623"/>
-    <path d="M40 40 L38 47 L40 45 L42 47 Z" fill="#f5a623"/>
-  </g>
-</svg>`,
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#06080e"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><ellipse cx="40" cy="62" rx="32" ry="22" fill="#221a06"/><path d="M6 56 Q12 36 26 46 Z" fill="#2e2208"/><path d="M74 56 Q68 36 54 46 Z" fill="#2e2208"/><circle cx="40" cy="30" r="22" fill="#f0ece4"/><ellipse cx="40" cy="19" rx="13" ry="8" fill="#dedad0" opacity="0.6"/><ellipse cx="30" cy="28" rx="7.5" ry="6.5" fill="#181206"/><ellipse cx="50" cy="28" rx="7.5" ry="6.5" fill="#181206"/><ellipse cx="30" cy="28" rx="5" ry="4.5" fill="#c88010"/><ellipse cx="50" cy="28" rx="5" ry="4.5" fill="#c88010"/><circle cx="30" cy="28" r="2.8" fill="#060402"/><circle cx="50" cy="28" r="2.8" fill="#060402"/><circle cx="31" cy="27" r="1" fill="white"/><circle cx="51" cy="27" r="1" fill="white"/><path d="M23 25 Q30 20 37 23" fill="none" stroke="#ccc4ac" stroke-width="3.5" stroke-linecap="round"/><path d="M43 23 Q50 20 57 25" fill="none" stroke="#ccc4ac" stroke-width="3.5" stroke-linecap="round"/><path d="M32 37 Q40 33 48 37 Q45 45 40 49 Q35 45 32 37 Z" fill="#e8a010"/><path d="M40 37 Q46 37 48 37 Q45 45 40 49 Z" fill="#b87808"/><ellipse cx="36" cy="38" rx="2.5" ry="1.5" fill="#c08808"/></g></svg>`,
+  },
+  {
+    id: 'bear',
+    label: 'Bear',
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#100800"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><circle cx="40" cy="52" r="32" fill="#6a3c08"/><circle cx="19" cy="20" r="14" fill="#7a4810"/><circle cx="19" cy="19" r="8" fill="#3a1e06"/><circle cx="61" cy="20" r="14" fill="#7a4810"/><circle cx="61" cy="19" r="8" fill="#3a1e06"/><ellipse cx="40" cy="44" rx="24" ry="25" fill="#8a5010"/><ellipse cx="40" cy="32" rx="19" ry="9" fill="#5a2e08" opacity="0.6"/><ellipse cx="30" cy="39" rx="7.5" ry="6" fill="#2e1606"/><ellipse cx="50" cy="39" rx="7.5" ry="6" fill="#2e1606"/><circle cx="30" cy="39" r="4.5" fill="#1e0e04"/><circle cx="50" cy="39" r="4.5" fill="#1e0e04"/><circle cx="30" cy="39" r="2.5" fill="#060200"/><circle cx="50" cy="39" r="2.5" fill="#060200"/><circle cx="31" cy="38" r="1" fill="white"/><circle cx="51" cy="38" r="1" fill="white"/><ellipse cx="40" cy="57" rx="16" ry="12" fill="#b06828"/><ellipse cx="40" cy="51" rx="7" ry="5.5" fill="#180a02"/><line x1="36" y1="51" x2="44" y2="51" stroke="#2e1006" stroke-width="1.2"/><path d="M33 58 Q36.5 62 40 60 Q43.5 62 47 58" fill="none" stroke="#5a2c08" stroke-width="2.5" stroke-linecap="round"/><path d="M26 34 Q28 40 26 46" fill="none" stroke="#6a3810" stroke-width="2.5" stroke-linecap="round"/><path d="M27 34 Q29 40 27 46" fill="none" stroke="#3a1a06" stroke-width="1.2" stroke-linecap="round"/></g></svg>`,
+  },
+  {
+    id: 'panther',
+    label: 'Panther',
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#06060c"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><ellipse cx="40" cy="54" rx="28" ry="26" fill="#181824"/><polygon points="22,32 14,6 36,28" fill="#181824"/><polygon points="24,30 18,10 34,27" fill="#2a1430"/><polygon points="58,32 66,6 44,28" fill="#181824"/><polygon points="56,30 62,10 46,27" fill="#2a1430"/><ellipse cx="40" cy="40" rx="22" ry="23" fill="#20202e"/><ellipse cx="27" cy="48" rx="10" ry="8" fill="#28283a"/><ellipse cx="53" cy="48" rx="10" ry="8" fill="#28283a"/><circle cx="31" cy="36" r="9" fill="#082808"/><circle cx="49" cy="36" r="9" fill="#082808"/><ellipse cx="31" cy="36" rx="7" ry="6" fill="#06060c"/><ellipse cx="49" cy="36" rx="7" ry="6" fill="#06060c"/><ellipse cx="31" cy="36" rx="5.5" ry="4.5" fill="#22dd48"/><ellipse cx="49" cy="36" rx="5.5" ry="4.5" fill="#22dd48"/><ellipse cx="31" cy="36" rx="2" ry="4.5" fill="#020408"/><ellipse cx="49" cy="36" rx="2" ry="4.5" fill="#020408"/><circle cx="32" cy="34" r="0.9" fill="white"/><circle cx="50" cy="34" r="0.9" fill="white"/><ellipse cx="40" cy="52" rx="12" ry="9" fill="#28283a"/><path d="M36 48 Q40 46 44 48 Q42 52 40 52 Q38 52 36 48 Z" fill="#2a0e22"/><path d="M35 52 Q37.5 56 40 54.5 Q42.5 56 45 52" fill="none" stroke="#3a1a30" stroke-width="2" stroke-linecap="round"/><line x1="28" y1="50" x2="10" y2="46" stroke="#4a4a62" stroke-width="1.4" stroke-linecap="round"/><line x1="28" y1="53" x2="9" y2="52" stroke="#4a4a62" stroke-width="1.4" stroke-linecap="round"/><line x1="52" y1="50" x2="70" y2="46" stroke="#4a4a62" stroke-width="1.4" stroke-linecap="round"/><line x1="52" y1="53" x2="71" y2="52" stroke="#4a4a62" stroke-width="1.4" stroke-linecap="round"/></g></svg>`,
+  },
+  {
+    id: 'hawk',
+    label: 'Hawk',
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#080a06"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><ellipse cx="40" cy="58" rx="28" ry="24" fill="#5a3a0a"/><ellipse cx="40" cy="62" rx="14" ry="18" fill="#ddd0a8"/><line x1="38" y1="52" x2="37" y2="72" stroke="#8a7040" stroke-width="2.5" stroke-linecap="round"/><line x1="40" y1="51" x2="40" y2="72" stroke="#8a7040" stroke-width="2.5" stroke-linecap="round"/><line x1="42" y1="52" x2="43" y2="72" stroke="#8a7040" stroke-width="2.5" stroke-linecap="round"/><ellipse cx="40" cy="30" rx="18" ry="20" fill="#3a2408"/><ellipse cx="40" cy="19" rx="11" ry="8" fill="#221408"/><circle cx="32" cy="30" r="7.5" fill="#3a2408"/><circle cx="48" cy="30" r="7.5" fill="#3a2408"/><circle cx="32" cy="30" r="5.5" fill="#e08810"/><circle cx="48" cy="30" r="5.5" fill="#e08810"/><circle cx="32" cy="30" r="3.2" fill="#080604"/><circle cx="48" cy="30" r="3.2" fill="#080604"/><circle cx="33" cy="29" r="1.2" fill="white"/><circle cx="49" cy="29" r="1.2" fill="white"/><path d="M33 39 Q40 36 47 39 Q44 46 40 48 Q36 46 33 39 Z" fill="#d8a010"/><path d="M40 39 Q45 39 47 39 Q44 46 40 48 Z" fill="#a87808"/><ellipse cx="37" cy="40" rx="2.5" ry="1.5" fill="#b08808"/></g></svg>`,
+  },
+  {
+    id: 'tiger',
+    label: 'Tiger',
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#140800"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><ellipse cx="40" cy="50" rx="28" ry="30" fill="#cc5500"/><polygon points="20,30 12,6 34,26" fill="#cc5500"/><polygon points="22,28 16,10 32,25" fill="#ee7730"/><polygon points="23,27 18,13 31,25" fill="#2a1000" opacity="0.45"/><polygon points="60,30 68,6 46,26" fill="#cc5500"/><polygon points="58,28 64,10 48,25" fill="#ee7730"/><polygon points="57,27 62,13 49,25" fill="#2a1000" opacity="0.45"/><ellipse cx="40" cy="42" rx="22" ry="22" fill="#ee6600"/><path d="M19 31 Q23 27 26 34" fill="none" stroke="#1a0800" stroke-width="5" stroke-linecap="round"/><path d="M61 31 Q57 27 54 34" fill="none" stroke="#1a0800" stroke-width="5" stroke-linecap="round"/><path d="M17 44 Q21 40 25 46" fill="none" stroke="#1a0800" stroke-width="4" stroke-linecap="round"/><path d="M63 44 Q59 40 55 46" fill="none" stroke="#1a0800" stroke-width="4" stroke-linecap="round"/><path d="M34 22 Q40 18 46 22" fill="none" stroke="#1a0800" stroke-width="4" stroke-linecap="round"/><ellipse cx="28" cy="50" rx="10" ry="8" fill="#ffe0b0"/><ellipse cx="52" cy="50" rx="10" ry="8" fill="#ffe0b0"/><ellipse cx="32" cy="37" rx="6" ry="5.5" fill="#1a0800"/><ellipse cx="48" cy="37" rx="6" ry="5.5" fill="#1a0800"/><ellipse cx="32" cy="37" rx="4.5" ry="3.5" fill="#44aa00"/><ellipse cx="48" cy="37" rx="4.5" ry="3.5" fill="#44aa00"/><ellipse cx="32" cy="37" rx="1.8" ry="3.5" fill="#080400"/><ellipse cx="48" cy="37" rx="1.8" ry="3.5" fill="#080400"/><circle cx="33" cy="36" r="1" fill="white"/><circle cx="49" cy="36" r="1" fill="white"/><path d="M37 47 Q40 45 43 47 L41.5 51 Q40 52 38.5 51 Z" fill="#cc2244"/><ellipse cx="40" cy="56" rx="8" ry="5" fill="#ffe0b0"/><path d="M36 52 Q38 56 40 54 Q42 56 44 52" fill="none" stroke="#8b1430" stroke-width="1.8" stroke-linecap="round"/><circle cx="27" cy="49" r="1.4" fill="#bb4400"/><circle cx="31" cy="51" r="1.4" fill="#bb4400"/><circle cx="49" cy="51" r="1.4" fill="#bb4400"/><circle cx="53" cy="49" r="1.4" fill="#bb4400"/></g></svg>`,
+  },
+  {
+    id: 'gorilla',
+    label: 'Gorilla',
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#050504"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><ellipse cx="40" cy="58" rx="30" ry="26" fill="#1a1a18"/><ellipse cx="40" cy="36" rx="26" ry="27" fill="#1e1e1c"/><ellipse cx="40" cy="20" rx="11" ry="9" fill="#252523"/><path d="M18 30 Q29 23 40 25 Q51 23 62 30 L60 33 Q50 27 40 29 Q30 27 20 33 Z" fill="#2c2c2a"/><ellipse cx="30" cy="35" rx="8.5" ry="7.5" fill="#0e0e0c"/><ellipse cx="50" cy="35" rx="8.5" ry="7.5" fill="#0e0e0c"/><circle cx="30" cy="35" r="5.5" fill="#2e2418"/><circle cx="50" cy="35" r="5.5" fill="#2e2418"/><circle cx="30" cy="35" r="3.2" fill="#080604"/><circle cx="50" cy="35" r="3.2" fill="#080604"/><circle cx="31" cy="34" r="1.3" fill="white"/><circle cx="51" cy="34" r="1.3" fill="white"/><ellipse cx="40" cy="47" rx="11" ry="7.5" fill="#141412"/><circle cx="35" cy="47" r="4" fill="#0a0a08"/><circle cx="45" cy="47" r="4" fill="#0a0a08"/><path d="M26 56 Q33 50 40 53 Q47 50 54 56" fill="#2a2018"/><path d="M27 56 Q33 52 40 54 Q47 52 53 56" fill="none" stroke="#3a2e20" stroke-width="1.8"/><path d="M28 56 Q40 65 52 56" fill="none" stroke="#242220" stroke-width="3"/><ellipse cx="40" cy="60" rx="13" ry="6" fill="#1a1a18"/></g></svg>`,
   },
   {
     id: 'bull',
     label: 'Bull',
-    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg12" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1a0800"/>
-      <stop offset="100%" stop-color="#0d0400"/>
-    </linearGradient>
-    <clipPath id="c12"><circle cx="40" cy="40" r="40"/></clipPath>
-  </defs>
-  <circle cx="40" cy="40" r="40" fill="url(#bg12)"/>
-  <g clip-path="url(#c12)">
-    <path d="M20 36 Q12 22 18 14 Q22 28 30 34Z" fill="#7a5010"/>
-    <path d="M60 36 Q68 22 62 14 Q58 28 50 34Z" fill="#7a5010"/>
-    <ellipse cx="40" cy="50" rx="22" ry="20" fill="#8B5c14"/>
-    <circle cx="40" cy="38" r="14" fill="#a07028"/>
-    <circle cx="33" cy="35" r="4.5" fill="#1a0800"/>
-    <circle cx="47" cy="35" r="4.5" fill="#1a0800"/>
-    <circle cx="34.5" cy="33.5" r="1.8" fill="white"/>
-    <circle cx="48.5" cy="33.5" r="1.8" fill="white"/>
-    <ellipse cx="40" cy="43" rx="8" ry="6" fill="#c48030"/>
-    <circle cx="37" cy="43" r="1.8" fill="#1a0800"/>
-    <circle cx="43" cy="43" r="1.8" fill="#1a0800"/>
-    <ellipse cx="40" cy="48" rx="4" ry="2.5" fill="#e8a040"/>
-    <path d="M36 51 Q40 55 44 51" stroke="#8a5010" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-    <path d="M20 36 Q16 44 22 46" fill="none" stroke="#7a5010" stroke-width="3" stroke-linecap="round"/>
-    <path d="M60 36 Q64 44 58 46" fill="none" stroke="#7a5010" stroke-width="3" stroke-linecap="round"/>
-  </g>
-</svg>`,
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#0e0600"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><path d="M22 34 Q8 18 12 10" fill="none" stroke="#8a6420" stroke-width="9" stroke-linecap="round"/><path d="M22 34 Q8 18 12 10" fill="none" stroke="#5a3a0c" stroke-width="5" stroke-linecap="round"/><circle cx="12" cy="10" r="4" fill="#aa8030"/><path d="M58 34 Q72 18 68 10" fill="none" stroke="#8a6420" stroke-width="9" stroke-linecap="round"/><path d="M58 34 Q72 18 68 10" fill="none" stroke="#5a3a0c" stroke-width="5" stroke-linecap="round"/><circle cx="68" cy="10" r="4" fill="#aa8030"/><ellipse cx="40" cy="49" rx="28" ry="27" fill="#4a2c0e"/><ellipse cx="40" cy="35" rx="21" ry="14" fill="#5a3c1a"/><circle cx="32" cy="30" r="6" fill="#4a2c0e" opacity="0.7"/><circle cx="40" cy="28" r="6" fill="#4a2c0e" opacity="0.7"/><circle cx="48" cy="30" r="6" fill="#4a2c0e" opacity="0.7"/><path d="M21 38 Q30 32 38 36" fill="none" stroke="#2e1808" stroke-width="4.5" stroke-linecap="round"/><path d="M42 36 Q50 32 59 38" fill="none" stroke="#2e1808" stroke-width="4.5" stroke-linecap="round"/><ellipse cx="30" cy="42" rx="6.5" ry="5.5" fill="#1e0e06"/><ellipse cx="50" cy="42" rx="6.5" ry="5.5" fill="#1e0e06"/><circle cx="30" cy="42" r="3.8" fill="#3a1808"/><circle cx="50" cy="42" r="3.8" fill="#3a1808"/><circle cx="30" cy="42" r="2.2" fill="#0a0400"/><circle cx="50" cy="42" r="2.2" fill="#0a0400"/><circle cx="31" cy="41" r="0.9" fill="white"/><circle cx="51" cy="41" r="0.9" fill="white"/><ellipse cx="40" cy="60" rx="20" ry="14" fill="#6a4020"/><ellipse cx="33" cy="58" rx="5.5" ry="4.5" fill="#180a02"/><ellipse cx="47" cy="58" rx="5.5" ry="4.5" fill="#180a02"/><path d="M30 52 Q40 48 50 52" fill="none" stroke="#c8c0b0" stroke-width="5" stroke-linecap="round"/><path d="M31 52 Q40 49 49 52" fill="none" stroke="#909088" stroke-width="2.5" stroke-linecap="round"/></g></svg>`,
+  },
+  {
+    id: 'fox',
+    label: 'Fox',
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#0e0800"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><ellipse cx="40" cy="58" rx="26" ry="22" fill="#cc4400"/><ellipse cx="40" cy="65" rx="14" ry="15" fill="#f0e8e0"/><polygon points="22,34 12,4 36,28" fill="#cc4400"/><polygon points="24,32 16,8 34,27" fill="#ee6622" opacity="0.8"/><polygon points="25,31 19,13 33,27" fill="#220a00" opacity="0.5"/><polygon points="58,34 68,4 44,28" fill="#cc4400"/><polygon points="56,32 64,8 46,27" fill="#ee6622" opacity="0.8"/><polygon points="55,31 61,13 47,27" fill="#220a00" opacity="0.5"/><ellipse cx="40" cy="40" rx="22" ry="22" fill="#dd5500"/><path d="M27 47 Q33 43 40 45 Q47 43 53 47 Q51 59 40 65 Q29 59 27 47 Z" fill="#f0e8e0"/><path d="M31 45 Q40 41 49 45 Q47 51 40 54 Q33 51 31 45 Z" fill="#dd5500"/><path d="M24 32 Q31 27 37 33" fill="none" stroke="#1a0800" stroke-width="2.5" stroke-linecap="round"/><path d="M43 33 Q49 27 56 32" fill="none" stroke="#1a0800" stroke-width="2.5" stroke-linecap="round"/><ellipse cx="32" cy="35" rx="5.5" ry="5" fill="#0e0800"/><ellipse cx="48" cy="35" rx="5.5" ry="5" fill="#0e0800"/><ellipse cx="32" cy="35" rx="4" ry="3.5" fill="#dd8c10"/><ellipse cx="48" cy="35" rx="4" ry="3.5" fill="#dd8c10"/><ellipse cx="32" cy="35" rx="1.8" ry="3.5" fill="#080400"/><ellipse cx="48" cy="35" rx="1.8" ry="3.5" fill="#080400"/><circle cx="33" cy="34" r="0.9" fill="white"/><circle cx="49" cy="34" r="0.9" fill="white"/><ellipse cx="40" cy="52" rx="4.5" ry="3.2" fill="#1a0800"/></g></svg>`,
+  },
+  {
+    id: 'snake',
+    label: 'Snake',
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#041008"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><path d="M66 66 Q70 36 52 24 Q34 12 20 24 Q6 36 14 50 Q22 64 40 60 Q58 56 56 42 Q54 28 40 28 Q26 28 24 40" fill="none" stroke="#1a4818" stroke-width="16" stroke-linecap="round"/><path d="M66 66 Q70 36 52 24 Q34 12 20 24 Q6 36 14 50 Q22 64 40 60 Q58 56 56 42 Q54 28 40 28 Q26 28 24 40" fill="none" stroke="#286a24" stroke-width="12" stroke-linecap="round"/><path d="M66 66 Q70 36 52 24 Q34 12 20 24 Q6 36 14 50 Q22 64 40 60 Q58 56 56 42 Q54 28 40 28 Q26 28 24 40" fill="none" stroke="#42a040" stroke-width="5" stroke-linecap="round"/><path d="M66 66 Q70 36 52 24 Q34 12 20 24 Q6 36 14 50 Q22 64 40 60 Q58 56 56 42 Q54 28 40 28 Q26 28 24 40" fill="none" stroke="#56c055" stroke-width="2" stroke-linecap="round" stroke-dasharray="4,8"/><ellipse cx="24" cy="41" rx="14" ry="10" fill="#286a24"/><ellipse cx="24" cy="41" rx="12" ry="8.5" fill="#42a040"/><ellipse cx="17" cy="39" rx="4.5" ry="4" fill="#d8b820"/><ellipse cx="17" cy="39" rx="1.5" ry="4" fill="#081006"/><circle cx="18" cy="38" r="0.8" fill="white"/><path d="M12 43 Q6 43 2 41 M12 43 Q6 45 2 47" fill="none" stroke="#cc1818" stroke-width="2.2" stroke-linecap="round"/></g></svg>`,
+  },
+  {
+    id: 'shark',
+    label: 'Shark',
+    svg: `<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="40" r="40" fill="#04080e"/><clipPath id="cl"><circle cx="40" cy="40" r="40"/></clipPath><g clip-path="url(#cl)"><ellipse cx="40" cy="62" rx="42" ry="22" fill="#0a1e3c"/><ellipse cx="40" cy="46" rx="34" ry="28" fill="#4a5560"/><ellipse cx="40" cy="54" rx="22" ry="18" fill="#d4d8dc"/><polygon points="40,4 53,26 27,26" fill="#3a4550"/><polygon points="40,8 51,26 40,26" fill="#2a3540"/><polygon points="10,50 4,66 28,54" fill="#3a4550"/><polygon points="70,50 76,66 52,54" fill="#3a4550"/><ellipse cx="40" cy="34" rx="20" ry="18" fill="#5a6570"/><path d="M22 34 Q20 40 22 46" fill="none" stroke="#3a4550" stroke-width="2.5" stroke-linecap="round"/><path d="M26 32 Q24 38 26 44" fill="none" stroke="#3a4550" stroke-width="2" stroke-linecap="round"/><path d="M30 31 Q28 37 30 43" fill="none" stroke="#3a4550" stroke-width="1.5" stroke-linecap="round"/><circle cx="31" cy="30" r="8" fill="#080c12"/><circle cx="49" cy="30" r="8" fill="#080c12"/><circle cx="32" cy="28" r="2.2" fill="#141c28" opacity="0.6"/><circle cx="50" cy="28" r="2.2" fill="#141c28" opacity="0.6"/><ellipse cx="40" cy="40" rx="15" ry="9" fill="#6a7580"/><path d="M24 45 Q40 52 56 45" fill="#d4d8dc"/><path d="M24 45 Q40 52 56 45" fill="none" stroke="#3a4550" stroke-width="1.2"/><polygon points="25,45 27.5,53 30,45" fill="white"/><polygon points="31,46 33.5,54 36,46" fill="white"/><polygon points="37,47 39.5,55 42,47" fill="white"/><polygon points="43,47 45.5,55 48,47" fill="white"/><polygon points="49,46 51.5,54 54,46" fill="white"/></g></svg>`,
   },
 ] as const
 
 export type AvatarPresetId = typeof AVATAR_PRESETS[number]['id']
 
-// Convert SVG string to a data URL safe for use in <img src>
 export function presetToDataUrl(svgString: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`
-}
-
-// Store preset as data URL directly on profile (avoids Supabase storage CORS/SVG issues)
-export function presetSvgToStorageData(svgString: string): string {
-  return presetToDataUrl(svgString)
 }
