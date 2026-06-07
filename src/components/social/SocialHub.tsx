@@ -78,7 +78,7 @@ export function SocialHub() {
         .select('*, friend_requester:profiles!friendships_requester_id_fkey(*), friend_addressee:profiles!friendships_addressee_id_fkey(*)')
         .eq('status', 'accepted')
         .or(`requester_id.eq.${user!.id},addressee_id.eq.${user!.id}`)
-      if (error) throw error
+      if (error) return []
       return (data ?? []).map(f => ({
         ...f,
         friend: f.requester_id === user!.id ? f.friend_addressee : f.friend_requester,
@@ -96,7 +96,7 @@ export function SocialHub() {
         .select('*, requester:profiles!friendships_requester_id_fkey(*)')
         .eq('addressee_id', user!.id)
         .eq('status', 'pending')
-      if (error) throw error
+      if (error) return []
       return (data ?? []).map(f => ({ ...f, friend: f.requester })) as Friendship[]
     },
   })
