@@ -312,6 +312,7 @@ function CreateLeagueModal({ onClose }: { onClose: () => void }) {
     draft_type: 'snake',
     is_public: false,
     player_pool: 'both' as 'nfl' | 'cfb' | 'both',
+    league_type: 'redraft' as 'redraft' | 'keeper' | 'dynasty' | 'pickem',
   })
 
   const handleSubmit = async () => {
@@ -335,6 +336,34 @@ function CreateLeagueModal({ onClose }: { onClose: () => void }) {
             />
           </div>
 
+          <div>
+            <label className="label">League Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { value: 'redraft', label: 'Redraft',   desc: 'Draft every year' },
+                { value: 'keeper',  label: 'Keeper',    desc: 'Keep players' },
+                { value: 'dynasty', label: 'Dynasty',   desc: 'Keep forever' },
+                { value: 'pickem',  label: "Pick'Em",   desc: 'Pick NFL winners' },
+              ] as const).map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, league_type: opt.value }))}
+                  className={clsx(
+                    'flex flex-col items-center gap-0.5 p-3 rounded-lg border-2 transition-all text-center',
+                    form.league_type === opt.value
+                      ? 'border-gold bg-gold/10 text-gold'
+                      : 'border-field-700 bg-field-800 text-field-400 hover:border-field-500 hover:text-white',
+                  )}
+                >
+                  <span className="font-bold text-sm">{opt.label}</span>
+                  <span className="text-xs opacity-60">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {form.league_type !== 'pickem' && (
           <div>
             <label className="label">Player Pool</label>
             <div className="grid grid-cols-3 gap-2">
@@ -360,7 +389,9 @@ function CreateLeagueModal({ onClose }: { onClose: () => void }) {
               ))}
             </div>
           </div>
+          )}
 
+          {form.league_type !== 'pickem' && (
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="label">Teams</label>
@@ -383,7 +414,9 @@ function CreateLeagueModal({ onClose }: { onClose: () => void }) {
               </select>
             </div>
           </div>
+          )}
 
+          {form.league_type !== 'pickem' && (
           <div>
             <label className="label">Draft Type</label>
             <select className="input" value={form.draft_type} onChange={e => setForm(f => ({ ...f, draft_type: e.target.value }))}>
@@ -392,6 +425,7 @@ function CreateLeagueModal({ onClose }: { onClose: () => void }) {
               <option value="auction">Auction</option>
             </select>
           </div>
+          )}
 
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -432,7 +466,7 @@ function JoinLeagueModal({ onClose }: { onClose: () => void }) {
         <p className="text-field-400 text-sm mb-4">Enter the invite code from your league commissioner.</p>
         <input
           className="input text-center text-xl tracking-widest font-mono uppercase"
-          placeholder="ABC123"
+          placeholder="ABC12345"
           maxLength={8}
           value={code}
           onChange={e => setCode(e.target.value.toUpperCase())}

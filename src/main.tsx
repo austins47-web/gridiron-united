@@ -21,6 +21,7 @@ import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { CommissionerPanel } from '@/components/commissioner/CommissionerPanel'
 import { MockDraftHub } from '@/components/mock/MockDraftHub'
 import { SocialHub } from '@/components/social/SocialHub'
+import { PickEmView } from '@/components/pickem/PickEmView'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -132,6 +133,7 @@ function App() {
               <Route path="mock" element={<MockDraftHub />} />
               <Route path="social" element={<SocialHub />} />
               <Route path="account" element={<AccountPage />} />
+              <Route path="pickem" element={<PickEmView />} />
               {/* All league-specific routes go through LeagueRouter */}
               <Route path="/*" element={<LeagueRouter />} />
             </Route>

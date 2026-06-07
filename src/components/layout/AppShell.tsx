@@ -17,9 +17,10 @@ export function AppShell() {
     { to: '/roster',       label: 'Roster',      emoji: '🏟' },
     { to: '/players',      label: 'Players',     emoji: '🔍' },
     { to: '/leagues',      label: 'Leagues',     emoji: '🏆' },
-    { to: '/draft',        label: 'Draft Room',  emoji: '🎯' },
+    { to: '/draft',        label: 'Draft Room',  emoji: '📋' },
     { to: '/mock',         label: 'Mock Draft',  emoji: '🧪' },
     { to: '/social',       label: 'Social',      emoji: '👥' },
+    { to: '/pickem',       label: "Pick'Em",     emoji: '🎯' },
     { to: '/scoring',      label: 'Scoring',     emoji: '📊' },
     ...(isCommissioner ? [{ to: '/commissioner', label: 'Commissioner', emoji: '⚙️' }] : []),
   ]

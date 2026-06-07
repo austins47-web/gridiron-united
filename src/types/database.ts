@@ -7,9 +7,9 @@ export type PlayerPos = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DST'
 export type PlayerLeague = 'NFL' | 'CFB'
 export type PlayerStatus = 'active' | 'questionable' | 'out' | 'ir'
 export type ScoringType = 'standard' | 'half_ppr' | 'ppr'
-export type LeagueType = 'redraft' | 'keeper' | 'dynasty'
+export type LeagueType = 'redraft' | 'keeper' | 'dynasty' | 'pickem'
 export type DraftType = 'snake' | 'auction' | 'linear'
-export type DraftStatus = 'pre_draft' | 'in_progress' | 'completed' | 'scheduled'
+export type DraftStatus = 'pre_draft' | 'in_progress' | 'completed' | 'scheduled' | 'paused'
 
 export interface Database {
   public: {
@@ -159,16 +159,20 @@ export interface RosterSlotConfig {
   slots_ir: number
 }
 
+export type PlayerPool = 'nfl' | 'cfb' | 'both'
+
 export interface League extends ScoringRules, RosterSlotConfig {
   id: string
   name: string
   commissioner_id: string | null
   num_teams: number
+  num_rounds: number
   scoring_type: ScoringType
   league_type: LeagueType
   draft_type: DraftType
   draft_status: DraftStatus
   draft_pick_timer: number
+  player_pool: PlayerPool
   current_week: number
   season: number
   is_public: boolean
@@ -215,7 +219,7 @@ export interface DraftState {
   league_id: string
   current_pick: number
   current_round: number
-  status: 'waiting' | 'active' | 'paused' | 'completed'
+  status: 'waiting' | 'active' | 'in_progress' | 'paused' | 'completed' | 'scheduled'
   current_user_id: string | null
   pick_started_at: string | null
   num_rounds: number

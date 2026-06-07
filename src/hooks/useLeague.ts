@@ -71,6 +71,7 @@ export function useCreateLeague() {
       draft_type: string
       is_public: boolean
       player_pool: 'nfl' | 'cfb' | 'both'
+      league_type?: string
     }) => {
       if (!user) throw new Error('Not logged in')
 
@@ -84,6 +85,7 @@ export function useCreateLeague() {
           num_rounds: params.num_rounds,
           scoring_type: params.scoring_type as any,
           draft_type: params.draft_type as any,
+          league_type: (params.league_type ?? 'redraft') as any,
           is_public: params.is_public,
           player_pool: params.player_pool,
         })
