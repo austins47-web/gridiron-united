@@ -125,9 +125,10 @@ export function AccountPage() {
     favorite_cfb_team: profile?.favorite_cfb_team ?? '',
   })
   const [saving, setSaving]           = useState(false)
-  const [changingPw, setChangingPw]   = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPw, setConfirmPw]     = useState('')
+  const [currentPw, setCurrentPw]     = useState('')
+  const [showChangePw, setShowChangePw] = useState(false)
   const [uploading, setUploading]     = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [showPresetPicker, setShowPresetPicker] = useState(false)
@@ -245,14 +246,37 @@ export function AccountPage() {
 
   // ── Change password ─────────────────────────────────────────
   const handleChangePassword = async () => {
+    if (!user?.email) return
     if (newPassword.length < 8) return toast.error('Password must be at least 8 characters')
     if (newPassword !== confirmPw) return toast.error('Passwords do not match')
-    const { error } = await supabase.auth.updateUser({ password: newPassword })
-    if (error) return toast.error(error.message)
-    toast.success('Password changed!')
-    setNewPassword('')
-    setConfirmPw('')
-    setChangingPw(false)
+
+    setShowChangePw(true) // keep form open during save so user sees the loading state
+    setSaving(true)
+    try {
+      // Re-authenticate with current password first so the session is fresh
+      // This prevents "session expired" errors on updateUser
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPw,
+      })
+      if (signInErr) {
+        toast.error('Current password is incorrect')
+        return
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+
+      toast.success('Password changed!')
+      setCurrentPw('')
+      setNewPassword('')
+      setConfirmPw('')
+      setShowChangePw(false)
+    } catch (e: any) {
+      toast.error(e.message ?? 'Failed to change password')
+    } finally {
+      setSaving(false)
+    }
   }
 
   // ── Delete account ──────────────────────────────────────────
@@ -444,44 +468,96 @@ export function AccountPage() {
           Signed in as <span className="text-white font-bold">{user?.email}</span>
         </div>
 
-        {!changingPw ? (
-          <button className="btn-outline" onClick={() => setChangingPw(true)}>
-            Change Password
-          </button>
+        {/* Only show password change for email/password accounts */}
+        {user?.app_metadata?.provider === 'email' || !user?.app_metadata?.provider ? (
+          !showChangePw ? (
+            <button className="btn-outline" onClick={() => setShowChangePw(true)}>
+              Change Password
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="label">Current Password</label>
+                <input
+                  className="input"
+                  type="password"
+                  value={currentPw}
+                  onChange={e => setCurrentPw(e.target.value)}
+                  placeholder="Your current password"
+                  autoComplete="current-password"
+                />
+              </div>
+              <div>
+                <label className="label">New Password</label>
+                <input
+                  className="input"
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Min 8 characters"
+                  autoComplete="new-password"
+                />
+                {/* Strength bar */}
+                {newPassword.length > 0 && (() => {
+                  const score = [
+                    newPassword.length >= 8,
+                    newPassword.length >= 12,
+                    /[A-Z]/.test(newPassword),
+                    /[0-9]/.test(newPassword),
+                    /[^A-Za-z0-9]/.test(newPassword),
+                  ].filter(Boolean).length
+                  const labels = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Very strong']
+                  const colors = ['', 'bg-red-500', 'bg-orange-400', 'bg-yellow-400', 'bg-emerald-400', 'bg-emerald-500']
+                  return (
+                    <div className="mt-1.5">
+                      <div className="flex gap-1 mb-1">
+                        {[1,2,3,4,5].map(i => (
+                          <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i <= score ? colors[score] : 'bg-field-700'}`} />
+                        ))}
+                      </div>
+                      <span className={`text-xs font-bold ${score <= 1 ? 'text-red-400' : score <= 2 ? 'text-orange-400' : score <= 3 ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                        {labels[score]}
+                      </span>
+                    </div>
+                  )
+                })()}
+              </div>
+              <div>
+                <label className="label">Confirm New Password</label>
+                <input
+                  className="input"
+                  type="password"
+                  value={confirmPw}
+                  onChange={e => setConfirmPw(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleChangePassword()}
+                  placeholder="Repeat new password"
+                  autoComplete="new-password"
+                />
+                {confirmPw.length > 0 && newPassword !== confirmPw && (
+                  <p className="text-xs text-red-400 mt-1">Passwords do not match</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="btn-ghost flex-1"
+                  onClick={() => { setShowChangePw(false); setCurrentPw(''); setNewPassword(''); setConfirmPw('') }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn-gold flex-1"
+                  onClick={handleChangePassword}
+                  disabled={saving || !currentPw || newPassword.length < 8 || newPassword !== confirmPw}
+                >
+                  {saving ? 'Updating…' : 'Update Password'}
+                </button>
+              </div>
+            </div>
+          )
         ) : (
-          <div className="space-y-3">
-            <div>
-              <label className="label">New Password</label>
-              <input
-                className="input"
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="Min 8 characters"
-              />
-            </div>
-            <div>
-              <label className="label">Confirm Password</label>
-              <input
-                className="input"
-                type="password"
-                value={confirmPw}
-                onChange={e => setConfirmPw(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleChangePassword()}
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                className="btn-ghost flex-1"
-                onClick={() => { setChangingPw(false); setNewPassword(''); setConfirmPw('') }}
-              >
-                Cancel
-              </button>
-              <button className="btn-gold flex-1" onClick={handleChangePassword}>
-                Update Password
-              </button>
-            </div>
-          </div>
+          <p className="text-sm text-field-400">
+            You signed in with {user?.app_metadata?.provider}. Password changes are managed through that provider.
+          </p>
         )}
       </div>
 
