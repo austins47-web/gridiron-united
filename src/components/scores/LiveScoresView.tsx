@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/appStore'
-import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4 } from 'lucide-react'
+import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4, Newspaper } from 'lucide-react'
 import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
+import { NewsView } from './NewsView'
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ interface LiveGame {
   redZone?: boolean
 }
 
-type ViewMode = 'grid' | 'list'
+type ViewMode = 'grid' | 'list' | 'news'
 type ColCount = 2 | 3 | 4 | 5
 
 // ── ESPN parsers ─────────────────────────────────────────────
@@ -102,7 +103,6 @@ const FAV_KEY = 'gu_fav_teams_v2'
 const VIEW_KEY = 'gu_scores_view'
 const COLS_KEY = 'gu_scores_cols'
 
-// Maps full team names (stored in profiles) → ESPN abbreviations
 const FULL_NAME_TO_ABBR: Record<string, string> = {
   'Arizona Cardinals': 'ARI', 'Atlanta Falcons': 'ATL', 'Baltimore Ravens': 'BAL',
   'Buffalo Bills': 'BUF', 'Carolina Panthers': 'CAR', 'Chicago Bears': 'CHI',
@@ -115,7 +115,6 @@ const FULL_NAME_TO_ABBR: Record<string, string> = {
   'New York Jets': 'NYJ', 'Philadelphia Eagles': 'PHI', 'Pittsburgh Steelers': 'PIT',
   'San Francisco 49ers': 'SF', 'Seattle Seahawks': 'SEA', 'Tampa Bay Buccaneers': 'TB',
   'Tennessee Titans': 'TEN', 'Washington Commanders': 'WSH',
-  // CFB teams stored as short names — ESPN abbreviations vary; map common ones
   'Alabama': 'ALA', 'Auburn': 'AUB', 'Georgia': 'UGA', 'LSU': 'LSU',
   'Tennessee': 'TENN', 'Texas A&M': 'TAMU', 'Florida': 'FLA', 'South Carolina': 'SC',
   'Ohio State': 'OSU', 'Michigan': 'MICH', 'Penn State': 'PSU', 'Michigan State': 'MSU',
@@ -136,7 +135,6 @@ function loadFavs(): Set<string> {
 }
 function saveFavs(s: Set<string>) { localStorage.setItem(FAV_KEY, JSON.stringify([...s])) }
 
-// Check if a team is favorited by abbr OR full name (CFB abbrs are unreliable)
 function teamIsFav(favs: Set<string>, team: GameTeam): boolean {
   return favs.has(team.abbr) || favs.has(team.name) || favs.has(FULL_NAME_TO_ABBR[team.name] ?? '')
 }
@@ -188,8 +186,6 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
       : isLive ? 'border-gold/30'
       : 'border-field-700',
     )}>
-
-      {/* Header */}
       <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           <span className={clsx(
@@ -208,15 +204,14 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
         </div>
       </div>
 
-      {/* Teams */}
       {[
         { team: game.away, ahead: awayScore > homeScore },
         { team: game.home, ahead: homeScore > awayScore },
       ].map(({ team, ahead }) => {
-        const isFav    = teamIsFav(favTeams, team)
-        const hasBall  = isLive && game.possession === team.abbr
-        const winning  = (isLive || isFinal) && ahead
-        const losing   = (isLive || isFinal) && !ahead && awayScore !== homeScore
+        const isFav   = teamIsFav(favTeams, team)
+        const hasBall = isLive && game.possession === team.abbr
+        const winning = (isLive || isFinal) && ahead
+        const losing  = (isLive || isFinal) && !ahead && awayScore !== homeScore
 
         return (
           <div key={team.abbr} className="flex items-center gap-1.5">
@@ -248,7 +243,6 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
         )
       })}
 
-      {/* Down & distance / venue */}
       {isLive && game.downDistance && (
         <div className="text-xs text-field-300 border-t border-field-700/60 pt-1.5 truncate">
           {game.downDistance}
@@ -261,11 +255,8 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
         </div>
       )}
 
-      {/* Odds */}
       {odds && game.status !== 'post' && (
         <div className="border-t border-field-700/60 pt-2 space-y-2">
-
-          {/* Spread row */}
           {odds.spread !== null && (
             <div>
               <div className="flex items-center gap-1 mb-1">
@@ -285,37 +276,22 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
                       favored ? 'bg-field-700 border border-field-600' : 'bg-field-800/60 border border-field-700/50',
                     )}>
                       <span className="font-cond font-bold text-xs text-field-200">{team}</span>
-                      <span className={clsx(
-                        'font-cond font-black text-sm',
-                        favored ? 'text-white' : 'text-field-300',
-                      )}>{label}</span>
+                      <span className={clsx('font-cond font-black text-sm', favored ? 'text-white' : 'text-field-300')}>{label}</span>
                     </div>
                   )
                 })}
               </div>
             </div>
           )}
-
-          {/* Win probability */}
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-field-400 block mb-1">Win %</span>
               <div className="flex rounded-lg overflow-hidden h-5 text-xs font-black">
-                <div
-                  className="flex items-center justify-center bg-field-500 transition-all"
-                  style={{ width: `${odds.awayWinPct}%` }}
-                >
-                  {odds.awayWinPct >= 20 && (
-                    <span className="text-white">{odds.awayWinPct}%</span>
-                  )}
+                <div className="flex items-center justify-center bg-field-500 transition-all" style={{ width: `${odds.awayWinPct}%` }}>
+                  {odds.awayWinPct >= 20 && <span className="text-white">{odds.awayWinPct}%</span>}
                 </div>
-                <div
-                  className="flex items-center justify-center bg-gold/80 transition-all"
-                  style={{ width: `${odds.homeWinPct}%` }}
-                >
-                  {odds.homeWinPct >= 20 && (
-                    <span className="text-field-950">{odds.homeWinPct}%</span>
-                  )}
+                <div className="flex items-center justify-center bg-gold/80 transition-all" style={{ width: `${odds.homeWinPct}%` }}>
+                  {odds.homeWinPct >= 20 && <span className="text-field-950">{odds.homeWinPct}%</span>}
                 </div>
               </div>
               <div className="flex justify-between mt-1">
@@ -361,40 +337,26 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
     if (reverse) {
       return (
         <div className="flex items-center gap-2 min-w-0 flex-row-reverse">
-          {hasBall
-            ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" />
-            : <div className="w-2 shrink-0" />}
-          {team.rank
-            ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-left">#{team.rank}</span>
-            : <span className="w-5 shrink-0" />}
-          <span className={clsx(
-            'font-cond font-black text-base shrink-0 w-10 text-right',
+          {hasBall ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" /> : <div className="w-2 shrink-0" />}
+          {team.rank ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-left">#{team.rank}</span> : <span className="w-5 shrink-0" />}
+          <span className={clsx('font-cond font-black text-base shrink-0 w-10 text-right',
             isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
           )}>{team.abbr}</span>
           <span className="text-field-300 text-sm truncate text-right">{team.name !== team.abbr ? team.name : ''}</span>
-          {game.status === 'pre' && team.record && (
-            <span className="text-field-400 text-xs shrink-0">({team.record})</span>
-          )}
+          {game.status === 'pre' && team.record && <span className="text-field-400 text-xs shrink-0">({team.record})</span>}
         </div>
       )
     }
 
     return (
       <div className="flex items-center gap-2 min-w-0">
-        {hasBall
-          ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" />
-          : <div className="w-2 shrink-0" />}
-        {team.rank
-          ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
-          : <span className="w-5 shrink-0" />}
-        <span className={clsx(
-          'font-cond font-black text-base shrink-0 w-10',
+        {hasBall ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" /> : <div className="w-2 shrink-0" />}
+        {team.rank ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span> : <span className="w-5 shrink-0" />}
+        <span className={clsx('font-cond font-black text-base shrink-0 w-10',
           isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
         )}>{team.abbr}</span>
         <span className="text-field-300 text-sm truncate">{team.name !== team.abbr ? team.name : ''}</span>
-        {game.status === 'pre' && team.record && (
-          <span className="text-field-400 text-xs shrink-0">({team.record})</span>
-        )}
+        {game.status === 'pre' && team.record && <span className="text-field-400 text-xs shrink-0">({team.record})</span>}
       </div>
     )
   }
@@ -407,51 +369,38 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
       : anyFav ? 'border-field-600 bg-field-800'
       : 'border-field-700 bg-field-800/60',
     )}>
-
-      {/* League + status — fixed width */}
       <div className="flex items-center gap-1.5 shrink-0 w-[120px]">
-        <span className={clsx(
-          'font-cond font-black text-xs uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
+        <span className={clsx('font-cond font-black text-xs uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
           game.league === 'NFL' ? 'bg-nfl/20 text-nfl' : 'bg-cfb/20 text-cfb',
         )}>{game.league}</span>
         <StatusBadge game={game} compact />
         {game.redZone && isLive && <span className="text-[9px] font-black text-red-400">RZ</span>}
       </div>
 
-      {/* Away team */}
       <div className="shrink-0 w-[180px] min-w-0">
         <TeamBlock team={game.away} ahead={awayScore > homeScore} />
       </div>
 
-      {/* Scores — center */}
       <div className="shrink-0 flex items-center gap-1.5 w-20 justify-center">
         {game.status !== 'pre' ? (
           <>
-            <span className={clsx(
-              'font-cond font-black text-2xl w-7 text-right leading-none',
-              awayScore > homeScore ? 'text-white' : 'text-field-400',
-            )}>{game.away.score}</span>
+            <span className={clsx('font-cond font-black text-2xl w-7 text-right leading-none',
+              awayScore > homeScore ? 'text-white' : 'text-field-400')}>{game.away.score}</span>
             <span className="text-field-500 text-sm font-bold">–</span>
-            <span className={clsx(
-              'font-cond font-black text-2xl w-7 text-left leading-none',
-              homeScore > awayScore ? 'text-white' : 'text-field-400',
-            )}>{game.home.score}</span>
+            <span className={clsx('font-cond font-black text-2xl w-7 text-left leading-none',
+              homeScore > awayScore ? 'text-white' : 'text-field-400')}>{game.home.score}</span>
           </>
         ) : (
           <span className="text-field-300 text-sm font-bold uppercase tracking-widest">vs</span>
         )}
       </div>
 
-      {/* Home team */}
       <div className="shrink-0 w-[180px] min-w-0 flex justify-end">
         <TeamBlock team={game.home} ahead={homeScore > awayScore} reverse />
       </div>
 
-      {/* Odds — always fixed width so venue/star stay aligned */}
       <div className="shrink-0 hidden lg:flex items-center gap-5 w-[260px] justify-end">
         {odds && game.status !== 'post' && (<>
-
-          {/* Spread pill pair */}
           {odds.spread !== null && (
             <div className="flex flex-col gap-1">
               <span className="text-xs font-bold uppercase tracking-wider text-field-400 text-right">Spread</span>
@@ -463,12 +412,8 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
                   const label = pts === 0 ? 'PK' : pts > 0 ? `+${pts}` : `${pts}`
                   const favored = pts < 0
                   return (
-                    <span key={team} className={clsx(
-                      'font-cond font-bold text-sm px-2 py-1 rounded-lg',
-                      favored
-                        ? 'bg-field-500 text-white border border-field-400'
-                        : 'bg-field-700 text-field-200 border border-field-600',
-                    )}>
+                    <span key={team} className={clsx('font-cond font-bold text-sm px-2 py-1 rounded-lg',
+                      favored ? 'bg-field-500 text-white border border-field-400' : 'bg-field-700 text-field-200 border border-field-600')}>
                       {team} <span className={clsx('font-black', favored ? 'text-gold' : 'text-field-300')}>{label}</span>
                     </span>
                   )
@@ -476,18 +421,14 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
               </div>
             </div>
           )}
-
-          {/* Win % bar */}
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (
             <div className="w-32 shrink-0">
               <span className="text-xs font-bold uppercase tracking-wider text-field-400 block text-right mb-1">Win %</span>
               <div className="flex rounded-lg overflow-hidden h-5 text-xs font-black">
-                <div className="flex items-center justify-center bg-field-500 transition-all"
-                  style={{ width: `${odds.awayWinPct}%` }}>
+                <div className="flex items-center justify-center bg-field-500 transition-all" style={{ width: `${odds.awayWinPct}%` }}>
                   {odds.awayWinPct >= 25 && <span className="text-white text-xs font-black">{odds.awayWinPct}%</span>}
                 </div>
-                <div className="flex items-center justify-center bg-gold/80 transition-all"
-                  style={{ width: `${odds.homeWinPct}%` }}>
+                <div className="flex items-center justify-center bg-gold/80 transition-all" style={{ width: `${odds.homeWinPct}%` }}>
                   {odds.homeWinPct >= 25 && <span className="text-field-950 text-xs font-black">{odds.homeWinPct}%</span>}
                 </div>
               </div>
@@ -506,7 +447,6 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
         </>)}
       </div>
 
-      {/* Venue + broadcast — always fixed width, always aligned */}
       <div className="shrink-0 hidden sm:flex flex-col items-end gap-0.5 w-[140px]">
         {isLive && game.downDistance && (
           <span className="text-xs text-field-300 font-bold truncate w-full text-right">{game.downDistance}</span>
@@ -521,7 +461,6 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
         )}
       </div>
 
-      {/* Star */}
       <button onClick={() => onToggleFav(awayIsFav ? game.away.abbr : game.home.abbr)}
         className="text-field-500 hover:text-gold transition-colors shrink-0">
         <Star className={clsx('w-3.5 h-3.5', anyFav && 'fill-gold text-gold')} />
@@ -543,10 +482,8 @@ function ColsPicker({ value, onChange }: { value: ColCount, onChange: (v: ColCou
     <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
       {options.map(({ val, icon, label }) => (
         <button key={val} onClick={() => onChange(val)} title={`${label} per row`}
-          className={clsx(
-            'flex items-center gap-1 font-cond font-bold text-xs px-2 py-1.5 rounded-md transition-colors',
-            value === val ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white',
-          )}>
+          className={clsx('flex items-center gap-1 font-cond font-bold text-xs px-2 py-1.5 rounded-md transition-colors',
+            value === val ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white')}>
           {icon}
           <span className="hidden sm:inline">{label}</span>
         </button>
@@ -555,8 +492,6 @@ function ColsPicker({ value, onChange }: { value: ColCount, onChange: (v: ColCou
   )
 }
 
-// ── COLS → Tailwind class map ────────────────────────────────
-
 const GRID_COLS: Record<ColCount, string> = {
   2: 'grid-cols-2',
   3: 'grid-cols-2 sm:grid-cols-3',
@@ -564,11 +499,7 @@ const GRID_COLS: Record<ColCount, string> = {
   5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
 }
 
-// ── GAME GROUP (shared between fav / all sections) ───────────
-
-function GameGroup({
-  games, viewMode, cols, favTeams, onToggleFav, oddsMap,
-}: {
+function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap }: {
   games: LiveGame[]
   viewMode: ViewMode
   cols: ColCount
@@ -578,29 +509,21 @@ function GameGroup({
 }) {
   const getOdds = (g: LiveGame) => {
     if (!oddsMap) return null
-    if (g.league === 'NFL') {
-      return oddsMap.get(`${g.away.abbr}@${g.home.abbr}`) ?? null
-    } else {
-      // CFB keyed by ESPN short name e.g. "Georgia@Ohio State"
-      return oddsMap.get(`${g.away.name}@${g.home.name}`) ?? null
-    }
+    if (g.league === 'NFL') return oddsMap.get(`${g.away.abbr}@${g.home.abbr}`) ?? null
+    return oddsMap.get(`${g.away.name}@${g.home.name}`) ?? null
   }
 
   if (viewMode === 'list') {
     return (
       <div className="space-y-1.5">
-        {games.map(g => (
-          <ListRow key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} />
-        ))}
+        {games.map(g => <ListRow key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} />)}
       </div>
     )
   }
 
   return (
     <div className={clsx('grid gap-3', GRID_COLS[cols])}>
-      {games.map(g => (
-        <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} />
-      ))}
+      {games.map(g => <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} />)}
     </div>
   )
 }
@@ -615,30 +538,21 @@ export function LiveScoresView() {
 
   const [leagueFilter, setLeagueFilter] = useState<LeagueFilter>('All')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
-  const [viewMode, setViewMode]       = useState<ViewMode>(() =>
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
     (localStorage.getItem(VIEW_KEY) as ViewMode | null) ?? 'grid')
-  const [cols, setCols]               = useState<ColCount>(() =>
+  const [cols, setCols] = useState<ColCount>(() =>
     (Number(localStorage.getItem(COLS_KEY)) as ColCount | 0) || 4)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
-
-  // Manual favorites from localStorage (user-toggled)
   const [manualFavs, setManualFavs] = useState<Set<string>>(loadFavs)
 
-  // Profile team abbreviations (canonical form for matching)
   const profileAbbrs = new Set<string>(
     [profile?.favorite_nfl_team, profile?.favorite_cfb_team]
       .filter(Boolean)
-      .flatMap(t => [t as string, toAbbr(t as string)]) // store both raw + abbr for matching
+      .flatMap(t => [t as string, toAbbr(t as string)])
   )
-
-  // Combined set for matching — includes all lookup forms
   const favTeams = new Set([...profileAbbrs, ...manualFavs])
-
-  // Count only distinct display-level favorites for the badge
-  // (profile has max 2, plus any manual ones not already in profile)
-  const profileDisplayCount = [profile?.favorite_nfl_team, profile?.favorite_cfb_team]
-    .filter(Boolean).length
+  const profileDisplayCount = [profile?.favorite_nfl_team, profile?.favorite_cfb_team].filter(Boolean).length
   const manualExtra = [...manualFavs].filter(t => !profileAbbrs.has(t)).length
   const favCount = profileDisplayCount + manualExtra
 
@@ -667,7 +581,6 @@ export function LiveScoresView() {
     staleTime: 25_000, retry: 2,
   })
 
-  // Auto-refresh timer
   useEffect(() => {
     const all = [...(nflQuery.data ?? []), ...(cfbQuery.data ?? [])]
     const ms = all.some(g => g.status === 'in') ? 30_000 : 120_000
@@ -679,15 +592,12 @@ export function LiveScoresView() {
   const isFetching = nflQuery.isFetching || cfbQuery.isFetching
   const hasError   = nflQuery.isError && cfbQuery.isError
   const liveCount  = allGames.filter(g => g.status === 'in').length
-
   const statusOrder: Record<string, number> = { in: 0, pre: 1, post: 2 }
 
-  // Favorited games: ALWAYS shown at top, bypass filters, sorted live→upcoming→final
   const favGames = allGames
     .filter(g => gameHasFav(favTeams, g))
     .sort((a, b) => (statusOrder[a.status] ?? 1) - (statusOrder[b.status] ?? 1))
 
-  // All other games: filtered normally, favs excluded so they don't appear twice
   const otherGames = allGames
     .filter(g => {
       if (gameHasFav(favTeams, g)) return false
@@ -700,7 +610,6 @@ export function LiveScoresView() {
     .sort((a, b) => (statusOrder[a.status] ?? 1) - (statusOrder[b.status] ?? 1))
 
   const sorted = [...favGames, ...otherGames]
-
   const sharedProps = { viewMode, cols, favTeams, onToggleFav: toggleFav, oddsMap }
 
   return (
@@ -735,58 +644,59 @@ export function LiveScoresView() {
 
       {/* ── Controls bar ── */}
       <div className="flex flex-wrap gap-2 items-center">
-        {/* League filter */}
-        <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
-          {(['All', 'NFL', 'CFB'] as LeagueFilter[]).map(f => (
-            <button key={f} onClick={() => setLeagueFilter(f)}
-              className={clsx(
-                'font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
-                leagueFilter === f
-                  ? f === 'NFL' ? 'bg-nfl/20 text-nfl'
-                    : f === 'CFB' ? 'bg-cfb/20 text-cfb'
-                    : 'bg-field-700 text-white'
-                  : 'text-field-400 hover:text-white',
-              )}>{f}</button>
-          ))}
-        </div>
 
-        {/* Status filter */}
-        <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
-          {(['All', 'Live', 'Final', 'Upcoming'] as StatusFilter[]).map(f => (
-            <button key={f} onClick={() => setStatusFilter(f)}
-              className={clsx(
-                'font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
-                statusFilter === f
-                  ? f === 'Live' ? 'bg-red-500/20 text-red-400' : 'bg-field-700 text-white'
-                  : 'text-field-400 hover:text-white',
-              )}>{f}</button>
-          ))}
-        </div>
+        {/* League filter — hidden in news mode */}
+        {viewMode !== 'news' && (
+          <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+            {(['All', 'NFL', 'CFB'] as LeagueFilter[]).map(f => (
+              <button key={f} onClick={() => setLeagueFilter(f)}
+                className={clsx('font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+                  leagueFilter === f
+                    ? f === 'NFL' ? 'bg-nfl/20 text-nfl' : f === 'CFB' ? 'bg-cfb/20 text-cfb' : 'bg-field-700 text-white'
+                    : 'text-field-400 hover:text-white')}>{f}</button>
+            ))}
+          </div>
+        )}
 
-        {/* View mode toggle */}
+        {/* Status filter — hidden in news mode */}
+        {viewMode !== 'news' && (
+          <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+            {(['All', 'Live', 'Final', 'Upcoming'] as StatusFilter[]).map(f => (
+              <button key={f} onClick={() => setStatusFilter(f)}
+                className={clsx('font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+                  statusFilter === f
+                    ? f === 'Live' ? 'bg-red-500/20 text-red-400' : 'bg-field-700 text-white'
+                    : 'text-field-400 hover:text-white')}>{f}</button>
+            ))}
+          </div>
+        )}
+
+        {/* View mode toggle — includes News */}
         <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
           <button onClick={() => setViewMode('grid')} title="Grid view"
-            className={clsx(
-              'flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
-              viewMode === 'grid' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white',
-            )}>
+            className={clsx('flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+              viewMode === 'grid' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white')}>
             <LayoutGrid className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Grid</span>
           </button>
           <button onClick={() => setViewMode('list')} title="List view"
-            className={clsx(
-              'flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
-              viewMode === 'list' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white',
-            )}>
+            className={clsx('flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+              viewMode === 'list' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white')}>
             <List className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">List</span>
+          </button>
+          <button onClick={() => setViewMode('news')} title="News feed"
+            className={clsx('flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+              viewMode === 'news' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white')}>
+            <Newspaper className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">News</span>
           </button>
         </div>
 
         {/* Columns picker — grid mode only */}
         {viewMode === 'grid' && <ColsPicker value={cols} onChange={setCols} />}
 
-        {favCount > 0 && (
+        {favCount > 0 && viewMode !== 'news' && (
           <span className="text-xs text-gold flex items-center gap-1 ml-1">
             <Star className="w-3 h-3 fill-gold" />
             {favCount} favorited
@@ -794,82 +704,85 @@ export function LiveScoresView() {
         )}
       </div>
 
-      {/* Profile favorites notice */}
-      {(profile?.favorite_nfl_team || profile?.favorite_cfb_team) && (
-        <div className="flex items-center gap-2 text-xs text-field-300 bg-field-800/40 border border-field-700/50 rounded-lg px-3 py-2">
-          <Star className="w-3 h-3 text-gold fill-gold shrink-0" />
-          <span>Auto-pinned:
-            {profile.favorite_nfl_team && <span className="text-nfl font-bold ml-1">{profile.favorite_nfl_team}</span>}
-            {profile.favorite_nfl_team && profile.favorite_cfb_team && <span className="text-field-500 mx-1">·</span>}
-            {profile.favorite_cfb_team && <span className="text-cfb font-bold">{profile.favorite_cfb_team}</span>}
-          </span>
-        </div>
-      )}
+      {/* ── News view ── */}
+      {viewMode === 'news' && <NewsView />}
 
-      {/* Error */}
-      {hasError && (
-        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-          <WifiOff className="w-4 h-4 shrink-0" />
-          <div>
-            <p className="font-bold">Could not load scores</p>
-            <p className="text-xs text-red-400/70 mt-0.5">ESPN scores API unavailable. Try refreshing.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Loading skeletons */}
-      {isFetching && allGames.length === 0 && (
-        viewMode === 'list'
-          ? <div className="space-y-2">{Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-12 animate-pulse" />
-            ))}</div>
-          : <div className={clsx('grid gap-3', GRID_COLS[cols])}>
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-28 animate-pulse" />
-              ))}
-            </div>
-      )}
-
-      {/* No games */}
-      {!isFetching && !hasError && allGames.length === 0 && (
-        <div className="panel text-center py-14 space-y-2">
-          <div className="text-4xl">🏈</div>
-          <p className="text-white font-bold text-lg">No games today</p>
-          <p className="text-field-300 text-sm">Check back on game days — scores update live</p>
-        </div>
-      )}
-
-      {/* No filter match */}
-      {!isFetching && !hasError && allGames.length > 0 && sorted.length === 0 && (
-        <div className="panel text-center py-8">
-          <p className="text-field-300 text-sm">No games match the selected filters</p>
-        </div>
-      )}
-
-      {/* Games */}
-      {sorted.length > 0 && (
-        <div className="space-y-5">
-          {favGames.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Star className="w-3.5 h-3.5 text-gold fill-gold" />
-                <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">My Teams</span>
-              </div>
-              <GameGroup games={favGames} {...sharedProps} />
+      {/* ── Scores views ── */}
+      {viewMode !== 'news' && (
+        <>
+          {/* Profile favorites notice */}
+          {(profile?.favorite_nfl_team || profile?.favorite_cfb_team) && (
+            <div className="flex items-center gap-2 text-xs text-field-300 bg-field-800/40 border border-field-700/50 rounded-lg px-3 py-2">
+              <Star className="w-3 h-3 text-gold fill-gold shrink-0" />
+              <span>Auto-pinned:
+                {profile.favorite_nfl_team && <span className="text-nfl font-bold ml-1">{profile.favorite_nfl_team}</span>}
+                {profile.favorite_nfl_team && profile.favorite_cfb_team && <span className="text-field-500 mx-1">·</span>}
+                {profile.favorite_cfb_team && <span className="text-cfb font-bold">{profile.favorite_cfb_team}</span>}
+              </span>
             </div>
           )}
-          {otherGames.length > 0 && (
-            <div>
+
+          {hasError && (
+            <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+              <WifiOff className="w-4 h-4 shrink-0" />
+              <div>
+                <p className="font-bold">Could not load scores</p>
+                <p className="text-xs text-red-400/70 mt-0.5">ESPN scores API unavailable. Try refreshing.</p>
+              </div>
+            </div>
+          )}
+
+          {isFetching && allGames.length === 0 && (
+            viewMode === 'list'
+              ? <div className="space-y-2">{Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-12 animate-pulse" />
+                ))}</div>
+              : <div className={clsx('grid gap-3', GRID_COLS[cols])}>
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-28 animate-pulse" />
+                  ))}
+                </div>
+          )}
+
+          {!isFetching && !hasError && allGames.length === 0 && (
+            <div className="panel text-center py-14 space-y-2">
+              <div className="text-4xl">🏈</div>
+              <p className="text-white font-bold text-lg">No games today</p>
+              <p className="text-field-300 text-sm">Check back on game days — scores update live</p>
+            </div>
+          )}
+
+          {!isFetching && !hasError && allGames.length > 0 && sorted.length === 0 && (
+            <div className="panel text-center py-8">
+              <p className="text-field-300 text-sm">No games match the selected filters</p>
+            </div>
+          )}
+
+          {sorted.length > 0 && (
+            <div className="space-y-5">
               {favGames.length > 0 && (
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="font-cond font-bold text-xs uppercase tracking-wider text-field-300">All Games</span>
-                  <span className="text-xs text-field-400">tap ⭐ to favorite a team</span>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Star className="w-3.5 h-3.5 text-gold fill-gold" />
+                    <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">My Teams</span>
+                  </div>
+                  <GameGroup games={favGames} {...sharedProps} />
                 </div>
               )}
-              <GameGroup games={otherGames} {...sharedProps} />
+              {otherGames.length > 0 && (
+                <div>
+                  {favGames.length > 0 && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-cond font-bold text-xs uppercase tracking-wider text-field-300">All Games</span>
+                      <span className="text-xs text-field-400">tap ⭐ to favorite a team</span>
+                    </div>
+                  )}
+                  <GameGroup games={otherGames} {...sharedProps} />
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   )

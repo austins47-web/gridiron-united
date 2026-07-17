@@ -1,6 +1,5 @@
+import { LiveScoringView } from './LiveScoringView'
 import { useAppStore } from '@/store/appStore'
-import { DEFAULT_SCORING } from '@/types/database'
-import type { League } from '@/types/database'
 import { AlertCircle } from 'lucide-react'
 
 export function ScoringView() {
@@ -18,9 +17,16 @@ export function ScoringView() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+
+      {/* ── Live scoring ── */}
+      <LiveScoringView />
+
+      {/* ── Scoring rules ── */}
       <div>
         <h1 className="section-title">Scoring Rules</h1>
-        <p className="text-field-400 text-sm mt-1">{activeLeague.name} · <span className="capitalize">{activeLeague.scoring_type}</span></p>
+        <p className="text-field-400 text-sm mt-1">
+          {activeLeague.name} · <span className="capitalize">{activeLeague.scoring_type}</span>
+        </p>
       </div>
 
       <ScoringSection title="Passing" rows={[
@@ -71,6 +77,7 @@ export function ScoringView() {
         ['Points Allowed 28–34', activeLeague.score_dst_pts_28_34 ?? -1],
         ['Points Allowed 35+', activeLeague.score_dst_pts_35_plus ?? -4],
       ]} />
+
     </div>
   )
 }
