@@ -2,12 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import {
   getNFLScores,
   getNFLLiveScores,
-  getNFLPlayerStatsByWeek,
+  getNFLPlayerStats,
   getNFLNews,
   getCFBScores,
-  getCFBPlayerStatsByWeek,
+  getCFBPlayerStats,
   getCurrentNFLWeek,
   calculateFantasyPoints,
+  normalizeTeam,
+  teamAbbr,
   type SDIOScore,
   type SDIOPlayerGame,
   type SDIONews,
@@ -21,7 +23,7 @@ export function useCurrentWeek() {
   return useQuery({
     queryKey: ['nfl-current-week'],
     queryFn: getCurrentNFLWeek,
-    staleTime: 60 * 60 * 1000, // 1 hour
+    staleTime: 60 * 60 * 1000,
   })
 }
 
@@ -31,7 +33,7 @@ export function useNFLLiveScores() {
   return useQuery<SDIOScore[]>({
     queryKey: ['nfl-live-scores'],
     queryFn: getNFLLiveScores,
-    refetchInterval: 30_000,  // every 30 seconds
+    refetchInterval: 30_000,
     staleTime: 25_000,
   })
 }
@@ -41,11 +43,10 @@ export function useNFLLiveScores() {
 export function useNFLScores(week: number, season = 2026) {
   return useQuery<SDIOScore[]>({
     queryKey: ['nfl-scores', season, week],
-    queryFn: () => getNFLScores(week, season),
+    queryFn: () => getNFLScores(season, week),
     enabled: week > 0,
     staleTime: 5 * 60 * 1000,
     refetchInterval: (query) => {
-      // Only poll if there are live games
       const data = query.state.data
       const hasLive = data?.some(g => g.Status === 'InProgress')
       return hasLive ? 30_000 : false
@@ -58,15 +59,12 @@ export function useNFLScores(week: number, season = 2026) {
 export function useNFLPlayerStats(week: number, season = 2026) {
   return useQuery<SDIOPlayerGame[]>({
     queryKey: ['nfl-player-stats', season, week],
-    queryFn: () => getNFLPlayerStatsByWeek(week, season),
+    queryFn: () => getNFLPlayerStats(season, week),
     enabled: week > 0,
     staleTime: 5 * 60 * 1000,
-    refetchInterval: (query) => {
-      // Poll every 60s during live scoring window
-      // (player stats update less frequently than scores)
-      const isGameDay = new Date().getDay() === 0 || // Sunday
-                        new Date().getDay() === 1 || // Monday Night
-                        new Date().getDay() === 4    // Thursday Night
+    refetchInterval: () => {
+      const day = new Date().getDay()
+      const isGameDay = day === 0 || day === 1 || day === 4
       return isGameDay ? 60_000 : false
     },
   })
@@ -85,7 +83,7 @@ export function usePlayerFantasyPoints(
 
   const playerStats = stats?.find(
     s => s.Name.toLowerCase() === playerName.toLowerCase() &&
-         s.Team.toLowerCase() === team.toLowerCase().replace(/\s+/g, '')
+         s.Team.toLowerCase() === teamAbbr(team).toLowerCase()
   )
 
   if (!playerStats) return { points: null, stats: null }
@@ -117,7 +115,7 @@ export function useRosterLivePoints(
   return roster.map(player => {
     const found = stats?.find(
       s => s.Name.toLowerCase() === player.name.toLowerCase() &&
-           normalizeTeam(s.Team) === normalizeTeam(player.team)
+           normalizeTeam(s.Team).toLowerCase() === player.team.toLowerCase()
     )
     return {
       name: player.name,
@@ -134,18 +132,18 @@ export function useRosterLivePoints(
 export function useCFBScores(week: number, season = 2026) {
   return useQuery({
     queryKey: ['cfb-scores', season, week],
-    queryFn: () => getCFBScores(week, season),
+    queryFn: () => getCFBScores(season, week),
     enabled: week > 0,
     staleTime: 5 * 60 * 1000,
   })
 }
 
-// ── CFB player stats ─────────────────────────────────────────
+// ── CFB player stats ──────────────────────────────────────────
 
 export function useCFBPlayerStats(week: number, season = 2026) {
   return useQuery({
     queryKey: ['cfb-player-stats', season, week],
-    queryFn: () => getCFBPlayerStatsByWeek(week, season),
+    queryFn: () => getCFBPlayerStats(season, week),
     enabled: week > 0,
     staleTime: 5 * 60 * 1000,
   })
@@ -156,56 +154,12 @@ export function useCFBPlayerStats(week: number, season = 2026) {
 export function useNFLNews(count = 20) {
   return useQuery<SDIONews[]>({
     queryKey: ['nfl-news', count],
-    queryFn: () => getNFLNews(count),
-    staleTime: 5 * 60 * 1000,  // 5 minutes
-    refetchInterval: 10 * 60 * 1000, // refresh every 10 minutes
+    queryFn: getNFLNews,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
   })
 }
 
-// ── Helpers ───────────────────────────────────────────────────
+// ── Re-export helpers so components can import from one place ─
 
-// SportsDataIO uses abbreviations like 'KC', 'SF', 'NE'
-// Our DB uses full names like 'Kansas City Chiefs', 'San Francisco 49ers'
-export function normalizeTeam(team: string): string {
-  const map: Record<string, string> = {
-    'ARI': 'Arizona Cardinals', 'ATL': 'Atlanta Falcons',
-    'BAL': 'Baltimore Ravens', 'BUF': 'Buffalo Bills',
-    'CAR': 'Carolina Panthers', 'CHI': 'Chicago Bears',
-    'CIN': 'Cincinnati Bengals', 'CLE': 'Cleveland Browns',
-    'DAL': 'Dallas Cowboys', 'DEN': 'Denver Broncos',
-    'DET': 'Detroit Lions', 'GB': 'Green Bay Packers',
-    'HOU': 'Houston Texans', 'IND': 'Indianapolis Colts',
-    'JAX': 'Jacksonville Jaguars', 'KC': 'Kansas City Chiefs',
-    'LAC': 'Los Angeles Chargers', 'LAR': 'Los Angeles Rams',
-    'LV': 'Las Vegas Raiders', 'MIA': 'Miami Dolphins',
-    'MIN': 'Minnesota Vikings', 'NE': 'New England Patriots',
-    'NO': 'New Orleans Saints', 'NYG': 'New York Giants',
-    'NYJ': 'New York Jets', 'PHI': 'Philadelphia Eagles',
-    'PIT': 'Pittsburgh Steelers', 'SEA': 'Seattle Seahawks',
-    'SF': 'San Francisco 49ers', 'TB': 'Tampa Bay Buccaneers',
-    'TEN': 'Tennessee Titans', 'WAS': 'Washington Commanders',
-  }
-  return map[team.toUpperCase()] ?? team
-}
-
-export function teamAbbr(fullName: string): string {
-  const map: Record<string, string> = {
-    'Arizona Cardinals': 'ARI', 'Atlanta Falcons': 'ATL',
-    'Baltimore Ravens': 'BAL', 'Buffalo Bills': 'BUF',
-    'Carolina Panthers': 'CAR', 'Chicago Bears': 'CHI',
-    'Cincinnati Bengals': 'CIN', 'Cleveland Browns': 'CLE',
-    'Dallas Cowboys': 'DAL', 'Denver Broncos': 'DEN',
-    'Detroit Lions': 'DET', 'Green Bay Packers': 'GB',
-    'Houston Texans': 'HOU', 'Indianapolis Colts': 'IND',
-    'Jacksonville Jaguars': 'JAX', 'Kansas City Chiefs': 'KC',
-    'Los Angeles Chargers': 'LAC', 'Los Angeles Rams': 'LAR',
-    'Las Vegas Raiders': 'LV', 'Miami Dolphins': 'MIA',
-    'Minnesota Vikings': 'MIN', 'New England Patriots': 'NE',
-    'New Orleans Saints': 'NO', 'New York Giants': 'NYG',
-    'New York Jets': 'NYJ', 'Philadelphia Eagles': 'PHI',
-    'Pittsburgh Steelers': 'PIT', 'Seattle Seahawks': 'SEA',
-    'San Francisco 49ers': 'SF', 'Tampa Bay Buccaneers': 'TB',
-    'Tennessee Titans': 'TEN', 'Washington Commanders': 'WAS',
-  }
-  return map[fullName] ?? fullName.substring(0, 3).toUpperCase()
-}
+export { normalizeTeam, teamAbbr }
