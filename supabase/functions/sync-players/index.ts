@@ -193,7 +193,7 @@ async function syncCFB(supabase: any, season: string, nflNames: Set<string>) {
     const avgPts = stats?.FantasyPoints ?? 0
 
     rows.push({
-      id:          50000000 + p.PlayerID, // large offset so CFB IDs never clash with NFL
+      id:          50000000 + p.PlayerID,
       name:        `${p.FirstName} ${p.LastName}`,
       team:        teamInfo.name,
       pos,
@@ -204,7 +204,8 @@ async function syncCFB(supabase: any, season: string, nflNames: Set<string>) {
       adp:         avgPts > 20 ? 50 : avgPts > 10 ? 100 : avgPts > 5 ? 200 : 999,
       status:      mapStatus(p.InjuryStatus ?? ''),
       injury_note: p.InjuryBodyPart ?? null,
-      is_rookie:   p.Class === 'Freshman' || p.Class === 'Sophomore',
+      is_rookie:   false, // CFB players are never "rookies" — use depth_pos for class
+      depth_pos:   p.Class ?? null, // store Freshman/Sophomore/Junior/Senior/Graduate
       updated_at:  new Date().toISOString(),
     })
   }

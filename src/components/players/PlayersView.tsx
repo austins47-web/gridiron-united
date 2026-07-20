@@ -346,15 +346,40 @@ export function PlayersView() {
                   <tr key={p.id} className={clsx(isTaken && 'opacity-50')}>
                     <td>
                       <div>
-                        <div className="font-bold text-white text-sm flex items-center gap-1.5">
+                        <div className="font-bold text-white text-sm flex items-center gap-1.5 flex-wrap">
                           {p.name}
-                          {p.is_rookie && (
+                          {/* NFL rookie badge */}
+                          {p.is_rookie && p.league === 'NFL' && (
                             <span className="text-[10px] font-black bg-gold text-field-950 px-1 py-0.5 rounded leading-none shrink-0" title="2026 NFL Rookie">
                               R
                             </span>
                           )}
+                          {/* CFB class badge */}
+                          {p.league === 'CFB' && p.depth_pos && (() => {
+                            const cls = p.depth_pos
+                            const short: Record<string, string> = {
+                              Freshman: 'FR', Sophomore: 'SO', Junior: 'JR',
+                              Senior: 'SR', Graduate: 'GR',
+                            }
+                            const colors: Record<string, string> = {
+                              Freshman:  'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+                              Sophomore: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
+                              Junior:    'bg-purple-500/20 text-purple-300 border border-purple-500/30',
+                              Senior:    'bg-orange-500/20 text-orange-300 border border-orange-500/30',
+                              Graduate:  'bg-field-500/30 text-field-200 border border-field-500/30',
+                            }
+                            const label = short[cls]
+                            if (!label) return null
+                            return (
+                              <span className={`text-[10px] font-black px-1 py-0.5 rounded leading-none shrink-0 ${colors[cls]}`} title={cls}>
+                                {label}
+                              </span>
+                            )
+                          })()}
                         </div>
-                        {p.depth_pos && <div className="text-field-400 text-xs">{p.depth_pos}</div>}
+                        {p.league === 'NFL' && p.depth_pos && (
+                          <div className="text-field-400 text-xs">{p.depth_pos}</div>
+                        )}
                       </div>
                     </td>
                     <td className="text-center">
