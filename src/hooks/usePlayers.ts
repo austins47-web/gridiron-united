@@ -27,7 +27,7 @@ export const DEFAULT_FILTERS: PlayerFilters = {
   sortDir: 'asc',
   rookiesOnly: false,
   page: 0,
-  pageSize: 40,
+  pageSize: 100,
 }
 
 export function usePlayers(filters: PlayerFilters) {

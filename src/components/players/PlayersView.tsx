@@ -410,30 +410,61 @@ export function PlayersView() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <span className="text-field-400 text-sm">
           {total > 0
-            ? `${(filters.page * filters.pageSize + 1).toLocaleString()}–${Math.min((filters.page + 1) * filters.pageSize, total).toLocaleString()} of ${total.toLocaleString()}`
-            : ''}
+            ? `${(filters.page * filters.pageSize + 1).toLocaleString()}–${Math.min((filters.page + 1) * filters.pageSize, total).toLocaleString()} of ${total.toLocaleString()} players`
+            : 'No players found'}
         </span>
-        <div className="flex gap-1 items-center">
-          <button
-            className="btn-ghost !py-1 !px-2"
-            disabled={filters.page === 0}
-            onClick={() => setFilter('page', filters.page - 1)}
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm text-white px-2">
-            {filters.page + 1} / {Math.max(totalPages, 1)}
-          </span>
-          <button
-            className="btn-ghost !py-1 !px-2"
-            disabled={filters.page >= totalPages - 1}
-            onClick={() => setFilter('page', filters.page + 1)}
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+        <div className="flex items-center gap-3">
+          {/* Page size selector */}
+          <div className="flex items-center gap-1.5 text-sm text-field-400">
+            <span>Show</span>
+            <select
+              className="input !py-1 !px-2 text-xs w-20"
+              value={filters.pageSize}
+              onChange={e => setFilters(f => ({ ...f, pageSize: Number(e.target.value), page: 0 }))}
+            >
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={250}>250</option>
+              <option value={500}>500</option>
+            </select>
+          </div>
+          {/* Page controls */}
+          <div className="flex gap-1 items-center">
+            <button
+              className="btn-ghost !py-1 !px-2"
+              disabled={filters.page === 0}
+              onClick={() => setFilter('page', 0)}
+            >
+              «
+            </button>
+            <button
+              className="btn-ghost !py-1 !px-2"
+              disabled={filters.page === 0}
+              onClick={() => setFilter('page', filters.page - 1)}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm text-white px-2">
+              {filters.page + 1} / {Math.max(totalPages, 1)}
+            </span>
+            <button
+              className="btn-ghost !py-1 !px-2"
+              disabled={filters.page >= totalPages - 1}
+              onClick={() => setFilter('page', filters.page + 1)}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              className="btn-ghost !py-1 !px-2"
+              disabled={filters.page >= totalPages - 1}
+              onClick={() => setFilter('page', totalPages - 1)}
+            >
+              »
+            </button>
+          </div>
         </div>
       </div>
 
