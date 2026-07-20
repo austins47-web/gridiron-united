@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "crons": [
+    {
+      "name": "sync-players-weekly",
+      "function": "sync-players",
+      "schedule": "0 3 * * 2",
+      "args": {
+        "season": "2026",
+        "week": "auto"
+      }
+    }
+  ]
+}

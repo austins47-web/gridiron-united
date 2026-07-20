@@ -1,0 +1,11 @@
+[api]
+enabled = true
+
+[functions.sync-players]
+verify_jwt = false
+
+[functions.sportsdata]
+verify_jwt = false
+
+[functions.ai-roster-analysis]
+verify_jwt = false

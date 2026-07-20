@@ -731,38 +731,38 @@ function PlayerScoreEditor() {
   return (
     <div className="space-y-4">
       {/* ── SportsDataIO Sync ── */}
-      <div className="panel border-gold/20 bg-gold/5">
+      <div className="panel border-field-600 bg-field-800/50">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Zap className="w-4 h-4 text-gold" />
-              <span className="font-bold text-white text-sm">Sync Players from SportsDataIO</span>
+              <span className="font-bold text-white text-sm">Player Data — Auto Sync</span>
             </div>
             <p className="text-field-400 text-xs">
-              Replaces the entire player list and projections with live data from SportsDataIO.
-              Run this at the start of each week to get updated projections and injury statuses.
+              Players and projections sync automatically every Tuesday at 3am UTC from SportsDataIO.
+              Covers all active NFL players, all 32 D/ST units, and FBS college football players.
             </p>
             {syncResult && (
               <p className="text-emerald-400 text-xs mt-1 font-bold">
-                ✓ Synced {syncResult.players} players · {syncResult.withProjections} with projections
+                ✓ Last sync: {syncResult.players} total players ({syncResult.withProjections} NFL with projections)
               </p>
             )}
           </div>
           <button
             onClick={syncPlayers}
             disabled={syncing}
-            className="btn-gold shrink-0"
+            className="btn-outline shrink-0 text-xs"
           >
             {syncing ? (
-              <><span className="animate-spin">⟳</span> Syncing…</>
+              <><span className="animate-spin inline-block">⟳</span> Syncing…</>
             ) : (
-              <><Zap className="w-4 h-4" /> Sync Now</>
+              <><Zap className="w-3.5 h-3.5" /> Force Sync</>
             )}
           </button>
         </div>
       </div>
 
-      <p className="text-field-400 text-sm">Or manually edit individual players below.</p>
+      <p className="text-field-400 text-sm">Manually override individual player values below.</p>
 
       {/* Search */}
       <div className="relative">

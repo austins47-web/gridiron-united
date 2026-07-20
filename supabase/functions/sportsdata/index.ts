@@ -69,6 +69,9 @@ serve(async (req) => {
     } else if (endpoint === 'cfb/players') {
       apiUrl = `${CFB}/scores/json/Players`
 
+    } else if (endpoint === 'cfb/teams') {
+      apiUrl = `${CFB}/scores/json/Teams`
+
     } else if (endpoint === 'nfl/week') {
       apiUrl = `${NFL}/scores/json/CurrentWeek`
 
