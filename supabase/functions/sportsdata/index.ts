@@ -30,6 +30,11 @@ serve(async (req) => {
     if (endpoint === 'nfl/news') {
       apiUrl = `${NFL}/scores/json/News`
 
+    } else if (endpoint.startsWith('nfl/news/team/')) {
+      // nfl/news/team/{abbr} — news for a specific team e.g. nfl/news/team/KC
+      const team = endpoint.split('/')[3]
+      apiUrl = `${NFL}/scores/json/NewsByTeam/${team}`
+
     } else if (endpoint === 'nfl/live-scores') {
       apiUrl = `${NFL}/scores/json/LiveScores`
 

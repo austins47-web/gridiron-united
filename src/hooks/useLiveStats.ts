@@ -151,10 +151,28 @@ export function useCFBPlayerStats(week: number, season = 2026) {
 
 // ── NFL news ──────────────────────────────────────────────────
 
-export function useNFLNews(count = 20) {
+export function useNFLNews(count = 50) {
   return useQuery<SDIONews[]>({
     queryKey: ['nfl-news', count],
     queryFn: getNFLNews,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+  })
+}
+
+export function useNFLNewsByTeam(team: string) {
+  return useQuery<SDIONews[]>({
+    queryKey: ['nfl-news-team', team],
+    queryFn: async () => {
+      const PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sportsdata`
+      const ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const res = await fetch(`${PROXY}?endpoint=${encodeURIComponent(`nfl/news/team/${team}`)}`, {
+        headers: { apikey: ANON, Authorization: `Bearer ${ANON}` },
+      })
+      if (!res.ok) throw new Error(`news/team error ${res.status}`)
+      return res.json()
+    },
+    enabled: !!team,
     staleTime: 5 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
   })
