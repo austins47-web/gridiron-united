@@ -68,9 +68,9 @@ const CFB_POS: Record<string, string> = {
 
 // Which CFB conferences we include (FBS only)
 const INCLUDED_CONFS = new Set([
-  'SEC', 'Big Ten', 'Big 12', 'ACC', 'Pac-12', 'American',
-  'Mountain West', 'Conference USA', 'Mid-American', 'Sun Belt',
-  'Independent',
+  'Southeastern', 'Big Ten', 'Big 12', 'Atlantic Coast', 'Pac-12', 'American',
+  'Mountain West', 'Conference USA', 'Mid-American', 'Sun Belt - East', 'Sun Belt - West',
+  'FBS Independents',
 ])
 
 // ── NFL sync ───────────────────────────────────────────────────
@@ -169,9 +169,6 @@ async function syncCFB(supabase: any, season: string, nflNames: Set<string>) {
   const seen = new Set<number>()
 
   for (const p of allPlayers) {
-    if (seen.has(p.PlayerID)) continue
-    seen.add(p.PlayerID)
-
     const pos = CFB_POS[p.Position]
     if (!pos) continue
     if (!p.Team) continue
@@ -185,6 +182,11 @@ async function syncCFB(supabase: any, season: string, nflNames: Set<string>) {
     // Skip anyone already on an active NFL roster
     const fullName = `${p.FirstName} ${p.LastName}`
     if (nflNames.has(fullName.toLowerCase())) continue
+
+    // Deduplicate by PlayerID — after all filters so non-skill entries
+    // don't block a later skill-position entry for the same player
+    if (seen.has(p.PlayerID)) continue
+    seen.add(p.PlayerID)
 
     // Skip non-skill players on tiny programs
     const stats = statsMap.get(p.PlayerID)
