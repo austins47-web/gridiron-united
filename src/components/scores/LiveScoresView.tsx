@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/appStore'
-import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4, Newspaper } from 'lucide-react'
+import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4 } from 'lucide-react'
 import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
-import { NewsView } from './NewsView'
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -33,7 +32,7 @@ interface LiveGame {
   redZone?: boolean
 }
 
-type ViewMode = 'grid' | 'list' | 'news'
+type ViewMode = 'grid' | 'list'
 type ColCount = 2 | 3 | 4 | 5
 
 // ── ESPN parsers ─────────────────────────────────────────────
@@ -645,33 +644,29 @@ export function LiveScoresView() {
       {/* ── Controls bar ── */}
       <div className="flex flex-wrap gap-2 items-center">
 
-        {/* League filter — hidden in news mode */}
-        {viewMode !== 'news' && (
-          <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
-            {(['All', 'NFL', 'CFB'] as LeagueFilter[]).map(f => (
-              <button key={f} onClick={() => setLeagueFilter(f)}
-                className={clsx('font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
-                  leagueFilter === f
-                    ? f === 'NFL' ? 'bg-nfl/20 text-nfl' : f === 'CFB' ? 'bg-cfb/20 text-cfb' : 'bg-field-700 text-white'
-                    : 'text-field-400 hover:text-white')}>{f}</button>
-            ))}
-          </div>
-        )}
+        {/* League filter */}
+        <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+          {(['All', 'NFL', 'CFB'] as LeagueFilter[]).map(f => (
+            <button key={f} onClick={() => setLeagueFilter(f)}
+              className={clsx('font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+                leagueFilter === f
+                  ? f === 'NFL' ? 'bg-nfl/20 text-nfl' : f === 'CFB' ? 'bg-cfb/20 text-cfb' : 'bg-field-700 text-white'
+                  : 'text-field-400 hover:text-white')}>{f}</button>
+          ))}
+        </div>
 
-        {/* Status filter — hidden in news mode */}
-        {viewMode !== 'news' && (
-          <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
-            {(['All', 'Live', 'Final', 'Upcoming'] as StatusFilter[]).map(f => (
-              <button key={f} onClick={() => setStatusFilter(f)}
-                className={clsx('font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
-                  statusFilter === f
-                    ? f === 'Live' ? 'bg-red-500/20 text-red-400' : 'bg-field-700 text-white'
-                    : 'text-field-400 hover:text-white')}>{f}</button>
-            ))}
-          </div>
-        )}
+        {/* Status filter */}
+        <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+          {(['All', 'Live', 'Final', 'Upcoming'] as StatusFilter[]).map(f => (
+            <button key={f} onClick={() => setStatusFilter(f)}
+              className={clsx('font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+                statusFilter === f
+                  ? f === 'Live' ? 'bg-red-500/20 text-red-400' : 'bg-field-700 text-white'
+                  : 'text-field-400 hover:text-white')}>{f}</button>
+          ))}
+        </div>
 
-        {/* View mode toggle — includes News */}
+        {/* View mode toggle */}
         <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
           <button onClick={() => setViewMode('grid')} title="Grid view"
             className={clsx('flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
@@ -685,18 +680,12 @@ export function LiveScoresView() {
             <List className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">List</span>
           </button>
-          <button onClick={() => setViewMode('news')} title="News feed"
-            className={clsx('flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
-              viewMode === 'news' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white')}>
-            <Newspaper className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">News</span>
-          </button>
         </div>
 
         {/* Columns picker — grid mode only */}
         {viewMode === 'grid' && <ColsPicker value={cols} onChange={setCols} />}
 
-        {favCount > 0 && viewMode !== 'news' && (
+        {favCount > 0 && (
           <span className="text-xs text-gold flex items-center gap-1 ml-1">
             <Star className="w-3 h-3 fill-gold" />
             {favCount} favorited
@@ -704,12 +693,8 @@ export function LiveScoresView() {
         )}
       </div>
 
-      {/* ── News view ── */}
-      {viewMode === 'news' && <NewsView />}
+      {/* ── Scores ── */}
 
-      {/* ── Scores views ── */}
-      {viewMode !== 'news' && (
-        <>
           {/* Profile favorites notice */}
           {(profile?.favorite_nfl_team || profile?.favorite_cfb_team) && (
             <div className="flex items-center gap-2 text-xs text-field-300 bg-field-800/40 border border-field-700/50 rounded-lg px-3 py-2">
@@ -782,8 +767,6 @@ export function LiveScoresView() {
               )}
             </div>
           )}
-        </>
-      )}
     </div>
   )
 }

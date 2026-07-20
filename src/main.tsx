@@ -26,6 +26,7 @@ import { PickEmView } from '@/components/pickem/PickEmView'
 import { LeagueChat } from '@/components/chat/LeagueChat'
 import { TradeCenter } from '@/components/trades/TradeCenter'
 import { LiveScoresView } from '@/components/scores/LiveScoresView'
+import { NewsView } from '@/components/scores/NewsView'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -150,6 +151,7 @@ function App() {
               {/* These routes don't need league isolation */}
               <Route path="leagues" element={<LeaguesView />} />
               <Route path="scores" element={<LiveScoresView />} />
+              <Route path="news" element={<NewsView />} />
               <Route path="mock" element={<MockDraftHub />} />
               <Route path="social" element={<SocialHub />} />
               <Route path="account" element={<AccountPage />} />
