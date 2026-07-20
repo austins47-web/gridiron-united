@@ -141,7 +141,7 @@ async function syncNFL(supabase: any, season: string, week: string) {
 
 // ── CFB sync ───────────────────────────────────────────────────
 
-async function syncCFB(supabase: any, season: string) {
+async function syncCFB(supabase: any, season: string, nflNames: Set<string>) {
   // Fetch teams first to build school name + conference map
   const teams: any[] = await sdio(`${CFB_BASE}/scores/json/Teams`)
   const teamMap = new Map<string, { name: string; conf: string }>()
@@ -181,6 +181,10 @@ async function syncCFB(supabase: any, season: string) {
 
     // Only include FBS conferences
     if (!INCLUDED_CONFS.has(teamInfo.conf) && teamInfo.conf !== '') continue
+
+    // Skip anyone already on an active NFL roster
+    const fullName = `${p.FirstName} ${p.LastName}`
+    if (nflNames.has(fullName.toLowerCase())) continue
 
     // Skip non-skill players on tiny programs
     const stats = statsMap.get(p.PlayerID)
@@ -237,21 +241,28 @@ serve(async (req) => {
       ? String(Math.max(1, Math.min(18, Math.floor((Date.now() - NFL_START) / (7 * 86400000)) + 1)))
       : weekParam
 
-    // Run NFL and CFB syncs in parallel
-    const [nfl, cfb] = await Promise.all([
-      syncNFL(supabase, season, week),
-      syncCFB(supabase, season),
-    ])
+    // Fetch NFL players first so we can exclude them from CFB
+    const nflData = await syncNFL(supabase, season, week)
 
-    const allRows = [...nfl.rows, ...cfb.rows]
+    // Build set of active NFL player names for CFB dedup
+    const nflNames = new Set(
+      nflData.rows
+        .filter((r: any) => r.pos !== 'DST')
+        .map((r: any) => r.name.toLowerCase())
+    )
+
+    // Run CFB sync with NFL names excluded
+    const cfbData = await syncCFB(supabase, season, nflNames)
+
+    const allRows = [...nflData.rows, ...cfbData.rows]
     const upserted = await upsertBatched(supabase, allRows)
 
     return new Response(JSON.stringify({
       success:         true,
       total:           upserted,
-      nfl:             nfl.rows.length,
-      cfb:             cfb.rows.length,
-      nflProjections:  nfl.projCount,
+      nfl:             nflData.rows.length,
+      cfb:             cfbData.rows.length,
+      nflProjections:  nflData.projCount,
       season,
       week,
       syncedAt:        new Date().toISOString(),
