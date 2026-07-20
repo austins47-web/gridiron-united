@@ -651,11 +651,38 @@ function PlayerScoreEditor() {
   const [results, setResults] = useState<Player[]>([])
   const [editing, setEditing] = useState<Player | null>(null)
   const [avgPts, setAvgPts] = useState('')
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ players: number; withProjections: number } | null>(null)
+  const qc = useQueryClient()
+
+  const syncPlayers = async () => {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const URL  = import.meta.env.VITE_SUPABASE_URL
+      const res = await fetch(
+        `${URL}/functions/v1/sync-players?season=2026&week=1`,
+        {
+          method: 'POST',
+          headers: { apikey: ANON, Authorization: `Bearer ${ANON}` },
+        }
+      )
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Sync failed')
+      setSyncResult({ players: data.players, withProjections: data.withProjections })
+      toast.success(`Synced ${data.players} players (${data.withProjections} with projections)`)
+      qc.invalidateQueries({ queryKey: ['players'] })
+    } catch (e: any) {
+      toast.error(e.message ?? 'Sync failed')
+    } finally {
+      setSyncing(false)
+    }
+  }
   const [projPts, setProjPts] = useState('')
   const [adp, setAdp] = useState('')
   const [status, setStatus] = useState('active')
   const [saving, setSaving] = useState(false)
-  const qc = useQueryClient()
 
   const searchPlayers = async (q: string) => {
     if (q.length < 2) { setResults([]); return }
@@ -703,7 +730,39 @@ function PlayerScoreEditor() {
 
   return (
     <div className="space-y-4">
-      <p className="text-field-400 text-sm">Search for any player to edit their average points, projected points, ADP, or injury status.</p>
+      {/* ── SportsDataIO Sync ── */}
+      <div className="panel border-gold/20 bg-gold/5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="w-4 h-4 text-gold" />
+              <span className="font-bold text-white text-sm">Sync Players from SportsDataIO</span>
+            </div>
+            <p className="text-field-400 text-xs">
+              Replaces the entire player list and projections with live data from SportsDataIO.
+              Run this at the start of each week to get updated projections and injury statuses.
+            </p>
+            {syncResult && (
+              <p className="text-emerald-400 text-xs mt-1 font-bold">
+                ✓ Synced {syncResult.players} players · {syncResult.withProjections} with projections
+              </p>
+            )}
+          </div>
+          <button
+            onClick={syncPlayers}
+            disabled={syncing}
+            className="btn-gold shrink-0"
+          >
+            {syncing ? (
+              <><span className="animate-spin">⟳</span> Syncing…</>
+            ) : (
+              <><Zap className="w-4 h-4" /> Sync Now</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      <p className="text-field-400 text-sm">Or manually edit individual players below.</p>
 
       {/* Search */}
       <div className="relative">
