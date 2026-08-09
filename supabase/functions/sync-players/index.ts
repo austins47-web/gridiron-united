@@ -256,11 +256,12 @@ async function syncCFB(supabase: any, nflNames: Set<string>, confsToSync = CFB_C
             avg_pts:     0,
             proj_pts:    0,
             adp:         999,
-            status:      mapStatus(athlete.injuries?.[0]?.status ?? ''),
-            injury_note: athlete.injuries?.[0]?.description ?? null,
-            is_rookie:   false,
-            depth_pos:   validClass,
-            updated_at:  new Date().toISOString(),
+            status:           mapStatus(athlete.injuries?.[0]?.status ?? ''),
+            injury_note:      athlete.injuries?.[0]?.description ?? null,
+            is_rookie:        false,
+            depth_pos:        validClass,
+            espn_athlete_id:  Number(athlete.id),
+            updated_at:       new Date().toISOString(),
           })
         }
       }

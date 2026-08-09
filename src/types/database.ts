@@ -135,6 +135,7 @@ export interface Player {
   status: PlayerStatus
   injury_note: string | null
   is_rookie: boolean | null
+  espn_athlete_id: number | null
   created_at: string
   updated_at: string
 }

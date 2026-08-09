@@ -6,7 +6,11 @@ import type { Player } from '@/types/database'
 
 // ── Helpers ───────────────────────────────────────────────────
 function toEspnId(player: Player): number {
-  return player.league === 'NFL' ? player.id - 1_000_000 : player.id - 50_000_000
+  // NFL: DB id = espnId + 1_000_000
+  // CFB: use espn_athlete_id if available (populated post-resync)
+  //      fallback: DB id - 50_000_000 (correct after resync since IDs are now 50000000 + athleteId)
+  if (player.league === 'NFL') return player.id - 1_000_000
+  return player.espn_athlete_id ?? (player.id - 50_000_000)
 }
 
 function headshotUrl(player: Player): string {
