@@ -84,6 +84,7 @@ export function useTeamList(league: PlayerLeague | 'ALL') {
         .from('players')
         .select('team, league')
         .order('team')
+        .limit(5000)
       if (league !== 'ALL') {
         q = q.eq('league', league)
       }
