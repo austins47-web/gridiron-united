@@ -155,8 +155,9 @@ export function useNFLNews(count = 50) {
   return useQuery<SDIONews[]>({
     queryKey: ['nfl-news', count],
     queryFn: getNFLNews,
-    staleTime: 5 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
+    staleTime: 15 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    refetchInterval: 15 * 60 * 1000,
   })
 }
 
@@ -191,8 +192,9 @@ export function useCFBNews() {
       const data = await res.json()
       return (data.articles ?? []) as any[]
     },
-    staleTime: 5 * 60_000,
-    refetchInterval: 10 * 60_000,
+    staleTime: 15 * 60_000,
+    gcTime: 60 * 60_000,
+    refetchInterval: 15 * 60_000,
   })
 }
 

@@ -203,7 +203,6 @@ export function PlayersView() {
 
               {/* Team list */}
               <div className="max-h-56 overflow-y-auto">
-                {/* All teams option */}
                 <button
                   className={clsx(
                     'w-full text-left px-3 py-2 text-sm hover:bg-field-800 transition-colors flex items-center gap-2',
@@ -219,25 +218,45 @@ export function PlayersView() {
                   <div className="px-3 py-4 text-field-400 text-sm text-center">No teams found</div>
                 )}
 
-                {filteredTeams.map(({ team, league }) => (
-                  <button
-                    key={team}
-                    className={clsx(
-                      'w-full text-left px-3 py-2 text-sm hover:bg-field-800 transition-colors flex items-center gap-2',
-                      filters.team === team ? 'text-gold font-bold bg-field-800/60' : 'text-white',
-                    )}
-                    onClick={() => { setFilter('team', team); setTeamDropdownOpen(false); setTeamSearch('') }}
-                  >
-                    <span className={clsx(
-                      'text-xs font-bold px-1 py-0.5 rounded shrink-0',
-                      league === 'NFL' ? 'league-nfl' : 'league-cfb',
-                    )}>
-                      {league}
-                    </span>
-                    <span className="truncate">{team}</span>
-                    {filters.team === team && <Check className="w-3 h-3 ml-auto shrink-0" />}
-                  </button>
-                ))}
+                {filteredTeams.map(({ team, league, conference }, idx) => {
+                  // Section header when conference changes (CFB only, when not searching)
+                  const prev = filteredTeams[idx - 1]
+                  const showLeagueHeader = idx === 0 || prev?.league !== league
+                  const showConfHeader = !teamSearch && league === 'CFB' && prev?.conference !== conference
+
+                  return (
+                    <div key={team}>
+                      {showLeagueHeader && (
+                        <div className={clsx(
+                          'px-3 py-1 text-[10px] font-black uppercase tracking-widest sticky top-0',
+                          league === 'NFL' ? 'text-nfl/80 bg-field-900' : 'text-cfb/80 bg-field-900',
+                        )}>
+                          {league}
+                        </div>
+                      )}
+                      {showConfHeader && conference && (
+                        <div className="px-3 py-0.5 text-[10px] font-bold text-field-500 uppercase tracking-wider bg-field-850">
+                          {conference}
+                        </div>
+                      )}
+                      <button
+                        className={clsx(
+                          'w-full text-left px-3 py-2 text-sm hover:bg-field-800 transition-colors flex items-center gap-2',
+                          filters.team === team ? 'text-gold font-bold bg-field-800/60' : 'text-white',
+                        )}
+                        onClick={() => { setFilter('team', team); setTeamDropdownOpen(false); setTeamSearch('') }}
+                      >
+                        <span className={clsx(
+                          'text-[10px] font-bold px-1 py-0.5 rounded shrink-0',
+                          league === 'NFL' ? 'league-nfl' : 'league-cfb',
+                        )}>
+                          {league}
+                        </span>
+                        {team}
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

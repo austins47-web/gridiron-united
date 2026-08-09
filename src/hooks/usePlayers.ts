@@ -80,17 +80,18 @@ export function useTeamList(league: PlayerLeague | 'ALL') {
   return useQuery({
     queryKey: ['team-list', league],
     queryFn: async () => {
-      // Supabase caps at 1000 rows per request, so paginate to get all teams
       const seen = new Set<string>()
-      const teams: Array<{ team: string; league: PlayerLeague }> = []
+      const teams: Array<{ team: string; league: PlayerLeague; conference: string | null }> = []
       const pageSize = 1000
       let page = 0
 
       while (true) {
         let q = supabase
           .from('players')
-          .select('team, league')
+          .select('team, league, conference')
           .neq('pos', 'DST')
+          .order('league')       // NFL before CFB alphabetically
+          .order('conference')
           .order('team')
           .range(page * pageSize, (page + 1) * pageSize - 1)
 
@@ -103,7 +104,7 @@ export function useTeamList(league: PlayerLeague | 'ALL') {
         for (const r of data) {
           if (!seen.has(r.team)) {
             seen.add(r.team)
-            teams.push({ team: r.team, league: r.league as PlayerLeague })
+            teams.push({ team: r.team, league: r.league as PlayerLeague, conference: r.conference })
           }
         }
 
@@ -111,9 +112,16 @@ export function useTeamList(league: PlayerLeague | 'ALL') {
         page++
       }
 
-      return teams.sort((a, b) => a.team.localeCompare(b.team))
+      // NFL first (sorted by name), then CFB grouped by conference then name
+      const nfl = teams.filter(t => t.league === 'NFL').sort((a, b) => a.team.localeCompare(b.team))
+      const cfb = teams.filter(t => t.league === 'CFB').sort((a, b) => {
+        const confCmp = (a.conference ?? '').localeCompare(b.conference ?? '')
+        return confCmp !== 0 ? confCmp : a.team.localeCompare(b.team)
+      })
+      return [...nfl, ...cfb]
     },
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
   })
 }
 
