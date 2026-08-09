@@ -34,61 +34,61 @@ function timeAgo(dateStr: string): string {
 
 // ── Single article card ───────────────────────────────────────
 function NewsCard({ item }: { item: any }) {
-  const [expanded, setExpanded] = useState(false)
-  return (
-    <article
-      className="panel hover:border-field-500 transition-colors cursor-pointer"
-      onClick={() => setExpanded(e => !e)}
-    >
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            {item.PlayerName && (
-              <span className="text-xs font-bold text-gold bg-gold/10 border border-gold/20 px-2 py-0.5 rounded-full shrink-0">
-                {item.PlayerName}
-              </span>
-            )}
-            {item.Team && (
-              <span className="text-xs font-bold text-field-300 bg-field-700 px-2 py-0.5 rounded-full shrink-0">
-                {item.Team}
-              </span>
-            )}
-            {item.Categories && (
-              <span className="text-xs text-field-500 shrink-0">{item.Categories}</span>
-            )}
-            <div className="flex items-center gap-1 text-field-500 text-xs ml-auto shrink-0">
-              <Clock className="w-3 h-3"/>
-              <span>{timeAgo(item.Updated)}</span>
-            </div>
-          </div>
-          <h3 className="font-bold text-white text-sm leading-snug mb-1">
-            {item.Title}
-          </h3>
-          <p className={clsx(
-            'text-field-300 text-xs leading-relaxed',
-            expanded ? '' : 'line-clamp-3'
-          )}>
-            {item.Content}
-          </p>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-xs text-field-500">{item.Source || item.OriginalSource}</span>
-            <span className="text-xs text-field-600">
-              {expanded ? '▲ less' : '▼ more'}
+  const inner = (
+    <div className="flex items-start gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          {item.PlayerName && (
+            <span className="text-xs font-bold text-gold bg-gold/10 border border-gold/20 px-2 py-0.5 rounded-full shrink-0">
+              {item.PlayerName}
             </span>
-            {item.Url && (
-              <a
-                href={item.Url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="flex items-center gap-1 text-xs text-gold/70 hover:text-gold transition-colors ml-auto"
-              >
-                Full article <ExternalLink className="w-3 h-3"/>
-              </a>
-            )}
+          )}
+          {item.Team && (
+            <span className="text-xs font-bold text-field-300 bg-field-700 px-2 py-0.5 rounded-full shrink-0">
+              {item.Team}
+            </span>
+          )}
+          <div className="flex items-center gap-1 text-field-500 text-xs ml-auto shrink-0">
+            <Clock className="w-3 h-3"/>
+            <span>{timeAgo(item.Updated)}</span>
           </div>
         </div>
+        <h3 className="font-bold text-white text-sm leading-snug mb-1 group-hover:text-gold transition-colors">
+          {item.Title}
+        </h3>
+        {item.Content && (
+          <p className="text-field-300 text-xs leading-relaxed line-clamp-2">
+            {item.Content}
+          </p>
+        )}
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-xs text-field-500">{item.Source || item.OriginalSource}</span>
+          {item.Url && (
+            <span className="flex items-center gap-1 text-xs text-gold/60 ml-auto">
+              Read more <ExternalLink className="w-3 h-3"/>
+            </span>
+          )}
+        </div>
       </div>
+    </div>
+  )
+
+  if (item.Url) {
+    return (
+      <a
+        href={item.Url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="panel hover:border-field-500 transition-colors block group"
+      >
+        {inner}
+      </a>
+    )
+  }
+
+  return (
+    <article className="panel">
+      {inner}
     </article>
   )
 }
