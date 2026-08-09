@@ -89,6 +89,13 @@ serve(async (req) => {
     } else if (endpoint === 'nfl/injuries') {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')
 
+    } else if (endpoint.startsWith('game/summary/')) {
+      // game/summary/{league}/{gameId}
+      const parts = endpoint.split('/')
+      const league = parts[2] === 'CFB' ? 'college-football' : 'nfl'
+      const gameId = parts[3]
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/summary?event=${gameId}`)
+
     } else {
       return new Response(JSON.stringify({ error: `Unknown endpoint: ${endpoint}` }), {
         status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },

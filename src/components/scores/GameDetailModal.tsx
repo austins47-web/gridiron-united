@@ -28,11 +28,14 @@ interface GameSummary {
 // ── Fetch ESPN game summary ────────────────────────────────────
 
 async function fetchSummary(gameId: string, league: 'NFL' | 'CFB'): Promise<GameSummary> {
-  const slug = league === 'NFL' ? 'nfl' : 'college-football'
+  // Route through Supabase Edge Function proxy to avoid ESPN CORS/blocking issues
+  const PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sportsdata`
+  const ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
   const res = await fetch(
-    `https://site.api.espn.com/apis/site/v2/sports/football/${slug}/summary?event=${gameId}`
+    `${PROXY}?endpoint=${encodeURIComponent(`game/summary/${league}/${gameId}`)}`,
+    { headers: { apikey: ANON, Authorization: `Bearer ${ANON}` } }
   )
-  if (!res.ok) throw new Error(`ESPN summary ${res.status}`)
+  if (!res.ok) throw new Error(`Summary fetch failed: ${res.status}`)
   const d = await res.json()
 
   const comp = d.header?.competitions?.[0] ?? {}
@@ -205,7 +208,8 @@ export function GameDetailModal({ gameId, league, onClose }: Props) {
             <div className="p-4">
               {data.teamStats.length === 0 ? (
                 <p className="text-center text-field-400 text-sm py-8">
-                  Stats not available — game may not have started yet.
+                  Team stats aren't available — ESPN only provides stats during and after live games.
+                  Check back once the game starts.
                 </p>
               ) : (
                 <table className="w-full text-sm">
@@ -237,7 +241,8 @@ export function GameDetailModal({ gameId, league, onClose }: Props) {
             <div className="p-4 space-y-2">
               {data.topPerformers.length === 0 ? (
                 <p className="text-center text-field-400 text-sm py-8">
-                  Player stats not available yet.
+                  Player stats aren't available — ESPN only provides leaders during and after live games.
+                  Check back once the game starts.
                 </p>
               ) : (
                 data.topPerformers.map((p, i) => (
