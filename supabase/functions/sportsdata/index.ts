@@ -90,22 +90,22 @@ serve(async (req) => {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')
 
     } else if (endpoint.startsWith('athlete/')) {
-      // athlete/{league}/{espnId} — player profile
-      // athlete/stats/{league}/{espnId} — season stats
-      // athlete/news/{league}/{espnId} — player news
       const parts = endpoint.split('/')
       if (parts[1] === 'stats') {
+        // athlete/stats/{league}/{espnId}
         const league = parts[2] === 'CFB' ? 'college-football' : 'nfl'
         const espnId = parts[3]
-        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/athletes/${espnId}/statistics`)
+        data = await espnFetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/${league}/athletes/${espnId}/stats`)
       } else if (parts[1] === 'news') {
-        const league = parts[2] === 'CFB' ? 'college-football' : 'nfl'
+        // athlete/news/{league}/{espnId}
         const espnId = parts[3]
-        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/athletes/${espnId}/news`)
+        // Fantasy news endpoint works for both NFL and CFB
+        data = await espnFetch(`https://site.api.espn.com/apis/fantasy/v2/games/ffl/news/players?limit=25&playerId=${espnId}`)
       } else {
+        // athlete/{league}/{espnId} — full profile
         const league = parts[1] === 'CFB' ? 'college-football' : 'nfl'
         const espnId = parts[2]
-        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/athletes/${espnId}`)
+        data = await espnFetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/${league}/athletes/${espnId}`)
       }
 
     } else if (endpoint.startsWith('game/summary/')) {

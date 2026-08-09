@@ -5,7 +5,8 @@ import clsx from 'clsx'
 import type { Player } from '@/types/database'
 
 // ── ESPN ID helpers ───────────────────────────────────────────
-// Our DB stores: NFL = espnId + 1_000_000, CFB = espnId + 50_000_000
+// NFL DB id = espnId + 1_000_000
+// CFB DB id = espnId + 50_000_000
 function toEspnId(player: Player): number {
   if (player.league === 'NFL') return player.id - 1_000_000
   return player.id - 50_000_000
@@ -13,6 +14,13 @@ function toEspnId(player: Player): number {
 
 function espnLeagueSlug(league: string) {
   return league === 'NFL' ? 'nfl' : 'college-football'
+}
+
+// Headshot URL — constructed directly, no API call needed
+function headshotUrl(player: Player): string {
+  const espnId = toEspnId(player)
+  const sport = player.league === 'NFL' ? 'nfl' : 'college-football'
+  return `https://a.espncdn.com/i/headshots/${sport}/players/full/${espnId}.png`
 }
 
 // ── Proxy fetch ───────────────────────────────────────────────
@@ -50,32 +58,29 @@ interface NewsItem  { title: string; url: string; published: string; desc: strin
 // ── Fetch athlete + stats ─────────────────────────────────────
 async function fetchProfile(player: Player): Promise<AthleteProfile> {
   const espnId = toEspnId(player)
-  const slug   = espnLeagueSlug(player.league)
 
-  // Fetch athlete profile
-  const athleteData = await proxyFetch(`athlete/${slug}/${espnId}`)
+  // Fetch athlete profile from site.web.api v3
+  const athleteData = await proxyFetch(`athlete/${player.league}/${espnId}`)
   const a = athleteData.athlete ?? athleteData
 
-  // Fetch season stats
+  // Parse stats
   let stats: StatLine[] = []
   try {
-    const statsData = await proxyFetch(`athlete/stats/${slug}/${espnId}`)
-    const categories = statsData.categories ?? []
+    const statsData = await proxyFetch(`athlete/stats/${player.league}/${espnId}`)
+    const categories = statsData.splits?.categories ?? statsData.categories ?? []
     for (const cat of categories) {
-      for (let i = 0; i < (cat.names ?? []).length; i++) {
-        const label = cat.names[i]
-        const val   = cat.values?.[i]
-        if (val !== undefined && val !== null && val !== 0) {
-          stats.push({ label, value: String(val) })
+      for (const s of (cat.stats ?? [])) {
+        if (s.displayValue && s.displayValue !== '0' && s.displayValue !== '--') {
+          stats.push({ label: s.displayName ?? s.name, value: s.displayValue })
         }
       }
     }
-  } catch { /* stats may not exist for all players */ }
+  } catch { /* pre-season: no stats yet */ }
 
   return {
     displayName: a.displayName ?? player.name,
     shortName:   a.shortName   ?? player.name,
-    headshot:    a.headshot?.href,
+    headshot:    headshotUrl(player),
     jersey:      a.jersey,
     position:    a.position?.displayName ?? player.pos,
     team:        a.team?.displayName ?? player.team,
@@ -94,14 +99,15 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
 
 async function fetchPlayerNews(player: Player): Promise<NewsItem[]> {
   try {
-    const slug = espnLeagueSlug(player.league)
     const espnId = toEspnId(player)
-    const data = await proxyFetch(`athlete/news/${slug}/${espnId}`)
-    return (data.articles ?? []).slice(0, 10).map((a: any) => ({
-      title:     a.headline ?? '',
-      url:       a.links?.web?.href ?? '',
-      published: a.published ?? '',
-      desc:      a.description ?? '',
+    const data = await proxyFetch(`athlete/news/${player.league}/${espnId}`)
+    // Fantasy news endpoint returns { items: [...] }
+    const articles = data.items ?? data.articles ?? []
+    return articles.slice(0, 10).map((a: any) => ({
+      title:     a.headline ?? a.title ?? '',
+      url:       a.links?.web?.href ?? a.link ?? '',
+      published: a.published ?? a.date ?? '',
+      desc:      a.description ?? a.story?.substring(0, 200) ?? '',
     }))
   } catch { return [] }
 }
@@ -145,6 +151,8 @@ interface Props {
 export function PlayerProfileDrawer({ player, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
 
+  const [imgError, setImgError] = useState(false)
+
   const { data: profile, isLoading: loadingProfile } = useQuery({
     queryKey: ['player-profile', player.id],
     queryFn: () => fetchProfile(player),
@@ -186,8 +194,13 @@ export function PlayerProfileDrawer({ player, onClose }: Props) {
         <div className="flex items-start gap-3 p-4 border-b border-field-700 shrink-0">
           {/* Headshot */}
           <div className="w-14 h-14 rounded-xl bg-field-800 border border-field-700 overflow-hidden shrink-0 flex items-center justify-center">
-            {profile?.headshot ? (
-              <img src={profile.headshot} alt={player.name} className="w-full h-full object-cover object-top" />
+            {!imgError ? (
+              <img
+                src={headshotUrl(player)}
+                alt={player.name}
+                className="w-full h-full object-cover object-top"
+                onError={() => setImgError(true)}
+              />
             ) : (
               <User className="w-6 h-6 text-field-500" />
             )}
@@ -219,11 +232,13 @@ export function PlayerProfileDrawer({ player, onClose }: Props) {
               )}
             </div>
             {player.status !== 'active' && (
-              <div className="flex items-center gap-1 mt-1">
-                <AlertTriangle className="w-3 h-3 text-yellow-400 shrink-0" />
-                <span className="text-xs text-yellow-400 font-bold capitalize">{player.status}</span>
+              <div className="mt-1.5 bg-yellow-400/10 border border-yellow-400/20 rounded-lg px-2 py-1.5">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <AlertTriangle className="w-3 h-3 text-yellow-400 shrink-0" />
+                  <span className="text-xs text-yellow-400 font-bold capitalize">{player.status}</span>
+                </div>
                 {player.injury_note && (
-                  <span className="text-xs text-field-400 truncate">· {player.injury_note}</span>
+                  <p className="text-xs text-field-300 leading-relaxed">{player.injury_note}</p>
                 )}
               </div>
             )}
