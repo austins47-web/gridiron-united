@@ -4,6 +4,7 @@ import { useRosteredPlayerIds, useAddPlayer, useMyRoster } from '@/hooks/useRost
 import { useAppStore } from '@/store/appStore'
 import { buildSlotDefs } from '@/types/database'
 import type { Player } from '@/types/database'
+import { PlayerProfileDrawer } from './PlayerProfileDrawer'
 import { Search, ChevronLeft, ChevronRight, Plus, Check, X, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -20,6 +21,7 @@ const CFB_CONFS = [
 export function PlayersView() {
   const [filters, setFilters] = useState<PlayerFilters>(DEFAULT_FILTERS)
   const [showSlotPicker, setShowSlotPicker] = useState<Player | null>(null)
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const [teamSearch, setTeamSearch] = useState('')
   const [teamDropdownOpen, setTeamDropdownOpen] = useState(false)
   const teamDropdownRef = useRef<HTMLDivElement>(null)
@@ -351,7 +353,12 @@ export function PlayersView() {
                     <td>
                       <div>
                         <div className="font-bold text-white text-sm flex items-center gap-1.5 flex-wrap">
-                          {p.name}
+                          <button
+                            className="hover:text-gold transition-colors text-left"
+                            onClick={() => setSelectedPlayer(p)}
+                          >
+                            {p.name}
+                          </button>
                           {/* NFL rookie badge */}
                           {p.is_rookie && p.league === 'NFL' && (
                             <span className="text-[10px] font-black bg-gold text-field-950 px-1 py-0.5 rounded leading-none shrink-0" title="2026 NFL Rookie">
@@ -512,6 +519,14 @@ export function PlayersView() {
             setShowSlotPicker(null)
           }}
           onClose={() => setShowSlotPicker(null)}
+        />
+      )}
+
+      {/* Player profile drawer */}
+      {selectedPlayer && (
+        <PlayerProfileDrawer
+          player={selectedPlayer}
+          onClose={() => setSelectedPlayer(null)}
         />
       )}
     </div>

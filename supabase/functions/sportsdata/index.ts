@@ -89,6 +89,25 @@ serve(async (req) => {
     } else if (endpoint === 'nfl/injuries') {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')
 
+    } else if (endpoint.startsWith('athlete/')) {
+      // athlete/{league}/{espnId} — player profile
+      // athlete/stats/{league}/{espnId} — season stats
+      // athlete/news/{league}/{espnId} — player news
+      const parts = endpoint.split('/')
+      if (parts[1] === 'stats') {
+        const league = parts[2] === 'CFB' ? 'college-football' : 'nfl'
+        const espnId = parts[3]
+        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/athletes/${espnId}/statistics`)
+      } else if (parts[1] === 'news') {
+        const league = parts[2] === 'CFB' ? 'college-football' : 'nfl'
+        const espnId = parts[3]
+        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/athletes/${espnId}/news`)
+      } else {
+        const league = parts[1] === 'CFB' ? 'college-football' : 'nfl'
+        const espnId = parts[2]
+        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/athletes/${espnId}`)
+      }
+
     } else if (endpoint.startsWith('game/summary/')) {
       // game/summary/{league}/{gameId}
       const parts = endpoint.split('/')
