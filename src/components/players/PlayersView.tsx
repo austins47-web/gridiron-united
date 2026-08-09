@@ -321,22 +321,21 @@ export function PlayersView() {
             <thead>
               <tr>
                 <th className="text-left">Player</th>
-                <th className="text-center">Pos</th>
+                <th className="text-center w-14">Pos</th>
                 <th className="text-left hidden sm:table-cell">Team</th>
-                <th className="text-left hidden md:table-cell">Type</th>
-                <th className="text-center">ADP</th>
-                <th className="text-center">Avg</th>
-                <th className="text-center">Proj</th>
-                <th className="text-center">Status</th>
-                {activeLeagueId && <th className="text-center">Add</th>}
+                <th className="text-center w-16">ADP</th>
+                <th className="text-center w-16">Avg</th>
+                <th className="text-center w-16">Proj</th>
+                <th className="text-center w-20">Status</th>
+                {activeLeagueId && <th className="text-center w-14">Add</th>}
               </tr>
             </thead>
             <tbody>
               {isFetching && players.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-8 text-field-400">Loading…</td></tr>
+                <tr><td colSpan={8} className="text-center py-8 text-field-400">Loading…</td></tr>
               ) : players.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-10 text-field-400">
+                  <td colSpan={8} className="text-center py-10 text-field-400">
                     <div className="flex flex-col items-center gap-2">
                       <Search className="w-8 h-8 opacity-30" />
                       <span>No players match your filters</span>
@@ -350,76 +349,97 @@ export function PlayersView() {
                 const isTaken = rosteredIds?.has(p.id)
                 return (
                   <tr key={p.id} className={clsx(isTaken && 'opacity-50')}>
+                    {/* Player name + badges */}
                     <td>
-                      <div>
-                        <div className="font-bold text-white text-sm flex items-center gap-1.5 flex-wrap">
-                          <button
-                            className="hover:text-gold transition-colors text-left"
-                            onClick={() => setSelectedPlayer(p)}
-                          >
-                            {p.name}
-                          </button>
-                          {/* NFL rookie badge */}
-                          {p.is_rookie && p.league === 'NFL' && (
-                            <span className="text-[10px] font-black bg-gold text-field-950 px-1 py-0.5 rounded leading-none shrink-0" title="2026 NFL Rookie">
-                              R
-                            </span>
-                          )}
-                          {/* CFB class badge */}
-                          {p.league === 'CFB' && p.depth_pos && (() => {
-                            const cls = p.depth_pos
-                            const short: Record<string, string> = {
-                              Freshman: 'FR', Sophomore: 'SO', Junior: 'JR',
-                              Senior: 'SR', Graduate: 'GR',
-                            }
-                            const colors: Record<string, string> = {
-                              Freshman:  'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-                              Sophomore: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-                              Junior:    'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-                              Senior:    'bg-orange-500/20 text-orange-300 border border-orange-500/30',
-                              Graduate:  'bg-field-500/30 text-field-200 border border-field-500/30',
-                            }
-                            const label = short[cls]
-                            if (!label) return null
-                            return (
-                              <span className={`text-[10px] font-black px-1 py-0.5 rounded leading-none shrink-0 ${colors[cls]}`} title={cls}>
-                                {label}
-                              </span>
-                            )
-                          })()}
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* League dot */}
+                        <div className={clsx(
+                          'w-1 self-stretch rounded-full shrink-0',
+                          p.league === 'NFL' ? 'bg-nfl/60' : 'bg-cfb/60',
+                        )} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              className="font-bold text-white text-sm hover:text-gold transition-colors text-left leading-tight"
+                              onClick={() => setSelectedPlayer(p)}
+                            >
+                              {p.name}
+                            </button>
+                            {/* NFL rookie badge */}
+                            {p.is_rookie && p.league === 'NFL' && (
+                              <span className="text-[9px] font-black bg-gold text-field-950 px-1 py-0.5 rounded leading-none shrink-0">R</span>
+                            )}
+                            {/* CFB class badge */}
+                            {p.league === 'CFB' && p.depth_pos && (() => {
+                              const short: Record<string, string> = { Freshman: 'FR', Sophomore: 'SO', Junior: 'JR', Senior: 'SR', Graduate: 'GR' }
+                              const colors: Record<string, string> = {
+                                Freshman:  'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25',
+                                Sophomore: 'bg-blue-500/15 text-blue-400 border border-blue-500/25',
+                                Junior:    'bg-purple-500/15 text-purple-400 border border-purple-500/25',
+                                Senior:    'bg-orange-500/15 text-orange-400 border border-orange-500/25',
+                                Graduate:  'bg-field-600/30 text-field-300 border border-field-500/25',
+                              }
+                              const label = short[p.depth_pos]
+                              if (!label) return null
+                              return <span className={`text-[9px] font-black px-1 py-0.5 rounded leading-none shrink-0 ${colors[p.depth_pos]}`}>{label}</span>
+                            })()}
+                          </div>
+                          {/* Subtitle: team (mobile) + depth pos (NFL) */}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={clsx(
+                              'text-[10px] font-bold uppercase tracking-wider',
+                              p.league === 'NFL' ? 'text-nfl/70' : 'text-cfb/70',
+                            )}>{p.league}</span>
+                            {p.league === 'NFL' && p.depth_pos && (
+                              <span className="text-field-500 text-[10px] hidden sm:inline">{p.depth_pos}</span>
+                            )}
+                            <span className="text-field-500 text-[10px] sm:hidden truncate">{p.team}</span>
+                          </div>
                         </div>
-                        {p.league === 'NFL' && p.depth_pos && (
-                          <div className="text-field-400 text-xs">{p.depth_pos}</div>
-                        )}
                       </div>
                     </td>
+
+                    {/* Pos */}
                     <td className="text-center">
                       <span className={`pos-badge pos-${p.pos}`}>{p.pos}</span>
                     </td>
+
+                    {/* Team */}
                     <td className="hidden sm:table-cell">
                       <button
                         className="text-field-300 text-sm hover:text-gold transition-colors text-left"
                         onClick={() => { setFilter('team', p.team); setTeamSearch('') }}
-                        title={`Filter by ${p.team}`}
                       >
                         {p.team}
                       </button>
                     </td>
-                    <td className="hidden md:table-cell">
-                      <button
-                        className={clsx('text-xs font-bold px-1.5 py-0.5 rounded', p.league === 'NFL' ? 'league-nfl' : 'league-cfb')}
-                        onClick={() => setLeagueFilter(p.league as any)}
-                        title={`Filter by ${p.league}`}
-                      >
-                        {p.league}
-                      </button>
+
+                    {/* ADP */}
+                    <td className="text-center tabular-nums">
+                      <span className="text-sm text-white font-medium">
+                        {p.adp && p.adp < 999 ? p.adp.toFixed(1) : <span className="text-field-600">—</span>}
+                      </span>
                     </td>
-                    <td className="text-center text-field-300 text-sm">{p.adp?.toFixed(1) ?? '—'}</td>
-                    <td className="text-center text-white font-bold text-sm">{p.avg_pts?.toFixed(1) ?? '—'}</td>
-                    <td className="text-center text-field-300 text-sm">{p.proj_pts?.toFixed(1) ?? '—'}</td>
+
+                    {/* Avg */}
+                    <td className="text-center tabular-nums">
+                      <span className={clsx('text-sm font-bold', p.avg_pts > 0 ? 'text-white' : 'text-field-600')}>
+                        {p.avg_pts > 0 ? p.avg_pts.toFixed(1) : '—'}
+                      </span>
+                    </td>
+
+                    {/* Proj */}
+                    <td className="text-center tabular-nums">
+                      <span className={clsx('text-sm', p.proj_pts > 0 ? 'text-gold font-bold' : 'text-field-600')}>
+                        {p.proj_pts > 0 ? p.proj_pts.toFixed(1) : '—'}
+                      </span>
+                    </td>
+
+                    {/* Status */}
                     <td className="text-center">
                       <StatusBadge status={p.status} note={p.injury_note} />
                     </td>
+
                     {activeLeagueId && (
                       <td className="text-center">
                         {isTaken ? (
