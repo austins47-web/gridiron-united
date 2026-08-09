@@ -80,27 +80,38 @@ export function useTeamList(league: PlayerLeague | 'ALL') {
   return useQuery({
     queryKey: ['team-list', league],
     queryFn: async () => {
-      let q = supabase
-        .from('players')
-        .select('team, league')
-        .order('team')
-        .limit(5000)
-      if (league !== 'ALL') {
-        q = q.eq('league', league)
-      }
-      // Filter out DST entries so team names stay clean
-      q = q.neq('pos', 'DST')
-      const { data, error } = await q
-      if (error) throw error
-      // Deduplicate
+      // Supabase caps at 1000 rows per request, so paginate to get all teams
       const seen = new Set<string>()
-      return (data ?? [])
-        .filter(r => {
-          if (seen.has(r.team)) return false
-          seen.add(r.team)
-          return true
-        })
-        .map(r => ({ team: r.team, league: r.league as PlayerLeague }))
+      const teams: Array<{ team: string; league: PlayerLeague }> = []
+      const pageSize = 1000
+      let page = 0
+
+      while (true) {
+        let q = supabase
+          .from('players')
+          .select('team, league')
+          .neq('pos', 'DST')
+          .order('team')
+          .range(page * pageSize, (page + 1) * pageSize - 1)
+
+        if (league !== 'ALL') q = q.eq('league', league)
+
+        const { data, error } = await q
+        if (error) throw error
+        if (!data || data.length === 0) break
+
+        for (const r of data) {
+          if (!seen.has(r.team)) {
+            seen.add(r.team)
+            teams.push({ team: r.team, league: r.league as PlayerLeague })
+          }
+        }
+
+        if (data.length < pageSize) break
+        page++
+      }
+
+      return teams.sort((a, b) => a.team.localeCompare(b.team))
     },
     staleTime: 5 * 60_000,
   })

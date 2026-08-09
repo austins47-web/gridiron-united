@@ -11,7 +11,11 @@ const POS_OPTS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const
 const LEAGUE_OPTS = ['ALL', 'NFL', 'CFB'] as const
 const STATUS_OPTS = ['ALL', 'active', 'questionable', 'out'] as const
 const NFL_CONFS = ['AFC East', 'AFC North', 'AFC South', 'AFC West', 'NFC East', 'NFC North', 'NFC South', 'NFC West']
-const CFB_CONFS = ['SEC', 'Big Ten', 'Big 12', 'ACC', 'Ind', 'AAC', 'Mountain West', 'CUSA']
+const CFB_CONFS = [
+  'Southeastern', 'Big Ten', 'Big 12', 'Atlantic Coast', 'Pac-12',
+  'American Athletic', 'Mountain West', 'Conference USA', 'Mid-American',
+  'Sun Belt', 'Sun Belt - East', 'Sun Belt - West', 'FBS Independents',
+]
 
 export function PlayersView() {
   const [filters, setFilters] = useState<PlayerFilters>(DEFAULT_FILTERS)
