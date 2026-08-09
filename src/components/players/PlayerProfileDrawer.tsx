@@ -44,9 +44,38 @@ interface NewsItem { title: string; url: string; published: string; desc: string
 
 // ── Data fetchers ─────────────────────────────────────────────
 async function fetchProfile(player: Player): Promise<AthleteProfile> {
-  // CFB ESPN athlete API doesn't work server-side — return DB data only
+  // CFB: call ESPN directly from the browser — browser isn't blocked, only server-side is
   if (player.league === 'CFB') {
-    return { displayName: player.name, position: player.pos, team: player.team, stats: [] }
+    const espnId = toEspnId(player)
+    const BASE = `https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/athletes/${espnId}`
+
+    let stats: Array<{ label: string; value: string }> = []
+    let jersey: string | undefined, age: number | undefined
+    let height: string | undefined, weight: string | undefined
+    let birthPlace: string | undefined, college: string | undefined
+
+    await Promise.allSettled([
+      fetch(`${BASE}/stats`).then(async r => {
+        if (!r.ok) return
+        const sd = await r.json()
+        const cats = sd.splits?.categories ?? sd.categories ?? []
+        for (const cat of cats)
+          for (const s of (cat.stats ?? []))
+            if (s.displayValue && s.displayValue !== '0' && s.displayValue !== '--')
+              stats.push({ label: s.displayName ?? s.name, value: s.displayValue })
+      }),
+      fetch(BASE).then(async r => {
+        if (!r.ok) return
+        const ad = await r.json()
+        const a = ad.athlete ?? ad
+        jersey = a.jersey; age = a.age; height = a.displayHeight; weight = a.displayWeight
+        const bp = a.birthPlace
+        birthPlace = bp?.city ? `${bp.city}${bp.state ? ', ' + bp.state : ''}` : undefined
+        college = typeof a.college === 'string' ? a.college : a.college?.name
+      }),
+    ])
+
+    return { displayName: player.name, jersey, position: player.pos, team: player.team, age, height, weight, birthPlace, college, stats }
   }
 
   const espnId = toEspnId(player)
@@ -315,7 +344,7 @@ export function PlayerProfileDrawer({ player, onClose }: { player: Player; onClo
                   <BarChart2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">
                     {player.league === 'CFB'
-                      ? 'CFB season stats aren\'t available from ESPN\'s public API.'
+                      ? 'No stats available from ESPN for this player yet.'
                       : 'Season stats will appear once the 2026 NFL season starts.'}
                   </p>
                 </div>
