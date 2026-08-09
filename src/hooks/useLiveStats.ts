@@ -178,6 +178,24 @@ export function useNFLNewsByTeam(team: string) {
   })
 }
 
+export function useCFBNews() {
+  return useQuery({
+    queryKey: ['cfb-news'],
+    queryFn: async () => {
+      const PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sportsdata`
+      const ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const res = await fetch(`${PROXY}?endpoint=cfb/news`, {
+        headers: { apikey: ANON, Authorization: `Bearer ${ANON}` },
+      })
+      if (!res.ok) throw new Error(`cfb/news error ${res.status}`)
+      const data = await res.json()
+      return (data.articles ?? []) as any[]
+    },
+    staleTime: 5 * 60_000,
+    refetchInterval: 10 * 60_000,
+  })
+}
+
 // ── Re-export helpers so components can import from one place ─
 
 export { normalizeTeam, teamAbbr }

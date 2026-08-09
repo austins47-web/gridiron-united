@@ -89,6 +89,13 @@ serve(async (req) => {
     } else if (endpoint === 'nfl/injuries') {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')
 
+    } else if (endpoint === 'cfb/news') {
+      data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=50')
+
+    } else if (endpoint.startsWith('cfb/news/team/')) {
+      const teamId = endpoint.split('/')[3]
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=${teamId}&limit=25`)
+
     } else if (endpoint.startsWith('cfb/teams/') && endpoint.endsWith('/roster')) {
       // cfb/teams/{teamId}/roster — for debugging athlete ID structure
       const teamId = endpoint.split('/')[2]
