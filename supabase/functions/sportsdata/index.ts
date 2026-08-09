@@ -49,19 +49,24 @@ serve(async (req) => {
     let data: any
 
     if (endpoint === 'nfl/news') {
-      // ESPN NFL news feed
-      data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=100')
-      // Normalize to our expected shape
-      data = (data.articles ?? []).map((a: any) => ({
-        NewsID:      a.dataSourceIdentifier ?? a.id,
-        Title:       a.headline,
-        Content:     a.description ?? a.story ?? '',
-        Url:         a.links?.web?.href ?? '',
-        Source:      a.source ?? 'ESPN',
-        Updated:     a.published ?? a.lastModified ?? new Date().toISOString(),
-        PlayerName:  a.athletes?.[0]?.displayName ?? null,
-        Team:        a.categories?.find((c: any) => c.type === 'team')?.shortName ?? null,
-      }))
+      const raw = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=100')
+      const firstCats = raw.articles?.[0]?.categories ?? []
+      const teamCat = firstCats.find((c: any) => c.type === 'team')
+      console.log('NFL news team cat sample:', JSON.stringify(teamCat))
+      data = (raw.articles ?? []).map((a: any) => {
+        const teamCat = a.categories?.find((c: any) => c.type === 'team')
+        const teamAbbr = teamCat?.team?.abbreviation ?? teamCat?.shortName ?? teamCat?.description ?? null
+        return {
+          NewsID:      a.dataSourceIdentifier ?? a.id,
+          Title:       a.headline,
+          Content:     a.description ?? a.story ?? '',
+          Url:         a.links?.web?.href ?? '',
+          Source:      a.source ?? 'ESPN',
+          Updated:     a.published ?? a.lastModified ?? new Date().toISOString(),
+          PlayerName:  a.athletes?.[0]?.displayName ?? null,
+          Team:        teamAbbr,
+        }
+      })
 
     } else if (endpoint.startsWith('nfl/news/team/')) {
       const abbr   = endpoint.split('/')[3].toUpperCase()

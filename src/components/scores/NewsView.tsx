@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useNFLNews, useNFLNewsByTeam, useCFBNews } from '@/hooks/useLiveStats'
+import { useNFLNews, useCFBNews } from '@/hooks/useLiveStats'
 import { ExternalLink, Clock, Search, X } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -212,11 +212,8 @@ export function NewsView() {
   const [search, setSearch]         = useState('')
   const [showTeamPicker, setShowTeamPicker] = useState(false)
 
-  const { data: allNews,  isLoading: loadingAll  } = useNFLNews(100)
-  const { data: teamNews, isLoading: loadingTeam } = useNFLNewsByTeam(teamFilter)
-
-  const isLoading = teamFilter ? loadingTeam : loadingAll
-  const rawNews   = teamFilter ? (teamNews ?? []) : (allNews ?? [])
+  const { data: allNews, isLoading } = useNFLNews(100)
+  const rawNews = allNews ?? []
 
   const deduped = useMemo(() => {
     const seen = new Set<number>()
@@ -228,14 +225,28 @@ export function NewsView() {
   }, [rawNews])
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return deduped
-    const q = search.toLowerCase()
-    return deduped.filter(n =>
-      n.Title?.toLowerCase().includes(q) ||
-      n.Content?.toLowerCase().includes(q) ||
-      n.PlayerName?.toLowerCase().includes(q)
-    )
-  }, [deduped, search])
+    let items = deduped
+    // Team filter — match against the Team abbreviation stored on each article
+    if (teamFilter) {
+      const abbr = teamFilter.toUpperCase()
+      const teamEntry = NFL_TEAMS.find(t => t.abbr === abbr)
+      const nickname = teamEntry?.name.toLowerCase() ?? ''
+      items = items.filter(n =>
+        n.Team?.toUpperCase() === abbr ||
+        n.Team?.toLowerCase() === nickname
+      )
+    }
+    // Text search
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      items = items.filter(n =>
+        n.Title?.toLowerCase().includes(q) ||
+        n.Content?.toLowerCase().includes(q) ||
+        n.PlayerName?.toLowerCase().includes(q)
+      )
+    }
+    return items
+  }, [deduped, teamFilter, search])
 
   const selectedTeam = NFL_TEAMS.find(t => t.abbr === teamFilter)
 
