@@ -120,12 +120,12 @@ async function fetchNews(player: Player): Promise<NewsItem[]> {
   try {
     const espnId = toEspnId(player)
     const data = await proxyFetch(`athlete/news/${player.league}/${espnId}`)
-    const articles = data.items ?? data.articles ?? []
-    return articles.slice(0, 10).map((a: any) => ({
+    const articles = data.articles ?? data.items ?? data.feed ?? []
+    return articles.slice(0, 15).map((a: any) => ({
       title:     a.headline ?? a.title ?? '',
       url:       a.links?.web?.href ?? a.link ?? '',
       published: a.published ?? a.date ?? '',
-      desc:      a.description ?? '',
+      desc:      a.description ?? a.content ?? '',
     }))
   } catch { return [] }
 }

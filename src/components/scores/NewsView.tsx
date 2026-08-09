@@ -152,35 +152,100 @@ function CFBNewsCard({ item }: { item: any }) {
 
 // ── CFB news tab ──────────────────────────────────────────────
 function CFBNewsTab() {
-  const [search, setSearch] = useState('')
+  const [search, setSearch]           = useState('')
+  const [teamFilter, setTeamFilter]   = useState('')
+  const [showTeamPicker, setShowTeamPicker] = useState(false)
   const { data: articles = [], isLoading } = useCFBNews()
 
+  // Build sorted unique team list from what's actually in the feed
+  const cfbTeams = useMemo(() => {
+    const seen = new Set<string>()
+    const teams: string[] = []
+    for (const a of articles) {
+      const name = a._teamName ?? a.categories?.find((c: any) => c.type === 'team' && c.team?.shortDisplayName)?.team?.shortDisplayName
+      if (name && !seen.has(name)) { seen.add(name); teams.push(name) }
+    }
+    return teams.sort((a, b) => a.localeCompare(b))
+  }, [articles])
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return articles
-    const q = search.toLowerCase()
-    return articles.filter((a: any) =>
-      a.headline?.toLowerCase().includes(q) ||
-      a.description?.toLowerCase().includes(q) ||
-      a.categories?.some((c: any) => c.team?.shortDisplayName?.toLowerCase().includes(q))
-    )
-  }, [articles, search])
+    let items = articles
+    if (teamFilter) {
+      items = items.filter((a: any) => {
+        const name = a._teamName ?? a.categories?.find((c: any) => c.type === 'team' && c.team?.shortDisplayName)?.team?.shortDisplayName
+        return name === teamFilter
+      })
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      items = items.filter((a: any) =>
+        a.headline?.toLowerCase().includes(q) ||
+        a.description?.toLowerCase().includes(q) ||
+        a.categories?.some((c: any) => c.team?.shortDisplayName?.toLowerCase().includes(q))
+      )
+    }
+    return items
+  }, [articles, teamFilter, search])
+
+  const selectedLabel = teamFilter || 'All Teams'
 
   return (
     <div className="space-y-3">
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-field-500 pointer-events-none"/>
-        <input
-          className="input pl-8 pr-8 text-sm w-full"
-          placeholder="Search CFB news, teams…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-        {search && (
-          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-field-500 hover:text-white">
-            <X className="w-3.5 h-3.5"/>
+      {/* Controls */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-field-500 pointer-events-none"/>
+          <input
+            className="input pl-8 pr-8 text-sm w-full"
+            placeholder="Search CFB news, teams…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-field-500 hover:text-white">
+              <X className="w-3.5 h-3.5"/>
+            </button>
+          )}
+        </div>
+
+        {/* Team picker */}
+        <div className="relative">
+          <button
+            onClick={() => setShowTeamPicker(p => !p)}
+            className={clsx(
+              'flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-colors',
+              teamFilter ? 'bg-cfb/10 border-cfb/40 text-cfb' : 'bg-field-800 border-field-700 text-field-300 hover:text-white'
+            )}
+          >
+            {selectedLabel}
+            {teamFilter && (
+              <span onClick={e => { e.stopPropagation(); setTeamFilter('') }} className="ml-1 text-field-400 hover:text-white">
+                <X className="w-3 h-3"/>
+              </span>
+            )}
           </button>
-        )}
+          {showTeamPicker && (
+            <div className="absolute top-full mt-1 left-0 z-50 bg-field-800 border border-field-700 rounded-xl shadow-2xl p-1 w-52 max-h-64 overflow-y-auto">
+              <button
+                onClick={() => { setTeamFilter(''); setShowTeamPicker(false) }}
+                className={clsx('w-full text-left px-3 py-2 text-sm rounded-lg transition-colors', !teamFilter ? 'text-gold font-bold' : 'text-white hover:bg-field-700')}
+              >
+                All Teams
+              </button>
+              {cfbTeams.map(t => (
+                <button
+                  key={t}
+                  onClick={() => { setTeamFilter(t); setShowTeamPicker(false) }}
+                  className={clsx('w-full text-left px-3 py-2 text-sm rounded-lg transition-colors', teamFilter === t ? 'text-gold font-bold bg-field-700' : 'text-white hover:bg-field-700')}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <span className="text-xs text-field-500">{filtered.length} article{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
       {isLoading && (
@@ -194,7 +259,11 @@ function CFBNewsTab() {
       {!isLoading && filtered.length === 0 && (
         <div className="text-center py-10 text-field-400">
           <p>No CFB news found</p>
-          {search && <button className="text-gold text-sm underline mt-1" onClick={() => setSearch('')}>Clear search</button>}
+          {(search || teamFilter) && (
+            <button className="text-gold text-sm underline mt-1" onClick={() => { setSearch(''); setTeamFilter('') }}>
+              Clear filters
+            </button>
+          )}
         </div>
       )}
 
@@ -212,7 +281,7 @@ export function NewsView() {
   const [search, setSearch]         = useState('')
   const [showTeamPicker, setShowTeamPicker] = useState(false)
 
-  const { data: allNews, isLoading } = useNFLNews(100)
+  const { data: allNews, isLoading } = useNFLNews(300)
   const rawNews = allNews ?? []
 
   const deduped = useMemo(() => {

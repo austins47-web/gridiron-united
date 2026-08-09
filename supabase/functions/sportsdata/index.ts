@@ -49,7 +49,7 @@ serve(async (req) => {
     let data: any
 
     if (endpoint === 'nfl/news') {
-      const raw = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=100')
+      const raw = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=300')
       const firstCats = raw.articles?.[0]?.categories ?? []
       const teamCat = firstCats.find((c: any) => c.type === 'team')
       console.log('NFL news team cat sample:', JSON.stringify(teamCat))
@@ -95,7 +95,16 @@ serve(async (req) => {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')
 
     } else if (endpoint === 'cfb/news') {
-      data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=50')
+      const raw = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=300')
+      data = {
+        articles: (raw.articles ?? []).map((a: any) => ({
+          ...a,
+          // Attach top athlete name for player matching
+          _playerName: a.athletes?.[0]?.displayName ?? null,
+          // Attach primary team shortDisplayName for client-side filtering
+          _teamName: a.categories?.find((c: any) => c.type === 'team' && c.team?.shortDisplayName)?.team?.shortDisplayName ?? null,
+        }))
+      }
 
     } else if (endpoint.startsWith('cfb/news/team/')) {
       const teamId = endpoint.split('/')[3]
@@ -113,8 +122,19 @@ serve(async (req) => {
         const espnId = parts[3]
         data = await espnFetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/${league}/athletes/${espnId}/stats`)
       } else if (parts[1] === 'news') {
+        const league = parts[2] === 'CFB' ? 'college-football' : 'nfl'
         const espnId = parts[3]
-        data = await espnFetch(`https://site.api.espn.com/apis/fantasy/v2/games/ffl/news/players?limit=25&playerId=${espnId}`)
+        // Use general news feed filtered by player name rather than fantasy endpoint
+        const raw = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/news?limit=300`)
+        const articles = (raw.articles ?? []).filter((a: any) =>
+          a.athletes?.some((ath: any) => String(ath.id) === String(espnId))
+        )
+        data = articles.map((a: any) => ({
+          headline:    a.headline,
+          description: a.description ?? '',
+          published:   a.published ?? a.lastModified ?? '',
+          links:       a.links,
+        }))
       } else if (parts[1] === 'CFB') {
         // CFB uses sports.core.api with full athlete ID
         const espnId = parts[2]
