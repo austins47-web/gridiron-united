@@ -250,7 +250,11 @@ async function syncCFB(supabase: any, nflNames: Set<string>, targetConf?: string
 
           const classYear = athlete.year ?? null
           const classMap: Record<number, string> = { 1: 'Freshman', 2: 'Sophomore', 3: 'Junior', 4: 'Senior', 5: 'Graduate' }
-          const rawClass = athlete.displayClass ?? (classYear ? classMap[classYear] : null) ?? null
+          // ESPN moved class data to athlete.experience.displayValue
+          const rawClass = athlete.experience?.displayValue
+            ?? athlete.displayClass
+            ?? (classYear ? classMap[classYear] : null)
+            ?? null
           const normClass = rawClass
             ? rawClass.replace(/Redshirt\s+/i, '').replace(/Graduate\s+Student/i, 'Graduate').trim()
             : null
