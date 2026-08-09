@@ -320,6 +320,44 @@ serve(async (req) => {
     const league   = params.get('league') ?? 'nfl'
     const confName = params.get('conf')   // optional: target conference name e.g. "Southeastern"
 
+    if (league === 'injuries') {
+      // Fast injury-only poll — updates status + injury_note without touching other fields
+      const NFL_INJ_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries'
+      let updated = 0
+      const errors: string[] = []
+
+      try {
+        const data = await espn(NFL_INJ_URL)
+        const teams = data.injuries ?? []
+
+        for (const team of teams) {
+          for (const item of (team.injuries ?? [])) {
+            const athleteId = item.athlete?.id
+            if (!athleteId) continue
+
+            const rawStatus = item.status?.type?.description ?? item.status?.description ?? ''
+            const status = mapStatus(rawStatus)
+            const note   = item.longComment ?? item.shortComment ?? null
+
+            const dbId = 1000000 + Number(athleteId)
+            const { error } = await supabase
+              .from('players')
+              .update({ status, injury_note: note, updated_at: new Date().toISOString() })
+              .eq('id', dbId)
+
+            if (error) errors.push(`${athleteId}: ${error.message}`)
+            else updated++
+          }
+        }
+      } catch (e: any) {
+        errors.push(`NFL injury fetch: ${e.message}`)
+      }
+
+      return new Response(JSON.stringify({
+        success: true, updated, errors, syncedAt: new Date().toISOString(),
+      }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+    }
+
     if (league === 'cfb') {
       const { data: nflPlayers } = await supabase
         .from('players').select('name').eq('league', 'NFL').neq('pos', 'DST')
