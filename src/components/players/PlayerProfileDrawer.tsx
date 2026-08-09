@@ -82,17 +82,18 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
     shortName:   a.shortName   ?? player.name,
     headshot:    headshotUrl(player),
     jersey:      a.jersey,
-    position:    a.position?.displayName ?? player.pos,
-    team:        a.team?.displayName ?? player.team,
-    experience:  a.experience?.years,
+    position:    a.position?.displayName ?? a.position?.abbreviation ?? player.pos,
+    team:        a.team?.displayName ?? a.team?.name ?? player.team,
+    experience:  a.experience?.years ?? a.yearsExperience,
     age:         a.age,
-    height:      a.displayHeight,
-    weight:      a.displayWeight,
+    height:      a.displayHeight ?? (a.height ? String(a.height) : undefined),
+    // displayWeight already includes "lbs" — don't append it again
+    weight:      a.displayWeight ?? (a.weight ? `${a.weight} lbs` : undefined),
     birthPlace:  a.birthPlace?.city
-      ? `${a.birthPlace.city}${a.birthPlace.state ? ', ' + a.birthPlace.state : ''}`
+      ? `${a.birthPlace.city}${a.birthPlace.state ? ', ' + a.birthPlace.state : a.birthPlace.country ? ', ' + a.birthPlace.country : ''}`
       : undefined,
-    college:     a.college?.name ?? a.college,
-    status:      a.status?.type?.description,
+    college:     typeof a.college === 'string' ? a.college : a.college?.name ?? a.college?.displayName,
+    status:      a.status?.type?.description ?? a.status?.description,
     stats,
   }
 }
@@ -315,7 +316,7 @@ export function PlayerProfileDrawer({ player, onClose }: Props) {
                       { label: 'Position',   value: profile.position },
                       { label: 'Age',        value: profile.age ? `${profile.age}` : undefined },
                       { label: 'Height',     value: profile.height },
-                      { label: 'Weight',     value: profile.weight ? `${profile.weight} lbs` : undefined },
+                      { label: 'Weight',     value: profile.weight },
                       { label: 'Experience', value: profile.experience !== undefined
                           ? profile.experience === 0 ? 'Rookie' : `${profile.experience} yr${profile.experience !== 1 ? 's' : ''}`
                           : undefined },
