@@ -4,6 +4,7 @@ import { useAppStore } from '@/store/appStore'
 import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4 } from 'lucide-react'
 import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
+import { GameDetailModal } from './GameDetailModal'
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -165,11 +166,12 @@ function StatusBadge({ game, compact = false }: { game: LiveGame, compact?: bool
 
 // ── GRID CARD ────────────────────────────────────────────────
 
-function GridCard({ game, favTeams, onToggleFav, odds }: {
+function GridCard({ game, favTeams, onToggleFav, odds, onSelect }: {
   game: LiveGame
   favTeams: Set<string>
   onToggleFav: (abbr: string) => void
   odds?: GameOdds | null
+  onSelect: (game: LiveGame) => void
 }) {
   const isLive  = game.status === 'in'
   const isFinal = game.status === 'post'
@@ -179,12 +181,15 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
   const awayIsFav = teamIsFav(favTeams, game.away)
 
   return (
-    <div className={clsx(
-      'bg-field-800 border rounded-xl p-3 flex flex-col gap-2 min-w-0',
-      isLive && game.redZone ? 'border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.12)]'
-      : isLive ? 'border-gold/30'
-      : 'border-field-700',
-    )}>
+    <div
+      className={clsx(
+        'bg-field-800 border rounded-xl p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:border-field-500 transition-colors',
+        isLive && game.redZone ? 'border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.12)]'
+        : isLive ? 'border-gold/30'
+        : 'border-field-700',
+      )}
+      onClick={() => onSelect(game)}
+    >
       <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           <span className={clsx(
@@ -313,11 +318,12 @@ function GridCard({ game, favTeams, onToggleFav, odds }: {
 
 // ── LIST ROW ─────────────────────────────────────────────────
 
-function ListRow({ game, favTeams, onToggleFav, odds }: {
+function ListRow({ game, favTeams, onToggleFav, odds, onSelect }: {
   game: LiveGame
   favTeams: Set<string>
   onToggleFav: (abbr: string) => void
   odds?: GameOdds | null
+  onSelect: (game: LiveGame) => void
 }) {
   const isLive  = game.status === 'in'
   const isFinal = game.status === 'post'
@@ -361,13 +367,16 @@ function ListRow({ game, favTeams, onToggleFav, odds }: {
   }
 
   return (
-    <div className={clsx(
-      'flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all w-full',
-      isLive && game.redZone ? 'border-red-500/30 bg-red-500/[0.03]'
-      : isLive ? 'border-gold/25 bg-field-800'
-      : anyFav ? 'border-field-600 bg-field-800'
-      : 'border-field-700 bg-field-800/60',
-    )}>
+    <div
+      className={clsx(
+        'flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all w-full cursor-pointer hover:border-field-500',
+        isLive && game.redZone ? 'border-red-500/30 bg-red-500/[0.03]'
+        : isLive ? 'border-gold/25 bg-field-800'
+        : anyFav ? 'border-field-600 bg-field-800'
+        : 'border-field-700 bg-field-800/60',
+      )}
+      onClick={() => onSelect(game)}
+    >
       <div className="flex items-center gap-1.5 shrink-0 w-[120px]">
         <span className={clsx('font-cond font-black text-xs uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
           game.league === 'NFL' ? 'bg-nfl/20 text-nfl' : 'bg-cfb/20 text-cfb',
@@ -498,13 +507,14 @@ const GRID_COLS: Record<ColCount, string> = {
   5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
 }
 
-function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap }: {
+function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSelect }: {
   games: LiveGame[]
   viewMode: ViewMode
   cols: ColCount
   favTeams: Set<string>
   onToggleFav: (abbr: string) => void
   oddsMap?: Map<string, GameOdds>
+  onSelect: (game: LiveGame) => void
 }) {
   const getOdds = (g: LiveGame) => {
     if (!oddsMap) return null
@@ -515,14 +525,14 @@ function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap }: {
   if (viewMode === 'list') {
     return (
       <div className="space-y-1.5">
-        {games.map(g => <ListRow key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} />)}
+        {games.map(g => <ListRow key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect} />)}
       </div>
     )
   }
 
   return (
     <div className={clsx('grid gap-3', GRID_COLS[cols])}>
-      {games.map(g => <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} />)}
+      {games.map(g => <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect} />)}
     </div>
   )
 }
@@ -544,6 +554,7 @@ export function LiveScoresView() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
   const [manualFavs, setManualFavs] = useState<Set<string>>(loadFavs)
+  const [selectedGame, setSelectedGame] = useState<LiveGame | null>(null)
 
   const profileAbbrs = new Set<string>(
     [profile?.favorite_nfl_team, profile?.favorite_cfb_team]
@@ -609,9 +620,10 @@ export function LiveScoresView() {
     .sort((a, b) => (statusOrder[a.status] ?? 1) - (statusOrder[b.status] ?? 1))
 
   const sorted = [...favGames, ...otherGames]
-  const sharedProps = { viewMode, cols, favTeams, onToggleFav: toggleFav, oddsMap }
+  const sharedProps = { viewMode, cols, favTeams, onToggleFav: toggleFav, oddsMap, onSelect: setSelectedGame }
 
   return (
+    <>
     <div className="space-y-4">
 
       {/* ── Header ── */}
@@ -768,5 +780,15 @@ export function LiveScoresView() {
             </div>
           )}
     </div>
+
+    {/* ── Game detail modal ── */}
+    {selectedGame && (
+      <GameDetailModal
+        gameId={selectedGame.id}
+        league={selectedGame.league}
+        onClose={() => setSelectedGame(null)}
+      />
+    )}
+  </>
   )
 }
