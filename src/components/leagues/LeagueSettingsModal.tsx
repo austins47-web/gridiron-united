@@ -81,6 +81,11 @@ export function LeagueSettingsModal({ league, onClose, onSaved }: Props) {
   async function save() {
     if (!isCommissioner) return
     setSaving(true)
+
+    const scoringChanged = (Object.keys(scoring) as (keyof ScoringRules)[]).some(
+      k => scoring[k] !== (league as any)[k]
+    )
+
     const update = { ...slots, ...scoring, ...meta, updated_at: new Date().toISOString() }
     const { data, error } = await supabase
       .from('leagues')
@@ -89,7 +94,21 @@ export function LeagueSettingsModal({ league, onClose, onSaved }: Props) {
       .select()
       .single()
     if (error) { toast.error('Failed to save: ' + error.message); setSaving(false); return }
-    toast.success('League settings saved!')
+
+    // If scoring settings changed, recalculate all weekly scores immediately
+    if (scoringChanged) {
+      toast.loading('Recalculating all scores…', { id: 'recalc' })
+      const { error: recalcError } = await supabase
+        .rpc('recalc_league_scores', { p_league_id: league.id })
+      if (recalcError) {
+        toast.error('Score recalc failed: ' + recalcError.message, { id: 'recalc' })
+      } else {
+        toast.success('Scores recalculated!', { id: 'recalc' })
+      }
+    } else {
+      toast.success('League settings saved!')
+    }
+
     onSaved(data as League)
     setSaving(false)
     onClose()
