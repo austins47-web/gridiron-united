@@ -139,11 +139,18 @@ const CFB_CONF_GROUPS: Array<{ id: number; name: string }> = [
   { id: 18,  name: 'FBS Independents' },
 ]
 
-async function syncCFB(supabase: any, nflNames: Set<string>) {
+// Which CFB conferences we include (FBS only) — must match ESPN names exactly
+const FBS_CONFS = new Set([
+  'Southeastern', 'Big Ten', 'Big 12', 'Atlantic Coast', 'Pac-12',
+  'American Athletic', 'Mountain West', 'Conference USA', 'Mid-American',
+  'Sun Belt', 'FBS Independents',
+])
+
+async function syncCFB(supabase: any, nflNames: Set<string>, confsToSync = CFB_CONF_GROUPS) {
   const rows: any[] = []
   const seen = new Set<string>()
 
-  for (const conf of CFB_CONF_GROUPS) {
+  for (const conf of confsToSync) {
     let teamsData: any
     try {
       teamsData = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=100&groups=${conf.id}`)
@@ -168,7 +175,8 @@ async function syncCFB(supabase: any, nflNames: Set<string>) {
 
     for (const { team, data } of results) {
       if (!data) continue
-      const teamName = team.displayName ?? team.name
+      // Use shortDisplayName (e.g. "Boise State") not displayName ("Boise State Broncos")
+      const teamName = team.shortDisplayName ?? team.location ?? team.displayName ?? team.name
 
       for (const group of (data.athletes ?? [])) {
         for (const athlete of (group.items ?? [])) {
@@ -184,11 +192,26 @@ async function syncCFB(supabase: any, nflNames: Set<string>) {
 
           const classYear = athlete.year ?? null
           const classMap: Record<number, string> = { 1: 'Freshman', 2: 'Sophomore', 3: 'Junior', 4: 'Senior', 5: 'Graduate' }
+          // ESPN returns numeric year OR full string — handle both
+          // Also normalise redshirt variants to base class
+          const rawClass = athlete.displayClass ?? (classYear ? classMap[classYear] : null) ?? null
+          const normClass = rawClass
+            ? rawClass.replace(/Redshirt\s+/i, '').replace(/Graduate\s+Student/i, 'Graduate').trim()
+            : null
+          // Only store recognised classes
+          const validClass = ['Freshman','Sophomore','Junior','Senior','Graduate'].includes(normClass ?? '')
+            ? normClass : null
+
+          // Double-check this is an FBS conference (guards against ESPN group leakage)
+          if (!FBS_CONFS.has(conf.name)) continue
+
+          // Strip nickname suffix from team display name (e.g. "Boise State Broncos" → "Boise State")
+          const shortName = team.shortDisplayName ?? team.location ?? teamName
 
           rows.push({
             id:          50000000 + Number(athlete.id),
             name,
-            team:        teamName,
+            team:        shortName,
             pos,
             league:      'CFB',
             conference:  conf.name,
@@ -198,7 +221,7 @@ async function syncCFB(supabase: any, nflNames: Set<string>) {
             status:      mapStatus(athlete.injuries?.[0]?.status ?? ''),
             injury_note: athlete.injuries?.[0]?.description ?? null,
             is_rookie:   false,
-            depth_pos:   classMap[classYear] ?? null,
+            depth_pos:   validClass,
             updated_at:  new Date().toISOString(),
           })
         }
@@ -230,28 +253,32 @@ serve(async (req) => {
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    const league   = new URL(req.url).searchParams.get('league') ?? 'nfl'
+    const params   = new URL(req.url).searchParams
+    const league   = params.get('league') ?? 'nfl'
+    const confId   = params.get('conf')   // optional: sync one CFB conference
 
     if (league === 'cfb') {
-      // CFB-only sync — called by its own cron job
-      // Need NFL names to filter out players on NFL rosters
+      // Get NFL names from DB to filter crossover players
       const { data: nflPlayers } = await supabase
-        .from('players')
-        .select('name')
-        .eq('league', 'NFL')
-        .neq('pos', 'DST')
+        .from('players').select('name').eq('league', 'NFL').neq('pos', 'DST')
       const nflNames = new Set((nflPlayers ?? []).map((p: any) => p.name.toLowerCase()))
-      const { rows } = await syncCFB(supabase, nflNames)
+
+      // If a specific conference group id is passed, only sync that one
+      const confsToSync = confId
+        ? CFB_CONF_GROUPS.filter(c => String(c.id) === confId)
+        : CFB_CONF_GROUPS
+
+      const { rows } = await syncCFB(supabase, nflNames, confsToSync)
       const total = await upsertBatched(supabase, rows)
       return new Response(JSON.stringify({
-        success: true, total, cfb: rows.length, syncedAt: new Date().toISOString(),
+        success: true, total, cfb: rows.length,
+        conf: confId ?? 'all', syncedAt: new Date().toISOString(),
       }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
     }
 
-    // Default: NFL only (fast, always under 60s)
+    // Default: NFL
     const { rows: nflRows, nflNames } = await syncNFL(supabase)
     const total = await upsertBatched(supabase, nflRows)
-
     return new Response(JSON.stringify({
       success: true, total, nfl: nflRows.length, syncedAt: new Date().toISOString(),
     }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
