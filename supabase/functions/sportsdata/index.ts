@@ -155,20 +155,43 @@ serve(async (req) => {
         const espnId = parts[3]
         data = await espnFetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/${league}/athletes/${espnId}/stats`)
       } else if (parts[1] === 'news') {
-        const league = parts[2] === 'CFB' ? 'college-football' : 'nfl'
-        const espnId = String(parts[3])
-        // Paginate full news feed and filter by athleteId in categories
-        const articles = await fetchNewsPaged(
-          `https://site.api.espn.com/apis/site/v2/sports/football/${league}/news?limit=50`, 6
-        )
-        const matched = articles.filter((a: any) =>
-          a.categories?.some((c: any) =>
-            c.type === 'athlete' && String(c.athleteId) === espnId
+        const league   = parts[2] === 'CFB' ? 'college-football' : 'nfl'
+        const espnId   = String(parts[3])
+
+        // Try ESPN's athlete-specific news endpoint first
+        let articles: any[] = []
+        try {
+          const direct = await espnFetch(
+            `https://site.api.espn.com/apis/site/v2/sports/football/${league}/athletes/${espnId}/news?limit=10`
           )
-        )
-        data = matched.map((a: any) => ({
-          headline:    a.headline,
-          description: a.description ?? '',
+          articles = direct.articles ?? direct.feed ?? []
+        } catch { /* fall through */ }
+
+        // If that returns nothing, try with ?athlete= query param
+        if (articles.length === 0) {
+          try {
+            const param = await espnFetch(
+              `https://site.api.espn.com/apis/site/v2/sports/football/${league}/news?athlete=${espnId}&limit=20`
+            )
+            articles = param.articles ?? []
+          } catch { /* fall through */ }
+        }
+
+        // Last resort: filter the general feed by categories.athleteId
+        if (articles.length === 0) {
+          const general = await fetchNewsPaged(
+            `https://site.api.espn.com/apis/site/v2/sports/football/${league}/news?limit=50`, 3
+          )
+          articles = general.filter((a: any) =>
+            a.categories?.some((c: any) =>
+              c.type === 'athlete' && String(c.athleteId) === espnId
+            )
+          )
+        }
+
+        data = articles.slice(0, 15).map((a: any) => ({
+          headline:    a.headline ?? a.title ?? '',
+          description: a.description ?? a.story ?? '',
           published:   a.published ?? a.lastModified ?? '',
           links:       a.links,
         }))

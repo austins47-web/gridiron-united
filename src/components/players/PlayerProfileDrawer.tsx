@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { X, Newspaper, BarChart2, User, ExternalLink, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
 import type { Player } from '@/types/database'
@@ -116,20 +116,6 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
   }
 }
 
-async function fetchNews(player: Player): Promise<NewsItem[]> {
-  try {
-    const espnId = toEspnId(player)
-    const data = await proxyFetch(`athlete/news/${player.league}/${espnId}`)
-    const articles = data.articles ?? data.items ?? data.feed ?? []
-    return articles.slice(0, 15).map((a: any) => ({
-      title:     a.headline ?? a.title ?? '',
-      url:       a.links?.web?.href ?? a.link ?? '',
-      published: a.published ?? a.date ?? '',
-      desc:      a.description ?? a.content ?? '',
-    }))
-  } catch { return [] }
-}
-
 function timeAgo(iso: string) {
   if (!iso) return ''
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
@@ -165,13 +151,41 @@ export function PlayerProfileDrawer({ player, onClose }: { player: Player; onClo
     retry: 1,
   })
 
-  const { data: news = [], isLoading: newsLoading } = useQuery({
-    queryKey: ['player-news', player.id],
-    queryFn:  () => fetchNews(player),
-    staleTime: 5 * 60_000,
-    enabled: tab === 'news',
-    retry: 1,
-  })
+  // Pull player news from already-cached global feeds — no extra API call
+  const qc = useQueryClient()
+  const news: NewsItem[] = useMemo(() => {
+    const espnId = toEspnId(player)
+    const nameLower = player.name.toLowerCase()
+
+    // NFL feed is cached as SDIONews[] under ['nfl-news', N]
+    // CFB feed is cached as raw ESPN articles[] under ['cfb-news']
+    const nflFeed: any[] = qc.getQueryData(['nfl-news', 300]) ?? []
+    const cfbFeed: any[] = (qc.getQueryData(['cfb-news']) as any[]) ?? []
+
+    const feed = player.league === 'NFL' ? nflFeed : cfbFeed
+
+    const matched = feed.filter((a: any) => {
+      // NFL articles: match EspnAthleteId field we now attach in proxy
+      if (player.league === 'NFL') {
+        if (a.EspnAthleteId && a.EspnAthleteId === espnId) return true
+      }
+      // CFB articles: match _espnAthleteId field
+      if (player.league === 'CFB') {
+        if (a._espnAthleteId && a._espnAthleteId === espnId) return true
+      }
+      // Fallback: name appears in headline or description
+      const title = (a.Title ?? a.headline ?? '').toLowerCase()
+      const desc  = (a.Content ?? a.description ?? '').toLowerCase()
+      return title.includes(nameLower) || desc.includes(nameLower)
+    })
+
+    return matched.slice(0, 15).map((a: any) => ({
+      title:     a.Title ?? a.headline ?? '',
+      url:       a.Url ?? a.links?.web?.href ?? '',
+      published: a.Updated ?? a.published ?? a.lastModified ?? '',
+      desc:      a.Content ?? a.description ?? '',
+    }))
+  }, [player, qc])
 
   const dots = (
     <div className="flex justify-center py-10 gap-1">
@@ -371,14 +385,14 @@ export function PlayerProfileDrawer({ player, onClose }: { player: Player; onClo
           {/* News */}
           {tab === 'news' && (
             <div className="p-5 space-y-3">
-              {newsLoading && dots}
-              {!newsLoading && news.length === 0 && (
+              {news.length === 0 && (
                 <div className="text-center py-16 text-field-400">
                   <Newspaper className="w-10 h-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">No recent news for {player.name}.</p>
+                  <p className="text-xs mt-1 text-field-600">Visit the News tab to load the latest articles.</p>
                 </div>
               )}
-              {!newsLoading && news.map((item, i) => (
+              {news.map((item, i) => (
                 <a
                   key={i}
                   href={item.url}
