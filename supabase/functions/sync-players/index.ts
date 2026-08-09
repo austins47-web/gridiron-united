@@ -140,7 +140,36 @@ const CFB_CONF_GROUPS: Array<{ id: number; name: string }> = [
 ]
 
 // Sun Belt (37) and Independents (18) don't return teams via groups param in Deno —
-// we fall back to fetching all teams and filtering by conferenceId
+// hardcode verified ESPN team IDs for these conferences
+const HARDCODED_TEAMS: Record<number, Array<{ id: number; name: string }>> = {
+  37: [ // Sun Belt
+    { id: 2026, name: 'Appalachian State' },
+    { id: 2032, name: 'Arkansas State' },
+    { id: 324,  name: 'Coastal Carolina' },
+    { id: 290,  name: 'Georgia Southern' },
+    { id: 261,  name: 'Georgia State' },
+    { id: 2573, name: 'James Madison' },
+    { id: 309,  name: 'Louisiana' },
+    { id: 2350, name: 'Louisiana Tech' },
+    { id: 2433, name: 'Louisiana Monroe' },
+    { id: 276,  name: 'Marshall' },
+    { id: 295,  name: 'Old Dominion' },
+    { id: 6,    name: 'South Alabama' },
+    { id: 2572, name: 'Southern Miss' },
+    { id: 326,  name: 'Troy' },
+  ],
+  18: [ // FBS Independents
+    { id: 87,   name: 'Notre Dame' },
+    { id: 252,  name: 'BYU' },
+    { id: 2335, name: 'Liberty' },
+    { id: 349,  name: 'Army' },
+    { id: 41,   name: 'Connecticut' },
+    { id: 113,  name: 'Massachusetts' },
+    { id: 2453, name: 'New Mexico State' },
+    { id: 55,   name: 'Jacksonville State' },
+    { id: 2229, name: 'Sam Houston' },
+  ],
+}
 const DIRECT_GROUP_IDS = new Set([37, 18])
 
 const FBS_CONFS = new Set([
@@ -156,18 +185,14 @@ async function syncCFB(supabase: any, nflNames: Set<string>, confsToSync = CFB_C
   for (const conf of confsToSync) {
     let teams: any[] = []
     try {
-      const data = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=100&groups=${conf.id}`)
-      teams = data.sports?.[0]?.leagues?.[0]?.teams ?? []
-
-      // Sun Belt (37) and Independents (18) return 0 teams via the groups param —
-      // fall back to fetching by known team slugs from the all-teams endpoint
-      if (teams.length === 0 && DIRECT_GROUP_IDS.has(conf.id)) {
-        const allData = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=500`)
-        const allTeams = allData.sports?.[0]?.leagues?.[0]?.teams ?? []
-        // conferenceId field on team object
-        teams = allTeams.filter(({ team }: any) =>
-          Number(team.conferenceId) === conf.id
-        )
+      if (DIRECT_GROUP_IDS.has(conf.id)) {
+        // Use hardcoded team list — ESPN blocks groups endpoint for these in Deno
+        teams = (HARDCODED_TEAMS[conf.id] ?? []).map(t => ({
+          team: { id: String(t.id), shortDisplayName: t.name, displayName: t.name }
+        }))
+      } else {
+        const data = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=100&groups=${conf.id}`)
+        teams = data.sports?.[0]?.leagues?.[0]?.teams ?? []
       }
     } catch (e) {
       console.error(`Failed conf ${conf.name}:`, e)
