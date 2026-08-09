@@ -124,22 +124,21 @@ async function syncNFL(supabase: any) {
 
 // ── CFB sync ──────────────────────────────────────────────────
 
-// ESPN conference group IDs for FBS
+// ESPN conference group IDs for FBS — verified from ESPN's hidden API docs
 const CFB_CONF_GROUPS: Array<{ id: number; name: string }> = [
   { id: 8,   name: 'Southeastern' },
-  { id: 23,  name: 'Big Ten' },
-  { id: 12,  name: 'Big 12' },
+  { id: 5,   name: 'Big Ten' },
+  { id: 4,   name: 'Big 12' },
   { id: 1,   name: 'Atlantic Coast' },
   { id: 9,   name: 'Pac-12' },
   { id: 151, name: 'American Athletic' },
   { id: 17,  name: 'Mountain West' },
-  { id: 37,  name: 'Conference USA' },
+  { id: 12,  name: 'Conference USA' },
   { id: 15,  name: 'Mid-American' },
   { id: 37,  name: 'Sun Belt' },
   { id: 18,  name: 'FBS Independents' },
 ]
 
-// Which CFB conferences we include (FBS only) — must match ESPN names exactly
 const FBS_CONFS = new Set([
   'Southeastern', 'Big Ten', 'Big 12', 'Atlantic Coast', 'Pac-12',
   'American Athletic', 'Mountain West', 'Conference USA', 'Mid-American',

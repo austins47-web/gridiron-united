@@ -14,7 +14,7 @@ const NFL_CONFS = ['AFC East', 'AFC North', 'AFC South', 'AFC West', 'NFC East',
 const CFB_CONFS = [
   'Southeastern', 'Big Ten', 'Big 12', 'Atlantic Coast', 'Pac-12',
   'American Athletic', 'Mountain West', 'Conference USA', 'Mid-American',
-  'Sun Belt', 'Sun Belt - East', 'Sun Belt - West', 'FBS Independents',
+  'Sun Belt', 'FBS Independents',
 ]
 
 export function PlayersView() {
