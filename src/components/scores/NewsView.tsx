@@ -150,6 +150,61 @@ function CFBNewsCard({ item }: { item: any }) {
   return <article className="panel flex items-start gap-3">{inner}</article>
 }
 
+// ── Conference → team map for CFB news grouping ──────────────
+// Maps ESPN team shortDisplayName → conference name
+const TEAM_CONF_MAP: Record<string, string> = {
+  'Alabama':'Southeastern','Arkansas':'Southeastern','Auburn':'Southeastern',
+  'Florida':'Southeastern','Georgia':'Southeastern','Kentucky':'Southeastern',
+  'LSU':'Southeastern','Mississippi State':'Southeastern','Missouri':'Southeastern',
+  'Ole Miss':'Southeastern','Oklahoma':'Southeastern','South Carolina':'Southeastern',
+  'Tennessee':'Southeastern','Texas A&M':'Southeastern','Texas':'Southeastern','Vanderbilt':'Southeastern',
+  'Illinois':'Big Ten','Indiana':'Big Ten','Iowa':'Big Ten','Maryland':'Big Ten',
+  'Michigan':'Big Ten','Michigan State':'Big Ten','Minnesota':'Big Ten','Nebraska':'Big Ten',
+  'Northwestern':'Big Ten','Ohio State':'Big Ten','Oregon':'Big Ten','Penn State':'Big Ten',
+  'Purdue':'Big Ten','Rutgers':'Big Ten','UCLA':'Big Ten','USC':'Big Ten',
+  'Washington':'Big Ten','Wisconsin':'Big Ten',
+  'Arizona':'Big 12','Arizona State':'Big 12','Baylor':'Big 12','BYU':'Big 12',
+  'Cincinnati':'Big 12','Colorado':'Big 12','Houston':'Big 12','Iowa State':'Big 12',
+  'Kansas':'Big 12','Kansas State':'Big 12','Oklahoma State':'Big 12','TCU':'Big 12',
+  'Texas Tech':'Big 12','UCF':'Big 12','Utah':'Big 12','West Virginia':'Big 12',
+  'Boston College':'Atlantic Coast','California':'Atlantic Coast','Clemson':'Atlantic Coast',
+  'Duke':'Atlantic Coast','Florida State':'Atlantic Coast','Georgia Tech':'Atlantic Coast',
+  'Louisville':'Atlantic Coast','Miami':'Atlantic Coast','NC State':'Atlantic Coast',
+  'North Carolina':'Atlantic Coast','Pittsburgh':'Atlantic Coast','SMU':'Atlantic Coast',
+  'Stanford':'Atlantic Coast','Syracuse':'Atlantic Coast','Virginia':'Atlantic Coast',
+  'Virginia Tech':'Atlantic Coast','Wake Forest':'Atlantic Coast',
+  'Boise State':'Pac-12','Colorado State':'Pac-12','Fresno State':'Pac-12',
+  "Hawai'i":'Pac-12','Hawaii':'Pac-12','Nevada':'Pac-12','New Mexico':'Pac-12',
+  'Oregon State':'Pac-12','San Diego State':'Pac-12','San Jose State':'Pac-12',
+  'UNLV':'Pac-12','Utah State':'Pac-12','Washington State':'Pac-12','Wyoming':'Pac-12',
+  'Air Force':'Mountain West','Colorado State':'Mountain West','Fresno State':'Mountain West',
+  'Nevada':'Mountain West','New Mexico':'Mountain West','San Diego State':'Mountain West',
+  'San Jose State':'Mountain West','UNLV':'Mountain West','Utah State':'Mountain West','Wyoming':'Mountain West',
+  'Army':'American Athletic','Charlotte':'American Athletic','East Carolina':'American Athletic',
+  'Florida Atlantic':'American Athletic','Memphis':'American Athletic','Navy':'American Athletic',
+  'North Texas':'American Athletic','Rice':'American Athletic','South Florida':'American Athletic',
+  'Temple':'American Athletic','Tulane':'American Athletic','Tulsa':'American Athletic',
+  'UAB':'American Athletic','Connecticut':'American Athletic','UTSA':'American Athletic',
+  'FIU':'Conference USA','Jacksonville State':'Conference USA','Louisiana Tech':'Conference USA',
+  'Marshall':'Conference USA','Middle Tennessee':'Conference USA','New Mexico State':'Conference USA',
+  'Old Dominion':'Conference USA','Southern Miss':'Conference USA','UTEP':'Conference USA',
+  'Western Kentucky':'Conference USA',
+  'Akron':'Mid-American','Ball State':'Mid-American','Bowling Green':'Mid-American',
+  'Buffalo':'Mid-American','Central Michigan':'Mid-American','Eastern Michigan':'Mid-American',
+  'Kent State':'Mid-American','Miami (OH)':'Mid-American','Northern Illinois':'Mid-American',
+  'Ohio':'Mid-American','Toledo':'Mid-American','Western Michigan':'Mid-American',
+  'Appalachian State':'Sun Belt','App State':'Sun Belt','Arkansas State':'Sun Belt',
+  'Coastal Carolina':'Sun Belt','Georgia Southern':'Sun Belt','Georgia State':'Sun Belt',
+  'James Madison':'Sun Belt','Louisiana':'Sun Belt','Louisiana Monroe':'Sun Belt',
+  'South Alabama':'Sun Belt','Troy':'Sun Belt',
+  'Notre Dame':'FBS Independents','Liberty':'FBS Independents','Massachusetts':'FBS Independents',
+}
+
+const CONF_ORDER = [
+  'Southeastern','Big Ten','Big 12','Atlantic Coast','Pac-12',
+  'American Athletic','Mountain West','Conference USA','Mid-American','Sun Belt','FBS Independents',
+]
+
 // ── CFB news tab ──────────────────────────────────────────────
 function CFBNewsTab() {
   const [search, setSearch]           = useState('')
@@ -157,16 +212,28 @@ function CFBNewsTab() {
   const [showTeamPicker, setShowTeamPicker] = useState(false)
   const { data: articles = [], isLoading } = useCFBNews()
 
-  // Build sorted unique team list from what's actually in the feed
-  const cfbTeams = useMemo(() => {
+  // Build conference-grouped team list from what's in the feed
+  const cfbTeamsByConf = useMemo(() => {
     const seen = new Set<string>()
-    const teams: string[] = []
+    const byConf: Record<string, string[]> = {}
     for (const a of articles) {
       const name = a._teamName ?? a.categories?.find((c: any) => c.type === 'team' && c.team?.shortDisplayName)?.team?.shortDisplayName
-      if (name && !seen.has(name)) { seen.add(name); teams.push(name) }
+      if (!name || seen.has(name)) continue
+      seen.add(name)
+      const conf = TEAM_CONF_MAP[name] ?? 'Other'
+      if (!byConf[conf]) byConf[conf] = []
+      byConf[conf].push(name)
     }
-    return teams.sort((a, b) => a.localeCompare(b))
+    // Sort teams within each conference
+    for (const conf of Object.keys(byConf)) byConf[conf].sort()
+    return byConf
   }, [articles])
+
+  // Flat sorted list for search mode
+  const allCfbTeams = useMemo(() =>
+    Object.values(cfbTeamsByConf).flat().sort(),
+    [cfbTeamsByConf]
+  )
 
   const filtered = useMemo(() => {
     let items = articles
@@ -232,15 +299,27 @@ function CFBNewsTab() {
               >
                 All Teams
               </button>
-              {cfbTeams.map(t => (
-                <button
-                  key={t}
-                  onClick={() => { setTeamFilter(t); setShowTeamPicker(false) }}
-                  className={clsx('w-full text-left px-3 py-2 text-sm rounded-lg transition-colors', teamFilter === t ? 'text-gold font-bold bg-field-700' : 'text-white hover:bg-field-700')}
-                >
-                  {t}
-                </button>
-              ))}
+              {search.trim()
+                ? allCfbTeams.filter(t => t.toLowerCase().includes(search.toLowerCase())).map(t => (
+                    <button key={t} onClick={() => { setTeamFilter(t); setShowTeamPicker(false) }}
+                      className={clsx('w-full text-left px-3 py-2 text-sm rounded-lg transition-colors', teamFilter === t ? 'text-gold font-bold bg-field-700' : 'text-white hover:bg-field-700')}>
+                      {t}
+                    </button>
+                  ))
+                : CONF_ORDER.filter(c => cfbTeamsByConf[c]?.length).map(conf => (
+                    <div key={conf}>
+                      <div className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cfb/70 bg-field-900 sticky top-0">
+                        {conf}
+                      </div>
+                      {cfbTeamsByConf[conf].map(t => (
+                        <button key={t} onClick={() => { setTeamFilter(t); setShowTeamPicker(false) }}
+                          className={clsx('w-full text-left px-3 py-2 text-sm rounded-lg transition-colors', teamFilter === t ? 'text-gold font-bold bg-field-700' : 'text-white hover:bg-field-700')}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  ))
+              }
             </div>
           )}
         </div>

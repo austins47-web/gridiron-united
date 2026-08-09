@@ -48,25 +48,52 @@ serve(async (req) => {
   try {
     let data: any
 
+    // Helper: fetch multiple pages of ESPN news and deduplicate
+    async function fetchNewsPaged(baseUrl: string, pages = 5): Promise<any[]> {
+      const seen = new Set<string>()
+      const all: any[] = []
+      for (let p = 1; p <= pages; p++) {
+        try {
+          const res = await espnFetch(`${baseUrl}&page=${p}`)
+          const articles = res.articles ?? []
+          if (articles.length === 0) break
+          for (const a of articles) {
+            const key = a.dataSourceIdentifier ?? a.id ?? a.contentKey
+            if (key && seen.has(key)) continue
+            if (key) seen.add(key)
+            all.push(a)
+          }
+          if (articles.length < 50) break // ESPN returns <50 on last page
+        } catch { break }
+      }
+      return all
+    }
+
+    // Normalize an ESPN article to our SDIONews shape
+    function normalizeNFL(a: any, fallbackTeam?: string) {
+      const teamCat = a.categories?.find((c: any) => c.type === 'team')
+      const teamAbbr = fallbackTeam ?? teamCat?.team?.abbreviation ?? teamCat?.shortName ?? null
+      const athleteCat = a.categories?.find((c: any) => c.type === 'athlete')
+      const playerName = athleteCat?.description ?? athleteCat?.athlete?.description ?? null
+      const espnAthleteId = athleteCat?.athleteId ?? null
+      return {
+        NewsID:         a.dataSourceIdentifier ?? a.id,
+        Title:          a.headline,
+        Content:        a.description ?? a.story ?? '',
+        Url:            a.links?.web?.href ?? '',
+        Source:         a.source ?? 'ESPN',
+        Updated:        a.published ?? a.lastModified ?? new Date().toISOString(),
+        PlayerName:     playerName,
+        EspnAthleteId:  espnAthleteId,
+        Team:           teamAbbr,
+      }
+    }
+
     if (endpoint === 'nfl/news') {
-      const raw = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=300')
-      const firstCats = raw.articles?.[0]?.categories ?? []
-      const teamCat = firstCats.find((c: any) => c.type === 'team')
-      console.log('NFL news team cat sample:', JSON.stringify(teamCat))
-      data = (raw.articles ?? []).map((a: any) => {
-        const teamCat = a.categories?.find((c: any) => c.type === 'team')
-        const teamAbbr = teamCat?.team?.abbreviation ?? teamCat?.shortName ?? teamCat?.description ?? null
-        return {
-          NewsID:      a.dataSourceIdentifier ?? a.id,
-          Title:       a.headline,
-          Content:     a.description ?? a.story ?? '',
-          Url:         a.links?.web?.href ?? '',
-          Source:      a.source ?? 'ESPN',
-          Updated:     a.published ?? a.lastModified ?? new Date().toISOString(),
-          PlayerName:  a.athletes?.[0]?.displayName ?? null,
-          Team:        teamAbbr,
-        }
-      })
+      const articles = await fetchNewsPaged(
+        'https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50', 6
+      )
+      data = articles.map((a: any) => normalizeNFL(a))
 
     } else if (endpoint.startsWith('nfl/news/team/')) {
       const abbr   = endpoint.split('/')[3].toUpperCase()
@@ -95,15 +122,21 @@ serve(async (req) => {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')
 
     } else if (endpoint === 'cfb/news') {
-      const raw = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=300')
+      const articles = await fetchNewsPaged(
+        'https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=50', 6
+      )
       data = {
-        articles: (raw.articles ?? []).map((a: any) => ({
-          ...a,
-          // Attach top athlete name for player matching
-          _playerName: a.athletes?.[0]?.displayName ?? null,
-          // Attach primary team shortDisplayName for client-side filtering
-          _teamName: a.categories?.find((c: any) => c.type === 'team' && c.team?.shortDisplayName)?.team?.shortDisplayName ?? null,
-        }))
+        articles: articles.map((a: any) => {
+          const athleteCat = a.categories?.find((c: any) => c.type === 'athlete')
+          const teamCat = a.categories?.find((c: any) => c.type === 'team' && c.team?.shortDisplayName)
+          return {
+            ...a,
+            _playerName:    athleteCat?.description ?? null,
+            _espnAthleteId: athleteCat?.athleteId ?? null,
+            _teamName:      teamCat?.team?.shortDisplayName ?? null,
+            _teamId:        teamCat?.teamId ?? null,
+          }
+        })
       }
 
     } else if (endpoint.startsWith('cfb/news/team/')) {
@@ -123,13 +156,17 @@ serve(async (req) => {
         data = await espnFetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/${league}/athletes/${espnId}/stats`)
       } else if (parts[1] === 'news') {
         const league = parts[2] === 'CFB' ? 'college-football' : 'nfl'
-        const espnId = parts[3]
-        // Use general news feed filtered by player name rather than fantasy endpoint
-        const raw = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/news?limit=300`)
-        const articles = (raw.articles ?? []).filter((a: any) =>
-          a.athletes?.some((ath: any) => String(ath.id) === String(espnId))
+        const espnId = String(parts[3])
+        // Paginate full news feed and filter by athleteId in categories
+        const articles = await fetchNewsPaged(
+          `https://site.api.espn.com/apis/site/v2/sports/football/${league}/news?limit=50`, 6
         )
-        data = articles.map((a: any) => ({
+        const matched = articles.filter((a: any) =>
+          a.categories?.some((c: any) =>
+            c.type === 'athlete' && String(c.athleteId) === espnId
+          )
+        )
+        data = matched.map((a: any) => ({
           headline:    a.headline,
           description: a.description ?? '',
           published:   a.published ?? a.lastModified ?? '',
