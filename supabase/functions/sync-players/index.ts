@@ -142,13 +142,13 @@ const CFB_CONF_GROUPS: Array<{ id: number; name: string }> = [
 // Sun Belt (37) and Independents (18) don't return teams via groups param in Deno —
 // hardcode verified ESPN team IDs for these conferences
 const HARDCODED_TEAMS: Record<number, Array<{ id: number; name: string }>> = {
-  37: [ // Sun Belt
+  37: [ // Sun Belt — verified ESPN team IDs
     { id: 2026, name: 'Appalachian State' },
     { id: 2032, name: 'Arkansas State' },
     { id: 324,  name: 'Coastal Carolina' },
     { id: 290,  name: 'Georgia Southern' },
-    { id: 261,  name: 'Georgia State' },
-    { id: 2573, name: 'James Madison' },
+    { id: 2247, name: 'Georgia State' },      // was 261 — fixed
+    { id: 256,  name: 'James Madison' },      // was 2573 — fixed
     { id: 309,  name: 'Louisiana' },
     { id: 2350, name: 'Louisiana Tech' },
     { id: 2433, name: 'Louisiana Monroe' },
@@ -158,7 +158,7 @@ const HARDCODED_TEAMS: Record<number, Array<{ id: number; name: string }>> = {
     { id: 2572, name: 'Southern Miss' },
     { id: 326,  name: 'Troy' },
   ],
-  18: [ // FBS Independents
+  18: [ // FBS Independents — verified ESPN team IDs
     { id: 87,   name: 'Notre Dame' },
     { id: 252,  name: 'BYU' },
     { id: 2335, name: 'Liberty' },
