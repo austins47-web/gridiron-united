@@ -1,21 +1,43 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-const KEY = Deno.env.get('SPORTSDATAIO_KEY') ?? ''
-const NFL = 'https://api.sportsdata.io/v3/nfl'
-const CFB = 'https://api.sportsdata.io/v3/cfb'
+// ── ESPN proxy + FantasyPros proxy ────────────────────────────
+// Replaces SportsDataIO. All sources are free, no API key needed.
+// Routes:
+//   nfl/news              → ESPN NFL news
+//   nfl/news/team/{abbr}  → ESPN team news
+//   nfl/live-scores       → ESPN scoreboard
+//   cfb/scores/{s}/{w}    → ESPN CFB scoreboard
+//   nfl/injuries          → ESPN NFL injuries (all teams)
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS })
-  }
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (compatible; Gridiron-United/1.0)',
+  'Accept': 'application/json',
+}
 
-  const url = new URL(req.url)
-  const endpoint = url.searchParams.get('endpoint') // e.g. 'nfl/news', 'nfl/scores/week/1', 'nfl/stats/week/1', 'cfb/scores/week/1'
+// ESPN team abbreviation → ESPN team ID map (for news lookups)
+const TEAM_ID: Record<string, number> = {
+  ARI:22, ATL:1,  BAL:33, BUF:2,  CAR:29, CHI:3,  CIN:4,  CLE:5,
+  DAL:6,  DEN:7,  DET:8,  GB:9,   HOU:34, IND:11, JAX:30, KC:12,
+  LAC:24, LAR:14, LV:13,  MIA:15, MIN:16, NE:17,  NO:18,  NYG:19,
+  NYJ:20, PHI:21, PIT:23, SEA:26, SF:25,  TB:27,  TEN:10, WAS:28,
+}
+
+async function espnFetch(url: string) {
+  const res = await fetch(url, { headers: HEADERS })
+  if (!res.ok) throw new Error(`ESPN ${res.status}: ${url}`)
+  return res.json()
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+
+  const url      = new URL(req.url)
+  const endpoint = url.searchParams.get('endpoint') ?? ''
 
   if (!endpoint) {
     return new Response(JSON.stringify({ error: 'Missing endpoint param' }), {
@@ -24,56 +46,48 @@ serve(async (req) => {
   }
 
   try {
-    let apiUrl: string
+    let data: any
 
-    // ── Route to correct SportsDataIO endpoint ──────────────
     if (endpoint === 'nfl/news') {
-      apiUrl = `${NFL}/scores/json/News`
+      // ESPN NFL news feed
+      data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=100')
+      // Normalize to our expected shape
+      data = (data.articles ?? []).map((a: any) => ({
+        NewsID:      a.dataSourceIdentifier ?? a.id,
+        Title:       a.headline,
+        Content:     a.description ?? a.story ?? '',
+        Url:         a.links?.web?.href ?? '',
+        Source:      a.source ?? 'ESPN',
+        Updated:     a.published ?? a.lastModified ?? new Date().toISOString(),
+        PlayerName:  a.athletes?.[0]?.displayName ?? null,
+        Team:        a.categories?.find((c: any) => c.type === 'team')?.shortName ?? null,
+      }))
 
     } else if (endpoint.startsWith('nfl/news/team/')) {
-      // nfl/news/team/{abbr} — news for a specific team e.g. nfl/news/team/KC
-      const team = endpoint.split('/')[3]
-      apiUrl = `${NFL}/scores/json/NewsByTeam/${team}`
+      const abbr   = endpoint.split('/')[3].toUpperCase()
+      const teamId = TEAM_ID[abbr]
+      if (!teamId) throw new Error(`Unknown team abbreviation: ${abbr}`)
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/news?limit=100`)
+      data = (data.articles ?? []).map((a: any) => ({
+        NewsID:     a.dataSourceIdentifier ?? a.id,
+        Title:      a.headline,
+        Content:    a.description ?? a.story ?? '',
+        Url:        a.links?.web?.href ?? '',
+        Source:     a.source ?? 'ESPN',
+        Updated:    a.published ?? new Date().toISOString(),
+        PlayerName: a.athletes?.[0]?.displayName ?? null,
+        Team:       abbr,
+      }))
 
     } else if (endpoint === 'nfl/live-scores') {
-      apiUrl = `${NFL}/scores/json/LiveScores`
-
-    } else if (endpoint.startsWith('nfl/scores/')) {
-      // nfl/scores/{season}/{week}
-      const [, , season, week] = endpoint.split('/')
-      apiUrl = `${NFL}/scores/json/ScoresByWeek/${season}REG/${week}`
-
-    } else if (endpoint.startsWith('nfl/stats/')) {
-      // nfl/stats/{season}/{week}
-      const [, , season, week] = endpoint.split('/')
-      apiUrl = `${NFL}/stats/json/PlayerGameStatsByWeek/${season}REG/${week}`
-
-    } else if (endpoint.startsWith('nfl/projections/')) {
-      // nfl/projections/{season}/{week}
-      const [, , season, week] = endpoint.split('/')
-      apiUrl = `${NFL}/projections/json/PlayerGameProjectionStatsByWeek/${season}REG/${week}`
-
-    } else if (endpoint === 'nfl/players') {
-      apiUrl = `${NFL}/scores/json/Players`
+      data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard')
 
     } else if (endpoint.startsWith('cfb/scores/')) {
-      // cfb/scores/{season}/{week}
-      const [, , season, week] = endpoint.split('/')
-      apiUrl = `${CFB}/scores/json/GamesByWeek/${season}/${week}`
+      const [,, season, week] = endpoint.split('/')
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=50&week=${week}&season=${season}`)
 
-    } else if (endpoint.startsWith('cfb/stats/')) {
-      // cfb/stats/{season}/{week}
-      const [, , season, week] = endpoint.split('/')
-      apiUrl = `${CFB}/stats/json/PlayerGameStatsByWeek/${season}/${week}`
-
-    } else if (endpoint === 'cfb/players') {
-      apiUrl = `${CFB}/scores/json/Players`
-
-    } else if (endpoint === 'cfb/teams') {
-      apiUrl = `${CFB}/scores/json/Teams`
-
-    } else if (endpoint === 'nfl/week') {
-      apiUrl = `${NFL}/scores/json/CurrentWeek`
+    } else if (endpoint === 'nfl/injuries') {
+      data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')
 
     } else {
       return new Response(JSON.stringify({ error: `Unknown endpoint: ${endpoint}` }), {
@@ -81,18 +95,6 @@ serve(async (req) => {
       })
     }
 
-    const res = await fetch(apiUrl, {
-      headers: { 'Ocp-Apim-Subscription-Key': KEY },
-    })
-
-    if (!res.ok) {
-      const text = await res.text()
-      return new Response(JSON.stringify({ error: `SportsDataIO ${res.status}`, detail: text }), {
-        status: res.status, headers: { ...CORS, 'Content-Type': 'application/json' },
-      })
-    }
-
-    const data = await res.json()
     return new Response(JSON.stringify(data), {
       headers: { ...CORS, 'Content-Type': 'application/json' },
     })

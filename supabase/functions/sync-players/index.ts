@@ -1,54 +1,35 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// ── Weekly heavy sync: NFL + CFB player rosters ───────────────
-// Runs once a week (Tuesday 3am UTC).
-// Only fetches player lists — no projections (those are in sync-projections).
-// CFB player list: ~3MB. NFL player list: ~1MB. Teams: ~50KB.
-// Total per run: ~4MB. At once/week = ~16MB/month vs ~6GB/month at 30min.
+// ── Weekly roster sync via ESPN free API ─────────────────────
+// No API key needed. Fetches all 32 NFL teams + all CFB FBS teams.
+// ESPN blocks PowerShell but allows server-side Deno requests.
+// Data is free, real-time, and covers both NFL and CFB.
 
-const SDIO_KEY             = Deno.env.get('SPORTSDATAIO_KEY') ?? ''
 const SUPABASE_URL         = Deno.env.get('APP_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_SERVICE_KEY = Deno.env.get('SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-const NFL_BASE = 'https://api.sportsdata.io/v3/nfl'
-const CFB_BASE = 'https://api.sportsdata.io/v3/cfb'
-const H = { 'Ocp-Apim-Subscription-Key': SDIO_KEY }
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-async function sdio(url: string) {
-  const res = await fetch(url, { headers: H })
-  if (!res.ok) throw new Error(`SDIO ${res.status}: ${url}`)
+const ESPN_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (compatible; Gridiron-United/1.0)',
+  'Accept': 'application/json',
+}
+
+async function espn(url: string) {
+  const res = await fetch(url, { headers: ESPN_HEADERS })
+  if (!res.ok) throw new Error(`ESPN ${res.status}: ${url}`)
   return res.json()
 }
 
-function mapStatus(s: string): string {
-  if (!s || s === 'Active') return 'active'
-  if (s === 'Questionable') return 'questionable'
-  if (s === 'Out' || s === 'Doubtful') return 'out'
-  if (s === 'IR' || s === 'PUP' || s === 'NFI') return 'ir'
-  return 'active'
-}
+// ── Maps ──────────────────────────────────────────────────────
 
-const NFL_POS: Record<string, string> = {
-  QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', FB: 'RB',
-}
-
-const NFL_TEAM: Record<string, string> = {
-  ARI:'Arizona Cardinals',   ATL:'Atlanta Falcons',    BAL:'Baltimore Ravens',
-  BUF:'Buffalo Bills',       CAR:'Carolina Panthers',  CHI:'Chicago Bears',
-  CIN:'Cincinnati Bengals',  CLE:'Cleveland Browns',   DAL:'Dallas Cowboys',
-  DEN:'Denver Broncos',      DET:'Detroit Lions',      GB:'Green Bay Packers',
-  HOU:'Houston Texans',      IND:'Indianapolis Colts', JAX:'Jacksonville Jaguars',
-  KC:'Kansas City Chiefs',   LAC:'Los Angeles Chargers',LAR:'Los Angeles Rams',
-  LV:'Las Vegas Raiders',    MIA:'Miami Dolphins',     MIN:'Minnesota Vikings',
-  NE:'New England Patriots', NO:'New Orleans Saints',  NYG:'New York Giants',
-  NYJ:'New York Jets',       PHI:'Philadelphia Eagles',PIT:'Pittsburgh Steelers',
-  SEA:'Seattle Seahawks',    SF:'San Francisco 49ers', TB:'Tampa Bay Buccaneers',
-  TEN:'Tennessee Titans',    WAS:'Washington Commanders',
+const POS_MAP: Record<string, string> = {
+  QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K',
+  FB: 'RB', HB: 'RB',
 }
 
 const NFL_CONF: Record<string, string> = {
@@ -62,71 +43,63 @@ const NFL_CONF: Record<string, string> = {
   SF:'NFC West',   TB:'NFC South',  TEN:'AFC South', WAS:'NFC East',
 }
 
-const CFB_POS: Record<string, string> = {
-  QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', FB: 'RB', HB: 'RB',
+function mapStatus(s: string): string {
+  if (!s) return 'active'
+  const l = s.toLowerCase()
+  if (l.includes('question')) return 'questionable'
+  if (l.includes('out') || l.includes('doubtful')) return 'out'
+  if (l.includes('ir') || l.includes('injured reserve') || l.includes('pup')) return 'ir'
+  return 'active'
 }
 
-const INCLUDED_CONFS = new Set([
-  'Southeastern', 'Big Ten', 'Big 12', 'Atlantic Coast', 'Pac-12', 'American',
-  'Mountain West', 'Conference USA', 'Mid-American', 'Sun Belt - East', 'Sun Belt - West',
-  'FBS Independents',
-])
+// ── NFL sync ──────────────────────────────────────────────────
 
-async function upsertBatched(supabase: any, rows: any[]) {
-  let count = 0
-  for (let i = 0; i < rows.length; i += 200) {
-    const batch = rows.slice(i, i + 200)
-    const { error } = await supabase
-      .from('players')
-      .upsert(batch, { onConflict: 'id' })
-    if (error) throw new Error(`Upsert batch ${Math.floor(i/200)} failed: ${error.message}`)
-    count += batch.length
-  }
-  return count
-}
+async function syncNFL(supabase: any) {
+  // Get all 32 NFL teams
+  const teamsData = await espn('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams?limit=32')
+  const teams = teamsData.sports?.[0]?.leagues?.[0]?.teams ?? []
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  const rows: any[] = []
+  const nflNames = new Set<string>()
 
-  try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    const season = new URL(req.url).searchParams.get('season') ?? '2026'
+  for (const { team } of teams) {
+    const abbr     = team.abbreviation
+    const teamName = team.displayName
+    const teamId   = team.id
 
-    // ── NFL players ──────────────────────────────────────────
-    const allNFL: any[] = await sdio(`${NFL_BASE}/scores/json/Players`)
-    const nflRows: any[] = []
-    const nflNames = new Set<string>()
+    try {
+      // Fetch roster for this team
+      const rosterData = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/roster`)
+      const groups: any[] = rosterData.athletes ?? []
 
-    for (const p of allNFL) {
-      const pos = NFL_POS[p.Position]
-      if (!pos) continue
-      if (!p.Team || !NFL_TEAM[p.Team]) continue
-      if (p.Status === 'Inactive' || p.Status === 'Practice Squad') continue
+      for (const group of groups) {
+        for (const athlete of (group.items ?? [])) {
+          const pos = POS_MAP[athlete.position?.abbreviation]
+          if (!pos) continue
 
-      nflNames.add(p.Name.toLowerCase())
-      nflRows.push({
-        id:          p.PlayerID,
-        name:        p.Name,
-        team:        NFL_TEAM[p.Team],
-        pos,
-        league:      'NFL',
-        conference:  NFL_CONF[p.Team] ?? null,
-        status:      mapStatus(p.InjuryStatus ?? p.Status ?? ''),
-        injury_note: p.InjuryBodyPart ? `${p.InjuryBodyPart}${p.InjuryNotes ? ': ' + p.InjuryNotes : ''}` : null,
-        is_rookie:   p.Experience === 0,
-        // Don't touch avg_pts/proj_pts/adp — those are managed by sync-projections
-        updated_at:  new Date().toISOString(),
-      })
-    }
+          const name = athlete.fullName ?? `${athlete.firstName} ${athlete.lastName}`
+          nflNames.add(name.toLowerCase())
 
-    // DST — one per team
-    const teamEntries = Object.entries(NFL_TEAM)
-    for (let i = 0; i < teamEntries.length; i++) {
-      const [abbr, fullName] = teamEntries[i]
-      nflRows.push({
-        id:          90000 + i,
-        name:        `${fullName} D/ST`,
-        team:        fullName,
+          rows.push({
+            id:          Number(athlete.id) + 1000000, // ESPN IDs + offset to avoid collision
+            name,
+            team:        teamName,
+            pos,
+            league:      'NFL',
+            conference:  NFL_CONF[abbr] ?? null,
+            status:      mapStatus(athlete.injuries?.[0]?.status ?? athlete.status?.type?.description ?? ''),
+            injury_note: athlete.injuries?.[0]?.description ?? null,
+            is_rookie:   (athlete.experience?.years ?? 1) === 0,
+            updated_at:  new Date().toISOString(),
+          })
+        }
+      }
+
+      // Add DST for this team
+      rows.push({
+        id:          90000 + rows.length, // unique DST id
+        name:        `${teamName} D/ST`,
+        team:        teamName,
         pos:         'DST',
         league:      'NFL',
         conference:  NFL_CONF[abbr] ?? null,
@@ -135,67 +108,146 @@ serve(async (req) => {
         is_rookie:   false,
         updated_at:  new Date().toISOString(),
       })
+    } catch (e) {
+      console.error(`Failed roster for ${teamName}:`, e)
+    }
+  }
+
+  return { rows, nflNames }
+}
+
+// ── CFB sync ──────────────────────────────────────────────────
+
+// ESPN conference group IDs for FBS
+const CFB_CONF_GROUPS: Array<{ id: number; name: string }> = [
+  { id: 8,   name: 'Southeastern' },
+  { id: 23,  name: 'Big Ten' },
+  { id: 12,  name: 'Big 12' },
+  { id: 1,   name: 'Atlantic Coast' },
+  { id: 9,   name: 'Pac-12' },
+  { id: 151, name: 'American Athletic' },
+  { id: 17,  name: 'Mountain West' },
+  { id: 37,  name: 'Conference USA' },
+  { id: 15,  name: 'Mid-American' },
+  { id: 37,  name: 'Sun Belt' },
+  { id: 18,  name: 'FBS Independents' },
+]
+
+async function syncCFB(supabase: any, nflNames: Set<string>) {
+  const rows: any[] = []
+  const seen = new Set<string>()
+
+  for (const conf of CFB_CONF_GROUPS) {
+    let teamsData: any
+    try {
+      teamsData = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=100&groups=${conf.id}`)
+    } catch (e) {
+      console.error(`Failed conf ${conf.name}:`, e)
+      continue
     }
 
-    // ── CFB players ──────────────────────────────────────────
-    const [cfbTeams, allCFB, cfbStats] = await Promise.all([
-      sdio(`${CFB_BASE}/scores/json/Teams`),
-      sdio(`${CFB_BASE}/scores/json/Players`),
-      sdio(`${CFB_BASE}/stats/json/PlayerSeasonStats/${Number(season) - 1}`).catch(() => []),
-    ])
+    const teams = teamsData.sports?.[0]?.leagues?.[0]?.teams ?? []
 
-    const teamMap = new Map<string, { name: string; conf: string }>()
-    for (const t of cfbTeams) {
-      if (t.Key) teamMap.set(t.Key, { name: t.School ?? t.Key, conf: t.Conference ?? '' })
+    // Fetch all team rosters in parallel (per conference, not all at once)
+    const rosterPromises = teams.map(async ({ team }: any) => {
+      try {
+        const data = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${team.id}/roster`)
+        return { team, data }
+      } catch {
+        return { team, data: null }
+      }
+    })
+
+    const results = await Promise.all(rosterPromises)
+
+    for (const { team, data } of results) {
+      if (!data) continue
+      const teamName = team.displayName ?? team.name
+
+      for (const group of (data.athletes ?? [])) {
+        for (const athlete of (group.items ?? [])) {
+          const pos = POS_MAP[athlete.position?.abbreviation]
+          if (!pos) continue
+
+          const name = athlete.fullName ?? `${athlete.firstName ?? ''} ${athlete.lastName ?? ''}`.trim()
+          if (!name || nflNames.has(name.toLowerCase())) continue
+
+          const key = `${athlete.id}-${team.id}`
+          if (seen.has(key)) continue
+          seen.add(key)
+
+          const classYear = athlete.year ?? null
+          const classMap: Record<number, string> = { 1: 'Freshman', 2: 'Sophomore', 3: 'Junior', 4: 'Senior', 5: 'Graduate' }
+
+          rows.push({
+            id:          50000000 + Number(athlete.id),
+            name,
+            team:        teamName,
+            pos,
+            league:      'CFB',
+            conference:  conf.name,
+            avg_pts:     0,
+            proj_pts:    0,
+            adp:         999,
+            status:      mapStatus(athlete.injuries?.[0]?.status ?? ''),
+            injury_note: athlete.injuries?.[0]?.description ?? null,
+            is_rookie:   false,
+            depth_pos:   classMap[classYear] ?? null,
+            updated_at:  new Date().toISOString(),
+          })
+        }
+      }
+    }
+  }
+
+  return { rows }
+}
+
+// ── Upsert ────────────────────────────────────────────────────
+
+async function upsertBatched(supabase: any, rows: any[]) {
+  let count = 0
+  for (let i = 0; i < rows.length; i += 200) {
+    const { error } = await supabase
+      .from('players')
+      .upsert(rows.slice(i, i + 200), { onConflict: 'id' })
+    if (error) throw new Error(`Upsert batch ${Math.floor(i/200)} failed: ${error.message}`)
+    count += rows.slice(i, i + 200).length
+  }
+  return count
+}
+
+// ── Main ──────────────────────────────────────────────────────
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    const league   = new URL(req.url).searchParams.get('league') ?? 'nfl'
+
+    if (league === 'cfb') {
+      // CFB-only sync — called by its own cron job
+      // Need NFL names to filter out players on NFL rosters
+      const { data: nflPlayers } = await supabase
+        .from('players')
+        .select('name')
+        .eq('league', 'NFL')
+        .neq('pos', 'DST')
+      const nflNames = new Set((nflPlayers ?? []).map((p: any) => p.name.toLowerCase()))
+      const { rows } = await syncCFB(supabase, nflNames)
+      const total = await upsertBatched(supabase, rows)
+      return new Response(JSON.stringify({
+        success: true, total, cfb: rows.length, syncedAt: new Date().toISOString(),
+      }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
     }
 
-    const statsMap = new Map<number, any>()
-    for (const s of cfbStats) statsMap.set(s.PlayerID, s)
-
-    const cfbRows: any[] = []
-    const seen = new Set<number>()
-
-    for (const p of allCFB) {
-      const pos = CFB_POS[p.Position]
-      if (!pos || !p.Team) continue
-
-      const teamInfo = teamMap.get(p.Team)
-      if (!teamInfo) continue
-      if (!INCLUDED_CONFS.has(teamInfo.conf) && teamInfo.conf !== '') continue
-
-      const fullName = `${p.FirstName} ${p.LastName}`
-      if (nflNames.has(fullName.toLowerCase())) continue
-
-      if (seen.has(p.PlayerID)) continue
-      seen.add(p.PlayerID)
-
-      const stats  = statsMap.get(p.PlayerID)
-      const avgPts = stats?.FantasyPoints ?? 0
-
-      cfbRows.push({
-        id:          50000000 + p.PlayerID,
-        name:        fullName,
-        team:        teamInfo.name,
-        pos,
-        league:      'CFB',
-        conference:  teamInfo.conf || null,
-        avg_pts:     avgPts,
-        proj_pts:    avgPts,
-        adp:         avgPts > 20 ? 50 : avgPts > 10 ? 100 : avgPts > 5 ? 200 : 999,
-        status:      mapStatus(p.InjuryStatus ?? ''),
-        injury_note: p.InjuryBodyPart ?? null,
-        is_rookie:   false,
-        depth_pos:   p.Class ?? null,
-        updated_at:  new Date().toISOString(),
-      })
-    }
-
-    const total = await upsertBatched(supabase, [...nflRows, ...cfbRows])
+    // Default: NFL only (fast, always under 60s)
+    const { rows: nflRows, nflNames } = await syncNFL(supabase)
+    const total = await upsertBatched(supabase, nflRows)
 
     return new Response(JSON.stringify({
-      success: true, total,
-      nfl: nflRows.length, cfb: cfbRows.length,
-      syncedAt: new Date().toISOString(),
+      success: true, total, nfl: nflRows.length, syncedAt: new Date().toISOString(),
     }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
 
   } catch (e) {
