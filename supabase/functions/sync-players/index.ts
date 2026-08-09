@@ -139,6 +139,10 @@ const CFB_CONF_GROUPS: Array<{ id: number; name: string }> = [
   { id: 18,  name: 'FBS Independents' },
 ]
 
+// Sun Belt (37) and Independents (18) don't return teams via groups param in Deno —
+// we fall back to fetching all teams and filtering by conferenceId
+const DIRECT_GROUP_IDS = new Set([37, 18])
+
 const FBS_CONFS = new Set([
   'Southeastern', 'Big Ten', 'Big 12', 'Atlantic Coast', 'Pac-12',
   'American Athletic', 'Mountain West', 'Conference USA', 'Mid-American',
@@ -150,15 +154,25 @@ async function syncCFB(supabase: any, nflNames: Set<string>, confsToSync = CFB_C
   const seen = new Set<string>()
 
   for (const conf of confsToSync) {
-    let teamsData: any
+    let teams: any[] = []
     try {
-      teamsData = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=100&groups=${conf.id}`)
+      const data = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=100&groups=${conf.id}`)
+      teams = data.sports?.[0]?.leagues?.[0]?.teams ?? []
+
+      // Sun Belt (37) and Independents (18) return 0 teams via the groups param —
+      // fall back to fetching by known team slugs from the all-teams endpoint
+      if (teams.length === 0 && DIRECT_GROUP_IDS.has(conf.id)) {
+        const allData = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=500`)
+        const allTeams = allData.sports?.[0]?.leagues?.[0]?.teams ?? []
+        // conferenceId field on team object
+        teams = allTeams.filter(({ team }: any) =>
+          Number(team.conferenceId) === conf.id
+        )
+      }
     } catch (e) {
       console.error(`Failed conf ${conf.name}:`, e)
       continue
     }
-
-    const teams = teamsData.sports?.[0]?.leagues?.[0]?.teams ?? []
 
     // Fetch all team rosters in parallel (per conference, not all at once)
     const rosterPromises = teams.map(async ({ team }: any) => {
