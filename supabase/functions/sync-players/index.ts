@@ -123,98 +123,118 @@ async function syncNFL(supabase: any) {
 }
 
 // ── CFB sync ──────────────────────────────────────────────────
+// ESPN team IDs verified from espn.com logos CSV (saiemgilani/c6596f0e1c8b148daabc2b7f1e6f6add)
+// All ESPN groups endpoints return unfiltered results from Deno — hardcode everything.
 
-// ESPN conference group IDs for FBS — verified from ESPN's hidden API docs
-const CFB_CONF_GROUPS: Array<{ id: number; name: string }> = [
-  { id: 8,   name: 'Southeastern' },
-  { id: 5,   name: 'Big Ten' },
-  { id: 4,   name: 'Big 12' },
-  { id: 1,   name: 'Atlantic Coast' },
-  { id: 9,   name: 'Pac-12' },
-  { id: 151, name: 'American Athletic' },
-  { id: 17,  name: 'Mountain West' },
-  { id: 12,  name: 'Conference USA' },
-  { id: 15,  name: 'Mid-American' },
-  { id: 37,  name: 'Sun Belt' },
-  { id: 18,  name: 'FBS Independents' },
-]
-
-// Sun Belt (37) and Independents (18) don't return teams via groups param in Deno —
-// hardcode verified ESPN team IDs for these conferences
-const HARDCODED_TEAMS: Record<number, Array<{ id: number; name: string }>> = {
-  37: [ // Sun Belt — verified ESPN team IDs
-    { id: 2026, name: 'Appalachian State' },
-    { id: 2032, name: 'Arkansas State' },
-    { id: 324,  name: 'Coastal Carolina' },
-    { id: 290,  name: 'Georgia Southern' },
-    { id: 2247, name: 'Georgia State' },      // was 261 — fixed
-    { id: 256,  name: 'James Madison' },      // was 2573 — fixed
-    { id: 309,  name: 'Louisiana' },
-    { id: 2350, name: 'Louisiana Tech' },
-    { id: 2433, name: 'Louisiana Monroe' },
-    { id: 276,  name: 'Marshall' },
-    { id: 295,  name: 'Old Dominion' },
-    { id: 6,    name: 'South Alabama' },
-    { id: 2572, name: 'Southern Miss' },
-    { id: 326,  name: 'Troy' },
+const FBS_TEAMS_BY_CONF: Record<string, Array<{ id: number; name: string }>> = {
+  'Southeastern': [
+    { id: 333, name: 'Alabama' }, { id: 8, name: 'Arkansas' }, { id: 2, name: 'Auburn' },
+    { id: 57, name: 'Florida' }, { id: 61, name: 'Georgia' }, { id: 96, name: 'Kentucky' },
+    { id: 99, name: 'LSU' }, { id: 344, name: 'Mississippi State' }, { id: 142, name: 'Missouri' },
+    { id: 145, name: 'Ole Miss' }, { id: 2579, name: 'Oklahoma' }, { id: 201, name: 'South Carolina' },
+    { id: 2507, name: 'Tennessee' }, { id: 245, name: 'Texas A&M' }, { id: 251, name: 'Texas' },
+    { id: 238, name: 'Vanderbilt' },
   ],
-  18: [ // FBS Independents — verified ESPN team IDs
-    { id: 87,   name: 'Notre Dame' },
-    { id: 252,  name: 'BYU' },
-    { id: 2335, name: 'Liberty' },
-    { id: 349,  name: 'Army' },
-    { id: 41,   name: 'Connecticut' },
-    { id: 113,  name: 'Massachusetts' },
-    { id: 2453, name: 'New Mexico State' },
-    { id: 55,   name: 'Jacksonville State' },
-    { id: 2229, name: 'Sam Houston' },
+  'Big Ten': [
+    { id: 356, name: 'Illinois' }, { id: 84, name: 'Indiana' }, { id: 2294, name: 'Iowa' },
+    { id: 120, name: 'Maryland' }, { id: 130, name: 'Michigan' }, { id: 127, name: 'Michigan State' },
+    { id: 135, name: 'Minnesota' }, { id: 158, name: 'Nebraska' }, { id: 77, name: 'Northwestern' },
+    { id: 194, name: 'Ohio State' }, { id: 2483, name: 'Oregon' }, { id: 213, name: 'Penn State' },
+    { id: 275, name: 'Purdue' }, { id: 164, name: 'Rutgers' }, { id: 26, name: 'UCLA' },
+    { id: 30, name: 'USC' }, { id: 264, name: 'Washington' }, { id: 275, name: 'Wisconsin' },
+  ],
+  'Big 12': [
+    { id: 12, name: 'Arizona' }, { id: 9, name: 'Arizona State' }, { id: 239, name: 'Baylor' },
+    { id: 252, name: 'BYU' }, { id: 2132, name: 'Cincinnati' }, { id: 38, name: 'Colorado' },
+    { id: 248, name: 'Houston' }, { id: 66, name: 'Iowa State' }, { id: 2305, name: 'Kansas' },
+    { id: 2306, name: 'Kansas State' }, { id: 197, name: 'Oklahoma State' }, { id: 2628, name: 'TCU' },
+    { id: 2515, name: 'Texas Tech' }, { id: 2116, name: 'UCF' }, { id: 254, name: 'Utah' },
+    { id: 277, name: 'West Virginia' },
+  ],
+  'Atlantic Coast': [
+    { id: 103, name: 'Boston College' }, { id: 25, name: 'California' }, { id: 228, name: 'Clemson' },
+    { id: 150, name: 'Duke' }, { id: 52, name: 'Florida State' }, { id: 59, name: 'Georgia Tech' },
+    { id: 97, name: 'Louisville' }, { id: 2390, name: 'Miami' }, { id: 152, name: 'NC State' },
+    { id: 153, name: 'North Carolina' }, { id: 221, name: 'Pittsburgh' }, { id: 2579, name: 'SMU' },
+    { id: 258, name: 'Stanford' }, { id: 183, name: 'Syracuse' }, { id: 261, name: 'Virginia' },
+    { id: 259, name: 'Virginia Tech' }, { id: 154, name: 'Wake Forest' },
+  ],
+  'Pac-12': [
+    { id: 68, name: 'Boise State' }, { id: 36, name: 'Colorado State' }, { id: 278, name: 'Fresno State' },
+    { id: 62, name: "Hawai'i" }, { id: 2440, name: 'Nevada' }, { id: 167, name: 'New Mexico' },
+    { id: 204, name: 'Oregon State' }, { id: 21, name: 'San Diego State' }, { id: 23, name: 'San Jose State' },
+    { id: 2439, name: 'UNLV' }, { id: 328, name: 'Utah State' }, { id: 265, name: 'Washington State' },
+    { id: 2637, name: 'Wyoming' },
+  ],
+  'American Athletic': [
+    { id: 349, name: 'Army' }, { id: 2429, name: 'Charlotte' }, { id: 151, name: 'East Carolina' },
+    { id: 2226, name: 'Florida Atlantic' }, { id: 235, name: 'Memphis' }, { id: 2426, name: 'Navy' },
+    { id: 249, name: 'North Texas' }, { id: 242, name: 'Rice' }, { id: 58, name: 'South Florida' },
+    { id: 218, name: 'Temple' }, { id: 2655, name: 'Tulane' }, { id: 202, name: 'Tulsa' },
+    { id: 2630, name: 'UAB' }, { id: 41, name: 'Connecticut' }, { id: 2702, name: 'UTSA' },
+    { id: 2567, name: 'Wichita State' },
+  ],
+  'Mountain West': [
+    { id: 2005, name: 'Air Force' }, { id: 68, name: 'Boise State' }, { id: 36, name: 'Colorado State' },
+    { id: 278, name: 'Fresno State' }, { id: 62, name: "Hawai'i" }, { id: 2440, name: 'Nevada' },
+    { id: 167, name: 'New Mexico' }, { id: 21, name: 'San Diego State' }, { id: 23, name: 'San Jose State' },
+    { id: 2439, name: 'UNLV' }, { id: 328, name: 'Utah State' }, { id: 2637, name: 'Wyoming' },
+  ],
+  'Conference USA': [
+    { id: 2429, name: 'Charlotte' }, { id: 2226, name: 'Florida Atlantic' }, { id: 2229, name: 'FIU' },
+    { id: 55, name: 'Jacksonville State' }, { id: 2348, name: 'Louisiana Tech' }, { id: 276, name: 'Marshall' },
+    { id: 2393, name: 'Middle Tennessee' }, { id: 166, name: 'New Mexico State' }, { id: 249, name: 'North Texas' },
+    { id: 295, name: 'Old Dominion' }, { id: 242, name: 'Rice' }, { id: 2229, name: 'Sam Houston' },
+    { id: 2572, name: 'Southern Miss' }, { id: 2567, name: 'UTEP' }, { id: 2702, name: 'UTSA' },
+    { id: 2657, name: 'Western Kentucky' },
+  ],
+  'Mid-American': [
+    { id: 2006, name: 'Akron' }, { id: 2050, name: 'Ball State' }, { id: 189, name: 'Bowling Green' },
+    { id: 2084, name: 'Buffalo' }, { id: 2117, name: 'Central Michigan' }, { id: 2199, name: 'Eastern Michigan' },
+    { id: 2309, name: 'Kent State' }, { id: 193, name: 'Miami (OH)' }, { id: 2459, name: 'Northern Illinois' },
+    { id: 195, name: 'Ohio' }, { id: 2332, name: 'Toledo' }, { id: 2713, name: 'Western Michigan' },
+  ],
+  'Sun Belt': [
+    { id: 2026, name: 'Appalachian State' }, { id: 2032, name: 'Arkansas State' }, { id: 324, name: 'Coastal Carolina' },
+    { id: 290, name: 'Georgia Southern' }, { id: 2247, name: 'Georgia State' }, { id: 256, name: 'James Madison' },
+    { id: 309, name: 'Louisiana' }, { id: 2348, name: 'Louisiana Tech' }, { id: 2433, name: 'Louisiana Monroe' },
+    { id: 276, name: 'Marshall' }, { id: 295, name: 'Old Dominion' }, { id: 6, name: 'South Alabama' },
+    { id: 2572, name: 'Southern Miss' }, { id: 326, name: 'Troy' },
+  ],
+  'FBS Independents': [
+    { id: 87, name: 'Notre Dame' }, { id: 252, name: 'BYU' }, { id: 2335, name: 'Liberty' },
+    { id: 349, name: 'Army' }, { id: 41, name: 'Connecticut' }, { id: 113, name: 'Massachusetts' },
+    { id: 166, name: 'New Mexico State' }, { id: 55, name: 'Jacksonville State' }, { id: 2229, name: 'Sam Houston' },
   ],
 }
-const DIRECT_GROUP_IDS = new Set([37, 18])
 
-const FBS_CONFS = new Set([
-  'Southeastern', 'Big Ten', 'Big 12', 'Atlantic Coast', 'Pac-12',
-  'American Athletic', 'Mountain West', 'Conference USA', 'Mid-American',
-  'Sun Belt', 'FBS Independents',
-])
+const FBS_CONFS = new Set(Object.keys(FBS_TEAMS_BY_CONF))
 
-async function syncCFB(supabase: any, nflNames: Set<string>, confsToSync = CFB_CONF_GROUPS) {
+async function syncCFB(supabase: any, nflNames: Set<string>, targetConf?: string) {
   const rows: any[] = []
   const seen = new Set<string>()
 
-  for (const conf of confsToSync) {
-    let teams: any[] = []
-    try {
-      if (DIRECT_GROUP_IDS.has(conf.id)) {
-        // Use hardcoded team list — ESPN blocks groups endpoint for these in Deno
-        teams = (HARDCODED_TEAMS[conf.id] ?? []).map(t => ({
-          team: { id: String(t.id), shortDisplayName: t.name, displayName: t.name }
-        }))
-      } else {
-        const data = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=100&groups=${conf.id}`)
-        teams = data.sports?.[0]?.leagues?.[0]?.teams ?? []
-      }
-    } catch (e) {
-      console.error(`Failed conf ${conf.name}:`, e)
-      continue
-    }
+  // Determine which conferences to sync
+  const confsToSync = targetConf
+    ? (FBS_TEAMS_BY_CONF[targetConf] ? { [targetConf]: FBS_TEAMS_BY_CONF[targetConf] } : {})
+    : FBS_TEAMS_BY_CONF
 
-    // Fetch all team rosters in parallel (per conference, not all at once)
-    const rosterPromises = teams.map(async ({ team }: any) => {
-      try {
-        const data = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${team.id}/roster`)
-        return { team, data }
-      } catch {
-        return { team, data: null }
-      }
-    })
+  for (const [confName, teams] of Object.entries(confsToSync)) {
+    console.log(`Syncing ${confName}: ${teams.length} teams`)
 
-    const results = await Promise.all(rosterPromises)
+    const rosterResults = await Promise.all(
+      teams.map(async ({ id, name }) => {
+        try {
+          const data = await espn(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster`)
+          return { teamId: id, teamName: name, confName, data }
+        } catch {
+          return { teamId: id, teamName: name, confName, data: null }
+        }
+      })
+    )
 
-    for (const { team, data } of results) {
+    for (const { teamId, teamName, confName: conf, data } of rosterResults) {
       if (!data) continue
-      // Use shortDisplayName (e.g. "Boise State") not displayName ("Boise State Broncos")
-      const teamName = team.shortDisplayName ?? team.location ?? team.displayName ?? team.name
 
       for (const group of (data.athletes ?? [])) {
         for (const athlete of (group.items ?? [])) {
@@ -224,38 +244,32 @@ async function syncCFB(supabase: any, nflNames: Set<string>, confsToSync = CFB_C
           const name = athlete.fullName ?? `${athlete.firstName ?? ''} ${athlete.lastName ?? ''}`.trim()
           if (!name || nflNames.has(name.toLowerCase())) continue
 
-          const key = `${athlete.id}-${team.id}`
+          const key = `${athlete.id}-${teamId}`
           if (seen.has(key)) continue
           seen.add(key)
 
           const classYear = athlete.year ?? null
           const classMap: Record<number, string> = { 1: 'Freshman', 2: 'Sophomore', 3: 'Junior', 4: 'Senior', 5: 'Graduate' }
-          // ESPN returns numeric year OR full string — handle both
-          // Also normalise redshirt variants to base class
           const rawClass = athlete.displayClass ?? (classYear ? classMap[classYear] : null) ?? null
           const normClass = rawClass
             ? rawClass.replace(/Redshirt\s+/i, '').replace(/Graduate\s+Student/i, 'Graduate').trim()
             : null
-          // Only store recognised classes
           const validClass = ['Freshman','Sophomore','Junior','Senior','Graduate'].includes(normClass ?? '')
             ? normClass : null
 
-          // Double-check this is an FBS conference (guards against ESPN group leakage)
-          if (!FBS_CONFS.has(conf.name)) continue
-
-          // Strip nickname suffix from team display name (e.g. "Boise State Broncos" → "Boise State")
-          const shortName = team.shortDisplayName ?? team.location ?? teamName
+          // Use shortDisplayName from roster response if available, else our hardcoded name
+          const shortName = data.team?.shortDisplayName ?? data.team?.location ?? teamName
 
           rows.push({
-            id:          50000000 + Number(athlete.id),
+            id:               50000000 + Number(athlete.id),
             name,
-            team:        shortName,
+            team:             shortName,
             pos,
-            league:      'CFB',
-            conference:  conf.name,
-            avg_pts:     0,
-            proj_pts:    0,
-            adp:         999,
+            league:           'CFB',
+            conference:       conf,
+            avg_pts:          0,
+            proj_pts:         0,
+            adp:              999,
             status:           mapStatus(athlete.injuries?.[0]?.status ?? ''),
             injury_note:      athlete.injuries?.[0]?.description ?? null,
             is_rookie:        false,
@@ -275,13 +289,19 @@ async function syncCFB(supabase: any, nflNames: Set<string>, confsToSync = CFB_C
 
 async function upsertBatched(supabase: any, rows: any[]) {
   let count = 0
+  const errors: string[] = []
   for (let i = 0; i < rows.length; i += 200) {
+    const batch = rows.slice(i, i + 200)
     const { error } = await supabase
       .from('players')
-      .upsert(rows.slice(i, i + 200), { onConflict: 'id' })
-    if (error) throw new Error(`Upsert batch ${Math.floor(i/200)} failed: ${error.message}`)
-    count += rows.slice(i, i + 200).length
+      .upsert(batch, { onConflict: 'id' })
+    if (error) {
+      errors.push(`Batch ${Math.floor(i/200)}: ${error.message} | code: ${error.code} | details: ${error.details}`)
+    } else {
+      count += batch.length
+    }
   }
+  if (errors.length > 0) throw new Error(errors.join(' | '))
   return count
 }
 
@@ -294,24 +314,18 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     const params   = new URL(req.url).searchParams
     const league   = params.get('league') ?? 'nfl'
-    const confId   = params.get('conf')   // optional: sync one CFB conference
+    const confName = params.get('conf')   // optional: target conference name e.g. "Southeastern"
 
     if (league === 'cfb') {
-      // Get NFL names from DB to filter crossover players
       const { data: nflPlayers } = await supabase
         .from('players').select('name').eq('league', 'NFL').neq('pos', 'DST')
       const nflNames = new Set((nflPlayers ?? []).map((p: any) => p.name.toLowerCase()))
 
-      // If a specific conference group id is passed, only sync that one
-      const confsToSync = confId
-        ? CFB_CONF_GROUPS.filter(c => String(c.id) === confId)
-        : CFB_CONF_GROUPS
-
-      const { rows } = await syncCFB(supabase, nflNames, confsToSync)
+      const { rows } = await syncCFB(supabase, nflNames, confName ?? undefined)
       const total = await upsertBatched(supabase, rows)
       return new Response(JSON.stringify({
         success: true, total, cfb: rows.length,
-        conf: confId ?? 'all', syncedAt: new Date().toISOString(),
+        conf: confName ?? 'all', syncedAt: new Date().toISOString(),
       }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
     }
 
