@@ -703,27 +703,18 @@ export function LiveScoresView() {
       {/* ── Controls bar ── */}
       <div className="flex flex-wrap gap-2 items-center">
 
-        {/* Week picker */}
-        <div className="flex items-center gap-1.5 bg-field-800 border border-field-700 rounded-lg px-2 py-1">
-          <button
-            onClick={() => setWeek(w => Math.max(1, w - 1))}
-            disabled={week <= 1}
-            className="text-field-400 hover:text-white disabled:opacity-30 transition-colors px-1"
-          >‹</button>
+        {/* Week picker — dropdown only */}
+        <div className="flex items-center gap-2 bg-field-800 border border-field-700 rounded-lg px-3 py-1.5">
+          <span className="text-xs text-field-400 font-bold uppercase tracking-wider shrink-0">Week</span>
           <select
             value={week}
             onChange={e => setWeek(Number(e.target.value))}
-            className="bg-transparent text-white text-sm font-bold text-center appearance-none cursor-pointer outline-none w-20"
+            className="bg-transparent text-white text-sm font-bold cursor-pointer outline-none"
           >
             {weeks.map(w => (
-              <option key={w} value={w} className="bg-field-800">Week {w}</option>
+              <option key={w} value={w} className="bg-field-800 text-white">Week {w}</option>
             ))}
           </select>
-          <button
-            onClick={() => setWeek(w => Math.min(weeks.length, w + 1))}
-            disabled={week >= weeks.length}
-            className="text-field-400 hover:text-white disabled:opacity-30 transition-colors px-1"
-          >›</button>
         </div>
 
         {/* Status filter */}

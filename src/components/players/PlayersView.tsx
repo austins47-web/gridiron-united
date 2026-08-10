@@ -5,6 +5,8 @@ import { useAppStore } from '@/store/appStore'
 import { buildSlotDefs } from '@/types/database'
 import type { Player, ScoringRules } from '@/types/database'
 import { PlayerProfileDrawer } from './PlayerProfileDrawer'
+import { TeamPage } from '@/components/teams/TeamPage'
+import { getTeamId } from '@/components/teams/teamIds'
 import { Search, ChevronLeft, ChevronRight, Plus, Check, X, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -25,6 +27,7 @@ export function PlayersView() {
   const [teamSearch, setTeamSearch] = useState('')
   const [teamDropdownOpen, setTeamDropdownOpen] = useState(false)
   const teamDropdownRef = useRef<HTMLDivElement>(null)
+  const [teamPage, setTeamPage] = useState<{ id: string; league: 'NFL' | 'CFB' } | null>(null)
 
   const { activeLeagueId, activeLeague } = useAppStore()
 
@@ -112,6 +115,17 @@ export function PlayersView() {
     : filters.league === 'CFB'
     ? CFB_CONFS
     : [...NFL_CONFS, ...CFB_CONFS]
+
+  // Show team page if one is selected
+  if (teamPage) {
+    return (
+      <TeamPage
+        teamId={teamPage.id}
+        league={teamPage.league}
+        onBack={() => setTeamPage(null)}
+      />
+    )
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
@@ -458,7 +472,11 @@ export function PlayersView() {
                     <td className="hidden sm:table-cell">
                       <button
                         className="text-field-300 text-sm hover:text-gold transition-colors text-left"
-                        onClick={() => { setFilter('team', p.team); setTeamSearch('') }}
+                        onClick={() => {
+                          const tid = getTeamId(p.team, p.league)
+                          if (tid) setTeamPage({ id: tid, league: p.league })
+                          else { setFilter('team', p.team); setTeamSearch('') }
+                        }}
                       >
                         {p.team}
                       </button>

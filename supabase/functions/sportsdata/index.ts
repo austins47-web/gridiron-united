@@ -150,9 +150,45 @@ serve(async (req) => {
       data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=${teamId}&limit=25`)
 
     } else if (endpoint.startsWith('cfb/teams/') && endpoint.endsWith('/roster')) {
-      // cfb/teams/{teamId}/roster — for debugging athlete ID structure
       const teamId = endpoint.split('/')[2]
       data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${teamId}/roster`)
+
+    } else if (endpoint.startsWith('cfb/teams/') && endpoint.endsWith('/schedule')) {
+      const teamId     = endpoint.split('/')[2]
+      const season     = url.searchParams.get('season') ?? '2026'
+      const seasontype = url.searchParams.get('seasontype') ?? '2'
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${teamId}/schedule?season=${season}&seasontype=${seasontype}`)
+
+    } else if (endpoint.startsWith('nfl/teams/') && endpoint.endsWith('/schedule')) {
+      const teamId     = endpoint.split('/')[2]
+      const season     = url.searchParams.get('season') ?? '2026'
+      const seasontype = url.searchParams.get('seasontype') ?? '2'
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/schedule?season=${season}&seasontype=${seasontype}`)
+
+    } else if (endpoint.startsWith('cfb/teams/') && endpoint.endsWith('/leaders')) {
+      const teamId = endpoint.split('/')[2]
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${teamId}/leaders`)
+
+    } else if (endpoint.startsWith('cfb/teams/') && endpoint.endsWith('/info')) {
+      const teamId = endpoint.split('/')[2]
+      // Full team info including stats, history
+      const [info, leaders] = await Promise.all([
+        espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${teamId}`),
+        espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${teamId}/leaders`).catch(() => null),
+      ])
+      data = { ...info, leaders }
+
+    } else if (endpoint.startsWith('nfl/teams/') && endpoint.endsWith('/info')) {
+      const teamId = endpoint.split('/')[2]
+      const [info, leaders] = await Promise.all([
+        espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}`),
+        espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/leaders`).catch(() => null),
+      ])
+      data = { ...info, leaders }
+
+    } else if (endpoint.startsWith('nfl/teams/') && endpoint.endsWith('/roster')) {
+      const teamId = endpoint.split('/')[2]
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/roster`)
 
     } else if (endpoint.startsWith('athlete/')) {
       const parts = endpoint.split('/')
