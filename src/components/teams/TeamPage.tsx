@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Trophy, Calendar, Users, BarChart2, Star, MapPin, Award } from 'lucide-react'
+import { ArrowLeft, Trophy, Calendar, Users, MapPin, Award, Medal, LayoutDashboard } from 'lucide-react'
 import clsx from 'clsx'
-import { CFB_HISTORY, NFL_HISTORY } from './teamHistory'
+import { NFL_AWARDS, CFB_AWARDS } from './teamAwards'
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -110,16 +111,16 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
     [schedule, teamId, league]
   )
 
-  const history = league === 'CFB'
-    ? CFB_HISTORY[teamId]
-    : NFL_HISTORY[teamId]
+  const awards = league === 'CFB'
+    ? CFB_AWARDS[teamId]
+    : NFL_AWARDS[teamId]
 
   const wins   = games.filter(g => g.result === 'W').length
   const losses = games.filter(g => g.result === 'L').length
   const upcoming = games.filter(g => !g.isFinal && !g.isLive).slice(0, 1)[0]
 
   const TABS: { id: Tab; label: string; icon: any }[] = [
-    { id: 'overview',  label: 'Overview',  icon: Star },
+    { id: 'overview',  label: 'Overview',  icon: LayoutDashboard },
     { id: 'schedule',  label: 'Schedule',  icon: Calendar },
     { id: 'roster',    label: 'Roster',    icon: Users },
     { id: 'history',   label: 'History',   icon: Trophy },
@@ -253,31 +254,25 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
             )}
 
             {/* History snapshot */}
-            {history && (
-              <div className="panel space-y-3">
+            {awards && (
+              <div className="panel space-y-2">
                 <div className="text-xs font-black uppercase tracking-wider text-field-400">All-Time Achievements</div>
-                {league === 'CFB' && 'heismans' in history && (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <Award className="w-4 h-4 text-gold" />
-                      <span className="text-sm font-bold text-white">
-                        {(history as any).heismans.length} Heisman{(history as any).heismans.length !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-gold" />
-                      <span className="text-sm font-bold text-white">
-                        {(history as any).natChamps.length} National Championship{(history as any).natChamps.length !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                  </>
+                {league === 'CFB' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(awards as any).natChamps?.length > 0 && <div className="flex items-center gap-2"><Trophy className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white font-bold">{(awards as any).natChamps.length} Nat. Championships</span></div>}
+                    {(awards as any).heismans?.length > 0 && <div className="flex items-center gap-2"><Award className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white font-bold">{(awards as any).heismans.length} Heismans</span></div>}
+                    {(awards as any).outland?.length > 0 && <div className="flex items-center gap-2"><Medal className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white">{(awards as any).outland.length} Outland</span></div>}
+                    {(awards as any).biletnikoff?.length > 0 && <div className="flex items-center gap-2"><Medal className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white">{(awards as any).biletnikoff.length} Biletnikoff</span></div>}
+                    {(awards as any).butkus?.length > 0 && <div className="flex items-center gap-2"><Medal className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white">{(awards as any).butkus.length} Butkus</span></div>}
+                  </div>
                 )}
-                {league === 'NFL' && 'superBowls' in history && (
-                  <div className="flex items-center gap-2">
-                    <Trophy className="w-4 h-4 text-gold" />
-                    <span className="text-sm font-bold text-white">
-                      {(history as any).superBowls.length} Super Bowl{(history as any).superBowls.length !== 1 ? 's' : ''}
-                    </span>
+                {league === 'NFL' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(awards as any).superBowls?.length > 0 && <div className="flex items-center gap-2"><Trophy className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white font-bold">{(awards as any).superBowls.length} Super Bowls</span></div>}
+                    {(awards as any).mvp?.length > 0 && <div className="flex items-center gap-2"><Award className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white font-bold">{(awards as any).mvp.length} MVPs</span></div>}
+                    {(awards as any).opoy?.length > 0 && <div className="flex items-center gap-2"><Medal className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white">{(awards as any).opoy.length} Offensive POY</span></div>}
+                    {(awards as any).dpoy?.length > 0 && <div className="flex items-center gap-2"><Medal className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white">{(awards as any).dpoy.length} Defensive POY</span></div>}
+                    {(awards as any).wpmoty?.length > 0 && <div className="flex items-center gap-2"><Medal className="w-4 h-4 text-gold shrink-0"/><span className="text-sm text-white">{(awards as any).wpmoty.length} Walter Payton MOY</span></div>}
                   </div>
                 )}
               </div>
@@ -411,90 +406,79 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
         {/* ══ HISTORY ══ */}
         {tab === 'history' && (
           <div className="space-y-4">
-            {!history && (
+            {!awards && (
               <div className="panel text-center py-10 text-field-400 text-sm">
                 Historical data not available for this team.
               </div>
             )}
 
-            {/* CFB History */}
-            {league === 'CFB' && history && 'heismans' in history && (
-              <>
-                {/* National Championships */}
-                {(history as any).natChamps.length > 0 && (
-                  <div className="panel space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-gold" />
-                      <span className="font-black text-white">National Championships ({(history as any).natChamps.length})</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(history as any).natChamps.map((yr: number) => (
-                        <span key={yr} className="px-2.5 py-1 rounded-lg bg-gold/10 border border-gold/30 text-gold text-sm font-bold">
-                          {yr}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            {awards && league === 'CFB' && (() => {
+              const a = awards as any
+              return (
+                <>
+                  {/* National Championships */}
+                  {a.natChamps?.length > 0 && (
+                    <AwardBlock icon={<Trophy className="w-4 h-4 text-gold"/>} title={`National Championships (${a.natChamps.length})`}>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {a.natChamps.map((yr: number) => (
+                          <span key={yr} className="px-2.5 py-1 rounded-lg bg-gold/10 border border-gold/30 text-gold text-sm font-bold">{yr}</span>
+                        ))}
+                      </div>
+                    </AwardBlock>
+                  )}
+                  {a.heismans?.length > 0 && <AwardList icon={<Award className="w-4 h-4 text-gold"/>} title={`Heisman Trophy (${a.heismans.length})`} items={a.heismans} />}
+                  {a.maxwell?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Maxwell Award — College Player of the Year (${a.maxwell.length})`} items={a.maxwell} />}
+                  {a.walterCamp?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Walter Camp Award — Player of the Year (${a.walterCamp.length})`} items={a.walterCamp} />}
+                  {a.daveyOBrien?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Davey O'Brien Award — Best QB (${a.daveyOBrien.length})`} items={a.daveyOBrien} />}
+                  {a.doakWalker?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Doak Walker Award — Best RB (${a.doakWalker.length})`} items={a.doakWalker} />}
+                  {a.biletnikoff?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Biletnikoff Award — Best Receiver (${a.biletnikoff.length})`} items={a.biletnikoff} />}
+                  {a.outland?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Outland Trophy — Best Interior Lineman (${a.outland.length})`} items={a.outland} />}
+                  {a.butkus?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Dick Butkus Award — Best Linebacker (${a.butkus.length})`} items={a.butkus} />}
+                  {a.bednarik?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Bednarik Award — Defensive Player of the Year (${a.bednarik.length})`} items={a.bednarik} />}
+                  {a.nagurski?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Nagurski Trophy — Defensive Player of the Year (${a.nagurski.length})`} items={a.nagurski} />}
+                  {a.jimThorpe?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Jim Thorpe Award — Best Defensive Back (${a.jimThorpe.length})`} items={a.jimThorpe} />}
+                  {!a.natChamps?.length && !a.heismans?.length && !a.maxwell?.length && !a.outland?.length && !a.biletnikoff?.length && (
+                    <div className="panel text-center py-10 text-field-400 text-sm">No major award data on record.</div>
+                  )}
+                </>
+              )
+            })()}
 
-                {/* Heisman Winners */}
-                {(history as any).heismans.length > 0 && (
-                  <div className="panel space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Award className="w-4 h-4 text-gold" />
-                      <span className="font-black text-white">Heisman Trophy Winners ({(history as any).heismans.length})</span>
-                    </div>
-                    <div className="space-y-2">
-                      {(history as any).heismans.map((h: any) => (
-                        <div key={h.year} className="flex items-center justify-between py-1 border-b border-field-800/50">
-                          <span className="text-white font-bold">{h.name}</span>
-                          <span className="text-field-400 text-sm">{h.year}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {(history as any).natChamps.length === 0 && (history as any).heismans.length === 0 && (
-                  <div className="panel text-center py-10 text-field-400 text-sm">
-                    No championships or Heisman winners on record.
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* NFL History */}
-            {league === 'NFL' && history && 'superBowls' in history && (
-              <>
-                {(history as any).superBowls.length > 0 ? (
-                  <div className="panel space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-gold" />
-                      <span className="font-black text-white">Super Bowl Wins ({(history as any).superBowls.length})</span>
-                    </div>
-                    <div className="space-y-3">
-                      {(history as any).superBowls.map((sb: any, i: number) => {
-                        const mvp = (history as any).mvps?.[i]
-                        return (
-                          <div key={sb.year} className="flex items-start justify-between py-2 border-b border-field-800/50">
-                            <div>
-                              <div className="text-white font-bold">{sb.year} — vs {sb.opponent}</div>
-                              <div className="text-sm text-field-400">Final: {sb.score}</div>
-                              {mvp && <div className="text-xs text-gold mt-0.5">MVP: {mvp.name}</div>}
+            {awards && league === 'NFL' && (() => {
+              const a = awards as any
+              return (
+                <>
+                  {/* Super Bowls */}
+                  {a.superBowls?.length > 0 && (
+                    <AwardBlock icon={<Trophy className="w-4 h-4 text-gold"/>} title={`Super Bowl Wins (${a.superBowls.length})`}>
+                      <div className="space-y-3">
+                        {a.superBowls.map((sb: any, i: number) => {
+                          const mvp = a.sbMvps?.[i]
+                          return (
+                            <div key={sb.year} className="flex items-start justify-between py-2 border-b border-field-800/50">
+                              <div>
+                                <div className="text-white font-bold">{sb.year} — vs {sb.opponent}</div>
+                                <div className="text-sm text-field-400">Final: {sb.score}</div>
+                                {mvp && <div className="text-xs text-gold mt-0.5">Super Bowl MVP: {mvp.name}</div>}
+                              </div>
                             </div>
-                            <span className="text-gold font-black text-sm">SB {romanize((history as any).superBowls.filter((_: any, j: number) => j <= i).length + previousSBCount(teamId))}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="panel text-center py-10 text-field-400 text-sm">
-                    No Super Bowl wins on record.
-                  </div>
-                )}
-              </>
-            )}
+                          )
+                        })}
+                      </div>
+                    </AwardBlock>
+                  )}
+                  {a.mvp?.length > 0 && <AwardList icon={<Award className="w-4 h-4 text-gold"/>} title={`AP MVP (${a.mvp.length})`} items={a.mvp} />}
+                  {a.opoy?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Offensive Player of the Year (${a.opoy.length})`} items={a.opoy} />}
+                  {a.dpoy?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Defensive Player of the Year (${a.dpoy.length})`} items={a.dpoy} />}
+                  {a.oroty?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Offensive Rookie of the Year (${a.oroty.length})`} items={a.oroty} />}
+                  {a.droty?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Defensive Rookie of the Year (${a.droty.length})`} items={a.droty} />}
+                  {a.wpmoty?.length > 0 && <AwardList icon={<Medal className="w-4 h-4 text-gold"/>} title={`Walter Payton Man of the Year (${a.wpmoty.length})`} items={a.wpmoty} />}
+                  {!a.superBowls?.length && !a.mvp?.length && !a.dpoy?.length && !a.opoy?.length && (
+                    <div className="panel text-center py-10 text-field-400 text-sm">No major award data on record.</div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         )}
       </div>
@@ -520,15 +504,31 @@ function posGroup(abbr: string): string {
 }
 
 const POS_ORDER = ['QB','RB','WR','TE','OL','DL','LB','DB','K','P','ST']
-function romanize(n: number): string {
-  const vals = [50,40,10,9,5,4,1]
-  const syms = ['L','XL','X','IX','V','IV','I']
-  let result = ''
-  for (let i = 0; i < vals.length; i++) {
-    while (n >= vals[i]) { result += syms[i]; n -= vals[i] }
-  }
-  return result
+
+// ── Award display helpers ─────────────────────────────────────
+function AwardBlock({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+  return (
+    <div className="panel space-y-3">
+      <div className="flex items-center gap-2">
+        {icon}
+        <span className="font-black text-white text-sm">{title}</span>
+      </div>
+      {children}
+    </div>
+  )
 }
 
-// Super Bowl count before a team's first win (for sequential numbering)
-function previousSBCount(_teamId: string): number { return 0 }
+function AwardList({ icon, title, items }: { icon: React.ReactNode; title: string; items: Array<{ year: number; name: string }> }) {
+  return (
+    <AwardBlock icon={icon} title={title}>
+      <div className="space-y-0">
+        {items.map((item, i) => (
+          <div key={`${item.year}-${i}`} className="flex items-center justify-between py-1.5 border-b border-field-800/50 last:border-0">
+            <span className="text-white font-bold text-sm">{item.name}</span>
+            <span className="text-field-400 text-xs tabular-nums">{item.year}</span>
+          </div>
+        ))}
+      </div>
+    </AwardBlock>
+  )
+}
