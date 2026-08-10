@@ -114,6 +114,12 @@ serve(async (req) => {
     } else if (endpoint === 'nfl/live-scores') {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard')
 
+    } else if (endpoint.startsWith('nfl/scores/')) {
+      // nfl/scores/{season}/{week} — e.g. nfl/scores/2026/1
+      const [,, season, week] = endpoint.split('/')
+      // seasontype=1 preseason, 2=regular, 3=postseason
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?season=${season}&seasontype=2&week=${week}`)
+
     } else if (endpoint.startsWith('cfb/scores/')) {
       const [,, season, week] = endpoint.split('/')
       data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=50&week=${week}&season=${season}`)

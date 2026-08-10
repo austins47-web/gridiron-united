@@ -539,13 +539,43 @@ function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSe
 
 // ── Main ─────────────────────────────────────────────────────
 
-type LeagueFilter = 'All' | 'NFL' | 'CFB'
+type LeagueTab  = 'NFL' | 'CFB'
 type StatusFilter = 'All' | 'Live' | 'Final' | 'Upcoming'
+
+// Season constants
+const NFL_SEASON  = 2026
+const CFB_SEASON  = 2026
+const NFL_WEEKS   = Array.from({ length: 18 }, (_, i) => i + 1)  // 1–18 regular season
+const CFB_WEEKS   = Array.from({ length: 15 }, (_, i) => i + 1)  // 1–15
+
+const WEEK_KEY    = 'gu_scores_week'
+const TAB_KEY     = 'gu_scores_tab'
+
+async function fetchWeek(league: LeagueTab, season: number, week: number): Promise<{ games: LiveGame[]; currentWeek: number }> {
+  const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
+  const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sportsdata`
+  const endpoint = league === 'NFL'
+    ? `nfl/scores/${season}/${week}`
+    : `cfb/scores/${season}/${week}`
+  const res = await fetch(`${BASE}?endpoint=${encodeURIComponent(endpoint)}`, {
+    headers: { apikey: ANON, Authorization: `Bearer ${ANON}` }
+  })
+  if (!res.ok) throw new Error(`ESPN ${league} fetch failed: ${res.status}`)
+  const data = await res.json()
+  const currentWeek = data.week?.number ?? week
+  const games = (data.events ?? []).map((e: any) => parseGame(e, league))
+  return { games, currentWeek }
+}
 
 export function LiveScoresView() {
   const { profile } = useAppStore()
 
-  const [leagueFilter, setLeagueFilter] = useState<LeagueFilter>('All')
+  const [tab, setTab] = useState<LeagueTab>(() =>
+    (localStorage.getItem(TAB_KEY) as LeagueTab | null) ?? 'NFL')
+  const [nflWeek, setNflWeek] = useState<number>(() =>
+    Number(localStorage.getItem(`${WEEK_KEY}_NFL`)) || 1)
+  const [cfbWeek, setCfbWeek] = useState<number>(() =>
+    Number(localStorage.getItem(`${WEEK_KEY}_CFB`)) || 1)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     (localStorage.getItem(VIEW_KEY) as ViewMode | null) ?? 'grid')
@@ -556,18 +586,21 @@ export function LiveScoresView() {
   const [manualFavs, setManualFavs] = useState<Set<string>>(loadFavs)
   const [selectedGame, setSelectedGame] = useState<LiveGame | null>(null)
 
+  const week    = tab === 'NFL' ? nflWeek : cfbWeek
+  const setWeek = tab === 'NFL' ? setNflWeek : setCfbWeek
+
+  useEffect(() => { localStorage.setItem(TAB_KEY, tab) }, [tab])
+  useEffect(() => { localStorage.setItem(`${WEEK_KEY}_NFL`, String(nflWeek)) }, [nflWeek])
+  useEffect(() => { localStorage.setItem(`${WEEK_KEY}_CFB`, String(cfbWeek)) }, [cfbWeek])
+  useEffect(() => { localStorage.setItem(VIEW_KEY, viewMode) }, [viewMode])
+  useEffect(() => { localStorage.setItem(COLS_KEY, String(cols)) }, [cols])
+
   const profileAbbrs = new Set<string>(
     [profile?.favorite_nfl_team, profile?.favorite_cfb_team]
       .filter(Boolean)
       .flatMap(t => [t as string, toAbbr(t as string)])
   )
   const favTeams = new Set([...profileAbbrs, ...manualFavs])
-  const profileDisplayCount = [profile?.favorite_nfl_team, profile?.favorite_cfb_team].filter(Boolean).length
-  const manualExtra = [...manualFavs].filter(t => !profileAbbrs.has(t)).length
-  const favCount = profileDisplayCount + manualExtra
-
-  useEffect(() => { localStorage.setItem(VIEW_KEY, viewMode) }, [viewMode])
-  useEffect(() => { localStorage.setItem(COLS_KEY, String(cols)) }, [cols])
 
   const toggleFav = useCallback((abbr: string) => {
     setManualFavs(prev => {
@@ -580,29 +613,29 @@ export function LiveScoresView() {
 
   const { data: oddsMap } = useNflOdds()
 
-  const nflQuery = useQuery({
-    queryKey: ['scores-nfl', refreshTick],
-    queryFn: async () => { const g = await fetchLeague('NFL'); setLastUpdated(new Date()); return g },
-    staleTime: 25_000, retry: 2,
-  })
-  const cfbQuery = useQuery({
-    queryKey: ['scores-cfb', refreshTick],
-    queryFn: async () => { const g = await fetchLeague('CFB'); setLastUpdated(new Date()); return g },
-    staleTime: 25_000, retry: 2,
+  const query = useQuery({
+    queryKey: ['scores', tab, tab === 'NFL' ? NFL_SEASON : CFB_SEASON, week, refreshTick],
+    queryFn: async () => {
+      const result = await fetchWeek(tab, tab === 'NFL' ? NFL_SEASON : CFB_SEASON, week)
+      setLastUpdated(new Date())
+      return result
+    },
+    staleTime: 25_000,
+    retry: 2,
   })
 
+  // Auto-refresh: faster when games are live
   useEffect(() => {
-    const all = [...(nflQuery.data ?? []), ...(cfbQuery.data ?? [])]
-    const ms = all.some(g => g.status === 'in') ? 30_000 : 120_000
+    const games = query.data?.games ?? []
+    const ms = games.some(g => g.status === 'in') ? 30_000 : 120_000
     const t = setTimeout(() => setRefreshTick(n => n + 1), ms)
     return () => clearTimeout(t)
-  }, [nflQuery.data, cfbQuery.data])
+  }, [query.data])
 
-  const allGames   = [...(nflQuery.data ?? []), ...(cfbQuery.data ?? [])]
-  const isFetching = nflQuery.isFetching || cfbQuery.isFetching
-  const hasError   = nflQuery.isError && cfbQuery.isError
-  const liveCount  = allGames.filter(g => g.status === 'in').length
+  const allGames  = query.data?.games ?? []
+  const liveCount = allGames.filter(g => g.status === 'in').length
   const statusOrder: Record<string, number> = { in: 0, pre: 1, post: 2 }
+  const weeks = tab === 'NFL' ? NFL_WEEKS : CFB_WEEKS
 
   const favGames = allGames
     .filter(g => gameHasFav(favTeams, g))
@@ -611,7 +644,6 @@ export function LiveScoresView() {
   const otherGames = allGames
     .filter(g => {
       if (gameHasFav(favTeams, g)) return false
-      if (leagueFilter !== 'All' && g.league !== leagueFilter) return false
       if (statusFilter === 'Live'     && g.status !== 'in')   return false
       if (statusFilter === 'Final'    && g.status !== 'post') return false
       if (statusFilter === 'Upcoming' && g.status !== 'pre')  return false
@@ -629,7 +661,7 @@ export function LiveScoresView() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <h1 className="section-title !mb-0">Live Scores</h1>
+          <h1 className="section-title !mb-0">Scores</h1>
           {liveCount > 0 && (
             <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg px-2 py-1">
               <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
@@ -643,28 +675,55 @@ export function LiveScoresView() {
               {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
-          <button onClick={() => setRefreshTick(n => n + 1)} disabled={isFetching}
+          <button onClick={() => setRefreshTick(n => n + 1)} disabled={query.isFetching}
             className={clsx(
               'p-1.5 rounded-lg border border-field-700 text-field-400 hover:text-white hover:border-field-500 transition-colors',
-              isFetching && 'animate-spin opacity-50 pointer-events-none',
+              query.isFetching && 'animate-spin opacity-50 pointer-events-none',
             )}>
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
+      {/* ── League tabs ── */}
+      <div className="flex gap-1 p-1 bg-field-900 rounded-xl border border-field-800 w-fit">
+        {(['NFL', 'CFB'] as LeagueTab[]).map(t => (
+          <button key={t} onClick={() => { setTab(t); setStatusFilter('All') }}
+            className={clsx(
+              'px-6 py-1.5 rounded-lg text-sm font-black transition-colors uppercase tracking-wide',
+              tab === t
+                ? t === 'NFL' ? 'bg-nfl text-white' : 'bg-cfb text-white'
+                : 'text-field-400 hover:text-white'
+            )}>
+            {t}
+          </button>
+        ))}
+      </div>
+
       {/* ── Controls bar ── */}
       <div className="flex flex-wrap gap-2 items-center">
 
-        {/* League filter */}
-        <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
-          {(['All', 'NFL', 'CFB'] as LeagueFilter[]).map(f => (
-            <button key={f} onClick={() => setLeagueFilter(f)}
-              className={clsx('font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
-                leagueFilter === f
-                  ? f === 'NFL' ? 'bg-nfl/20 text-nfl' : f === 'CFB' ? 'bg-cfb/20 text-cfb' : 'bg-field-700 text-white'
-                  : 'text-field-400 hover:text-white')}>{f}</button>
-          ))}
+        {/* Week picker */}
+        <div className="flex items-center gap-1.5 bg-field-800 border border-field-700 rounded-lg px-2 py-1">
+          <button
+            onClick={() => setWeek(w => Math.max(1, w - 1))}
+            disabled={week <= 1}
+            className="text-field-400 hover:text-white disabled:opacity-30 transition-colors px-1"
+          >‹</button>
+          <select
+            value={week}
+            onChange={e => setWeek(Number(e.target.value))}
+            className="bg-transparent text-white text-sm font-bold text-center appearance-none cursor-pointer outline-none w-20"
+          >
+            {weeks.map(w => (
+              <option key={w} value={w} className="bg-field-800">Week {w}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setWeek(w => Math.min(weeks.length, w + 1))}
+            disabled={week >= weeks.length}
+            className="text-field-400 hover:text-white disabled:opacity-30 transition-colors px-1"
+          >›</button>
         </div>
 
         {/* Status filter */}
@@ -678,110 +737,88 @@ export function LiveScoresView() {
           ))}
         </div>
 
-        {/* View mode toggle */}
+        {/* View mode */}
         <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
-          <button onClick={() => setViewMode('grid')} title="Grid view"
+          <button onClick={() => setViewMode('grid')}
             className={clsx('flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
               viewMode === 'grid' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white')}>
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Grid</span>
+            <LayoutGrid className="w-3.5 h-3.5" /><span className="hidden sm:inline">Grid</span>
           </button>
-          <button onClick={() => setViewMode('list')} title="List view"
+          <button onClick={() => setViewMode('list')}
             className={clsx('flex items-center gap-1.5 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
               viewMode === 'list' ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white')}>
-            <List className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">List</span>
+            <List className="w-3.5 h-3.5" /><span className="hidden sm:inline">List</span>
           </button>
         </div>
 
-        {/* Columns picker — grid mode only */}
         {viewMode === 'grid' && <ColsPicker value={cols} onChange={setCols} />}
-
-        {favCount > 0 && (
-          <span className="text-xs text-gold flex items-center gap-1 ml-1">
-            <Star className="w-3 h-3 fill-gold" />
-            {favCount} favorited
-          </span>
-        )}
       </div>
 
-      {/* ── Scores ── */}
+      {/* ── Games ── */}
+      {query.isError && (
+        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+          <WifiOff className="w-4 h-4 shrink-0" />
+          <div>
+            <p className="font-bold">Could not load scores</p>
+            <p className="text-xs text-red-400/70 mt-0.5">ESPN API unavailable. Try refreshing.</p>
+          </div>
+        </div>
+      )}
 
-          {/* Profile favorites notice */}
-          {(profile?.favorite_nfl_team || profile?.favorite_cfb_team) && (
-            <div className="flex items-center gap-2 text-xs text-field-300 bg-field-800/40 border border-field-700/50 rounded-lg px-3 py-2">
-              <Star className="w-3 h-3 text-gold fill-gold shrink-0" />
-              <span>Auto-pinned:
-                {profile.favorite_nfl_team && <span className="text-nfl font-bold ml-1">{profile.favorite_nfl_team}</span>}
-                {profile.favorite_nfl_team && profile.favorite_cfb_team && <span className="text-field-500 mx-1">·</span>}
-                {profile.favorite_cfb_team && <span className="text-cfb font-bold">{profile.favorite_cfb_team}</span>}
-              </span>
+      {query.isFetching && allGames.length === 0 && (
+        viewMode === 'list'
+          ? <div className="space-y-2">{Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-12 animate-pulse" />
+            ))}</div>
+          : <div className={clsx('grid gap-3', GRID_COLS[cols])}>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-28 animate-pulse" />
+              ))}
             </div>
-          )}
+      )}
 
-          {hasError && (
-            <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-              <WifiOff className="w-4 h-4 shrink-0" />
-              <div>
-                <p className="font-bold">Could not load scores</p>
-                <p className="text-xs text-red-400/70 mt-0.5">ESPN scores API unavailable. Try refreshing.</p>
+      {!query.isFetching && !query.isError && allGames.length === 0 && (
+        <div className="panel text-center py-14 space-y-2">
+          <div className="text-4xl">🏈</div>
+          <p className="text-white font-bold text-lg">No {tab} games — Week {week}</p>
+          <p className="text-field-300 text-sm">Try a different week or check back on game days</p>
+        </div>
+      )}
+
+      {!query.isFetching && !query.isError && allGames.length > 0 && sorted.length === 0 && (
+        <div className="panel text-center py-8">
+          <p className="text-field-300 text-sm">No games match the selected filter</p>
+        </div>
+      )}
+
+      {sorted.length > 0 && (
+        <div className="space-y-5">
+          {favGames.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Star className="w-3.5 h-3.5 text-gold fill-gold" />
+                <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">My Teams</span>
               </div>
+              <GameGroup games={favGames} {...sharedProps} />
             </div>
           )}
-
-          {isFetching && allGames.length === 0 && (
-            viewMode === 'list'
-              ? <div className="space-y-2">{Array.from({ length: 10 }).map((_, i) => (
-                  <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-12 animate-pulse" />
-                ))}</div>
-              : <div className={clsx('grid gap-3', GRID_COLS[cols])}>
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <div key={i} className="bg-field-800 border border-field-700 rounded-xl h-28 animate-pulse" />
-                  ))}
-                </div>
-          )}
-
-          {!isFetching && !hasError && allGames.length === 0 && (
-            <div className="panel text-center py-14 space-y-2">
-              <div className="text-4xl">🏈</div>
-              <p className="text-white font-bold text-lg">No games today</p>
-              <p className="text-field-300 text-sm">Check back on game days — scores update live</p>
-            </div>
-          )}
-
-          {!isFetching && !hasError && allGames.length > 0 && sorted.length === 0 && (
-            <div className="panel text-center py-8">
-              <p className="text-field-300 text-sm">No games match the selected filters</p>
-            </div>
-          )}
-
-          {sorted.length > 0 && (
-            <div className="space-y-5">
+          {otherGames.length > 0 && (
+            <div>
               {favGames.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Star className="w-3.5 h-3.5 text-gold fill-gold" />
-                    <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">My Teams</span>
-                  </div>
-                  <GameGroup games={favGames} {...sharedProps} />
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-cond font-bold text-xs uppercase tracking-wider text-field-300">
+                    All {tab} Games · Week {week}
+                  </span>
+                  <span className="text-xs text-field-400">tap ⭐ to favorite</span>
                 </div>
               )}
-              {otherGames.length > 0 && (
-                <div>
-                  {favGames.length > 0 && (
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-cond font-bold text-xs uppercase tracking-wider text-field-300">All Games</span>
-                      <span className="text-xs text-field-400">tap ⭐ to favorite a team</span>
-                    </div>
-                  )}
-                  <GameGroup games={otherGames} {...sharedProps} />
-                </div>
-              )}
+              <GameGroup games={otherGames} {...sharedProps} />
             </div>
           )}
+        </div>
+      )}
     </div>
 
-    {/* ── Game detail modal ── */}
     {selectedGame && (
       <GameDetailModal
         gameId={selectedGame.id}
