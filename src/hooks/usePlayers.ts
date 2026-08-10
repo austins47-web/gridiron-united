@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import type { Player, PlayerPos, PlayerLeague } from '@/types/database'
+import { calcProjPts, statusMultiplier } from '@/lib/scoring'
+import type { Player, PlayerPos, PlayerLeague, ScoringRules } from '@/types/database'
+import type { ProjStats } from '@/lib/scoring'
 
 export interface PlayerFilters {
   search: string
@@ -61,7 +63,9 @@ export function usePlayers(filters: PlayerFilters) {
         q = q.eq('is_rookie', true)
       }
 
-      q = q.order(filters.sortBy, { ascending: filters.sortDir === 'asc' })
+      // proj_pts sort is handled client-side after proj stats load; use adp as DB fallback
+      const dbSortBy = filters.sortBy === 'proj_pts' ? 'adp' : filters.sortBy
+      q = q.order(dbSortBy, { ascending: filters.sortDir === 'asc' })
       q = q.range(
         filters.page * filters.pageSize,
         filters.page * filters.pageSize + filters.pageSize - 1,
@@ -140,4 +144,40 @@ export function usePlayer(playerId: string | null) {
       return data as Player
     },
   })
+}
+
+// ── Projected stats from player_proj_stats table ──────────────
+// Fetches raw projected stat lines for a set of espn_athlete_ids.
+// Fantasy points are calculated client-side using league scoring.
+export function useProjStats(espnAthleteIds: number[]) {
+  return useQuery({
+    queryKey: ['proj-stats', espnAthleteIds],
+    enabled: espnAthleteIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('player_proj_stats')
+        .select('*')
+        .in('espn_athlete_id', espnAthleteIds)
+      if (error) throw error
+      const map = new Map<number, ProjStats>()
+      for (const row of (data ?? [])) map.set(row.espn_athlete_id, row as ProjStats)
+      return map
+    },
+    staleTime: 10 * 60_000,
+    gcTime:    60 * 60_000,
+  })
+}
+
+// Calculate displayed projected points for a player given league scoring settings.
+// Returns 0 if no proj stats available or no league selected.
+export function getDisplayProj(
+  player: Player,
+  projMap: Map<number, ProjStats> | undefined,
+  scoring: ScoringRules | null | undefined,
+): number {
+  if (!scoring || !player.espn_athlete_id) return 0
+  const proj = projMap?.get(player.espn_athlete_id)
+  if (!proj) return 0
+  const base = calcProjPts(proj, scoring)
+  return Math.round(base * statusMultiplier(player.status) * 10) / 10
 }

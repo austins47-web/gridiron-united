@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { usePlayers, useTeamList, DEFAULT_FILTERS, type PlayerFilters } from '@/hooks/usePlayers'
+import { usePlayers, useTeamList, useProjStats, getDisplayProj, DEFAULT_FILTERS, type PlayerFilters } from '@/hooks/usePlayers'
 import { useRosteredPlayerIds, useAddPlayer, useMyRoster } from '@/hooks/useRoster'
 import { useAppStore } from '@/store/appStore'
 import { buildSlotDefs } from '@/types/database'
-import type { Player } from '@/types/database'
+import type { Player, ScoringRules } from '@/types/database'
 import { PlayerProfileDrawer } from './PlayerProfileDrawer'
 import { Search, ChevronLeft, ChevronRight, Plus, Check, X, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
@@ -36,6 +36,42 @@ export function PlayersView() {
   const players = data?.players ?? []
   const total = data?.total ?? 0
   const totalPages = Math.ceil(total / filters.pageSize)
+
+  // Extract scoring settings from active league
+  const scoring: ScoringRules | null = activeLeague ? {
+    score_pass_td: activeLeague.score_pass_td, score_pass_yd: activeLeague.score_pass_yd,
+    score_pass_bonus_300: activeLeague.score_pass_bonus_300, score_pass_int: activeLeague.score_pass_int,
+    score_rush_td: activeLeague.score_rush_td, score_rush_yd: activeLeague.score_rush_yd,
+    score_rush_bonus_100: activeLeague.score_rush_bonus_100,
+    score_rec_td: activeLeague.score_rec_td, score_rec_yd: activeLeague.score_rec_yd,
+    score_rec_bonus_100: activeLeague.score_rec_bonus_100, score_reception: activeLeague.score_reception,
+    score_fumble_lost: activeLeague.score_fumble_lost, score_2pt_conv: activeLeague.score_2pt_conv,
+    score_fg_0_39: activeLeague.score_fg_0_39, score_fg_40_49: activeLeague.score_fg_40_49,
+    score_fg_50_plus: activeLeague.score_fg_50_plus, score_pat: activeLeague.score_pat,
+    score_fg_miss: activeLeague.score_fg_miss,
+    score_dst_sack: activeLeague.score_dst_sack, score_dst_int: activeLeague.score_dst_int,
+    score_dst_fumble_rec: activeLeague.score_dst_fumble_rec, score_dst_td: activeLeague.score_dst_td,
+    score_dst_safety: activeLeague.score_dst_safety, score_dst_blocked: activeLeague.score_dst_blocked,
+    score_dst_pts_0: activeLeague.score_dst_pts_0, score_dst_pts_1_6: activeLeague.score_dst_pts_1_6,
+    score_dst_pts_7_13: activeLeague.score_dst_pts_7_13, score_dst_pts_14_20: activeLeague.score_dst_pts_14_20,
+    score_dst_pts_21_27: activeLeague.score_dst_pts_21_27, score_dst_pts_28_34: activeLeague.score_dst_pts_28_34,
+    score_dst_pts_35_plus: activeLeague.score_dst_pts_35_plus,
+  } : null
+
+  // Fetch projected stats for current page of players
+  const pageAthleteIds = players
+    .map(p => p.espn_athlete_id)
+    .filter((id): id is number => id !== null)
+  const { data: projMap } = useProjStats(pageAthleteIds)
+
+  // Client-side sort by proj when selected (DB can't sort by calculated proj)
+  const sortedPlayers = filters.sortBy === 'proj_pts' && projMap
+    ? [...players].sort((a, b) => {
+        const pa = getDisplayProj(a, projMap, scoring)
+        const pb = getDisplayProj(b, projMap, scoring)
+        return filters.sortDir === 'asc' ? pa - pb : pb - pa
+      })
+    : players
 
   const setFilter = useCallback(<K extends keyof PlayerFilters>(key: K, val: PlayerFilters[K]) => {
     setFilters(f => ({ ...f, [key]: val, page: key === 'page' ? (val as number) : 0 }))
@@ -364,7 +400,7 @@ export function PlayersView() {
                     </div>
                   </td>
                 </tr>
-              ) : players.map(p => {
+              ) : sortedPlayers.map(p => {
                 const isTaken = rosteredIds?.has(p.id)
                 return (
                   <tr key={p.id} className={clsx(isTaken && 'opacity-50')}>
@@ -447,11 +483,16 @@ export function PlayersView() {
                       </span>
                     </td>
 
-                    {/* Proj */}
+                    {/* Proj — calculated per league scoring settings */}
                     <td className="text-center tabular-nums">
-                      <span className={clsx('text-sm', p.proj_pts > 0 ? 'text-gold font-bold' : 'text-field-600')}>
-                        {p.proj_pts > 0 ? p.proj_pts.toFixed(1) : '—'}
-                      </span>
+                      {(() => {
+                        const proj = getDisplayProj(p, projMap, scoring)
+                        return (
+                          <span className={clsx('text-sm', proj > 0 ? 'text-gold font-bold' : 'text-field-600')}>
+                            {proj > 0 ? proj.toFixed(1) : '—'}
+                          </span>
+                        )
+                      })()}
                     </td>
 
                     {/* Status */}
