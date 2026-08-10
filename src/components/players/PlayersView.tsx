@@ -457,7 +457,10 @@ export function PlayersView() {
                             {p.league === 'NFL' && p.depth_pos && (
                               <span className="text-field-500 text-[10px] hidden sm:inline">{p.depth_pos}</span>
                             )}
-                            <span className="text-field-500 text-[10px] sm:hidden truncate">{p.team}</span>
+                            <button
+                              className="text-field-400 text-[10px] sm:hidden truncate hover:text-gold transition-colors text-left"
+                              onClick={() => { const tid = getTeamId(p.team, p.league); if (tid) setTeamPage({ id: tid, league: p.league }); else setFilter('team', p.team) }}
+                            >{p.team}</button>
                           </div>
                         </div>
                       </div>

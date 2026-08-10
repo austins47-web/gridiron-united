@@ -137,7 +137,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
   }
 
   return (
-    <div className="space-y-0 max-w-4xl mx-auto">
+    <div className="space-y-0 max-w-4xl mx-auto min-w-0">
 
       {/* ── Back button ── */}
       <button onClick={onBack}
@@ -147,7 +147,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
 
       {/* ── Hero banner ── */}
       <div
-        className="relative rounded-2xl overflow-hidden p-6 flex items-end gap-5 min-h-[160px]"
+        className="relative rounded-2xl overflow-hidden p-4 sm:p-6 flex items-end gap-4 sm:gap-5"
         style={{ background: `linear-gradient(135deg, ${color}dd 0%, ${altColor}aa 100%)` }}
       >
         {/* Background watermark logo */}
@@ -192,7 +192,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
       </div>
 
       {/* ── Tabs ── */}
-      <div className="flex border-b border-field-800 mt-4 gap-0">
+      <div className="flex border-b border-field-800 mt-4 gap-0 overflow-x-auto">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={clsx(
