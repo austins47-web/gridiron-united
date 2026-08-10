@@ -200,7 +200,7 @@ export function LandingPage() {
               { n: '32', l: 'NFL Teams' },
               { n: '130+', l: 'CFB Programs' },
               { n: '4', l: 'League Formats' },
-              { n: '18', l: "Pick'Em Weeks" },
+              { n: '4,700+', l: 'Players' },
             ].map(({ n, l }) => (
               <div key={l} className="text-center">
                 <div className="font-cond font-black text-4xl md:text-5xl text-gold leading-none">{n}</div>
