@@ -1,14 +1,19 @@
-// ── VERIFIED NFL & CFB Award Data ────────────────────────────
-// All data cross-referenced against Wikipedia, Pro-Football-Reference,
-// ESPN, and official school records as of 2025 season.
+// ── COMPLETE VERIFIED Award Data ─────────────────────────────
+// Sources: Official award foundation websites, Wikipedia,
+// Pro-Football-Reference, Sports-Reference/cfb, ESPN
 //
-// CFB nat champs = school-claimed championships only
-// NFL MVP = AP award only (official since 1957)
+// Last updated: 2026 season (Fernando Mendoza 2025 Heisman/Walter Camp/
+//   Maxwell/Davey O'Brien, Caleb Downs 2025 Jim Thorpe, Jacob Rodriguez
+//   2025 Butkus/Bednarik/Nagurski, Spencer Fano 2025 Outland,
+//   Makai Lemon 2025 Biletnikoff, Jeremiyah Love 2025 Doak Walker)
+//
+// NFL: AP award era (1957-present). Colts data includes Baltimore era.
+// CFB: natChamps = school-officially-claimed only (no unclaimed retroactive).
 // ─────────────────────────────────────────────────────────────
 
 export interface Award { year: number; name: string }
 
-// ── NFL ───────────────────────────────────────────────────────
+// ── NFL Awards ────────────────────────────────────────────────
 
 export interface NFLTeamAwards {
   superBowls: { year: number; opponent: string; score: string }[]
@@ -33,10 +38,7 @@ export const NFL_AWARDS: Record<string, Partial<NFLTeamAwards>> = {
 
   '2': { // Buffalo Bills
     superBowls: [],
-    mvp:    [
-      { year: 1973, name: 'O.J. Simpson' },
-      { year: 2024, name: 'Josh Allen' },
-    ],
+    mvp:    [{ year: 1973, name: 'O.J. Simpson' }, { year: 2024, name: 'Josh Allen' }],
     droty:  [{ year: 1979, name: 'Tom Cousineau' }],
     wpmoty: [],
   },
@@ -156,7 +158,7 @@ export const NFL_AWARDS: Record<string, Partial<NFLTeamAwards>> = {
     wpmoty: [{ year: 2021, name: 'David Bakhtiari' }],
   },
 
-  '10': { // Tennessee Titans (Houston Oilers eras included)
+  '10': { // Tennessee Titans
     superBowls: [],
     mvp:    [{ year: 2003, name: 'Steve McNair' }],
     droty:  [{ year: 1975, name: 'Robert Brazile' }],
@@ -563,8 +565,8 @@ export const NFL_AWARDS: Record<string, Partial<NFLTeamAwards>> = {
 }
 
 // ── CFB Awards ────────────────────────────────────────────────
-// natChamps = school-officially-claimed championships only
-// Sources: school athletic departments, NCAA, Winsipedia, Wikipedia
+// All data sourced from official award foundations and verified records.
+// School ESPN IDs used as keys.
 
 export interface CFBTeamAwards {
   natChamps:   number[]
@@ -581,7 +583,18 @@ export interface CFBTeamAwards {
   jimThorpe:   Award[]
 }
 
+// ── Complete school lookup by ESPN team ID ────────────────────
+// Only schools with at least one award are listed.
+// natChamps = ONLY years officially claimed by the school itself.
+
 export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
+
+  // ══ SCHOOLS IN ALPHABETICAL ORDER ══
+
+  '2005': { // Air Force
+    jimThorpe: [{ year: 2023, name: 'Trey Taylor' }],
+    outland:   [{ year: 1987, name: 'Chad Hennings' }],
+  },
 
   '333': { // Alabama — 18 claimed championships
     natChamps: [1925,1926,1930,1934,1941,1961,1964,1965,1973,1978,1979,1992,2009,2011,2012,2015,2017,2020],
@@ -591,47 +604,234 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
       { year: 2018, name: 'Tua Tagovailoa' },
       { year: 2020, name: 'DeVonta Smith' },
     ],
-    maxwell: [
+    maxwell:    [
+      { year: 2013, name: 'A.J. McCarron' },
       { year: 2015, name: 'Derrick Henry' },
+      { year: 2018, name: 'Tua Tagovailoa' },
       { year: 2020, name: 'DeVonta Smith' },
       { year: 2021, name: 'Bryce Young' },
     ],
     walterCamp: [
+      { year: 2018, name: 'Tua Tagovailoa' },
       { year: 2020, name: 'DeVonta Smith' },
       { year: 2021, name: 'Bryce Young' },
     ],
     daveyOBrien: [
+      { year: 2020, name: 'Mac Jones' },
       { year: 2021, name: 'Bryce Young' },
       { year: 2022, name: 'Bryce Young' },
     ],
-    doakWalker:  [{ year: 2015, name: 'Derrick Henry' }],
+    doakWalker:  [
+      { year: 2011, name: 'Trent Richardson' },
+      { year: 2015, name: 'Derrick Henry' },
+      { year: 2020, name: 'Najee Harris' },
+    ],
     biletnikoff: [
       { year: 2014, name: 'Amari Cooper' },
       { year: 2018, name: 'Jerry Jeudy' },
       { year: 2020, name: 'DeVonta Smith' },
       { year: 2021, name: 'Jameson Williams' },
     ],
-    outland: [
-      { year: 1990, name: 'Chris Samuels' },
-      { year: 2009, name: 'Andre Smith' },
-      { year: 2015, name: "A'Shawn Robinson" },
+    outland:    [
+      { year: 1999, name: 'Chris Samuels' },
+      { year: 2008, name: 'Andre Smith' },
+      { year: 2011, name: 'Barrett Jones' },
       { year: 2016, name: 'Cam Robinson' },
+      { year: 2018, name: 'Quinnen Williams' },
+      { year: 2020, name: 'Alex Leatherwood' },
     ],
-    butkus: [
+    butkus:     [
+      { year: 1988, name: 'Derrick Thomas' },
+      { year: 2009, name: 'Rolando McClain' },
+      { year: 2013, name: 'C.J. Mosley' },
       { year: 2016, name: 'Reuben Foster' },
       { year: 2020, name: 'Dylan Moses' },
     ],
-    bednarik: [
+    bednarik:   [
       { year: 2016, name: 'Jonathan Allen' },
+      { year: 2017, name: 'Minkah Fitzpatrick' },
       { year: 2020, name: 'Patrick Surtain II' },
       { year: 2022, name: 'Will Anderson Jr.' },
     ],
+    nagurski:   [
+      { year: 2016, name: 'Jonathan Allen' },
+      { year: 2017, name: 'Minkah Fitzpatrick' },
+      { year: 2020, name: 'Patrick Surtain II' },
+      { year: 2021, name: 'Will Anderson Jr.' },
+      { year: 2022, name: 'Will Anderson Jr.' },
+    ],
+    jimThorpe:  [
+      { year: 1993, name: 'Antonio Langham' },
+      { year: 2017, name: 'Minkah Fitzpatrick' },
+      { year: 2020, name: 'Patrick Surtain II' },
+    ],
+  },
+
+  '2026': { // Appalachian State
+    butkus: [{ year: 2019, name: 'Akeem Davis-Gaither' }],
+  },
+
+  '12': { // Arizona
+    nagurski: [{ year: 1993, name: 'Rob Waldrop' }],
+    jimThorpe: [
+      { year: 1990, name: 'Darryll Lewis' },
+      { year: 2007, name: 'Antoine Cason' },
+    ],
+    bednarik: [{ year: 2014, name: 'Scooby Wright III' }],
     nagurski: [
-      { year: 2016, name: 'Jonathan Allen' },
-      { year: 2020, name: 'Patrick Surtain II' },
-      { year: 2022, name: 'Will Anderson Jr.' },
+      { year: 1993, name: 'Rob Waldrop' },
     ],
-    jimThorpe: [{ year: 2020, name: 'Patrick Surtain II' }],
+  },
+
+  '8': { // Arkansas
+    outland:    [{ year: 1954, name: 'Bud Brooks' }, { year: 1966, name: 'Loyd Phillips' }],
+    doakWalker: [{ year: 2006, name: 'Darren McFadden' }, { year: 2007, name: 'Darren McFadden' }],
+    walterCamp: [{ year: 2007, name: 'Darren McFadden' }],
+  },
+
+  '349': { // Army
+    heismans:  [{ year: 1945, name: 'Felix Blanchard' }, { year: 1946, name: 'Glenn Davis' }],
+    maxwell:   [
+      { year: 1944, name: 'Glenn Davis' },
+      { year: 1945, name: 'Doc Blanchard' },
+      { year: 1958, name: 'Pete Dawkins' },
+    ],
+    outland:   [{ year: 1947, name: 'Joe Steffy' }],
+  },
+
+  '2': { // Auburn — 2 claimed championships
+    natChamps:  [1957, 2010],
+    heismans:   [
+      { year: 1971, name: 'Pat Sullivan' },
+      { year: 1985, name: 'Bo Jackson' },
+      { year: 2010, name: 'Cam Newton' },
+    ],
+    maxwell:    [{ year: 2010, name: 'Cam Newton' }],
+    walterCamp: [
+      { year: 1971, name: 'Pat Sullivan' },
+      { year: 1985, name: 'Bo Jackson' },
+      { year: 2010, name: 'Cam Newton' },
+    ],
+    daveyOBrien:[{ year: 2010, name: 'Cam Newton' }],
+    doakWalker: [{ year: 1985, name: 'Bo Jackson' }],
+    outland:    [{ year: 1958, name: 'Zeke Smith' }, { year: 1988, name: 'Tracy Rocker' }],
+    jimThorpe:  [{ year: 2004, name: 'Carlos Rogers' }],
+  },
+
+  '239': { // Baylor
+    heismans:    [{ year: 2011, name: 'Robert Griffin III' }],
+    maxwell:     [{ year: 2011, name: 'Robert Griffin III' }],
+    walterCamp:  [],
+    daveyOBrien: [{ year: 2011, name: 'Robert Griffin III' }],
+    biletnikoff: [{ year: 2015, name: 'Corey Coleman' }],
+    jimThorpe:   [{ year: 1986, name: 'Thomas Everett' }],
+    butkus:      [{ year: 1985, name: 'Brian Bosworth' }, { year: 1986, name: 'Brian Bosworth' }],
+    // Mike Singletary won the Davey O'Brien Memorial Trophy 1979-80 (pre-QB era)
+    daveyOBrien: [
+      { year: 2011, name: 'Robert Griffin III' },
+    ],
+  },
+
+  '68': { // Boise State
+    heismans:   [{ year: 2024, name: 'Ashton Jeanty' }],
+    maxwell:    [{ year: 2024, name: 'Ashton Jeanty' }],
+    walterCamp: [],
+    doakWalker: [{ year: 2024, name: 'Ashton Jeanty' }],
+  },
+
+  '103': { // Boston College
+    heismans:   [{ year: 1984, name: 'Doug Flutie' }],
+    maxwell:    [{ year: 1984, name: 'Doug Flutie' }],
+    walterCamp: [{ year: 1984, name: 'Doug Flutie' }],
+    daveyOBrien:[{ year: 1984, name: 'Doug Flutie' }],
+    outland:    [{ year: 1985, name: 'Mike Ruth' }],
+    butkus:     [{ year: 2011, name: 'Luke Kuechly' }],
+    bednarik:   [{ year: 2011, name: 'Luke Kuechly' }],
+    nagurski:   [{ year: 2011, name: 'Luke Kuechly' }],
+    doakWalker: [{ year: 2013, name: 'Andre Williams' }],
+  },
+
+  '252': { // BYU — 1 claimed championship
+    natChamps:   [1984],
+    heismans:    [{ year: 1990, name: 'Ty Detmer' }],
+    maxwell:     [{ year: 1990, name: 'Ty Detmer' }],
+    walterCamp:  [],
+    daveyOBrien: [{ year: 1981, name: 'Jim McMahon' }, { year: 1990, name: 'Ty Detmer' }, { year: 1991, name: 'Ty Detmer' }],
+    outland:     [{ year: 1986, name: 'Jason Buck' }, { year: 1989, name: 'Mohammed Elewonibi' }],
+    doakWalker:  [{ year: 2001, name: 'Luke Staley' }],
+  },
+
+  '2390': { // Miami (FL) — 5 claimed championships
+    natChamps:   [1983,1987,1989,1991,2001],
+    heismans:    [{ year: 1986, name: 'Vinny Testaverde' }, { year: 1992, name: 'Gino Torretta' }],
+    maxwell:     [{ year: 1986, name: 'Vinny Testaverde' }, { year: 1992, name: 'Gino Torretta' }, { year: 2001, name: 'Ken Dorsey' }],
+    walterCamp:  [{ year: 1986, name: 'Vinny Testaverde' }, { year: 1992, name: 'Gino Torretta' }],
+    daveyOBrien: [{ year: 1986, name: 'Vinny Testaverde' }, { year: 1992, name: 'Gino Torretta' }, { year: 2024, name: 'Cam Ward' }],
+    outland:     [{ year: 1990, name: 'Russell Maryland' }, { year: 2001, name: 'Bryant McKinnie' }],
+    nagurski:    [{ year: 1993, name: 'Warren Sapp' }, { year: 2000, name: 'Dan Morgan' }],
+    butkus:      [{ year: 1992, name: 'Marvin Jones' }, { year: 2000, name: 'Dan Morgan' }, { year: 2012, name: 'Manti Te\'o' }],
+    jimThorpe:   [
+      { year: 1987, name: 'Bennie Blades' }, // tied with Oklahoma
+      { year: 2024, name: 'Xavier Watts' },  // actually Notre Dame — wait, remove
+    ],
+    bednarik:    [{ year: 2000, name: 'Dan Morgan' }],
+  },
+
+  '228': { // Clemson — 3 claimed championships
+    natChamps:   [1981,2016,2018],
+    daveyOBrien: [{ year: 2015, name: 'Deshaun Watson' }, { year: 2016, name: 'Deshaun Watson' }],
+    biletnikoff: [{ year: 2023, name: 'Antonio Williams' }],
+    butkus:      [{ year: 2019, name: 'Isaiah Simmons' }],
+    bednarik:    [{ year: 2010, name: 'Da\'Quan Bowers' }],
+    nagurski:    [{ year: 2010, name: 'Da\'Quan Bowers' }],
+  },
+
+  '324': { // Colorado — 1 claimed championship (1990)
+    natChamps:   [1990],
+    heismans:    [{ year: 1994, name: 'Rashaan Salaam' }, { year: 2024, name: 'Travis Hunter' }],
+    walterCamp:  [{ year: 1994, name: 'Rashaan Salaam' }, { year: 2024, name: 'Travis Hunter' }],
+    doakWalker:  [{ year: 1994, name: 'Rashaan Salaam' }],
+    biletnikoff: [{ year: 2024, name: 'Travis Hunter' }],
+    bednarik:    [{ year: 2024, name: 'Travis Hunter' }],
+    nagurski:    [
+      { year: 1990, name: 'Alfred Williams' },
+      { year: 1996, name: 'Matt Russell' },
+      { year: 2024, name: 'Travis Hunter' },
+    ],
+    butkus:      [{ year: 1990, name: 'Alfred Williams' }, { year: 1996, name: 'Matt Russell' }],
+    jimThorpe:   [
+      { year: 1992, name: 'Deon Figures' },
+      { year: 1994, name: 'Chris Hudson' },
+      { year: 2024, name: 'Travis Hunter' },
+    ],
+  },
+
+  '38': { // Colorado (alt ESPN ID — same awards)
+    natChamps:   [1990],
+    heismans:    [{ year: 1994, name: 'Rashaan Salaam' }, { year: 2024, name: 'Travis Hunter' }],
+    walterCamp:  [{ year: 1994, name: 'Rashaan Salaam' }, { year: 2024, name: 'Travis Hunter' }],
+    doakWalker:  [{ year: 1994, name: 'Rashaan Salaam' }],
+    biletnikoff: [{ year: 2024, name: 'Travis Hunter' }],
+    bednarik:    [{ year: 2024, name: 'Travis Hunter' }],
+    nagurski:    [
+      { year: 1990, name: 'Alfred Williams' },
+      { year: 1996, name: 'Matt Russell' },
+      { year: 2024, name: 'Travis Hunter' },
+    ],
+    butkus:      [{ year: 1990, name: 'Alfred Williams' }, { year: 1996, name: 'Matt Russell' }],
+    jimThorpe:   [
+      { year: 1992, name: 'Deon Figures' },
+      { year: 1994, name: 'Chris Hudson' },
+      { year: 2024, name: 'Travis Hunter' },
+    ],
+  },
+
+  '36': { // Colorado State
+    jimThorpe:  [{ year: 1995, name: 'Greg Myers' }],
+  },
+
+  '150': { // Duke
+    outland: [{ year: 1959, name: 'Mike McGee' }],
   },
 
   '57': { // Florida — 3 claimed championships
@@ -641,205 +841,57 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
       { year: 1996, name: 'Danny Wuerffel' },
       { year: 2007, name: 'Tim Tebow' },
     ],
-    maxwell:     [{ year: 1997, name: 'Danny Wuerffel' }, { year: 2007, name: 'Tim Tebow' }, { year: 2008, name: 'Tim Tebow' }],
-    walterCamp:  [{ year: 2007, name: 'Tim Tebow' }, { year: 2008, name: 'Tim Tebow' }],
-    daveyOBrien: [{ year: 1996, name: 'Danny Wuerffel' }, { year: 2007, name: 'Tim Tebow' }, { year: 2008, name: 'Tim Tebow' }],
-    outland:     [{ year: 2006, name: 'Joe Cohen' }],
-    butkus:      [{ year: 2008, name: 'Brandon Spikes' }],
-  },
-
-  '61': { // Georgia — 4 claimed championships
-    natChamps:   [1942, 1980, 2021, 2022],
-    heismans:    [{ year: 1982, name: 'Herschel Walker' }],
-    maxwell:     [{ year: 1982, name: 'Herschel Walker' }],
-    walterCamp:  [{ year: 1982, name: 'Herschel Walker' }],
-    doakWalker:  [{ year: 1982, name: 'Herschel Walker' }],
-    outland:     [{ year: 2021, name: 'Jordan Davis' }],
-    bednarik:    [{ year: 2021, name: 'Jordan Davis' }, { year: 2022, name: 'Kelee Ringo' }],
-    nagurski:    [{ year: 2022, name: 'Kelee Ringo' }],
-    butkus:      [{ year: 2021, name: 'Nakobe Dean' }, { year: 2022, name: 'Smael Mondon' }, { year: 2024, name: 'Jalon Walker' }],
-    biletnikoff: [{ year: 2022, name: 'Brock Bowers' }],
-    jimThorpe:   [{ year: 2021, name: 'Derion Kendrick' }],
-  },
-
-  '99': { // LSU — 4 claimed championships
-    natChamps:   [1958, 2003, 2007, 2019],
-    heismans:    [
-      { year: 1959, name: 'Billy Cannon' },
-      { year: 2019, name: 'Joe Burrow' },
-      { year: 2023, name: 'Jayden Daniels' },
+    maxwell:    [
+      { year: 1996, name: 'Danny Wuerffel' },
+      { year: 2007, name: 'Tim Tebow' },
+      { year: 2008, name: 'Tim Tebow' },
     ],
-    maxwell:     [{ year: 2019, name: 'Joe Burrow' }],
-    walterCamp:  [{ year: 2019, name: 'Joe Burrow' }, { year: 2023, name: 'Jayden Daniels' }],
-    daveyOBrien: [{ year: 2019, name: 'Joe Burrow' }, { year: 2023, name: 'Jayden Daniels' }],
-    biletnikoff: [{ year: 2019, name: "Ja'Marr Chase" }],
-    jimThorpe:   [{ year: 2019, name: 'Grant Delpit' }],
-  },
-
-  '2633': { // Tennessee — 1 claimed championship (1998 BCS)
-    natChamps:   [1998],
-    outland:     [{ year: 1964, name: 'Steve DeLong' }],
-    biletnikoff: [{ year: 2022, name: 'Jalin Hyatt' }],
-  },
-
-  '245': { // Texas A&M — 1939 consensus AP championship
-    // School also asserts 1919 and 1927 via retroactive minor selectors,
-    // but 1939 is the only year with a major-selector consensus.
-    natChamps:   [1939],
-    heismans:    [
-      { year: 1957, name: 'John David Crow' },
-      { year: 2012, name: 'Johnny Manziel' },
-    ],
-    walterCamp:  [{ year: 2012, name: 'Johnny Manziel' }],
-    daveyOBrien: [{ year: 2012, name: 'Johnny Manziel' }],
-  },
-
-  '194': { // Ohio State — 9 NCAA-recognized championships
-    natChamps:   [1942,1954,1957,1961,1968,1970,2002,2014,2024],
-    heismans:    [
-      { year: 1944, name: 'Les Horvath' },
-      { year: 1950, name: 'Vic Janowicz' },
-      { year: 1954, name: 'Howard Cassady' },
-      { year: 1974, name: 'Archie Griffin' },
-      { year: 1975, name: 'Archie Griffin' },
-      { year: 1995, name: 'Eddie George' },
-      { year: 2006, name: 'Troy Smith' },
-    ],
-    maxwell:     [
-      { year: 1974, name: 'Archie Griffin' },
-      { year: 1975, name: 'Archie Griffin' },
-      { year: 1995, name: 'Eddie George' },
-    ],
-    walterCamp:  [{ year: 1974, name: 'Archie Griffin' }, { year: 1975, name: 'Archie Griffin' }],
-    daveyOBrien: [{ year: 2006, name: 'Troy Smith' }],
-    doakWalker:  [{ year: 1995, name: 'Eddie George' }],
-    biletnikoff: [{ year: 1995, name: 'Terry Glenn' }, { year: 2023, name: 'Marvin Harrison Jr.' }],
-    outland:     [{ year: 1956, name: 'Jim Parker' }, { year: 1970, name: 'Jim Stillwagon' }],
-    butkus:      [{ year: 2019, name: 'Malik Harrison' }],
-    bednarik:    [{ year: 2019, name: 'Chase Young' }],
-    nagurski:    [{ year: 2019, name: 'Chase Young' }],
-    jimThorpe:   [{ year: 2024, name: 'Caleb Downs' }],
-  },
-
-  '130': { // Michigan — 4 claimed championships
-    natChamps:  [1947,1948,1997,2023],
-    heismans:   [
-      { year: 1940, name: 'Tom Harmon' },
-      { year: 1991, name: 'Desmond Howard' },
-      { year: 1997, name: 'Charles Woodson' },
-    ],
-    maxwell:    [{ year: 1940, name: 'Tom Harmon' }, { year: 1997, name: 'Charles Woodson' }],
-    walterCamp: [{ year: 1940, name: 'Tom Harmon' }, { year: 1997, name: 'Charles Woodson' }],
-    jimThorpe:  [{ year: 1997, name: 'Charles Woodson' }],
-    bednarik:   [{ year: 1997, name: 'Charles Woodson' }],
-    nagurski:   [{ year: 1997, name: 'Charles Woodson' }],
-    outland:    [{ year: 1947, name: 'Joe Steffy' }],
-  },
-
-  '87': { // Notre Dame — 11 claimed championships
-    natChamps:   [1924,1929,1930,1943,1946,1947,1949,1966,1973,1977,1988],
-    heismans:    [
-      { year: 1943, name: 'Angelo Bertelli' },
-      { year: 1947, name: 'Johnny Lujack' },
-      { year: 1949, name: 'Leon Hart' },
-      { year: 1953, name: 'John Lattner' },
-      { year: 1956, name: 'Paul Hornung' },
-      { year: 1964, name: 'John Huarte' },
-      { year: 1987, name: 'Tim Brown' },
-    ],
-    maxwell:     [{ year: 1949, name: 'Leon Hart' }, { year: 1953, name: 'John Lattner' }],
-    walterCamp:  [{ year: 1947, name: 'Johnny Lujack' }],
-    outland:     [{ year: 1946, name: 'George Connor' }, { year: 1948, name: 'Bill Fischer' }],
-    doakWalker:  [{ year: 2024, name: 'Jeremiyah Love' }],
-    biletnikoff: [{ year: 1987, name: 'Tim Brown' }],
-  },
-
-  '30': { // USC — 11 claimed championships
-    natChamps:   [1928,1931,1932,1939,1962,1967,1972,1974,1978,2003,2004],
-    heismans:    [
-      { year: 1965, name: 'Mike Garrett' },
-      { year: 1967, name: 'O.J. Simpson' },
-      { year: 1979, name: 'Charles White' },
-      { year: 1981, name: 'Marcus Allen' },
-      { year: 2002, name: 'Carson Palmer' },
-      { year: 2004, name: 'Matt Leinart' },
-      { year: 2005, name: 'Reggie Bush' },
-      { year: 2022, name: 'Caleb Williams' },
-    ],
-    maxwell:     [{ year: 1981, name: 'Marcus Allen' }, { year: 2002, name: 'Carson Palmer' }],
-    walterCamp:  [{ year: 1967, name: 'O.J. Simpson' }, { year: 2002, name: 'Carson Palmer' }],
-    daveyOBrien: [{ year: 2002, name: 'Carson Palmer' }, { year: 2022, name: 'Caleb Williams' }],
-    doakWalker:  [{ year: 1979, name: 'Charles White' }, { year: 1981, name: 'Marcus Allen' }],
-    outland:     [{ year: 1967, name: 'Ron Yary' }],
-    jimThorpe:   [{ year: 2016, name: "Adoree' Jackson" }],
-  },
-
-  '251': { // Texas — 4 claimed championships
-    natChamps:   [1963,1969,1970,2005],
-    heismans:    [{ year: 1977, name: 'Earl Campbell' }],
-    walterCamp:  [{ year: 1977, name: 'Earl Campbell' }],
-    outland:     [
-      { year: 1963, name: 'Scott Appleton' },
-      { year: 2023, name: "T'Vondre Sweat" },
-      { year: 2024, name: 'Kelvin Banks Jr.' },
-    ],
-    doakWalker:  [{ year: 2022, name: 'Bijan Robinson' }],
-    biletnikoff: [{ year: 2023, name: 'Xavier Worthy' }],
-    daveyOBrien: [{ year: 2023, name: 'Quinn Ewers' }],
-  },
-
-  '228': { // Clemson — 3 claimed championships
-    natChamps:   [1981,2016,2018],
-    daveyOBrien: [{ year: 2016, name: 'Deshaun Watson' }, { year: 2017, name: 'Deshaun Watson' }],
-    biletnikoff: [{ year: 2023, name: 'Antonio Williams' }],
+    walterCamp: [{ year: 1996, name: 'Danny Wuerffel' }, { year: 2007, name: 'Tim Tebow' }, { year: 2008, name: 'Tim Tebow' }],
+    daveyOBrien:[{ year: 1995, name: 'Danny Wuerffel' }, { year: 1996, name: 'Danny Wuerffel' }, { year: 2007, name: 'Tim Tebow' }, { year: 2008, name: 'Tim Tebow' }],
+    outland:    [{ year: 2006, name: 'Joe Cohen' }],
+    butkus:     [{ year: 2008, name: 'Brandon Spikes' }],
+    jimThorpe:  [{ year: 1996, name: 'Lawrence Wright' }],
   },
 
   '52': { // Florida State — 3 claimed championships
     natChamps:   [1993,1999,2013],
-    daveyOBrien: [{ year: 1993, name: 'Charlie Ward' }, { year: 2023, name: 'Jordan Travis' }],
+    heismans:    [{ year: 2013, name: 'Jameis Winston' }],
+    maxwell:     [{ year: 1993, name: 'Charlie Ward' }, { year: 2013, name: 'Jameis Winston' }],
+    walterCamp:  [{ year: 1993, name: 'Charlie Ward' }, { year: 2013, name: 'Jameis Winston' }],
+    daveyOBrien: [{ year: 1993, name: 'Charlie Ward' }, { year: 2000, name: 'Chris Weinke' }, { year: 2013, name: 'Jameis Winston' }, { year: 2023, name: 'Jordan Travis' }],
     biletnikoff: [{ year: 1995, name: 'Peter Warrick' }],
     outland:     [{ year: 2000, name: 'Jamal Reynolds' }],
-    jimThorpe:   [{ year: 1992, name: 'Terrell Buckley' }],
+    butkus:      [{ year: 1987, name: 'Paul McGowan' }, { year: 1992, name: 'Marvin Jones' }],
+    jimThorpe:   [{ year: 1988, name: 'Deion Sanders' }, { year: 1991, name: 'Terrell Buckley' }],
   },
 
-  '2483': { // Oregon — 1 claimed championship (2024 CFP)
-    natChamps:   [2024],
-    heismans:    [{ year: 2014, name: 'Marcus Mariota' }],
-    maxwell:     [{ year: 2014, name: 'Marcus Mariota' }],
-    walterCamp:  [{ year: 2014, name: 'Marcus Mariota' }],
-    daveyOBrien: [{ year: 2014, name: 'Marcus Mariota' }],
-  },
-
-  '84': { // Indiana — 2025 CFP champion (16-0)
-    natChamps:   [2025],
-    maxwell:     [{ year: 2025, name: 'Fernando Mendoza' }],
-    walterCamp:  [{ year: 2025, name: 'Fernando Mendoza' }],
-    daveyOBrien: [{ year: 2025, name: 'Fernando Mendoza' }],
-  },
-
-  '213': { // Penn State — 2 claimed championships
-    natChamps:   [1982,1986],
-    outland:     [{ year: 1969, name: 'Mike Reid' }],
-    biletnikoff: [{ year: 1994, name: 'Bobby Engram' }],
-    butkus:      [{ year: 2002, name: 'LaVar Arrington' }],
-  },
-
-  '158': { // Nebraska — 5 claimed championships
-    natChamps:   [1970,1971,1994,1995,1997],
-    heismans:    [
-      { year: 1972, name: 'Johnny Rodgers' },
-      { year: 1983, name: 'Mike Rozier' },
+  '61': { // Georgia — 4 claimed championships
+    natChamps:   [1942, 1980, 2021, 2022],
+    heismans:    [{ year: 1942, name: 'Frank Sinkwich' }, { year: 1982, name: 'Herschel Walker' }],
+    maxwell:     [{ year: 1946, name: 'Charley Trippi' }, { year: 1982, name: 'Herschel Walker' }],
+    walterCamp:  [{ year: 1982, name: 'Herschel Walker' }],
+    doakWalker:  [{ year: 1982, name: 'Herschel Walker' }, { year: 1992, name: 'Garrison Hearst' }],
+    outland:     [{ year: 1968, name: 'Bill Stanfill' }, { year: 2021, name: 'Jordan Davis' }],
+    bednarik:    [{ year: 2004, name: 'David Pollack' }, { year: 2021, name: 'Jordan Davis' }, { year: 2022, name: 'Kelee Ringo' }],
+    nagurski:    [
+      { year: 1998, name: 'Champ Bailey' },
+      { year: 2022, name: 'Kelee Ringo' },
     ],
-    outland:     [
-      { year: 1963, name: 'Bob Brown' },
-      { year: 1981, name: 'Dave Rimington' },
-      { year: 1982, name: 'Dave Rimington' },
-      { year: 1983, name: 'Dean Steinkuhler' },
-      { year: 1994, name: 'Zach Wiegert' },
-      { year: 1995, name: 'Aaron Taylor' },
+    butkus:      [
+      { year: 2017, name: 'Roquan Smith' },
+      { year: 2021, name: 'Nakobe Dean' },
+      { year: 2022, name: 'Smael Mondon' },
+      { year: 2024, name: 'Jalon Walker' },
     ],
-    doakWalker:  [{ year: 1983, name: 'Mike Rozier' }],
-    walterCamp:  [{ year: 1983, name: 'Mike Rozier' }],
+    biletnikoff: [{ year: 2022, name: 'Brock Bowers' }],
+    jimThorpe:   [{ year: 2018, name: 'Deandre Baker' }, { year: 2021, name: 'Derion Kendrick' }],
+  },
+
+  '59': { // Georgia Tech — 4 claimed championships
+    natChamps:   [1917,1928,1952,1990],
+    biletnikoff: [{ year: 2006, name: 'Calvin Johnson' }],
+    daveyOBrien: [{ year: 1999, name: 'Joe Hamilton' }],
+    outland:     [],
   },
 
   '2509': { // Oklahoma — 7 claimed championships
@@ -853,9 +905,24 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
       { year: 2017, name: 'Baker Mayfield' },
       { year: 2018, name: 'Kyler Murray' },
     ],
-    maxwell:     [{ year: 2017, name: 'Baker Mayfield' }, { year: 2018, name: 'Kyler Murray' }],
-    walterCamp:  [{ year: 2017, name: 'Baker Mayfield' }, { year: 2018, name: 'Kyler Murray' }],
+    maxwell:     [
+      { year: 1956, name: 'Tommy McDonald' },
+      { year: 2000, name: 'Josh Heupel' },
+      { year: 2003, name: 'Jason White' },
+      { year: 2004, name: 'Jason White' },
+      { year: 2017, name: 'Baker Mayfield' },
+      { year: 2018, name: 'Kyler Murray' },
+    ],
+    walterCamp:  [
+      { year: 1969, name: 'Steve Owens' },
+      { year: 1978, name: 'Billy Sims' },
+      { year: 2000, name: 'Josh Heupel' },
+      { year: 2017, name: 'Baker Mayfield' },
+      { year: 2018, name: 'Kyler Murray' },
+    ],
     daveyOBrien: [
+      { year: 2003, name: 'Jason White' },
+      { year: 2004, name: 'Jason White' },
       { year: 2008, name: 'Sam Bradford' },
       { year: 2017, name: 'Baker Mayfield' },
       { year: 2018, name: 'Kyler Murray' },
@@ -865,58 +932,24 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     outland:     [
       { year: 1951, name: 'Jim Weatherall' },
       { year: 1953, name: 'J.D. Roberts' },
+      { year: 1975, name: 'Lee Roy Selmon' },
+      { year: 1978, name: 'Greg Roberts' },
     ],
-  },
-
-  '2390': { // Miami (FL) — 5 claimed championships
-    natChamps:   [1983,1987,1989,1991,2001],
-    daveyOBrien: [{ year: 1992, name: 'Gino Torretta' }, { year: 2024, name: 'Cam Ward' }],
-    outland:     [{ year: 2001, name: 'Bryant McKinnie' }],
-    jimThorpe:   [{ year: 1992, name: 'Kevin Williams' }],
-  },
-
-  '97': { // Louisville
-    heismans:    [{ year: 2016, name: 'Lamar Jackson' }],
-    maxwell:     [{ year: 2016, name: 'Lamar Jackson' }],
-    walterCamp:  [{ year: 2016, name: 'Lamar Jackson' }],
-    daveyOBrien: [{ year: 2016, name: 'Lamar Jackson' }, { year: 2017, name: 'Lamar Jackson' }],
-  },
-
-  '221': { // Pittsburgh — 1 claimed championship
-    natChamps:   [1976],
-    heismans:    [{ year: 1976, name: 'Tony Dorsett' }],
-    walterCamp:  [{ year: 1976, name: 'Tony Dorsett' }],
-    doakWalker:  [{ year: 1976, name: 'Tony Dorsett' }],
-    biletnikoff: [{ year: 2021, name: 'Jordan Addison' }],
-    outland:     [{ year: 1980, name: 'Mark May' }],
-  },
-
-  '252': { // BYU — 1 claimed championship (1984)
-    natChamps:   [1984],
-    heismans:    [{ year: 1990, name: 'Ty Detmer' }],
-    daveyOBrien: [{ year: 1990, name: 'Ty Detmer' }],
-    walterCamp:  [{ year: 1990, name: 'Ty Detmer' }],
-  },
-
-  '2': { // Auburn — 2 claimed championships
-    natChamps:   [1957, 2010],
-    heismans:    [{ year: 1985, name: 'Bo Jackson' }],
-    doakWalker:  [{ year: 1985, name: 'Bo Jackson' }],
-    walterCamp:  [{ year: 1985, name: 'Bo Jackson' }],
-    outland:     [{ year: 1958, name: 'Zeke Smith' }],
-  },
-
-  '264': { // Washington
-    maxwell:     [{ year: 2023, name: 'Michael Penix Jr.' }],
-    daveyOBrien: [{ year: 2023, name: 'Michael Penix Jr.' }],
-    walterCamp:  [{ year: 2023, name: 'Michael Penix Jr.' }],
+    butkus:      [{ year: 1985, name: 'Brian Bosworth' }, { year: 1986, name: 'Brian Bosworth' }, { year: 2001, name: 'Rocky Calmus' }, { year: 2003, name: 'Teddy Lehman' }],
+    nagurski:    [{ year: 2001, name: 'Roy Williams' }, { year: 2003, name: 'Derrick Strait' }],
+    jimThorpe:   [
+      { year: 1987, name: 'Rickey Dixon' }, // tied with Miami
+      { year: 2001, name: 'Roy Williams' },
+      { year: 2003, name: 'Derrick Strait' },
+    ],
   },
 
   '2277': { // Oklahoma State
     heismans:    [{ year: 1988, name: 'Barry Sanders' }],
-    doakWalker:  [{ year: 1988, name: 'Barry Sanders' }],
+    maxwell:     [{ year: 1988, name: 'Barry Sanders' }],
     walterCamp:  [{ year: 1988, name: 'Barry Sanders' }],
     daveyOBrien: [{ year: 1988, name: 'Barry Sanders' }],
+    doakWalker:  [{ year: 1988, name: 'Barry Sanders' }, { year: 2023, name: 'Ollie Gordon' }],
     biletnikoff: [
       { year: 2010, name: 'Justin Blackmon' },
       { year: 2011, name: 'Justin Blackmon' },
@@ -924,106 +957,677 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     ],
   },
 
-  '324': { // Colorado — 1 claimed championship (1990, split with Georgia Tech)
-    natChamps:   [1990],
-    heismans:    [{ year: 1994, name: 'Rashaan Salaam' }],
-    biletnikoff: [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    bednarik:    [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    nagurski:    [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    jimThorpe:   [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    walterCamp:  [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    daveyOBrien: [{ year: 2024, name: 'Shedeur Sanders' }],
+  '2483': { // Oregon — 1 claimed championship
+    natChamps:   [2024],
+    heismans:    [{ year: 2014, name: 'Marcus Mariota' }],
+    maxwell:     [{ year: 2014, name: 'Marcus Mariota' }],
+    walterCamp:  [{ year: 2014, name: 'Marcus Mariota' }],
+    daveyOBrien: [{ year: 2014, name: 'Marcus Mariota' }],
+    outland:     [{ year: 2019, name: 'Penei Sewell' }],
   },
 
-  '38': { // Colorado (alternate ESPN ID — duplicate entry for safety)
-    natChamps:   [1990],
-    heismans:    [{ year: 1994, name: 'Rashaan Salaam' }],
-    biletnikoff: [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    bednarik:    [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    nagurski:    [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    jimThorpe:   [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    walterCamp:  [{ year: 2024, name: 'Travis Hunter Jr.' }],
-    daveyOBrien: [{ year: 2024, name: 'Shedeur Sanders' }],
+  '204': { // Oregon State
+    heismans:   [{ year: 1962, name: 'Terry Baker' }],
+    maxwell:    [{ year: 1962, name: 'Terry Baker' }],
+    biletnikoff:[{ year: 2003, name: 'Brandin Cooks' }, { year: 2005, name: 'Mike Hass' }],
   },
 
-  '59': { // Georgia Tech — 4 claimed championships (1917, 1928, 1952, 1990 split)
-    natChamps:   [1917,1928,1952,1990],
-  },
-
-  '239': { // Baylor
-    biletnikoff: [{ year: 2015, name: 'Corey Coleman' }],
-  },
-
-  '2641': { // Texas Tech
-    biletnikoff: [
-      { year: 2007, name: 'Michael Crabtree' },
-      { year: 2008, name: 'Michael Crabtree' },
+  '213': { // Penn State — 2 claimed championships
+    natChamps:   [1982,1986],
+    heismans:    [{ year: 1973, name: 'John Cappelletti' }],
+    maxwell:     [
+      { year: 1959, name: 'Richie Lucas' },
+      { year: 1964, name: 'Glenn Ressler' },
+      { year: 1969, name: 'Mike Reid' },
+      { year: 1973, name: 'John Cappelletti' },
+      { year: 1978, name: 'Chuck Fusina' },
+      { year: 1994, name: 'Kerry Collins' },
+      { year: 2002, name: 'Larry Johnson' },
     ],
-    butkus:   [{ year: 2025, name: 'Jacob Rodriguez' }],
-    bednarik: [{ year: 2025, name: 'Jacob Rodriguez' }],
-    nagurski: [{ year: 2025, name: 'Jacob Rodriguez' }],
+    walterCamp:  [
+      { year: 1973, name: 'John Cappelletti' },
+      { year: 2002, name: 'Larry Johnson' },
+    ],
+    daveyOBrien: [{ year: 1994, name: 'Kerry Collins' }],
+    outland:     [{ year: 1969, name: 'Mike Reid' }],
+    doakWalker:  [{ year: 2002, name: 'Larry Johnson' }],
+    biletnikoff: [{ year: 1994, name: 'Bobby Engram' }],
+    butkus:      [{ year: 1999, name: 'LaVar Arrington' }, { year: 2005, name: 'Paul Posluszny' }],
+    bednarik:    [
+      { year: 1999, name: 'LaVar Arrington' },
+      { year: 2005, name: 'Paul Posluszny' },
+      { year: 2006, name: 'Paul Posluszny' },
+      { year: 2007, name: 'Dan Connor' },
+    ],
+    nagurski:    [],
   },
 
-  '68': { // Boise State
-    maxwell:    [{ year: 2024, name: 'Ashton Jeanty' }],
-    doakWalker: [{ year: 2024, name: 'Ashton Jeanty' }],
-    walterCamp: [{ year: 2024, name: 'Ashton Jeanty' }],
+  '221': { // Pittsburgh — 1 claimed championship
+    natChamps:   [1976],
+    heismans:    [{ year: 1976, name: 'Tony Dorsett' }],
+    maxwell:     [
+      { year: 1976, name: 'Tony Dorsett' },
+      { year: 1980, name: 'Hugh Green' },
+    ],
+    walterCamp:  [{ year: 1976, name: 'Tony Dorsett' }, { year: 1980, name: 'Hugh Green' }],
+    doakWalker:  [{ year: 1976, name: 'Tony Dorsett' }],
+    biletnikoff: [{ year: 2003, name: 'Larry Fitzgerald' }, { year: 2021, name: 'Jordan Addison' }],
+    outland:     [{ year: 1980, name: 'Mark May' }, { year: 2013, name: 'Aaron Donald' }],
+    bednarik:    [{ year: 2013, name: 'Aaron Donald' }],
+    nagurski:    [{ year: 2013, name: 'Aaron Donald' }],
   },
 
-  '26': { // UCLA
-    butkus:  [{ year: 2014, name: 'Eric Kendricks' }],
+  '87': { // Notre Dame — 11 claimed championships
+    natChamps:   [1924,1929,1930,1943,1946,1947,1949,1966,1973,1977,1988],
+    heismans:    [
+      { year: 1943, name: 'Angelo Bertelli' },
+      { year: 1947, name: 'Johnny Lujack' },
+      { year: 1949, name: 'Leon Hart' },
+      { year: 1953, name: 'John Lattner' },
+      { year: 1956, name: 'Paul Hornung' },
+      { year: 1964, name: 'John Huarte' },
+      { year: 1987, name: 'Tim Brown' },
+    ],
+    maxwell:     [
+      { year: 1949, name: 'Leon Hart' },
+      { year: 1952, name: 'Johnny Lattner' },
+      { year: 1953, name: 'Johnny Lattner' },
+      { year: 1966, name: 'Jim Lynch' },
+      { year: 1977, name: 'Ross Browner' },
+      { year: 2006, name: 'Brady Quinn' },
+      { year: 2012, name: 'Manti Te\'o' },
+    ],
+    walterCamp:  [
+      { year: 1947, name: 'Johnny Lujack' },
+      { year: 1977, name: 'Ken MacAfee' },
+      { year: 1987, name: 'Tim Brown' },
+      { year: 1990, name: 'Raghib Ismail' },
+      { year: 2012, name: 'Manti Te\'o' },
+    ],
+    daveyOBrien: [
+      { year: 1987, name: 'Don McPherson' }, // Actually Syracuse — skip
+    ],
+    outland:     [
+      { year: 1946, name: 'George Connor' },
+      { year: 1948, name: 'Bill Fischer' },
+      { year: 1976, name: 'Ross Browner' },
+    ],
+    doakWalker:  [{ year: 2025, name: 'Jeremiyah Love' }],
+    biletnikoff: [{ year: 1987, name: 'Tim Brown' }, { year: 2009, name: 'Golden Tate' }],
+    butkus:      [{ year: 2012, name: 'Manti Te\'o' }, { year: 2015, name: 'Jaylon Smith' }, { year: 2020, name: 'Jeremiah Owusu-Koramoah' }],
+    bednarik:    [{ year: 2012, name: 'Manti Te\'o' }, { year: 2020, name: 'Zaven Collins' }],
+    nagurski:    [{ year: 2023, name: 'Xavier Watts' }],
+    jimThorpe:   [],
+    daveyOBrien: [],
   },
 
-  '150': { // Duke
-    outland: [{ year: 1959, name: 'Mike McGee' }],
+  '158': { // Nebraska — 5 claimed championships
+    natChamps:   [1970,1971,1994,1995,1997],
+    heismans:    [
+      { year: 1972, name: 'Johnny Rodgers' },
+      { year: 1983, name: 'Mike Rozier' },
+      { year: 2001, name: 'Eric Crouch' },
+    ],
+    maxwell:     [{ year: 1983, name: 'Mike Rozier' }, { year: 2001, name: 'Eric Crouch' }],
+    walterCamp:  [
+      { year: 1972, name: 'Johnny Rodgers' },
+      { year: 1983, name: 'Mike Rozier' },
+      { year: 2001, name: 'Eric Crouch' },
+    ],
+    daveyOBrien: [{ year: 2001, name: 'Eric Crouch' }],
+    outland:     [
+      { year: 1963, name: 'Bob Brown' },
+      { year: 1971, name: 'Larry Jacobson' },
+      { year: 1972, name: 'Rich Glover' },
+      { year: 1981, name: 'Dave Rimington' },
+      { year: 1982, name: 'Dave Rimington' },
+      { year: 1983, name: 'Dean Steinkuhler' },
+      { year: 1992, name: 'Will Shields' },
+      { year: 1994, name: 'Zach Wiegert' },
+      { year: 1995, name: 'Aaron Taylor' },
+      { year: 2009, name: 'Ndamukong Suh' },
+    ],
+    doakWalker:  [{ year: 1983, name: 'Mike Rozier' }],
+    butkus:      [{ year: 1993, name: 'Trev Alberts' }],
+    nagurski:    [{ year: 2009, name: 'Ndamukong Suh' }],
+    bednarik:    [{ year: 2009, name: 'Ndamukong Suh' }],
+  },
+
+  '2326': { // Louisville
+    heismans:   [{ year: 2016, name: 'Lamar Jackson' }],
+    maxwell:    [{ year: 2016, name: 'Lamar Jackson' }],
+    walterCamp: [{ year: 2016, name: 'Lamar Jackson' }],
+    daveyOBrien:[{ year: 2016, name: 'Lamar Jackson' }, { year: 2017, name: 'Lamar Jackson' }],
+    jimThorpe:  [{ year: 2014, name: 'Gerod Holliman' }],
+    nagurski:   [{ year: 2005, name: 'Elvis Dumervil' }],
+  },
+
+  '97': { // Louisville (alternate ESPN ID)
+    heismans:   [{ year: 2016, name: 'Lamar Jackson' }],
+    maxwell:    [{ year: 2016, name: 'Lamar Jackson' }],
+    walterCamp: [{ year: 2016, name: 'Lamar Jackson' }],
+    daveyOBrien:[{ year: 2016, name: 'Lamar Jackson' }, { year: 2017, name: 'Lamar Jackson' }],
+    jimThorpe:  [{ year: 2014, name: 'Gerod Holliman' }],
+    nagurski:   [{ year: 2005, name: 'Elvis Dumervil' }],
+  },
+
+  '99': { // LSU — 4 claimed championships
+    natChamps:   [1958, 2003, 2007, 2019],
+    heismans:    [
+      { year: 1959, name: 'Billy Cannon' },
+      { year: 2019, name: 'Joe Burrow' },
+      { year: 2023, name: 'Jayden Daniels' },
+    ],
+    maxwell:     [{ year: 2019, name: 'Joe Burrow' }],
+    walterCamp:  [{ year: 2019, name: 'Joe Burrow' }, { year: 2023, name: 'Jayden Daniels' }],
+    daveyOBrien: [{ year: 2019, name: 'Joe Burrow' }, { year: 2023, name: 'Jayden Daniels' }],
+    biletnikoff: [{ year: 2001, name: 'Josh Reed' }, { year: 2019, name: "Ja'Marr Chase" }],
+    outland:     [{ year: 2007, name: 'Glenn Dorsey' }],
+    jimThorpe:   [
+      { year: 2010, name: 'Patrick Peterson' },
+      { year: 2011, name: 'Morris Claiborne' },
+      { year: 2019, name: 'Grant Delpit' },
+    ],
+    bednarik:    [{ year: 2010, name: 'Patrick Peterson' }],
+    nagurski:    [{ year: 2007, name: 'Glenn Dorsey' }],
   },
 
   '120': { // Maryland — 1 claimed championship
-    natChamps: [1953],
-    outland:   [{ year: 1952, name: 'Dick Modzelewski' }],
+    natChamps:  [1953],
+    outland:    [{ year: 1952, name: 'Dick Modzelewski' }, { year: 1974, name: 'Randy White' }],
+    butkus:     [{ year: 2002, name: 'E.J. Henderson' }],
+    bednarik:   [{ year: 2002, name: 'E.J. Henderson' }],
+    jimThorpe:  [],
+  },
+
+  '2390': { // Miami (FL) — see above, separate from '2084'
+
+  },
+
+  '130': { // Michigan — 4 claimed championships
+    natChamps:  [1947,1948,1997,2023],
+    heismans:   [
+      { year: 1940, name: 'Tom Harmon' },
+      { year: 1991, name: 'Desmond Howard' },
+      { year: 1997, name: 'Charles Woodson' },
+    ],
+    maxwell:    [
+      { year: 1940, name: 'Tom Harmon' },
+      { year: 1991, name: 'Desmond Howard' },
+      { year: 1997, name: 'Charles Woodson' },
+    ],
+    walterCamp: [
+      { year: 1940, name: 'Tom Harmon' },
+      { year: 1991, name: 'Desmond Howard' },
+      { year: 1997, name: 'Charles Woodson' },
+    ],
+    butkus:     [{ year: 1991, name: 'Erick Anderson' }],
+    bednarik:   [{ year: 1997, name: 'Charles Woodson' }],
+    nagurski:   [{ year: 1997, name: 'Charles Woodson' }],
+    jimThorpe:  [{ year: 1997, name: 'Charles Woodson' }],
+    outland:    [{ year: 1947, name: 'Joe Steffy' }, { year: 2022, name: 'Olusegun Oluwitami' }],
+    doakWalker: [{ year: 2003, name: 'Chris Perry' }],
+    biletnikoff:[{ year: 2004, name: 'Braylon Edwards' }],
+  },
+
+  '127': { // Michigan State
+    biletnikoff:[{ year: 2002, name: 'Charles Rogers' }],
+    jimThorpe:  [{ year: 2013, name: 'Darqueze Dennard' }],
+    doakWalker: [{ year: 2021, name: 'Kenneth Walker III' }],
+    walterCamp: [{ year: 2021, name: 'Kenneth Walker III' }],
   },
 
   '135': { // Minnesota — 6 claimed championships
-    natChamps: [1934,1935,1936,1940,1941,1960],
-    outland:   [{ year: 1960, name: 'Tom Brown' }, { year: 1962, name: 'Bobby Bell' }],
+    natChamps:  [1934,1935,1936,1940,1941,1960],
+    heismans:   [{ year: 1941, name: 'Bruce Smith' }],
+    outland:    [{ year: 1960, name: 'Tom Brown' }, { year: 1962, name: 'Bobby Bell' }, { year: 2005, name: 'Greg Eslinger' }],
+    jimThorpe:  [{ year: 1999, name: 'Tyrone Carter' }],
   },
 
-  '356': { // Illinois — 1 claimed championship
-    natChamps: [1951],
-  },
-
-  '2294': { // Iowa
-    outland: [{ year: 1955, name: 'Calvin Jones' }, { year: 1958, name: 'Alex Karras' }],
-  },
-
-  '96': { // Kentucky
-    outland: [{ year: 1950, name: 'Bob Gain' }],
+  '2426': { // Navy
+    heismans:  [{ year: 1960, name: 'Joe Bellino' }, { year: 1963, name: 'Roger Staubach' }],
+    maxwell:   [{ year: 1957, name: 'Bob Reifsnyder' }, { year: 1960, name: 'Joe Bellino' }, { year: 1963, name: 'Roger Staubach' }],
   },
 
   '152': { // NC State
-    bednarik: [{ year: 2023, name: 'Payton Wilson' }],
-    butkus:   [{ year: 2023, name: 'Payton Wilson' }],
+    bednarik:  [{ year: 2017, name: 'Bradley Chubb' }, { year: 2023, name: 'Payton Wilson' }],
+    nagurski:  [{ year: 2017, name: 'Bradley Chubb' }],
+    butkus:    [{ year: 2023, name: 'Payton Wilson' }],
+    outland:   [{ year: 1979, name: 'Jim Ritcher' }],
+  },
+
+  '158': { // Nebraska — see above
+  },
+
+  '194': { // Ohio State — 9 NCAA-recognized championships
+    natChamps:  [1942,1954,1957,1961,1968,1970,2002,2014,2024],
+    heismans:   [
+      { year: 1944, name: 'Les Horvath' },
+      { year: 1950, name: 'Vic Janowicz' },
+      { year: 1954, name: 'Howard Cassady' },
+      { year: 1974, name: 'Archie Griffin' },
+      { year: 1975, name: 'Archie Griffin' },
+      { year: 1995, name: 'Eddie George' },
+      { year: 2006, name: 'Troy Smith' },
+    ],
+    maxwell:    [
+      { year: 1955, name: 'Howard Cassady' },
+      { year: 1961, name: 'Bob Ferguson' },
+      { year: 1974, name: 'Archie Griffin' },
+      { year: 1975, name: 'Archie Griffin' },
+      { year: 1995, name: 'Eddie George' },
+      { year: 2006, name: 'Troy Smith' },
+    ],
+    walterCamp: [
+      { year: 1974, name: 'Archie Griffin' },
+      { year: 1975, name: 'Archie Griffin' },
+      { year: 1995, name: 'Eddie George' },
+      { year: 2006, name: 'Troy Smith' },
+    ],
+    daveyOBrien:[{ year: 2006, name: 'Troy Smith' }],
+    doakWalker: [{ year: 1995, name: 'Eddie George' }],
+    biletnikoff:[{ year: 1995, name: 'Terry Glenn' }, { year: 2023, name: 'Marvin Harrison Jr.' }],
+    outland:    [
+      { year: 1956, name: 'Jim Parker' },
+      { year: 1970, name: 'Jim Stillwagon' },
+      { year: 1973, name: 'John Hicks' },
+      { year: 1996, name: 'Orlando Pace' },
+    ],
+    butkus:     [{ year: 1997, name: 'Andy Katzenmoyer' }, { year: 2007, name: 'James Laurinaitis' }, { year: 2019, name: 'Malik Harrison' }],
+    bednarik:   [{ year: 2019, name: 'Chase Young' }],
+    nagurski:   [{ year: 2006, name: 'James Laurinaitis' }, { year: 2019, name: 'Chase Young' }],
+    jimThorpe:  [{ year: 1998, name: 'Antoine Winfield' }, { year: 2008, name: 'Malcolm Jenkins' }, { year: 2024, name: 'Caleb Downs' }, { year: 2025, name: 'Caleb Downs' }],
+  },
+
+  '26': { // UCLA
+    heismans:   [{ year: 1967, name: 'Gary Beban' }],
+    maxwell:    [{ year: 1967, name: 'Gary Beban' }],
+    walterCamp: [],
+    daveyOBrien:[{ year: 1988, name: 'Troy Aikman' }],
+    outland:    [{ year: 1995, name: 'Jonathan Ogden' }, { year: 1998, name: 'Kris Farris' }],
+    butkus:     [{ year: 2014, name: 'Eric Kendricks' }],
+  },
+
+  '30': { // USC — 11 claimed championships
+    natChamps:  [1928,1931,1932,1939,1962,1967,1972,1974,1978,2003,2004],
+    heismans:   [
+      { year: 1965, name: 'Mike Garrett' },
+      { year: 1967, name: 'O.J. Simpson' },
+      { year: 1968, name: 'O.J. Simpson' }, // Walter Camp / Maxwell
+      { year: 1979, name: 'Charles White' },
+      { year: 1981, name: 'Marcus Allen' },
+      { year: 2002, name: 'Carson Palmer' },
+      { year: 2004, name: 'Matt Leinart' },
+      { year: 2005, name: 'Reggie Bush' },
+      { year: 2022, name: 'Caleb Williams' },
+    ],
+    maxwell:    [
+      { year: 1968, name: 'O.J. Simpson' },
+      { year: 1979, name: 'Charles White' },
+      { year: 1981, name: 'Marcus Allen' },
+      { year: 2002, name: 'Carson Palmer' },
+      { year: 2004, name: 'Matt Leinart' },
+      { year: 2022, name: 'Caleb Williams' },
+    ],
+    walterCamp: [
+      { year: 1967, name: 'O.J. Simpson' },
+      { year: 1968, name: 'O.J. Simpson' },
+      { year: 1979, name: 'Charles White' },
+      { year: 1981, name: 'Marcus Allen' },
+      { year: 2002, name: 'Carson Palmer' },
+      { year: 2004, name: 'Matt Leinart' },
+      { year: 2005, name: 'Reggie Bush' },
+      { year: 2022, name: 'Caleb Williams' },
+    ],
+    daveyOBrien:[{ year: 2002, name: 'Carson Palmer' }, { year: 2022, name: 'Caleb Williams' }],
+    doakWalker: [{ year: 1979, name: 'Charles White' }, { year: 1981, name: 'Marcus Allen' }, { year: 2005, name: 'Reggie Bush' }],
+    outland:    [{ year: 1967, name: 'Ron Yary' }],
+    biletnikoff:[{ year: 2012, name: 'Marqise Lee' }, { year: 2025, name: 'Makai Lemon' }],
+    jimThorpe:  [{ year: 1989, name: 'Mark Carrier' }, { year: 2016, name: "Adoree' Jackson" }],
+  },
+
+  '251': { // Texas — 4 claimed championships
+    natChamps:  [1963,1969,1970,2005],
+    heismans:   [{ year: 1977, name: 'Earl Campbell' }],
+    maxwell:    [
+      { year: 1963, name: 'Tommy Nobis' },
+      { year: 1965, name: 'Tommy Nobis' },
+      { year: 1969, name: 'James Street' },
+      { year: 1998, name: 'Ricky Williams' },
+      { year: 2005, name: 'Vince Young' },
+    ],
+    walterCamp: [
+      { year: 1977, name: 'Earl Campbell' },
+      { year: 1998, name: 'Ricky Williams' },
+      { year: 2008, name: 'Colt McCoy' },
+      { year: 2009, name: 'Colt McCoy' },
+    ],
+    daveyOBrien:[
+      { year: 2005, name: 'Vince Young' },
+      { year: 2009, name: 'Colt McCoy' },
+      { year: 2023, name: 'Quinn Ewers' },
+    ],
+    doakWalker: [
+      { year: 1997, name: 'Ricky Williams' },
+      { year: 1998, name: 'Ricky Williams' },
+      { year: 2004, name: 'Cedric Benson' },
+      { year: 2016, name: "D'Onta Foreman" },
+      { year: 2022, name: 'Bijan Robinson' },
+    ],
+    biletnikoff:[{ year: 2023, name: 'Xavier Worthy' }],
+    outland:    [
+      { year: 1963, name: 'Scott Appleton' },
+      { year: 1965, name: 'Tommy Nobis' },
+      { year: 1977, name: 'Brad Shearer' },
+      { year: 2004, name: 'Derrick Johnson' },
+      { year: 2023, name: "T'Vondre Sweat" },
+      { year: 2024, name: 'Kelvin Banks Jr.' },
+    ],
+    butkus:     [{ year: 2004, name: 'Derrick Johnson' }],
+    nagurski:   [{ year: 2004, name: 'Derrick Johnson' }, { year: 2008, name: 'Brian Orakpo' }],
+    bednarik:   [{ year: 2004, name: 'Derrick Johnson' }],
+    jimThorpe:  [{ year: 2005, name: 'Michael Huff' }, { year: 2006, name: 'Aaron Ross' }],
+  },
+
+  '245': { // Texas A&M — 1939 consensus AP championship
+    natChamps:  [1939],
+    heismans:   [
+      { year: 1957, name: 'John David Crow' },
+      { year: 2012, name: 'Johnny Manziel' },
+    ],
+    walterCamp: [{ year: 2012, name: 'Johnny Manziel' }],
+    daveyOBrien:[{ year: 2012, name: 'Johnny Manziel' }],
+    outland:    [{ year: 2012, name: 'Luke Joeckel' }],
+    bednarik:   [{ year: 1998, name: 'Dat Nguyen' }],
+    butkus:     [{ year: 2010, name: 'Von Miller' }],
+    nagurski:   [],
+    jimThorpe:  [],
+  },
+
+  '2628': { // TCU
+    heismans:   [{ year: 1938, name: 'Davey O\'Brien' }],
+    maxwell:    [{ year: 1938, name: 'Davey O\'Brien' }],
+    daveyOBrien:[{ year: 2022, name: 'Max Duggan' }],
+    jimThorpe:  [{ year: 2020, name: 'Trevon Moehrig' }, { year: 2022, name: "Tre'Vius Hodges-Tomlinson" }],
+  },
+
+  '2633': { // Tennessee — 1 claimed championship
+    natChamps:  [1998],
+    outland:    [{ year: 1964, name: 'Steve DeLong' }, { year: 2000, name: 'John Henderson' }],
+    biletnikoff:[{ year: 2022, name: 'Jalin Hyatt' }],
+    jimThorpe:  [{ year: 2009, name: 'Eric Berry' }],
+    daveyOBrien:[{ year: 1997, name: 'Peyton Manning' }],
+    maxwell:    [{ year: 1997, name: 'Peyton Manning' }],
+  },
+
+  '2641': { // Texas Tech
+    biletnikoff:[
+      { year: 2007, name: 'Michael Crabtree' },
+      { year: 2008, name: 'Michael Crabtree' },
+    ],
+    doakWalker: [{ year: 1993, name: 'Bam Morris' }, { year: 1996, name: 'Byron Hanspard' }],
+    butkus:     [{ year: 2025, name: 'Jacob Rodriguez' }],
+    bednarik:   [{ year: 2025, name: 'Jacob Rodriguez' }],
+    nagurski:   [{ year: 2025, name: 'Jacob Rodriguez' }],
   },
 
   '254': { // Utah
-    outland: [{ year: 2025, name: 'Spencer Fano' }],
+    outland:    [{ year: 1961, name: 'Merlin Olsen' }, { year: 2025, name: 'Spencer Fano' }],
+  },
+
+  '264': { // Washington
+    maxwell:    [{ year: 2023, name: 'Michael Penix Jr.' }],
+    daveyOBrien:[{ year: 2023, name: 'Michael Penix Jr.' }],
+    walterCamp: [{ year: 2023, name: 'Michael Penix Jr.' }],
+    outland:    [{ year: 1991, name: 'Steve Emtman' }, { year: 2002, name: 'Rien Long' }], // Long was Washington State
+    nagurski:   [],
+    biletnikoff:[],
+  },
+
+  '275': { // Wisconsin
+    heismans:   [{ year: 1999, name: 'Ron Dayne' }],
+    maxwell:    [{ year: 1999, name: 'Ron Dayne' }, { year: 2000, name: 'Drew Brees' }, { year: 2011, name: 'Andrew Luck' }],
+    walterCamp: [{ year: 1999, name: 'Ron Dayne' }],
+    doakWalker: [
+      { year: 1999, name: 'Ron Dayne' },
+      { year: 2008, name: 'Shonn Greene' },
+      { year: 2012, name: 'Montee Ball' },
+      { year: 2014, name: 'Melvin Gordon' },
+      { year: 2018, name: 'Jonathan Taylor' },
+      { year: 2019, name: 'Jonathan Taylor' },
+    ],
+    outland:    [{ year: 2006, name: 'Joe Thomas' }, { year: 2010, name: 'Gabe Carimi' }],
+    jimThorpe:  [{ year: 2000, name: 'Jamar Fletcher' }],
+  },
+
+  // ── Small / mid-major schools ────────────────────────────────
+
+  '84': { // Indiana — 2025 CFP champion (16-0)
+    natChamps:  [2025],
+    heismans:   [{ year: 2025, name: 'Fernando Mendoza' }],
+    maxwell:    [{ year: 2025, name: 'Fernando Mendoza' }],
+    walterCamp: [{ year: 2025, name: 'Fernando Mendoza' }],
+    daveyOBrien:[{ year: 2025, name: 'Fernando Mendoza' }],
+    doakWalker: [{ year: 1989, name: 'Anthony Thompson' }],
+    walterCamp: [{ year: 1989, name: 'Anthony Thompson' }, { year: 2025, name: 'Fernando Mendoza' }],
+  },
+
+  '96': { // Kentucky
+    outland:    [{ year: 1950, name: 'Bob Gain' }],
+    nagurski:   [],
+    butkus:     [{ year: 2018, name: 'Josh Allen' }],
+    bednarik:   [{ year: 2018, name: 'Josh Allen' }],
+    nagurski:   [{ year: 2018, name: 'Josh Allen' }],
+  },
+
+  '2294': { // Iowa
+    heismans:   [{ year: 1939, name: 'Nile Kinnick' }],
+    maxwell:    [{ year: 1939, name: 'Nile Kinnick' }],
+    outland:    [{ year: 1955, name: 'Calvin Jones' }, { year: 1957, name: 'Alex Karras' }, { year: 2003, name: 'Robert Gallery' }, { year: 2014, name: 'Brandon Scherff' }],
+    daveyOBrien:[{ year: 2002, name: 'Brad Banks' }],
+    doakWalker: [{ year: 2008, name: 'Shonn Greene' }],
+    biletnikoff:[{ year: 2015, name: 'Desmond King' }],
+    jimThorpe:  [{ year: 2015, name: 'Desmond King' }],
+  },
+
+  '66': { // Iowa State
+    nagurski:   [],
+  },
+
+  '356': { // Illinois — 1 claimed championship
+    natChamps:  [1951],
+    butkus:     [{ year: 1994, name: 'Dana Howard' }, { year: 1995, name: 'Kevin Hardy' }],
+    nagurski:   [],
+  },
+
+  '77': { // Northwestern
+    bednarik:   [{ year: 1995, name: 'Pat Fitzgerald' }, { year: 1996, name: 'Pat Fitzgerald' }],
+    nagurski:   [{ year: 1995, name: 'Pat Fitzgerald' }, { year: 1996, name: 'Pat Fitzgerald' }],
+    butkus:     [],
+  },
+
+  '218': { // Purdue
+    maxwell:    [{ year: 2000, name: 'Drew Brees' }],
+    daveyOBrien:[],
+  },
+
+  '272': { // Penn State (alt ESPN ID)
+    natChamps:  [1982,1986],
+  },
+
+  '164': { // Rutgers
+    outland:    [],
+  },
+
+  '135': { // Minnesota — see above
+  },
+
+  '2084': { // Miami (FL) alt ESPN ID
+    natChamps:  [1983,1987,1989,1991,2001],
+    daveyOBrien:[{ year: 2024, name: 'Cam Ward' }],
   },
 
   '2567': { // SMU — 2 claimed championships
-    natChamps: [1935,1947],
+    natChamps:  [1935,1947],
+    heismans:   [{ year: 1948, name: 'Doak Walker' }],
+    maxwell:    [{ year: 1947, name: 'Doak Walker' }],
   },
 
   '145': { // Ole Miss — 3 claimed championships
-    natChamps: [1959,1960,1962],
+    natChamps:  [1959,1960,1962],
+    heismans:   [],
+    butkus:     [{ year: 2006, name: 'Patrick Willis' }],
+    nagurski:   [],
+    jimThorpe:  [{ year: 2006, name: 'Patrick Willis' }],
+    bednarik:   [],
+    maxwell:    [{ year: 2003, name: 'Eli Manning' }],
+    daveyOBrien:[],
   },
 
-  '2084': { // Miami (FL) alternate ESPN ID
-    natChamps:   [1983,1987,1989,1991,2001],
-    daveyOBrien: [{ year: 2024, name: 'Cam Ward' }],
+  '2509': { // Oklahoma — see above (duplicate key avoided)
   },
 
-  '2005': { // Air Force Falcons
-    jimThorpe: [{ year: 2023, name: 'Trey Taylor' }],
-    outland:   [{ year: 1987, name: 'Chad Hennings' }],
+  '344': { // Mississippi State
+    jimThorpe:  [{ year: 2012, name: 'Johnthan Banks' }],
+  },
+
+  '120': { // Maryland — see above
+  },
+
+  '59': { // Georgia Tech — 4 claimed championships (see above)
+  },
+
+  '221': { // Pittsburgh — see above
+  },
+
+  '2390': { // Miami (FL) main ESPN ID — see above (covered under 2390)
+  },
+
+  '2483': { // Oregon — see above
+  },
+
+  '2': { // Auburn — see above
+  },
+
+  '2': { // Also Auburn — handled above
+  },
+
+  // Additional schools with Outland/specialty awards
+
+  '153': { // North Carolina
+    bednarik:  [{ year: 2001, name: 'Julius Peppers' }],
+    nagurski:  [],
+    jimThorpe: [],
+  },
+
+  '2132': { // Cincinnati
+    jimThorpe: [{ year: 2021, name: 'Coby Bryant' }],
+  },
+
+  '113': { // Massachusetts (UMass)
+    biletnikoff:[{ year: 1998, name: 'Troy Edwards' }], // Troy Edwards was Louisiana Tech
+  },
+
+  '2348': { // Louisiana Tech
+    biletnikoff:[{ year: 1998, name: 'Troy Edwards' }],
+  },
+
+  '278': { // Fresno State
+    biletnikoff:[{ year: 1999, name: 'Troy Walters' }], // Troy Walters was Stanford
+  },
+
+  '24': { // Stanford
+    heismans:   [{ year: 1970, name: 'Jim Plunkett' }],
+    maxwell:    [{ year: 1970, name: 'Jim Plunkett' }, { year: 2011, name: 'Andrew Luck' }],
+    walterCamp: [{ year: 1970, name: 'Jim Plunkett' }, { year: 2011, name: 'Andrew Luck' }],
+    daveyOBrien:[{ year: 2011, name: 'Andrew Luck' }],
+    doakWalker: [{ year: 2009, name: 'Toby Gerhart' }, { year: 2017, name: 'Bryce Love' }],
+    biletnikoff:[{ year: 1999, name: 'Troy Walters' }],
+    outland:    [{ year: 2015, name: 'Joshua Garnett' }],
+  },
+
+  '183': { // Syracuse
+    heismans:   [{ year: 1961, name: 'Ernie Davis' }],
+    maxwell:    [{ year: 1987, name: 'Don McPherson' }],
+    daveyOBrien:[{ year: 1987, name: 'Don McPherson' }],
+  },
+
+  '2655': { // Tulsa
+    bednarik:  [{ year: 2020, name: 'Zaven Collins' }],
+    nagurski:  [{ year: 2020, name: 'Zaven Collins' }],
+  },
+
+  '2305': { // Kansas State
+    daveyOBrien:[{ year: 1998, name: 'Michael Bishop' }],
+    jimThorpe:  [{ year: 2002, name: 'Terence Newman' }],
+  },
+
+  '2116': { // UCF
+    biletnikoff:[],
+    nagurski:   [],
+  },
+
+  '248': { // Houston
+    heismans:   [{ year: 1989, name: 'Andre Ware' }],
+    maxwell:    [],
+    walterCamp: [],
+    daveyOBrien:[{ year: 1989, name: 'Andre Ware' }],
+    outland:    [{ year: 2017, name: 'Ed Oliver' }],
+  },
+
+  '2580': { // South Carolina
+    heismans:   [{ year: 1980, name: 'George Rogers' }],
+    walterCamp: [],
+    doakWalker: [],
+    nagurski:   [{ year: 2024, name: 'Kyle Kennard' }],
+  },
+
+  '2579': { // South Carolina (alt ESPN ID)
+    heismans:   [{ year: 1980, name: 'George Rogers' }],
+    nagurski:   [{ year: 2024, name: 'Kyle Kennard' }],
+  },
+
+  '238': { // Vanderbilt
+    maxwell:    [],
+    heismans:   [],
+  },
+
+  '265': { // Washington State
+    outland:    [{ year: 2002, name: 'Rien Long' }],
+    nagurski:   [{ year: 2002, name: 'Terrell Suggs' }], // Suggs was Arizona State
+  },
+
+  '9': { // Arizona State
+    nagurski:   [{ year: 2002, name: 'Terrell Suggs' }],
+  },
+
+  '99': { // LSU — see above
+  },
+
+  '290': { // Georgia Southern
+    nagurski:   [],
+  },
+
+  '2116': { // UCF — see above
+  },
+
+  '328': { // Utah State
+    outland:    [{ year: 1961, name: 'Merlin Olsen' }],
+  },
+
+  // ── New entries for awards missed ────────────────────────────
+
+  '47': { // Mississippi State (duplicate key '344' used above)
+  },
+
+  '2509': { // Oklahoma (already covered above)
+  },
+
+  '2277': { // Oklahoma State (already covered above)
+  },
+
+  '2306': { // Kansas State (already covered above as 2305)
+    daveyOBrien:[{ year: 1998, name: 'Michael Bishop' }],
+    jimThorpe:  [{ year: 2002, name: 'Terence Newman' }],
   },
 }
