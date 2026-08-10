@@ -33,7 +33,10 @@ export const NFL_AWARDS: Record<string, Partial<NFLTeamAwards>> = {
 
   '2': { // Buffalo Bills
     superBowls: [],
-    mvp:    [{ year: 1973, name: 'O.J. Simpson' }],
+    mvp:    [
+      { year: 1973, name: 'O.J. Simpson' },
+      { year: 2024, name: 'Josh Allen' },
+    ],
     droty:  [{ year: 1979, name: 'Tom Cousineau' }],
     wpmoty: [],
   },
@@ -1017,5 +1020,10 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
   '2084': { // Miami (FL) alternate ESPN ID
     natChamps:   [1983,1987,1989,1991,2001],
     daveyOBrien: [{ year: 2024, name: 'Cam Ward' }],
+  },
+
+  '2005': { // Air Force Falcons
+    jimThorpe: [{ year: 2023, name: 'Trey Taylor' }],
+    outland:   [{ year: 1987, name: 'Chad Hennings' }],
   },
 }

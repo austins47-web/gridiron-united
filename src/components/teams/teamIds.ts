@@ -45,7 +45,7 @@ export const CFB_TEAM_IDS: Record<string, string> = {
   'NC State': '152', 'North Carolina': '153', 'Pittsburgh': '221', 'SMU': '2567',
   'Stanford': '24', 'Syracuse': '183', 'Virginia': '258', 'Virginia Tech': '259',
   'Wake Forest': '154',
-  // Pac-12 / MWC
+  // MWC / Independents
   'Air Force': '2005', 'Boise State': '68', 'Colorado State': '36',
   'Fresno State': '278', 'Hawaii': '62', 'Nevada': '2440', 'New Mexico': '167',
   'Oregon State': '204', 'San Diego State': '21', 'San Jose State': '23',
