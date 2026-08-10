@@ -547,16 +547,14 @@ function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSe
   if (viewMode === 'list') {
     return (
       <div className="space-y-1.5">
-        {games.map(g => <ListRow key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect}
-                onTeamClick={handleTeamClick} />)}
+        {games.map(g => <ListRow key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect} onTeamClick={onTeamClick} />)}
       </div>
     )
   }
 
   return (
     <div className={clsx('grid gap-3', GRID_COLS[cols])}>
-      {games.map(g => <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect}
-                onTeamClick={handleTeamClick} />)}
+      {games.map(g => <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect} onTeamClick={onTeamClick} />)}
     </div>
   )
 }
@@ -683,6 +681,10 @@ export function LiveScoresView() {
 
   const sorted = [...favGames, ...otherGames]
   const sharedProps = { viewMode, cols, favTeams, onToggleFav: toggleFav, oddsMap, onSelect: setSelectedGame }
+
+  if (teamPage) {
+    return <TeamPage teamId={teamPage.id} league={teamPage.league} onBack={() => setTeamPage(null)} />
+  }
 
   return (
     <>
@@ -820,8 +822,7 @@ export function LiveScoresView() {
                 <Star className="w-3.5 h-3.5 text-gold fill-gold" />
                 <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">My Teams</span>
               </div>
-              <GameGroup games={favGames} {...sharedProps}
-          onTeamClick={handleTeamClick} />
+              <GameGroup games={favGames} {...sharedProps} onTeamClick={handleTeamClick} />
             </div>
           )}
           {otherGames.length > 0 && (
@@ -834,8 +835,7 @@ export function LiveScoresView() {
                   <span className="text-xs text-field-400">tap ⭐ to favorite</span>
                 </div>
               )}
-              <GameGroup games={otherGames} {...sharedProps}
-          onTeamClick={handleTeamClick} />
+              <GameGroup games={otherGames} {...sharedProps} onTeamClick={handleTeamClick} />
             </div>
           )}
         </div>
