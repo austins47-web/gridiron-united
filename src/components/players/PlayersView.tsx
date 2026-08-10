@@ -27,17 +27,8 @@ export function PlayersView() {
   const teamDropdownRef = useRef<HTMLDivElement>(null)
 
   const { activeLeagueId, activeLeague } = useAppStore()
-  const { data, isFetching } = usePlayers(filters)
-  const { data: teamList = [] } = useTeamList(filters.league)
-  const { data: rosteredIds } = useRosteredPlayerIds(activeLeagueId)
-  const { data: myRoster = [] } = useMyRoster(activeLeagueId)
-  const addPlayer = useAddPlayer(activeLeagueId)
 
-  const players = data?.players ?? []
-  const total = data?.total ?? 0
-  const totalPages = Math.ceil(total / filters.pageSize)
-
-  // Extract scoring settings from active league
+  // Extract scoring settings from active league (needed by usePlayers for proj sort)
   const scoring: ScoringRules | null = activeLeague ? {
     score_pass_td: activeLeague.score_pass_td, score_pass_yd: activeLeague.score_pass_yd,
     score_pass_bonus_300: activeLeague.score_pass_bonus_300, score_pass_int: activeLeague.score_pass_int,
@@ -58,20 +49,24 @@ export function PlayersView() {
     score_dst_pts_35_plus: activeLeague.score_dst_pts_35_plus,
   } : null
 
+  const { data, isFetching } = usePlayers(filters, scoring)
+  const { data: teamList = [] } = useTeamList(filters.league)
+  const { data: rosteredIds } = useRosteredPlayerIds(activeLeagueId)
+  const { data: myRoster = [] } = useMyRoster(activeLeagueId)
+  const addPlayer = useAddPlayer(activeLeagueId)
+
+  const players = data?.players ?? []
+  const total = data?.total ?? 0
+  const totalPages = Math.ceil(total / filters.pageSize)
+
   // Fetch projected stats for current page of players
   const pageAthleteIds = players
-    .map(p => p.espn_athlete_id)
-    .filter((id): id is number => id !== null)
+    .map(p => p.espn_athlete_id ?? (p.id > 50_000_000 ? null : p.id - 1_000_000))
+    .filter((id): id is number => id !== null && id > 0)
   const { data: projMap } = useProjStats(pageAthleteIds)
 
-  // Client-side sort by proj when selected (DB can't sort by calculated proj)
-  const sortedPlayers = filters.sortBy === 'proj_pts' && projMap
-    ? [...players].sort((a, b) => {
-        const pa = getDisplayProj(a, projMap, scoring)
-        const pb = getDisplayProj(b, projMap, scoring)
-        return filters.sortDir === 'asc' ? pa - pb : pb - pa
-      })
-    : players
+  // Client-side sort no longer needed — proj sort is handled globally in usePlayers
+  const sortedPlayers = players
 
   const setFilter = useCallback(<K extends keyof PlayerFilters>(key: K, val: PlayerFilters[K]) => {
     setFilters(f => ({ ...f, [key]: val, page: key === 'page' ? (val as number) : 0 }))

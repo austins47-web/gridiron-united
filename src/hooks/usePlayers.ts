@@ -32,10 +32,78 @@ export const DEFAULT_FILTERS: PlayerFilters = {
   pageSize: 100,
 }
 
-export function usePlayers(filters: PlayerFilters) {
+export function usePlayers(filters: PlayerFilters, scoring: ScoringRules | null) {
   return useQuery({
-    queryKey: ['players', filters],
+    queryKey: ['players', filters, scoring?.score_reception, scoring?.score_pass_td],
     queryFn: async () => {
+
+      // ── Proj sort: fetch all IDs globally, sort by calculated proj, paginate manually ──
+      if (filters.sortBy === 'proj_pts' && scoring) {
+        // Step 1: get all matching player IDs (no pagination yet)
+        let idQ = supabase
+          .from('players')
+          .select('id, espn_athlete_id, status', { count: 'exact' })
+
+        if (filters.search)               idQ = idQ.or(`name.ilike.%${filters.search}%,team.ilike.%${filters.search}%`)
+        if (filters.pos !== 'ALL')        idQ = idQ.eq('pos', filters.pos)
+        if (filters.league !== 'ALL')     idQ = idQ.eq('league', filters.league)
+        if (filters.status !== 'ALL')     idQ = idQ.eq('status', filters.status)
+        if (filters.conference !== 'ALL') idQ = idQ.eq('conference', filters.conference)
+        if (filters.team !== 'ALL' && !filters.rookiesOnly) idQ = idQ.eq('team', filters.team)
+        if (filters.rookiesOnly)          idQ = idQ.eq('is_rookie', true)
+
+        const { data: allIds, count, error: idErr } = await idQ
+        if (idErr) throw idErr
+        if (!allIds?.length) return { players: [] as Player[], total: 0 }
+
+        // Step 2: fetch proj stats for all matching players
+        const athleteIds = allIds
+          .map(p => p.espn_athlete_id ?? (p.id > 50_000_000 ? null : p.id - 1_000_000))
+          .filter((id): id is number => id !== null && id > 0)
+
+        const projMap = new Map<number, ProjStats>()
+        if (athleteIds.length > 0) {
+          // Fetch in batches of 1000 (Supabase limit)
+          for (let i = 0; i < athleteIds.length; i += 1000) {
+            const { data: projBatch } = await supabase
+              .from('player_proj_stats')
+              .select('*')
+              .in('espn_athlete_id', athleteIds.slice(i, i + 1000))
+            for (const row of (projBatch ?? [])) projMap.set(row.espn_athlete_id, row as ProjStats)
+          }
+        }
+
+        // Step 3: sort all IDs by calculated proj
+        const scored = allIds.map(p => {
+          const espnId = p.espn_athlete_id ?? (p.id > 50_000_000 ? null : p.id - 1_000_000)
+          const proj = espnId ? projMap.get(espnId) : undefined
+          const pts = proj ? calcProjPts(proj, scoring) * statusMultiplier(p.status) : 0
+          return { id: p.id, pts }
+        })
+        scored.sort((a, b) => filters.sortDir === 'asc' ? a.pts - b.pts : b.pts - a.pts)
+
+        // Step 4: paginate the sorted IDs
+        const pageIds = scored
+          .slice(filters.page * filters.pageSize, (filters.page + 1) * filters.pageSize)
+          .map(s => s.id)
+
+        if (!pageIds.length) return { players: [] as Player[], total: count ?? 0 }
+
+        // Step 5: fetch full player rows for this page, preserving sort order
+        const { data: pageData, error: pageErr } = await supabase
+          .from('players')
+          .select('*')
+          .in('id', pageIds)
+        if (pageErr) throw pageErr
+
+        // Re-sort to match the order from step 4
+        const idOrder = new Map(pageIds.map((id, i) => [id, i]))
+        const sorted = (pageData ?? []).sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0))
+
+        return { players: sorted as Player[], total: count ?? 0 }
+      }
+
+      // ── Normal sort: let DB handle it ──
       let q = supabase
         .from('players')
         .select('*', { count: 'exact' })
@@ -63,9 +131,8 @@ export function usePlayers(filters: PlayerFilters) {
         q = q.eq('is_rookie', true)
       }
 
-      // proj_pts sort is handled client-side after proj stats load; use adp as DB fallback
-      const dbSortBy = filters.sortBy === 'proj_pts' ? 'adp' : filters.sortBy
-      q = q.order(dbSortBy, { ascending: filters.sortDir === 'asc' })
+      // proj_pts sort is now handled globally above — this path never runs for proj sort
+      q = q.order(filters.sortBy, { ascending: filters.sortDir === 'asc' })
       q = q.range(
         filters.page * filters.pageSize,
         filters.page * filters.pageSize + filters.pageSize - 1,
@@ -175,8 +242,12 @@ export function getDisplayProj(
   projMap: Map<number, ProjStats> | undefined,
   scoring: ScoringRules | null | undefined,
 ): number {
-  if (!scoring || !player.espn_athlete_id) return 0
-  const proj = projMap?.get(player.espn_athlete_id)
+  if (!scoring) return 0
+  // NFL: espn_athlete_id is null, use id - 1_000_000
+  // CFB: use espn_athlete_id directly
+  const espnId = player.espn_athlete_id ?? (player.id > 50_000_000 ? null : player.id - 1_000_000)
+  if (!espnId) return 0
+  const proj = projMap?.get(espnId)
   if (!proj) return 0
   const base = calcProjPts(proj, scoring)
   return Math.round(base * statusMultiplier(player.status) * 10) / 10
