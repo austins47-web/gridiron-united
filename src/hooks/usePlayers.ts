@@ -39,10 +39,11 @@ export function usePlayers(filters: PlayerFilters, scoring: ScoringRules | null)
 
       // ── Proj sort: fetch all IDs globally, sort by calculated proj, paginate manually ──
       if (filters.sortBy === 'proj_pts' && scoring) {
-        // Step 1: get all matching player IDs (no pagination yet)
+        // Step 1: get ALL matching player IDs (no pagination — need full set for global sort)
+        // Must paginate this query too since Supabase caps at 1000 rows per request
         let idQ = supabase
           .from('players')
-          .select('id, espn_athlete_id, status', { count: 'exact' })
+          .select('id, espn_athlete_id, status, league', { count: 'exact' })
 
         if (filters.search)               idQ = idQ.or(`name.ilike.%${filters.search}%,team.ilike.%${filters.search}%`)
         if (filters.pos !== 'ALL')        idQ = idQ.eq('pos', filters.pos)
@@ -52,9 +53,21 @@ export function usePlayers(filters: PlayerFilters, scoring: ScoringRules | null)
         if (filters.team !== 'ALL' && !filters.rookiesOnly) idQ = idQ.eq('team', filters.team)
         if (filters.rookiesOnly)          idQ = idQ.eq('is_rookie', true)
 
-        const { data: allIds, count, error: idErr } = await idQ
-        if (idErr) throw idErr
-        if (!allIds?.length) return { players: [] as Player[], total: 0 }
+        // Paginate to get all IDs
+        const allIds: any[] = []
+        let idPage = 0
+        let total = 0
+        while (true) {
+          const { data: batch, count, error: idErr } = await idQ
+            .range(idPage * 1000, (idPage + 1) * 1000 - 1)
+          if (idErr) throw idErr
+          if (batch?.length) allIds.push(...batch)
+          if (idPage === 0) total = count ?? 0
+          if (!batch?.length || batch.length < 1000) break
+          idPage++
+        }
+
+        if (!allIds.length) return { players: [] as Player[], total: 0 }
 
         // Step 2: fetch proj stats for all matching players
         const athleteIds = allIds
@@ -87,7 +100,7 @@ export function usePlayers(filters: PlayerFilters, scoring: ScoringRules | null)
           .slice(filters.page * filters.pageSize, (filters.page + 1) * filters.pageSize)
           .map(s => s.id)
 
-        if (!pageIds.length) return { players: [] as Player[], total: count ?? 0 }
+        if (!pageIds.length) return { players: [] as Player[], total }
 
         // Step 5: fetch full player rows for this page, preserving sort order
         const { data: pageData, error: pageErr } = await supabase
@@ -100,7 +113,7 @@ export function usePlayers(filters: PlayerFilters, scoring: ScoringRules | null)
         const idOrder = new Map(pageIds.map((id, i) => [id, i]))
         const sorted = (pageData ?? []).sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0))
 
-        return { players: sorted as Player[], total: count ?? 0 }
+        return { players: sorted as Player[], total }
       }
 
       // ── Normal sort: let DB handle it ──
