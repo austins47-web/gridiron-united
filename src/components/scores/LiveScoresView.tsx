@@ -5,12 +5,15 @@ import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Colum
 import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
 import { GameDetailModal } from './GameDetailModal'
+import { TeamPage } from '@/components/teams/TeamPage'
+import { getTeamId } from '@/components/teams/teamIds'
 
 // ── Types ────────────────────────────────────────────────────
 
 interface GameTeam {
   abbr: string
   name: string
+  id?: string
   score: string
   winner?: boolean
   record?: string
@@ -49,6 +52,7 @@ function parseGame(event: any, league: 'NFL' | 'CFB'): LiveGame {
     const mapTeam = (c: any): GameTeam => ({
       abbr: c.team?.abbreviation ?? '??',
       name: c.team?.shortDisplayName ?? c.team?.displayName ?? '??',
+      id: c.team?.id,
       score: c.score ?? '0',
       winner: c.winner,
       record: c.records?.[0]?.summary,
@@ -166,12 +170,13 @@ function StatusBadge({ game, compact = false }: { game: LiveGame, compact?: bool
 
 // ── GRID CARD ────────────────────────────────────────────────
 
-function GridCard({ game, favTeams, onToggleFav, odds, onSelect }: {
+function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
   game: LiveGame
   favTeams: Set<string>
   onToggleFav: (abbr: string) => void
   odds?: GameOdds | null
   onSelect: (game: LiveGame) => void
+  onTeamClick: (team: GameTeam, league: 'NFL' | 'CFB') => void
 }) {
   const isLive  = game.status === 'in'
   const isFinal = game.status === 'post'
@@ -225,15 +230,18 @@ function GridCard({ game, favTeams, onToggleFav, odds, onSelect }: {
             {team.rank
               ? <span className="text-[9px] font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
               : <span className="w-5 shrink-0" />}
-            <span className={clsx(
-              'font-cond font-bold text-sm flex-1 truncate',
-              isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
-            )}>
+            <button
+              className={clsx(
+                'font-cond font-bold text-sm flex-1 truncate text-left hover:text-gold transition-colors',
+                isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+              )}
+              onClick={e => { e.stopPropagation(); onTeamClick(team, game.league) }}
+            >
               {team.abbr}
               <span className="text-field-300 font-normal text-xs ml-1 hidden sm:inline">
                 {team.name !== team.abbr ? team.name : ''}
               </span>
-            </span>
+            </button>
             {game.status === 'pre' && team.record && (
               <span className="text-xs text-field-300 shrink-0">{team.record}</span>
             )}
@@ -318,12 +326,13 @@ function GridCard({ game, favTeams, onToggleFav, odds, onSelect }: {
 
 // ── LIST ROW ─────────────────────────────────────────────────
 
-function ListRow({ game, favTeams, onToggleFav, odds, onSelect }: {
+function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
   game: LiveGame
   favTeams: Set<string>
   onToggleFav: (abbr: string) => void
   odds?: GameOdds | null
   onSelect: (game: LiveGame) => void
+  onTeamClick: (team: GameTeam, league: 'NFL' | 'CFB') => void
 }) {
   const isLive  = game.status === 'in'
   const isFinal = game.status === 'post'
@@ -344,10 +353,16 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect }: {
         <div className="flex items-center gap-2 min-w-0 flex-row-reverse">
           {hasBall ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" /> : <div className="w-2 shrink-0" />}
           {team.rank ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-left">#{team.rank}</span> : <span className="w-5 shrink-0" />}
-          <span className={clsx('font-cond font-black text-base shrink-0 w-10 text-right',
-            isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
-          )}>{team.abbr}</span>
-          <span className="text-field-300 text-sm truncate text-right">{team.name !== team.abbr ? team.name : ''}</span>
+          <button
+            className={clsx('font-cond font-black text-base shrink-0 w-10 text-right hover:text-gold transition-colors',
+              isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+            )}
+            onClick={e => { e.stopPropagation(); onTeamClick(team, game.league) }}
+          >{team.abbr}</button>
+          <button
+            className="text-field-300 text-sm truncate text-right hover:text-gold transition-colors"
+            onClick={e => { e.stopPropagation(); onTeamClick(team, game.league) }}
+          >{team.name !== team.abbr ? team.name : ''}</button>
           {game.status === 'pre' && team.record && <span className="text-field-400 text-xs shrink-0">({team.record})</span>}
         </div>
       )
@@ -357,10 +372,16 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect }: {
       <div className="flex items-center gap-2 min-w-0">
         {hasBall ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" /> : <div className="w-2 shrink-0" />}
         {team.rank ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span> : <span className="w-5 shrink-0" />}
-        <span className={clsx('font-cond font-black text-base shrink-0 w-10',
-          isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
-        )}>{team.abbr}</span>
-        <span className="text-field-300 text-sm truncate">{team.name !== team.abbr ? team.name : ''}</span>
+        <button
+          className={clsx('font-cond font-black text-base shrink-0 w-10 text-left hover:text-gold transition-colors',
+            isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+          )}
+          onClick={e => { e.stopPropagation(); onTeamClick(team, game.league) }}
+        >{team.abbr}</button>
+        <button
+          className="text-field-300 text-sm truncate text-left hover:text-gold transition-colors"
+          onClick={e => { e.stopPropagation(); onTeamClick(team, game.league) }}
+        >{team.name !== team.abbr ? team.name : ''}</button>
         {game.status === 'pre' && team.record && <span className="text-field-400 text-xs shrink-0">({team.record})</span>}
       </div>
     )
@@ -525,14 +546,16 @@ function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSe
   if (viewMode === 'list') {
     return (
       <div className="space-y-1.5">
-        {games.map(g => <ListRow key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect} />)}
+        {games.map(g => <ListRow key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect}
+                onTeamClick={handleTeamClick} />)}
       </div>
     )
   }
 
   return (
     <div className={clsx('grid gap-3', GRID_COLS[cols])}>
-      {games.map(g => <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect} />)}
+      {games.map(g => <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect}
+                onTeamClick={handleTeamClick} />)}
     </div>
   )
 }
@@ -585,6 +608,12 @@ export function LiveScoresView() {
   const [refreshTick, setRefreshTick] = useState(0)
   const [manualFavs, setManualFavs] = useState<Set<string>>(loadFavs)
   const [selectedGame, setSelectedGame] = useState<LiveGame | null>(null)
+  const [teamPage, setTeamPage] = useState<{ id: string; league: 'NFL' | 'CFB' } | null>(null)
+
+  const handleTeamClick = (team: GameTeam, league: 'NFL' | 'CFB') => {
+    const tid = team.id ?? getTeamId(team.name, league) ?? getTeamId(team.abbr, league)
+    if (tid) setTeamPage({ id: tid, league })
+  }
 
   const week    = tab === 'NFL' ? nflWeek : cfbWeek
   const setWeek = tab === 'NFL' ? setNflWeek : setCfbWeek

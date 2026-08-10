@@ -140,7 +140,7 @@ const CLASS_SHORT: Record<string, string> = {
 // ── Component ─────────────────────────────────────────────────
 type Tab = 'overview' | 'stats' | 'news'
 
-export function PlayerProfileDrawer({ player, onClose }: { player: Player; onClose: () => void }) {
+export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: Player; onClose: () => void; onTeamClick?: () => void }) {
   const [tab, setTab]       = useState<Tab>('overview')
   const [imgError, setImgError] = useState(false)
 
@@ -329,7 +329,7 @@ export function PlayerProfileDrawer({ player, onClose }: { player: Player; onClo
                 <h3 className="text-xs font-bold uppercase tracking-wider text-field-400 mb-2">Bio</h3>
                 <div className="bg-field-800 rounded-xl border border-field-700 divide-y divide-field-700/60">
                   {[
-                    { label: 'Team',       value: profile?.team ?? player.team },
+                    { label: 'Team',       value: profile?.team ?? player.team, onClick: onTeamClick },
                     { label: 'Position',   value: profile?.position ?? player.pos },
                     { label: 'Conference', value: player.conference },
                     { label: 'Class',      value: player.league === 'CFB' ? player.depth_pos : undefined },
@@ -342,10 +342,13 @@ export function PlayerProfileDrawer({ player, onClose }: { player: Player; onClo
                         : undefined },
                     { label: 'College',    value: profile?.college },
                     { label: 'Birthplace', value: profile?.birthPlace },
-                  ].filter(r => r.value).map(({ label, value }) => (
+                  ].filter(r => r.value).map(({ label, value, onClick }: any) => (
                     <div key={label} className="flex items-center justify-between px-4 py-2.5">
                       <span className="text-sm text-field-400">{label}</span>
-                      <span className="text-sm font-bold text-white text-right max-w-[55%]">{value}</span>
+                      {onClick
+                        ? <button onClick={onClick} className="text-sm font-bold text-gold hover:text-gold/80 transition-colors text-right max-w-[55%] underline-offset-2 hover:underline">{value}</button>
+                        : <span className="text-sm font-bold text-white text-right max-w-[55%]">{value}</span>
+                      }
                     </div>
                   ))}
                 </div>

@@ -623,6 +623,10 @@ export function PlayersView() {
         <PlayerProfileDrawer
           player={selectedPlayer}
           onClose={() => setSelectedPlayer(null)}
+          onTeamClick={() => {
+            const tid = getTeamId(selectedPlayer.team, selectedPlayer.league)
+            if (tid) { setSelectedPlayer(null); setTeamPage({ id: tid, league: selectedPlayer.league }) }
+          }}
         />
       )}
     </div>
