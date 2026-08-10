@@ -64,8 +64,8 @@ function parseEvent(ev: any, teamId: string, league: 'NFL' | 'CFB') {
 
 export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
   const [tab, setTab] = useState<Tab>('overview')
-  const [schedSeason, setSchedSeason] = useState(2026)
   const [imgErr, setImgErr] = useState(false)
+  const SEASON = 2026
 
   const infoEndpoint = `${league.toLowerCase()}/teams/${teamId}/info`
   const { data: info, isLoading: infoLoading } = useQuery({
@@ -75,9 +75,9 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
   })
 
   const { data: schedule, isLoading: schedLoading } = useQuery({
-    queryKey: ['team-schedule', league, teamId, schedSeason],
+    queryKey: ['team-schedule', league, teamId, SEASON],
     queryFn: () => proxyFetch(`${league.toLowerCase()}/teams/${teamId}/schedule`, {
-      season: String(schedSeason), seasontype: '2',
+      season: String(SEASON), seasontype: '2',
     }),
     staleTime: 5 * 60_000,
     enabled: tab === 'schedule' || tab === 'overview',
@@ -234,7 +234,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
             {games.filter(g => g.isFinal).length > 0 && (
               <div className="panel space-y-3">
                 <div className="text-xs font-black uppercase tracking-wider text-field-400">
-                  {schedSeason} Results
+                  {SEASON} Results
                 </div>
                 <div className="space-y-2">
                   {games.filter(g => g.isFinal).map(g => (
@@ -288,24 +288,14 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
         {/* ══ SCHEDULE ══ */}
         {tab === 'schedule' && (
           <div className="space-y-3">
-            {/* Season picker */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-field-400 font-bold uppercase tracking-wider">Season</span>
-              <div className="flex gap-1">
-                {[2024, 2025, 2026].map(yr => (
-                  <button key={yr} onClick={() => setSchedSeason(yr)}
-                    className={clsx('px-3 py-1 rounded-lg text-sm font-bold transition-colors',
-                      schedSeason === yr ? 'bg-gold text-field-900' : 'bg-field-800 text-field-300 hover:text-white')}>
-                    {yr}
-                  </button>
-                ))}
-              </div>
-              {schedLoading && <div className="w-4 h-4 border-2 border-field-600 border-t-gold rounded-full animate-spin" />}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-field-400 font-bold uppercase tracking-wider">{SEASON} Regular Season</span>
+              {schedLoading && <div className="w-3.5 h-3.5 border-2 border-field-600 border-t-gold rounded-full animate-spin" />}
             </div>
 
             {games.length === 0 && !schedLoading && (
               <div className="panel text-center py-10 text-field-400 text-sm">
-                No schedule data for {schedSeason}
+                Schedule not yet available for {SEASON}
               </div>
             )}
 
@@ -373,34 +363,46 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
             )}
             {!rosterLoading && (
               <div className="space-y-4">
-                {/* Group by position */}
-                {(['QB','RB','WR','TE','OL','DL','LB','DB','K','P','ST'] as const).map(pos => {
-                  const players = (rosterData?.athletes ?? [])
+                {/* Flatten all ESPN roster groups (offense/defense/specialTeam) then re-group by position */}
+                {(() => {
+                  const allPlayers: any[] = (rosterData?.athletes ?? [])
                     .flatMap((g: any) => g.items ?? g.athletes ?? [])
-                    .filter((a: any) => a.position?.abbreviation === pos || a.position?.parentPosition === pos)
-                  if (!players.length) return null
-                  return (
+
+                  // Group by normalized position
+                  const grouped: Record<string, any[]> = {}
+                  for (const a of allPlayers) {
+                    const grp = posGroup(a.position?.abbreviation ?? '')
+                    if (!grouped[grp]) grouped[grp] = []
+                    grouped[grp].push(a)
+                  }
+
+                  return POS_ORDER.filter(pos => grouped[pos]?.length > 0).map(pos => (
                     <div key={pos}>
-                      <div className="text-xs font-black uppercase tracking-wider text-field-400 mb-2">{pos}</div>
+                      <div className="text-xs font-black uppercase tracking-wider text-field-400 mb-2">
+                        {pos === 'OL' ? 'Offensive Line' : pos === 'DL' ? 'Defensive Line' : pos === 'DB' ? 'Defensive Backs' : pos === 'LB' ? 'Linebackers' : pos === 'ST' ? 'Special Teams' : pos}
+                      </div>
                       <div className="space-y-1">
-                        {players.map((a: any) => (
+                        {grouped[pos].sort((a, b) => parseInt(a.jersey ?? '99') - parseInt(b.jersey ?? '99')).map((a: any) => (
                           <div key={a.id} className="flex items-center gap-3 py-1.5 border-b border-field-800/50">
-                            <span className="text-xs text-field-500 w-8 text-right">{a.jersey ?? '—'}</span>
+                            <span className="text-xs text-field-500 w-8 text-right font-mono">{a.jersey ?? '—'}</span>
                             {a.headshot?.href
                               ? <img src={a.headshot.href} alt={a.fullName} className="w-7 h-7 rounded-full object-cover shrink-0" />
-                              : <div className="w-7 h-7 rounded-full bg-field-700 shrink-0" />
+                              : <div className="w-7 h-7 rounded-full bg-field-700 shrink-0 flex items-center justify-center">
+                                  <span className="text-[9px] text-field-500 font-black">{a.position?.abbreviation}</span>
+                                </div>
                             }
                             <span className="text-sm text-white font-bold flex-1 truncate">{a.fullName ?? a.displayName}</span>
-                            <span className="text-xs text-field-500">{a.displayHeight} · {a.displayWeight}</span>
+                            <span className="text-xs text-field-500 hidden sm:block">{a.displayHeight} · {a.displayWeight}</span>
+                            <span className="text-[10px] text-field-600 shrink-0">{a.position?.abbreviation}</span>
                             {a.experience?.displayValue && (
-                              <span className="text-xs text-field-600">{a.experience.displayValue.charAt(0)}</span>
+                              <span className="text-[10px] text-field-600 w-6 text-center shrink-0">{a.experience.displayValue.charAt(0)}</span>
                             )}
                           </div>
                         ))}
                       </div>
                     </div>
-                  )
-                })}
+                  ))
+                })()}
               </div>
             )}
           </div>
@@ -500,7 +502,24 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
   )
 }
 
-// Roman numeral helper for Super Bowl numbering
+// Normalize ESPN position abbreviation → display group
+function posGroup(abbr: string): string {
+  switch (abbr) {
+    case 'QB':                    return 'QB'
+    case 'RB': case 'FB':        return 'RB'
+    case 'WR':                    return 'WR'
+    case 'TE':                    return 'TE'
+    case 'OL': case 'OT': case 'G': case 'C': case 'LS': return 'OL'
+    case 'DL': case 'DE': case 'DT': case 'NT':           return 'DL'
+    case 'LB': case 'ILB': case 'OLB':                    return 'LB'
+    case 'DB': case 'CB': case 'S': case 'SS': case 'FS': return 'DB'
+    case 'K': case 'PK':          return 'K'
+    case 'P':                     return 'P'
+    default:                      return 'ST'
+  }
+}
+
+const POS_ORDER = ['QB','RB','WR','TE','OL','DL','LB','DB','K','P','ST']
 function romanize(n: number): string {
   const vals = [50,40,10,9,5,4,1]
   const syms = ['L','XL','X','IX','V','IV','I']

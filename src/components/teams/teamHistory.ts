@@ -32,7 +32,10 @@ export const CFB_HISTORY: Record<string, { heismans: { year: number; name: strin
     natChamps: [1998],
   },
   '245': { // Texas A&M
-    heismans: [{ year: 1957, name: 'John David Crow' }],
+    heismans: [
+      { year: 1957, name: 'John David Crow' },
+      { year: 2012, name: 'Johnny Manziel' },
+    ],
     natChamps: [1919, 1927, 1939, 1998],
   },
   '194': { // Ohio State
@@ -71,8 +74,8 @@ export const CFB_HISTORY: Record<string, { heismans: { year: number; name: strin
   },
   '251': { // Texas
     heismans: [
-      { year: 1969, name: 'Steve Owens' }, { year: 1977, name: 'Earl Campbell' },
-      { year: 1990, name: 'Ty Detmer' }, { year: 2022, name: 'Caleb Williams' },
+      { year: 1977, name: 'Earl Campbell' },
+      { year: 1990, name: 'Ty Detmer' },
     ],
     natChamps: [1963,1969,1970,2005],
   },
