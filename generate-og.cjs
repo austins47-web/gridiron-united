@@ -6,26 +6,29 @@ const W = 1200, H = 630
 const c = createCanvas(W, H)
 const ctx = c.getContext('2d')
 
-// Exact colors from tailwind.config.js + landing page
-const BG       = '#08090f'  // field-950
-const CARD     = '#161b27'  // field-800
-const BORDER   = '#273044'  // field-600
+const BG       = '#08090f'
+const CARD     = '#161b27'
+const BORDER   = '#273044'
 const GOLD     = '#F5A623'
 const WHITE    = '#ffffff'
-const MUTED    = '#8a9ab8'  // field-300
-const DIM      = '#5a6a8a'  // field-500
-const DARKER   = '#3a4560'  // field-400 (darker for URL)
+const MUTED    = '#8a9ab8'
+const DIM      = '#5a6a8a'
+const DARKER   = '#3a4560'
 const NFL_BLUE = '#4a9fe8'
 const CFB_AMB  = '#e8a020'
 const QB_GOLD  = '#fbbf24'
 
+// Left col: x=50 to x=660 (610px usable). Right col: x=680 to x=1150.
+const LX  = 50   // left margin
+const COL = 660  // left column right edge — cards start at 680
+
 function rr(x, y, w, h, r) {
   ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.lineTo(x + w - r, y); ctx.arcTo(x+w, y,   x+w, y+r,   r)
-  ctx.lineTo(x + w, y + h - r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r)
-  ctx.lineTo(x + r, y + h); ctx.arcTo(x,   y+h, x,   y+h-r, r)
-  ctx.lineTo(x, y + r); ctx.arcTo(x,   y,   x+r, y,   r)
+  ctx.moveTo(x+r, y)
+  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y,   x+w, y+r,   r)
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r)
+  ctx.lineTo(x+r, y+h); ctx.arcTo(x,   y+h, x,   y+h-r, r)
+  ctx.lineTo(x, y+r); ctx.arcTo(x,   y,   x+r, y,   r)
   ctx.closePath()
 }
 
@@ -33,168 +36,174 @@ function rr(x, y, w, h, r) {
 ctx.fillStyle = BG
 ctx.fillRect(0, 0, W, H)
 
-// ── Gold glow orb (center, exactly like hero) ─────────────────
-const grd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, 400)
-grd.addColorStop(0,   'rgba(245,166,35,0.13)')
-grd.addColorStop(1,   'rgba(245,166,35,0)')
+// ── Gold glow orb ─────────────────────────────────────────────
+const grd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, 420)
+grd.addColorStop(0, 'rgba(245,166,35,0.13)')
+grd.addColorStop(1, 'rgba(245,166,35,0)')
 ctx.fillStyle = grd
 ctx.fillRect(0, 0, W, H)
 
-// ── Field yard lines (horizontal, like the hero SVG) ──────────
+// ── Field yard lines ──────────────────────────────────────────
 ctx.strokeStyle = 'rgba(255,255,255,0.04)'
 ctx.lineWidth = 1.5
 for (let y = 72; y < H; y += 72) {
   ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
 }
 
-// ── Center line ───────────────────────────────────────────────
-ctx.strokeStyle = 'rgba(255,255,255,0.02)'
-ctx.lineWidth = 2
-ctx.beginPath(); ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H); ctx.stroke()
-
 // ── End zone tints ────────────────────────────────────────────
 ctx.fillStyle = 'rgba(255,255,255,0.012)'
-ctx.fillRect(0, 0, 120, H)
-ctx.fillRect(W - 120, 0, 120, H)
+ctx.fillRect(0, 0, 80, H)
+ctx.fillRect(W - 80, 0, 80, H)
 
-// ── Goal posts left ───────────────────────────────────────────
-ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+// ── Goal posts (decorative, behind everything) ────────────────
+ctx.strokeStyle = 'rgba(255,255,255,0.055)'
 ctx.lineWidth = 3
-ctx.beginPath(); ctx.moveTo(60, 200); ctx.lineTo(60, 420); ctx.stroke()
+ctx.beginPath(); ctx.moveTo(40, 190); ctx.lineTo(40, 430); ctx.stroke()
 ctx.lineWidth = 2
-ctx.beginPath(); ctx.moveTo(60, 290); ctx.lineTo(30, 200); ctx.stroke()
-ctx.beginPath(); ctx.moveTo(60, 290); ctx.lineTo(90, 200); ctx.stroke()
+ctx.beginPath(); ctx.moveTo(40, 280); ctx.lineTo(14, 190); ctx.stroke()
+ctx.beginPath(); ctx.moveTo(40, 280); ctx.lineTo(66, 190); ctx.stroke()
 
-// ── Goal posts right ──────────────────────────────────────────
 ctx.lineWidth = 3
-ctx.beginPath(); ctx.moveTo(1140, 200); ctx.lineTo(1140, 420); ctx.stroke()
+ctx.beginPath(); ctx.moveTo(1160, 190); ctx.lineTo(1160, 430); ctx.stroke()
 ctx.lineWidth = 2
-ctx.beginPath(); ctx.moveTo(1140, 290); ctx.lineTo(1110, 200); ctx.stroke()
-ctx.beginPath(); ctx.moveTo(1140, 290); ctx.lineTo(1170, 200); ctx.stroke()
+ctx.beginPath(); ctx.moveTo(1160, 280); ctx.lineTo(1134, 190); ctx.stroke()
+ctx.beginPath(); ctx.moveTo(1160, 280); ctx.lineTo(1186, 190); ctx.stroke()
 
-// ── League badges (top left) ──────────────────────────────────
-// NFL badge
+// ── Vertical divider between columns ─────────────────────────
+ctx.strokeStyle = 'rgba(39,48,68,0.8)'
+ctx.lineWidth = 1
+ctx.beginPath(); ctx.moveTo(668, 40); ctx.lineTo(668, 590); ctx.stroke()
+
+// ── LEFT COLUMN ───────────────────────────────────────────────
+
+// League badges
 ctx.fillStyle = 'rgba(74,159,232,0.2)'
-rr(150, 80, 84, 34, 8); ctx.fill()
+rr(LX, 44, 72, 32, 7); ctx.fill()
 ctx.strokeStyle = 'rgba(74,159,232,0.35)'; ctx.lineWidth = 1
-rr(150, 80, 84, 34, 8); ctx.stroke()
+rr(LX, 44, 72, 32, 7); ctx.stroke()
 ctx.fillStyle = NFL_BLUE
-ctx.font = '900 15px "Arial Black", Arial'
+ctx.font = '900 13px "Arial Black", Arial'
 ctx.textAlign = 'center'
-ctx.fillText('NFL', 192, 103)
+ctx.fillText('NFL', LX + 36, 66)
 
-// plus sign
 ctx.fillStyle = DARKER
-ctx.font = '900 20px "Arial Black", Arial'
-ctx.fillText('+', 252, 103)
+ctx.font = '900 18px "Arial Black", Arial'
+ctx.fillText('+', LX + 88, 67)
 
-// CFB badge
 ctx.fillStyle = 'rgba(232,160,32,0.2)'
-rr(268, 80, 114, 34, 8); ctx.fill()
+rr(LX + 100, 44, 100, 32, 7); ctx.fill()
 ctx.strokeStyle = 'rgba(232,160,32,0.35)'; ctx.lineWidth = 1
-rr(268, 80, 114, 34, 8); ctx.stroke()
+rr(LX + 100, 44, 100, 32, 7); ctx.stroke()
 ctx.fillStyle = CFB_AMB
-ctx.font = '900 15px "Arial Black", Arial'
-ctx.fillText('COLLEGE', 325, 103)
+ctx.font = '900 13px "Arial Black", Arial'
+ctx.fillText('COLLEGE', LX + 150, 66)
 ctx.textAlign = 'left'
 
-// ── HEADLINE — massive, like the hero h1 ─────────────────────
+// Headline — fit within 610px left col
+// "FANTASY" at 88px ≈ 530px wide — fits
+// "FOOTBALL" at 88px ≈ 605px wide — tight but fits
 ctx.fillStyle = WHITE
-ctx.font = '900 148px "Arial Black", Arial'
-ctx.fillText('FANTASY', 150, 238)
+ctx.font = '900 88px "Arial Black", Arial'
+ctx.fillText('FANTASY', LX, 184)
 
 ctx.fillStyle = GOLD
-ctx.font = '900 148px "Arial Black", Arial'
-ctx.fillText('FOOTBALL', 150, 374)
+ctx.font = '900 88px "Arial Black", Arial'
+ctx.fillText('FOOTBALL', LX, 284)
 
-// ── Subhead / UNITED ──────────────────────────────────────────
+// UNITED subtext
 ctx.fillStyle = DIM
-ctx.font = '900 30px "Arial Black", Arial'
-ctx.fillText('UNITED', 154, 422)
+ctx.font = '900 26px "Arial Black", Arial'
+ctx.fillText('UNITED', LX + 2, 328)
 
-// ── Tagline ───────────────────────────────────────────────────
+// Tagline — two short lines so it never runs past col edge
 ctx.fillStyle = DIM
-ctx.font = '22px Arial'
-ctx.fillText('Draft NFL pros and college stars on one roster.', 154, 464)
+ctx.font = '20px Arial'
+ctx.fillText('Draft NFL pros and college stars', LX + 2, 372)
+ctx.fillText('on the same roster. Free to play.', LX + 2, 398)
 
-// ── Stat pills ────────────────────────────────────────────────
+// Stat pills
 const stats = [
-  { x: 154, n: '32',   l: 'NFL Teams',      w: 142 },
-  { x: 308, n: '130+', l: 'CFB Programs',   w: 172 },
-  { x: 492, n: '4',    l: 'League Formats', w: 172 },
+  { n: '32',   l: 'NFL Teams',    w: 130 },
+  { n: '130+', l: 'CFB Programs', w: 150 },
+  { n: '4',    l: 'Formats',      w: 110 },
 ]
-stats.forEach(({ x, n, l, w }) => {
+let sx = LX
+stats.forEach(({ n, l, w }) => {
   ctx.fillStyle = CARD
-  rr(x, 494, w, 60, 10); ctx.fill()
+  rr(sx, 428, w, 56, 10); ctx.fill()
   ctx.fillStyle = GOLD
-  ctx.font = '900 26px "Arial Black", Arial'
-  ctx.fillText(n, x + 22, 522)
+  ctx.font = '900 24px "Arial Black", Arial'
+  ctx.fillText(n, sx + 18, 453)
   ctx.fillStyle = DIM
-  ctx.font = '13px Arial'
-  ctx.fillText(l, x + 22, 542)
+  ctx.font = '12px Arial'
+  ctx.fillText(l, sx + 18, 472)
+  sx += w + 10
 })
 
-// ── Player card helper ────────────────────────────────────────
-function card(y, leagueTxt, leagueColor, badgeBg, badgeStroke, name, team, pts) {
-  // card
-  ctx.fillStyle = CARD
-  rr(730, y, 420, 220, 20); ctx.fill()
+// URL
+ctx.fillStyle = BORDER
+ctx.font = 'bold 13px "Arial Black", Arial'
+ctx.fillText('GRIDIRON-UNITED.VERCEL.APP', LX + 2, 582)
 
-  // left bar
+// ── RIGHT COLUMN ──────────────────────────────────────────────
+// Cards: x=680, width=470, so right edge = 1150. 1200 - 1150 = 50px margin.
+
+function card(y, leagueTxt, leagueColor, badgeBg, badgeStroke, name, team, pts) {
+  const CX = 680, CW = 470, CH = 228
+
+  ctx.fillStyle = CARD
+  rr(CX, y, CW, CH, 18); ctx.fill()
+
+  // color bar
   ctx.fillStyle = leagueColor
   ctx.beginPath()
-  ctx.moveTo(737, y); ctx.arcTo(730, y, 730, y+7, 7)
-  ctx.lineTo(730, y + 220 - 7); ctx.arcTo(730, y+220, 737, y+220, 7)
-  ctx.lineTo(737, y + 220)
-  ctx.lineTo(737, y)
+  ctx.moveTo(CX+7, y); ctx.arcTo(CX, y, CX, y+7, 7)
+  ctx.lineTo(CX, y+CH-7); ctx.arcTo(CX, y+CH, CX+7, y+CH, 7)
+  ctx.lineTo(CX+7, y+CH); ctx.lineTo(CX+7, y)
   ctx.closePath(); ctx.fill()
 
   // league pill
+  const pw = leagueTxt === 'COLLEGE' ? 84 : 62
   ctx.fillStyle = badgeBg
-  rr(760, y + 28, leagueTxt === 'COLLEGE' ? 84 : 64, 30, 7); ctx.fill()
+  rr(CX+22, y+26, pw, 28, 6); ctx.fill()
   ctx.strokeStyle = badgeStroke; ctx.lineWidth = 1
-  rr(760, y + 28, leagueTxt === 'COLLEGE' ? 84 : 64, 30, 7); ctx.stroke()
+  rr(CX+22, y+26, pw, 28, 6); ctx.stroke()
   ctx.fillStyle = leagueColor
-  ctx.font = '900 13px "Arial Black", Arial'
+  ctx.font = '900 12px "Arial Black", Arial'
   ctx.textAlign = 'center'
-  ctx.fillText(leagueTxt, leagueTxt === 'COLLEGE' ? 802 : 792, y + 49)
+  ctx.fillText(leagueTxt, CX + 22 + pw/2, y + 46)
 
   // QB badge
-  const qbX = leagueTxt === 'COLLEGE' ? 858 : 838
+  const qbX = CX + 22 + pw + 8
   ctx.fillStyle = 'rgba(146,64,14,0.4)'
-  rr(qbX, y + 28, 46, 30, 7); ctx.fill()
+  rr(qbX, y+26, 42, 28, 6); ctx.fill()
   ctx.fillStyle = QB_GOLD
-  ctx.fillText('QB', qbX + 23, y + 49)
+  ctx.fillText('QB', qbX + 21, y + 46)
   ctx.textAlign = 'left'
 
-  // name
+  // name — 40px fits both names well within 470px card
   ctx.fillStyle = WHITE
-  ctx.font = '900 44px "Arial Black", Arial'
-  ctx.fillText(name, 760, y + 128)
+  ctx.font = '900 40px "Arial Black", Arial'
+  ctx.fillText(name, CX+22, y + 122)
 
   // team
   ctx.fillStyle = MUTED
-  ctx.font = '22px Arial'
-  ctx.fillText(team, 760, y + 163)
+  ctx.font = '20px Arial'
+  ctx.fillText(team, CX+22, y + 154)
 
-  // pts right-aligned
+  // pts
   ctx.fillStyle = GOLD
-  ctx.font = '900 40px "Arial Black", Arial'
+  ctx.font = '900 36px "Arial Black", Arial'
   ctx.textAlign = 'right'
-  ctx.fillText(pts, 1126, y + 163)
+  ctx.fillText(pts, CX+CW-22, y + 154)
   ctx.fillStyle = DIM
-  ctx.font = '15px Arial'
-  ctx.fillText('pts / wk', 1126, y + 186)
+  ctx.font = '14px Arial'
+  ctx.fillText('pts/wk', CX+CW-22, y + 176)
   ctx.textAlign = 'left'
 }
 
-card(72,  'COLLEGE', CFB_AMB, 'rgba(232,160,32,0.2)',  'rgba(232,160,32,0.4)', 'Arch Manning', 'Texas Longhorns', '31.2')
-card(316, 'NFL',     NFL_BLUE,'rgba(74,159,232,0.2)',   'rgba(74,159,232,0.4)', 'Josh Allen',   'Buffalo Bills',   '38.9')
-
-// ── URL ───────────────────────────────────────────────────────
-ctx.fillStyle = BORDER
-ctx.font = 'bold 15px "Arial Black", Arial'
-ctx.fillText('GRIDIRON-UNITED.VERCEL.APP', 154, 606)
+card(40,  'COLLEGE', CFB_AMB,  'rgba(232,160,32,0.18)', 'rgba(232,160,32,0.4)',  'Arch Manning', 'Texas Longhorns', '31.2')
+card(296, 'NFL',     NFL_BLUE, 'rgba(74,159,232,0.18)', 'rgba(74,159,232,0.4)',  'Josh Allen',   'Buffalo Bills',   '38.9')
 
 // ── Write PNG ─────────────────────────────────────────────────
 const out = path.join(__dirname, 'public', 'og-image.png')
