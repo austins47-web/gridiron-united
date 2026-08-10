@@ -528,7 +528,7 @@ const GRID_COLS: Record<ColCount, string> = {
   5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
 }
 
-function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSelect }: {
+function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSelect, onTeamClick }: {
   games: LiveGame[]
   viewMode: ViewMode
   cols: ColCount
@@ -536,6 +536,7 @@ function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSe
   onToggleFav: (abbr: string) => void
   oddsMap?: Map<string, GameOdds>
   onSelect: (game: LiveGame) => void
+  onTeamClick: (team: GameTeam, league: 'NFL' | 'CFB') => void
 }) {
   const getOdds = (g: LiveGame) => {
     if (!oddsMap) return null
@@ -819,7 +820,8 @@ export function LiveScoresView() {
                 <Star className="w-3.5 h-3.5 text-gold fill-gold" />
                 <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">My Teams</span>
               </div>
-              <GameGroup games={favGames} {...sharedProps} />
+              <GameGroup games={favGames} {...sharedProps}
+          onTeamClick={handleTeamClick} />
             </div>
           )}
           {otherGames.length > 0 && (
@@ -832,7 +834,8 @@ export function LiveScoresView() {
                   <span className="text-xs text-field-400">tap ⭐ to favorite</span>
                 </div>
               )}
-              <GameGroup games={otherGames} {...sharedProps} />
+              <GameGroup games={otherGames} {...sharedProps}
+          onTeamClick={handleTeamClick} />
             </div>
           )}
         </div>
