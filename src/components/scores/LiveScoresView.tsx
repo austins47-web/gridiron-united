@@ -571,7 +571,7 @@ const CFB_SEASON  = 2026
 type WeekOpt = { value: string; label: string; seasonType: number; week: number }
 
 const NFL_WEEK_OPTIONS: WeekOpt[] = [
-  { value: 'hof',  label: 'Hall of Fame Game', seasonType: 1, week: 0 },
+  { value: 'hof',  label: 'Hall of Fame Game', seasonType: 1, week: 1 },
   { value: 'pre1', label: 'Preseason Wk 1',    seasonType: 1, week: 1 },
   { value: 'pre2', label: 'Preseason Wk 2',    seasonType: 1, week: 2 },
   { value: 'pre3', label: 'Preseason Wk 3',    seasonType: 1, week: 3 },
