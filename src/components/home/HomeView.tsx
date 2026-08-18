@@ -1,10 +1,10 @@
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
-import { useHomeData, type ActionItem, type TeamRow } from '@/hooks/useHome'
+import { useHomeData, useTickerGames, type ActionItem, type TeamRow } from '@/hooks/useHome'
 import { useMyLeagues } from '@/hooks/useLeague'
 import {
-  Zap, Trophy, ChevronRight, Clock, ArrowLeftRight, Target,
-  UserPlus, Users, Plus, LogIn, CheckCircle2, Flame,
+  Trophy, ChevronRight, Clock, ArrowLeftRight, Target,
+  UserPlus, Users, Plus, LogIn, Flame, Zap,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -24,16 +24,23 @@ export function HomeView() {
   const { profile } = useAppStore()
   const { teams, actions, isLoading, hasLeagues } = useHomeData()
 
-  const firstName = (profile?.display_name || profile?.username || '').split(' ')[0]
+  const name = profile?.display_name || profile?.username || ''
+  const firstName = name.split(' ')[0]
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+
+  // Aggregate scoreboard figures
+  const totalW = teams.reduce((s, t) => s + t.wins, 0)
+  const totalL = teams.reduce((s, t) => s + t.losses, 0)
+  const commishCount = teams.filter(t => t.isCommissioner).length
 
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
-        <div className="h-8 w-56 rounded bg-field-800 animate-pulse" />
+        <div className="h-36 rounded-2xl bg-field-800 animate-pulse" />
+        <div className="h-11 rounded-xl bg-field-800 animate-pulse" />
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-20 rounded-xl bg-field-800 animate-pulse" />
+          <div key={i} className="h-16 rounded-xl bg-field-800 animate-pulse" />
         ))}
       </div>
     )
@@ -42,75 +49,203 @@ export function HomeView() {
   if (!hasLeagues) return <EmptyHome />
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-4xl mx-auto px-4 py-6 space-y-5">
 
-      {/* Greeting */}
-      <div>
-        <h1 className="font-cond font-black text-2xl text-white uppercase tracking-wider">
-          {greeting}{firstName ? `, ${firstName}` : ''}
-        </h1>
-        <p className="text-field-400 text-sm mt-0.5">
-          {actions.length > 0
-            ? `${actions.length} thing${actions.length === 1 ? '' : 's'} need your attention`
-            : "You're all caught up"}
-        </p>
+      {/* ══ JUMBOTRON ══ */}
+      <div className="jumbotron rise-in">
+        <div className="relative p-5 sm:p-6">
+          {/* Eyebrow */}
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-gold" />
+            <span className="font-cond font-bold text-[10px] uppercase tracking-[0.2em] text-gold">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+            </span>
+          </div>
+
+          {/* Greeting */}
+          <h1 className="font-cond font-black uppercase text-white leading-[0.95] tracking-tight"
+              style={{ fontSize: 'clamp(1.9rem, 6vw, 3rem)' }}>
+            {greeting}
+            {firstName && <>,<span className="text-gold"> {firstName}</span></>}
+          </h1>
+
+          <p className="text-field-300 text-sm mt-1.5">
+            {actions.length > 0
+              ? <>You have <span className="text-white font-bold">{actions.length}</span> {actions.length === 1 ? 'thing' : 'things'} to handle.</>
+              : <>Everything's handled. Nothing needs you right now.</>}
+          </p>
+
+          {/* Scoreboard readouts */}
+          <div className="grid grid-cols-3 gap-px mt-5 bg-field-700/70 rounded-xl overflow-hidden">
+            {[
+              { label: 'Leagues',   value: String(teams.length) },
+              { label: 'Record',    value: `${totalW}-${totalL}` },
+              { label: commishCount === 1 ? 'Commish Of' : 'Commish Of', value: String(commishCount) },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-field-900/80 px-3 py-3 text-center">
+                <div className="readout-value">{value}</div>
+                <div className="readout-label mt-1">{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Needs Attention */}
+      {/* ══ TICKER ══ */}
+      <ScoreTicker />
+
+      {/* ══ NEEDS ATTENTION ══ */}
       <section>
-        <div className="flex items-center gap-2 mb-3">
-          <Zap className="w-4 h-4 text-gold" />
-          <h2 className="font-cond font-bold text-sm uppercase tracking-wider text-white">
-            Needs Attention
-          </h2>
-        </div>
+        <SectionHead
+          label="Needs Attention"
+          count={actions.length}
+          accent={actions.length > 0}
+        />
 
         {actions.length === 0 ? (
-          <div className="panel flex items-center gap-3 py-4">
-            <CheckCircle2 className="w-5 h-5 text-gold shrink-0" />
-            <div>
-              <p className="text-white font-bold text-sm">Nothing to do right now</p>
-              <p className="text-field-400 text-xs mt-0.5">
-                Drafts, trades, and pick deadlines will show up here as they come up.
-              </p>
-            </div>
+          <div className="rounded-xl border border-field-700 bg-field-800/60 px-4 py-5 text-center">
+            <p className="font-cond font-bold text-sm uppercase tracking-wider text-field-300">
+              All clear
+            </p>
+            <p className="text-field-500 text-xs mt-1">
+              Drafts, trades, and pick deadlines land here.
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
-            {actions.slice(0, 6).map(a => (
-              <ActionCard key={a.id} action={a} onGo={() => navigate(a.to)} />
+            {actions.slice(0, 6).map((a, i) => (
+              <ActionCard
+                key={a.id}
+                action={a}
+                index={i}
+                onGo={() => navigate(a.to)}
+              />
             ))}
           </div>
         )}
       </section>
 
-      {/* My Teams */}
+      {/* ══ MY TEAMS ══ */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-gold" />
-            <h2 className="font-cond font-bold text-sm uppercase tracking-wider text-white">
-              My Teams
-            </h2>
-            <span className="text-field-500 text-xs">({teams.length})</span>
-          </div>
-          <button
-            onClick={() => navigate('/app/leagues')}
-            className="text-xs font-bold text-field-400 hover:text-gold transition-colors flex items-center gap-1"
-          >
-            All leagues <ChevronRight className="w-3 h-3" />
-          </button>
-        </div>
-
+        <SectionHead
+          label="My Teams"
+          count={teams.length}
+          action={{ label: 'All leagues', onClick: () => navigate('/app/leagues') }}
+        />
         <div className="space-y-2">
-          {teams.map(t => <TeamCard key={t.leagueId} team={t} />)}
+          {teams.map((t, i) => <TeamCard key={t.leagueId} team={t} index={i} />)}
         </div>
       </section>
     </div>
   )
 }
 
-function ActionCard({ action, onGo }: { action: ActionItem; onGo: () => void }) {
+// ─── Section header — hairline rule carries the eye across ────
+function SectionHead({
+  label, count, accent, action,
+}: {
+  label: string
+  count?: number
+  accent?: boolean
+  action?: { label: string; onClick: () => void }
+}) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <h2 className={clsx(
+        'font-cond font-black text-xs uppercase tracking-[0.18em] shrink-0',
+        accent ? 'text-gold' : 'text-field-300',
+      )}>
+        {label}
+      </h2>
+      {count !== undefined && (
+        <span className="font-cond font-bold text-xs text-field-500 tabular-nums shrink-0">
+          {count}
+        </span>
+      )}
+      <div className="flex-1 h-px bg-field-700" />
+      {action && (
+        <button
+          onClick={action.onClick}
+          className="shrink-0 font-cond font-bold text-[11px] uppercase tracking-wider text-field-400 hover:text-gold transition-colors flex items-center gap-0.5"
+        >
+          {action.label} <ChevronRight className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Live ticker ─────────────────────────────────────────────
+function ScoreTicker() {
+  const { data: games = [] } = useTickerGames()
+  if (games.length === 0) return null
+
+  const liveCount = games.filter(g => g.status === 'in').length
+
+  return (
+    <div className="rounded-xl border border-field-700 bg-field-800/60 overflow-hidden rise-in"
+         style={{ animationDelay: '60ms' }}>
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-field-700 bg-field-900/60">
+        {liveCount > 0 ? (
+          <>
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+            <span className="font-cond font-bold text-[10px] uppercase tracking-[0.18em] text-red-400">
+              {liveCount} Live
+            </span>
+          </>
+        ) : (
+          <span className="font-cond font-bold text-[10px] uppercase tracking-[0.18em] text-field-400">
+            Around the League
+          </span>
+        )}
+      </div>
+
+      <div className="flex overflow-x-auto">
+        {games.map(g => {
+          const aw = parseInt(g.awayScore) || 0
+          const hm = parseInt(g.homeScore) || 0
+          return (
+            <div key={g.id} className="ticker-cell">
+              <div className="flex items-center justify-between gap-2">
+                <span className={clsx(
+                  'font-cond font-black text-xs',
+                  g.status !== 'pre' && aw > hm ? 'text-white' : 'text-field-300',
+                )}>{g.away}</span>
+                {g.status !== 'pre' && (
+                  <span className={clsx(
+                    'font-cond font-black text-xs tabular-nums',
+                    aw > hm ? 'text-white' : 'text-field-400',
+                  )}>{aw}</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className={clsx(
+                  'font-cond font-black text-xs',
+                  g.status !== 'pre' && hm > aw ? 'text-white' : 'text-field-300',
+                )}>{g.home}</span>
+                {g.status !== 'pre' && (
+                  <span className={clsx(
+                    'font-cond font-black text-xs tabular-nums',
+                    hm > aw ? 'text-white' : 'text-field-400',
+                  )}>{hm}</span>
+                )}
+              </div>
+              <div className={clsx(
+                'text-[9px] mt-0.5 truncate',
+                g.status === 'in' ? 'text-red-400 font-bold' : 'text-field-500',
+              )}>
+                {g.detail}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Action card — broadcast lower-third ─────────────────────
+function ActionCard({ action, index, onGo }: { action: ActionItem; index: number; onGo: () => void }) {
   const { setActiveLeague } = useAppStore()
   const { data: myLeagues = [] } = useMyLeagues()
   const urgent = action.priority === 0
@@ -127,11 +262,10 @@ function ActionCard({ action, onGo }: { action: ActionItem; onGo: () => void }) 
   return (
     <button
       onClick={handleClick}
+      style={{ animationDelay: `${100 + index * 45}ms` }}
       className={clsx(
-        'w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all group',
-        urgent
-          ? 'border-gold bg-gold/10 hover:bg-gold/15'
-          : 'border-field-700 bg-field-800 hover:border-field-500',
+        'lower-third rise-in w-full flex items-center gap-3 pl-4 pr-3 py-3 text-left group',
+        urgent && 'is-urgent play-clock',
       )}
     >
       <div className={clsx(
@@ -142,19 +276,23 @@ function ActionCard({ action, onGo }: { action: ActionItem; onGo: () => void }) 
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className={clsx('font-bold text-sm truncate', urgent ? 'text-gold' : 'text-white')}>
+        <div className="font-cond font-bold text-[10px] uppercase tracking-[0.16em] text-field-500 truncate">
+          {action.leagueName}
+        </div>
+        <div className={clsx(
+          'font-bold text-sm truncate leading-tight',
+          urgent ? 'text-gold' : 'text-white',
+        )}>
           {action.title}
         </div>
-        <div className="text-xs text-field-400 truncate">
-          {action.leagueName} · {action.detail}
-        </div>
+        <div className="text-xs text-field-400 truncate">{action.detail}</div>
       </div>
 
       <span className={clsx(
-        'shrink-0 text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg transition-colors',
+        'shrink-0 font-cond font-bold text-[11px] uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors',
         urgent
           ? 'bg-gold text-field-950'
-          : 'bg-field-700 text-field-300 group-hover:text-white',
+          : 'bg-field-700 text-field-300 group-hover:bg-gold group-hover:text-field-950',
       )}>
         {action.cta}
       </span>
@@ -162,7 +300,8 @@ function ActionCard({ action, onGo }: { action: ActionItem; onGo: () => void }) 
   )
 }
 
-function TeamCard({ team }: { team: TeamRow }) {
+// ─── Team card — standings row ───────────────────────────────
+function TeamCard({ team, index }: { team: TeamRow; index: number }) {
   const navigate = useNavigate()
   const { setActiveLeague, activeLeagueId } = useAppStore()
   const { data: myLeagues = [] } = useMyLeagues()
@@ -170,6 +309,7 @@ function TeamCard({ team }: { team: TeamRow }) {
   const isPickem = team.leagueType === 'pickem'
   const isActive = activeLeagueId === team.leagueId
   const preDraft = team.draftStatus === 'pre_draft'
+  const winning = team.matchup && team.matchup.myScore > team.matchup.oppScore
 
   const open = () => {
     const entry = myLeagues.find(l => l.league.id === team.leagueId)
@@ -183,65 +323,68 @@ function TeamCard({ team }: { team: TeamRow }) {
   return (
     <button
       onClick={open}
+      style={{ animationDelay: `${140 + index * 40}ms` }}
       className={clsx(
-        'w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all',
-        isActive
-          ? 'border-gold/50 bg-field-800'
-          : 'border-field-700 bg-field-800/60 hover:border-field-500',
+        'lower-third rise-in w-full flex items-center gap-3 pl-4 pr-3 py-3 text-left',
+        isActive && 'border-gold/40',
       )}
     >
       <div className={clsx(
-        'w-10 h-10 rounded-full flex items-center justify-center font-black shrink-0',
+        'w-10 h-10 rounded-lg flex items-center justify-center font-cond font-black text-lg shrink-0',
         isActive ? 'bg-gold text-field-950' : 'bg-field-700 text-gold',
       )}>
         {team.leagueName[0]?.toUpperCase()}
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-white text-sm truncate">{team.teamName}</span>
-          {isPickem && (
-            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold shrink-0">
-              Pick'Em
-            </span>
-          )}
+        <div className="font-cond font-bold text-[10px] uppercase tracking-[0.16em] text-field-500 truncate flex items-center gap-1.5">
+          {team.leagueName}
+          {isPickem && <span className="text-gold">· Pick'Em</span>}
+          {team.isCommissioner && <span className="text-field-400">· Commish</span>}
         </div>
-        <div className="text-xs text-field-400 truncate">{team.leagueName}</div>
+        <div className="font-bold text-white text-sm truncate leading-tight">
+          {team.teamName}
+        </div>
 
-        {team.matchup && (
-          <div className="text-xs mt-1 flex items-center gap-1.5">
-            <span className={clsx(
-              'font-bold',
-              team.matchup.myScore > team.matchup.oppScore ? 'text-gold' : 'text-field-300'
-            )}>
+        {team.matchup ? (
+          <div className="text-xs mt-0.5 flex items-center gap-1.5">
+            <span className={clsx('font-cond font-black tabular-nums', winning ? 'text-gold' : 'text-field-300')}>
               {team.matchup.myScore.toFixed(1)}
             </span>
-            <span className="text-field-600">vs</span>
-            <span className="text-field-300 font-bold">{team.matchup.oppScore.toFixed(1)}</span>
-            <span className="text-field-500 truncate">— {team.matchup.opponentName}</span>
+            <span className="text-field-600 text-[10px]">VS</span>
+            <span className="font-cond font-black tabular-nums text-field-300">
+              {team.matchup.oppScore.toFixed(1)}
+            </span>
+            <span className="text-field-500 truncate">{team.matchup.opponentName}</span>
+          </div>
+        ) : (
+          <div className="text-xs text-field-500 mt-0.5">
+            {preDraft ? 'Waiting to draft' : isPickem ? 'Season underway' : 'No matchup this week'}
           </div>
         )}
       </div>
 
-      <div className="text-right shrink-0">
+      <div className="text-right shrink-0 pr-1">
         {preDraft ? (
           <>
-            <div className="text-white font-bold text-sm">
-              {team.memberCount}/{team.numTeams}
+            <div className="font-cond font-black text-lg text-white tabular-nums leading-none">
+              {team.memberCount}<span className="text-field-500">/{team.numTeams}</span>
             </div>
-            <div className="text-field-500 text-[10px] uppercase tracking-wider">members</div>
+            <div className="readout-label mt-1">Members</div>
           </>
         ) : isPickem ? (
           <>
-            <div className="text-white font-bold text-sm">{team.wins}</div>
-            <div className="text-field-500 text-[10px] uppercase tracking-wider">correct</div>
+            <div className="font-cond font-black text-lg text-white tabular-nums leading-none">
+              {team.wins}
+            </div>
+            <div className="readout-label mt-1">Correct</div>
           </>
         ) : (
           <>
-            <div className="text-white font-bold text-sm">
+            <div className="font-cond font-black text-lg text-white tabular-nums leading-none">
               {team.wins}-{team.losses}{team.ties > 0 ? `-${team.ties}` : ''}
             </div>
-            <div className="text-field-500 text-[10px]">{team.pointsFor.toFixed(1)} pts</div>
+            <div className="readout-label mt-1">{team.pointsFor.toFixed(0)} PF</div>
           </>
         )}
       </div>
@@ -251,24 +394,32 @@ function TeamCard({ team }: { team: TeamRow }) {
   )
 }
 
+// ─── Empty state ─────────────────────────────────────────────
 function EmptyHome() {
   const navigate = useNavigate()
   return (
-    <div className="max-w-md mx-auto px-4 py-16 text-center">
-      <div className="text-5xl mb-4">🏈</div>
-      <h1 className="font-cond font-black text-2xl text-white uppercase tracking-wider mb-2">
-        Welcome to Gridiron United
-      </h1>
-      <p className="text-field-400 text-sm mb-6">
-        Create a league or join one with an invite code to get started.
-      </p>
-      <div className="flex gap-3 justify-center">
-        <button className="btn-outline" onClick={() => navigate('/app/leagues')}>
-          <LogIn className="w-4 h-4" /> Join a League
-        </button>
-        <button className="btn-gold" onClick={() => navigate('/app/leagues')}>
-          <Plus className="w-4 h-4" /> Create League
-        </button>
+    <div className="max-w-lg mx-auto px-4 py-10">
+      <div className="jumbotron">
+        <div className="relative p-8 text-center">
+          <div className="font-cond font-bold text-[10px] uppercase tracking-[0.2em] text-gold mb-2">
+            Gridiron United
+          </div>
+          <h1 className="font-cond font-black uppercase text-white leading-[0.95] tracking-tight mb-3"
+              style={{ fontSize: 'clamp(1.8rem, 6vw, 2.6rem)' }}>
+            No leagues yet
+          </h1>
+          <p className="text-field-300 text-sm mb-6 max-w-xs mx-auto">
+            Start a league of your own, or drop in an invite code to join one.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button className="btn-outline" onClick={() => navigate('/app/leagues')}>
+              <LogIn className="w-4 h-4" /> Join a league
+            </button>
+            <button className="btn-gold" onClick={() => navigate('/app/leagues')}>
+              <Plus className="w-4 h-4" /> Create league
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -137,6 +137,102 @@
     @apply w-2 h-2 rounded-full bg-red-400 animate-pulse;
   }
 
+  /* ══ HOME / JUMBOTRON ═══════════════════════════════════════
+     Signature surface: a stadium scoreboard slab. Yard-line
+     hatching, a gold chain-marker hairline, condensed numerals. */
+
+  .jumbotron {
+    @apply relative overflow-hidden rounded-2xl border border-field-700;
+    background:
+      linear-gradient(180deg, rgba(22,27,39,0.96) 0%, rgba(14,17,23,0.98) 100%);
+  }
+  /* Yard lines — every 5th heavier, like real field markings */
+  .jumbotron::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      repeating-linear-gradient(
+        90deg,
+        rgba(138,154,184,0.055) 0px,
+        rgba(138,154,184,0.055) 1px,
+        transparent 1px,
+        transparent 44px
+      );
+    pointer-events: none;
+  }
+  /* Gold chain marker across the top edge */
+  .jumbotron::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+      transparent 0%, #F5A623 15%, #f7b84e 50%, #F5A623 85%, transparent 100%);
+    pointer-events: none;
+  }
+
+  /* Scoreboard stat readout */
+  .readout-value {
+    @apply font-cond font-black text-white leading-none tabular-nums;
+    font-size: clamp(1.75rem, 5vw, 2.75rem);
+    letter-spacing: -0.01em;
+  }
+  .readout-label {
+    @apply font-cond font-bold uppercase text-field-400;
+    font-size: 0.625rem;
+    letter-spacing: 0.18em;
+  }
+
+  /* Broadcast lower-third: gold rail on the left edge */
+  .lower-third {
+    @apply relative overflow-hidden rounded-xl border border-field-700 bg-field-800;
+    transition: border-color .18s ease, transform .18s ease;
+  }
+  .lower-third::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: #3a4560;
+    transition: background .18s ease;
+  }
+  .lower-third:hover { @apply border-field-500; }
+  .lower-third:hover::before { background: #F5A623; }
+
+  .lower-third.is-urgent {
+    border-color: rgba(245,166,35,0.55);
+    background: linear-gradient(90deg, rgba(245,166,35,0.10) 0%, rgba(22,27,39,1) 55%);
+  }
+  .lower-third.is-urgent::before { background: #F5A623; }
+
+  /* Play clock — only on the single most urgent item */
+  @keyframes play-clock {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,166,35,0.35); }
+    50%      { box-shadow: 0 0 0 6px rgba(245,166,35,0); }
+  }
+  .play-clock { animation: play-clock 2s ease-out infinite; }
+
+  /* Page-load stagger */
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .rise-in {
+    animation: rise-in .42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Ticker row */
+  .ticker-cell {
+    @apply shrink-0 border-r border-field-700/70 px-4 py-2;
+    min-width: 128px;
+  }
+  .ticker-cell:last-child { @apply border-r-0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rise-in, .play-clock { animation: none !important; }
+  }
+
   /* ── Modal ── */
   .modal-overlay {
     @apply fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4;
@@ -681,6 +777,33 @@
   background-color: #e8ecf4 !important;
   color: #374151 !important;
 }
+
+/* ── Home / jumbotron light mode ── */
+[data-theme="light"] .jumbotron {
+  background: linear-gradient(180deg, #ffffff 0%, #f4f6fb 100%) !important;
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .jumbotron::before {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(17,24,39,0.045) 0px,
+    rgba(17,24,39,0.045) 1px,
+    transparent 1px,
+    transparent 44px
+  ) !important;
+}
+[data-theme="light"] .readout-value { color: #111827 !important; }
+[data-theme="light"] .readout-label { color: #4b5563 !important; }
+[data-theme="light"] .lower-third {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+}
+[data-theme="light"] .lower-third::before { background: #d1d5db !important; }
+[data-theme="light"] .lower-third.is-urgent {
+  background: linear-gradient(90deg, rgba(232,149,14,0.12) 0%, #ffffff 55%) !important;
+  border-color: rgba(232,149,14,0.5) !important;
+}
+[data-theme="light"] .ticker-cell { border-color: #e5e7eb !important; }
 
 /* ── Live Scores list row light mode ── */
 [data-theme="light"] .bg-field-500 {

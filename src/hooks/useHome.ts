@@ -258,3 +258,66 @@ export function useHomeData() {
     hasLeagues: myLeagues.length > 0,
   }
 }
+
+// ── Live ticker: a few games straight from ESPN, no proxy needed ──
+export interface TickerGame {
+  id: string
+  away: string
+  home: string
+  awayScore: string
+  homeScore: string
+  status: 'pre' | 'in' | 'post'
+  detail: string
+  league: 'NFL' | 'CFB'
+}
+
+export function useTickerGames() {
+  return useQuery({
+    queryKey: ['home-ticker'],
+    staleTime: 60_000,
+    refetchInterval: 90_000,
+    retry: 1,
+    queryFn: async (): Promise<TickerGame[]> => {
+      const urls: [string, 'NFL' | 'CFB'][] = [
+        ['https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', 'NFL'],
+        ['https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=25', 'CFB'],
+      ]
+
+      const results = await Promise.allSettled(
+        urls.map(([u]) => fetch(u).then(r => (r.ok ? r.json() : null)))
+      )
+
+      const out: TickerGame[] = []
+      results.forEach((res, idx) => {
+        if (res.status !== 'fulfilled' || !res.value) return
+        const league = urls[idx][1]
+        for (const ev of res.value.events ?? []) {
+          const comp = ev.competitions?.[0]
+          if (!comp) continue
+          const cs = comp.competitors ?? []
+          const home = cs.find((c: any) => c.homeAway === 'home')
+          const away = cs.find((c: any) => c.homeAway === 'away')
+          if (!home || !away) continue
+          const name = comp.status?.type?.name ?? ''
+          out.push({
+            id: ev.id,
+            away: away.team?.abbreviation ?? '??',
+            home: home.team?.abbreviation ?? '??',
+            awayScore: away.score ?? '0',
+            homeScore: home.score ?? '0',
+            status:
+              name === 'STATUS_IN_PROGRESS' || name === 'STATUS_HALFTIME' ? 'in'
+              : name === 'STATUS_FINAL' || name === 'STATUS_FINAL_OVERTIME' ? 'post'
+              : 'pre',
+            detail: comp.status?.type?.shortDetail ?? '',
+            league,
+          })
+        }
+      })
+
+      // Live games first, then upcoming, then finals
+      const rank = { in: 0, pre: 1, post: 2 } as const
+      return out.sort((a, b) => rank[a.status] - rank[b.status]).slice(0, 12)
+    },
+  })
+}
