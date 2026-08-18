@@ -123,14 +123,24 @@ serve(async (req) => {
     } else if (endpoint.startsWith('cfb/scores/')) {
       const [,, season, week] = endpoint.split('/')
       const seasontype = url.searchParams.get('seasontype') ?? '2'
+      // CFB Week 0 is a single late-August Saturday slate that ESPN lumps
+      // into week 1. Split them by date: week 0 = before Aug 26, week 1 = after.
+      const yr = parseInt(season)
+      const WEEK0_CUTOFF = new Date(`${yr}-08-26T00:00:00Z`).getTime()
+
       if (week === '0') {
-        // Week 0 CFB games happen in late August — fetch by date range
-        const yr = parseInt(season)
+        // Tight range covering only the week 0 slate
         data = await espnFetch(
-          `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=${yr}0822-${yr}0903`
+          `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=${yr}0818-${yr}0825`
         )
       } else {
-        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=50&dates=${season}&week=${week}&seasontype=${seasontype}`)
+        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=${season}&week=${week}&seasontype=${seasontype}`)
+        // Strip any week 0 stragglers out of week 1
+        if (week === '1' && Array.isArray(data?.events)) {
+          data.events = data.events.filter((e: any) =>
+            new Date(e.date).getTime() >= WEEK0_CUTOFF
+          )
+        }
       }
 
     } else if (endpoint === 'nfl/injuries') {

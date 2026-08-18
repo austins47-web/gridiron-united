@@ -572,10 +572,11 @@ const CFB_SEASON  = 2026
 type WeekOpt = { value: string; label: string; seasonType: number; week: number }
 
 const NFL_WEEK_OPTIONS: WeekOpt[] = [
+  // ESPN preseason weeks are offset by one: wk1 = HOF, wk2 = Pre Wk1, etc.
   { value: 'hof',  label: 'Hall of Fame Game', seasonType: 1, week: 1 },
-  { value: 'pre1', label: 'Preseason Wk 1',    seasonType: 1, week: 1 },
-  { value: 'pre2', label: 'Preseason Wk 2',    seasonType: 1, week: 2 },
-  { value: 'pre3', label: 'Preseason Wk 3',    seasonType: 1, week: 3 },
+  { value: 'pre1', label: 'Preseason Wk 1',    seasonType: 1, week: 2 },
+  { value: 'pre2', label: 'Preseason Wk 2',    seasonType: 1, week: 3 },
+  { value: 'pre3', label: 'Preseason Wk 3',    seasonType: 1, week: 4 },
   ...Array.from({ length: 18 }, (_, i) => ({
     value: String(i + 1), label: `Week ${i + 1}`, seasonType: 2, week: i + 1,
   })),
