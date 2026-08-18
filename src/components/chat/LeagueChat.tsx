@@ -461,7 +461,7 @@ export function LeagueChat() {
         <span className="font-cond font-bold text-sm uppercase tracking-wider text-white">League Chat</span>
         <span className="text-field-500 text-xs ml-1">— {activeLeague?.name}</span>
         <div className="ml-auto flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <div className="w-1.5 h-1.5 rounded-full bg-nfl" />
           <span className="text-xs text-field-400 font-bold">Live</span>
         </div>
       </div>

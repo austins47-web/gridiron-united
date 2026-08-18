@@ -396,7 +396,7 @@ export function AccountPage() {
               />
               <div className="flex justify-between mt-1">
                 <p className="text-field-500 text-xs">Lowercase, letters/numbers/underscores</p>
-                <span className={clsx('text-xs font-mono', form.username.length >= 18 ? 'text-yellow-400' : 'text-field-600')}>
+                <span className={clsx('text-xs font-mono', form.username.length >= 18 ? 'text-gold' : 'text-field-600')}>
                   {form.username.length}/20
                 </span>
               </div>
@@ -411,7 +411,7 @@ export function AccountPage() {
                 maxLength={30}
               />
               <div className="flex justify-end mt-1">
-                <span className={clsx('text-xs font-mono', form.display_name.length >= 27 ? 'text-yellow-400' : 'text-field-600')}>
+                <span className={clsx('text-xs font-mono', form.display_name.length >= 27 ? 'text-gold' : 'text-field-600')}>
                   {form.display_name.length}/30
                 </span>
               </div>
@@ -515,7 +515,7 @@ export function AccountPage() {
                           <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i <= score ? colors[score] : 'bg-field-700'}`} />
                         ))}
                       </div>
-                      <span className={`text-xs font-bold ${score <= 1 ? 'text-red-400' : score <= 2 ? 'text-orange-400' : score <= 3 ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                      <span className={`text-xs font-bold ${score <= 1 ? 'text-red-400' : score <= 2 ? 'text-orange-400' : score <= 3 ? 'text-gold' : 'text-emerald-400'}`}>
                         {labels[score]}
                       </span>
                     </div>
