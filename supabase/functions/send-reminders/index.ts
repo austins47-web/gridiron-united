@@ -168,7 +168,7 @@ serve(async (req) => {
       { data: profiles },
       { data: prefsRows },
     ] = await Promise.all([
-      supabase.from('leagues').select('id, name, league_type, current_week, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time'),
+      supabase.from('leagues').select('id, name, league_type, current_week, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz'),
       supabase.from('league_members').select('id, league_id, user_id, team_name'),
       supabase.from('profiles').select('id, username, display_name'),
       supabase.from('notification_preferences').select('*'),
@@ -211,7 +211,8 @@ serve(async (req) => {
       if (lg.pick_lock_type !== 'deadline') continue
       if (lg.pick_deadline_day == null || !lg.pick_deadline_time) continue
 
-      const next = nextWeeklyDeadline(lg.pick_deadline_day, lg.pick_deadline_time)
+      const lgTz = lg.pick_deadline_tz || 'UTC'
+      const next = nextWeeklyDeadline(lg.pick_deadline_day, lg.pick_deadline_time, lgTz)
       const hrs = hoursUntil(next.toISOString())
       const wk = lg.current_week ?? 1
 
@@ -219,6 +220,8 @@ serve(async (req) => {
         league: lg.name,
         type: 'pickem_deadline',
         deadlineUtc: next.toISOString(),
+        deadlineLocal: formatInZone(next, lgTz),
+        tz: lgTz,
         hoursUntil: Number(hrs.toFixed(2)),
         note: 'fires when hoursUntil is within 0.5 of a member lead time (default 24 or 2)',
       })
@@ -250,7 +253,7 @@ serve(async (req) => {
             dedupeKey: `pickem:${lg.id}:${lg.season ?? 2026}:w${wk}:${tag}`,
             subject: `Week ${wk} picks due in ${Math.round(hrs)}h - ${lg.name}`,
             heading: `Your Week ${wk} picks aren't in`,
-            body: `Picks lock in about ${Math.round(hrs)} hours. Get them in before the deadline.`,
+            body: `Picks lock ${formatInZone(next, lgTz)} — about ${Math.round(hrs)} hours from now. Get them in before then.`,
             ctaLabel: 'Make picks', ctaPath: '/app/pickem',
             urgent: target <= 4,
           })
@@ -460,14 +463,80 @@ serve(async (req) => {
   }
 })
 
-// ── Next occurrence of a weekly deadline (day 0-6, "HH:MM") ───
-function nextWeeklyDeadline(day: number, time: string): Date {
+// ══ Timezone-aware weekly deadlines ═══════════════════════════
+// A weekly deadline is a WALL-CLOCK time in a zone ("Wednesdays at
+// 5pm Mountain"), not a fixed UTC offset — Mountain is UTC-6 in
+// summer and UTC-7 in winter. We resolve local -> UTC using the
+// offset actually in effect on that date, so the deadline stays at
+// the same local time across daylight saving.
+
+function offsetMs(date: Date, tz: string): number {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
+  const p: Record<string, string> = {}
+  for (const part of dtf.formatToParts(date)) p[part.type] = part.value
+  const asUTC = Date.UTC(
+    Number(p.year), Number(p.month) - 1, Number(p.day),
+    Number(p.hour) % 24, Number(p.minute), Number(p.second),
+  )
+  return asUTC - date.getTime()
+}
+
+function zonedTimeToUtc(
+  year: number, month: number, day: number,
+  hour: number, minute: number, tz: string,
+): Date {
+  const naive = Date.UTC(year, month - 1, day, hour, minute, 0)
+  let ts = naive
+  for (let i = 0; i < 3; i++) {
+    const next = naive - offsetMs(new Date(ts), tz)
+    if (next === ts) break
+    ts = next
+  }
+  return new Date(ts)
+}
+
+function partsInZone(date: Date, tz: string) {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false, weekday: 'short',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
+  const p: Record<string, string> = {}
+  for (const part of dtf.formatToParts(date)) p[part.type] = part.value
+  const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  return {
+    year: Number(p.year), month: Number(p.month), day: Number(p.day),
+    weekday: DOW.indexOf(p.weekday),
+  }
+}
+
+/** Next occurrence of `day` at `time` in `tz`, as a UTC Date. */
+function nextWeeklyDeadline(day: number, time: string, tz = 'UTC'): Date {
   const [h, m] = time.split(':').map(Number)
-  const now = new Date()
-  const d = new Date(now)
-  d.setUTCHours(h, m, 0, 0)
-  const delta = (day - d.getUTCDay() + 7) % 7
-  d.setUTCDate(d.getUTCDate() + delta)
-  if (d.getTime() <= now.getTime()) d.setUTCDate(d.getUTCDate() + 7)
-  return d
+  const from = new Date()
+  for (let add = 0; add <= 8; add++) {
+    const probe = new Date(from.getTime() + add * 86400_000)
+    const pp = partsInZone(probe, tz)
+    if (pp.weekday !== day) continue
+    const candidate = zonedTimeToUtc(pp.year, pp.month, pp.day, h, m, tz)
+    if (candidate.getTime() > from.getTime()) return candidate
+  }
+  const pp = partsInZone(from, tz)
+  return zonedTimeToUtc(pp.year, pp.month, pp.day + 7, h, m, tz)
+}
+
+/** Render an instant in a zone, e.g. 'Wed, Aug 19, 5:00 PM MDT'. */
+function formatInZone(date: Date, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    }).format(date)
+  } catch {
+    return date.toISOString()
+  }
 }

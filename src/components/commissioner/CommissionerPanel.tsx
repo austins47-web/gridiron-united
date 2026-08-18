@@ -163,6 +163,7 @@ export function CommissionerPanel() {
             initialLockType={(activeLeague as any)?.pick_lock_type ?? 'kickoff'}
             initialDeadlineDay={(activeLeague as any)?.pick_deadline_day ?? 3}
             initialDeadlineTime={(activeLeague as any)?.pick_deadline_time ?? '18:00'}
+            initialTz={(activeLeague as any)?.pick_deadline_tz ?? null}
           />
         : <ScoringEditor league={activeLeague!} onSaved={setActiveLeague} />
       )}
