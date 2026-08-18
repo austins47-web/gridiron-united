@@ -146,3 +146,70 @@ export function to12Hour(time: string): string {
   const ampm = h >= 12 ? 'PM' : 'AM'
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`
 }
+
+/**
+ * The occurrence of a weekly rule that applies to a given week.
+ *
+ * A recurring rule ("Wednesdays at 5pm Mountain") has to resolve to
+ * ONE instant for a specific week. The right one is the latest
+ * occurrence at or before that week's first kickoff — that way the
+ * deadline always lands before games start, for past weeks as well
+ * as future ones.
+ *
+ * Returns null when there's no kickoff to anchor to.
+ */
+export function weeklyDeadlineForWeek(
+  firstKickoff: Date | null,
+  dayOfWeek: number,
+  time: string,
+  tz: string,
+): Date | null {
+  if (!firstKickoff) return null
+  const [h, m] = time.split(':').map(Number)
+
+  // Walk back up to 7 days from the first kickoff looking for the
+  // rule's weekday, and take the latest instant that still precedes it.
+  for (let back = 0; back <= 7; back++) {
+    const probe = new Date(firstKickoff.getTime() - back * 86400_000)
+    const pp = partsInZone(probe, tz)
+    if (pp.weekday !== dayOfWeek) continue
+    const candidate = zonedTimeToUtc(pp.year, pp.month, pp.day, h, m, tz)
+    if (candidate.getTime() <= firstKickoff.getTime()) return candidate
+  }
+  return null
+}
+
+/**
+ * Resolve the deadline actually in force for a week.
+ *
+ * Precedence, most specific first:
+ *   1. a per-week override set by the commissioner
+ *   2. the league's recurring weekly rule
+ *   3. none — games lock individually at kickoff
+ */
+export function resolveWeekDeadline(opts: {
+  weekOverride?: string | null
+  lockType?: string | null
+  day?: number | null
+  time?: string | null
+  tz?: string | null
+  firstKickoff?: Date | null
+}): { deadline: Date | null; source: 'override' | 'league-rule' | 'kickoff' } {
+  if (opts.weekOverride) {
+    return { deadline: new Date(opts.weekOverride), source: 'override' }
+  }
+  if (
+    opts.lockType === 'deadline' &&
+    opts.day != null &&
+    opts.time
+  ) {
+    const d = weeklyDeadlineForWeek(
+      opts.firstKickoff ?? null,
+      opts.day,
+      opts.time,
+      opts.tz || 'UTC',
+    )
+    if (d) return { deadline: d, source: 'league-rule' }
+  }
+  return { deadline: null, source: 'kickoff' }
+}

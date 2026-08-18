@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
+import { resolveWeekDeadline } from '@/lib/deadline'
 import {
   Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp
 } from 'lucide-react'
@@ -135,8 +136,6 @@ export function PickEmView() {
     },
   })
 
-  const weekDeadline = leagueSettings?.pick_deadline ?? null
-
   // Games for this week
   const { data: games = [] } = useQuery({
     queryKey: ['nfl-games', week],
@@ -151,6 +150,31 @@ export function PickEmView() {
       return data ?? []
     },
   })
+
+  // ── The deadline actually in force for this week ─────────────
+  //
+  // This previously read ONLY the per-week override row, so a
+  // league-wide rule set in the Commissioner panel was ignored:
+  // picks locked at kickoff while reminder emails announced a
+  // deadline. Precedence is now per-week override, then the league
+  // rule, then kickoff.
+  const firstKickoff = (() => {
+    const times = games
+      .map((g: any) => (g.game_date ? new Date(g.game_date).getTime() : NaN))
+      .filter((t: number) => Number.isFinite(t))
+    return times.length ? new Date(Math.min(...times)) : null
+  })()
+
+  const { deadline: effectiveDeadline, source: deadlineSource } = resolveWeekDeadline({
+    weekOverride: leagueSettings?.pick_deadline ?? null,
+    lockType:     (activeLeague as any)?.pick_lock_type,
+    day:          (activeLeague as any)?.pick_deadline_day,
+    time:         (activeLeague as any)?.pick_deadline_time,
+    tz:           (activeLeague as any)?.pick_deadline_tz,
+    firstKickoff,
+  })
+
+  const weekDeadline = effectiveDeadline ? effectiveDeadline.toISOString() : null
 
   // My picks for this week
   const { data: myPicks = [] } = useQuery({
@@ -480,6 +504,12 @@ export function PickEmView() {
           <Clock className="w-3.5 h-3.5 text-gold shrink-0" />
           <span className="text-field-300">
             <span className="text-gold font-bold">Pick deadline:</span> {formatDeadline(weekDeadline)}
+            {deadlineSource === 'league-rule' && (
+              <span className="text-field-500 ml-1.5">· league rule</span>
+            )}
+            {deadlineSource === 'override' && (
+              <span className="text-field-500 ml-1.5">· this week only</span>
+            )}
           </span>
           {isCommissioner && (
             <button
