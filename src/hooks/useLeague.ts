@@ -5,6 +5,15 @@ import { useAppStore } from '@/store/appStore'
 import type { League, LeagueMember } from '@/types/database'
 import toast from 'react-hot-toast'
 
+// Build the default team name from the user's profile
+function defaultTeamName(profile: { username?: string | null; display_name?: string | null } | null): string {
+  const handle = profile?.display_name?.trim() || profile?.username?.trim()
+  if (!handle) return 'My Team'
+  // Avoid "Chris's Team" → "Chris' Team" for names already ending in s
+  const suffix = handle.toLowerCase().endsWith('s') ? "' Team" : "'s Team"
+  return `${handle}${suffix}`
+}
+
 // All leagues the current user belongs to
 export function useMyLeagues() {
   const user = useAppStore(s => s.user)
@@ -60,7 +69,7 @@ export function useStandings(leagueId: string | null) {
 // Create a new league
 export function useCreateLeague() {
   const qc = useQueryClient()
-  const { user, setActiveLeague } = useAppStore()
+  const { user, profile, setActiveLeague } = useAppStore()
 
   return useMutation({
     mutationFn: async (params: {
@@ -100,7 +109,7 @@ export function useCreateLeague() {
           league_id: league.id,
           user_id: user.id,
           is_commissioner: true,
-          team_name: 'My Team',
+          team_name: defaultTeamName(profile),
         })
         .select()
         .single()
@@ -155,7 +164,7 @@ export function useDeleteLeague() {
 // Join a league via invite code
 export function useJoinLeague() {
   const qc = useQueryClient()
-  const { user, setActiveLeague } = useAppStore()
+  const { user, profile, setActiveLeague } = useAppStore()
 
   return useMutation({
     mutationFn: async (inviteCode: string) => {
@@ -190,7 +199,7 @@ export function useJoinLeague() {
           league_id: league.id,
           user_id: user.id,
           is_commissioner: false,
-          team_name: 'My Team',
+          team_name: defaultTeamName(profile),
         })
         .select()
         .single()

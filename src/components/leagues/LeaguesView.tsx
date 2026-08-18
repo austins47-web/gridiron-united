@@ -7,6 +7,32 @@ import { QRModal } from './QRModal'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
+// ── Label formatters ────────────────────────────────────────────
+const SCORING_LABELS: Record<string, string> = {
+  ppr: 'PPR', half_ppr: 'Half PPR', standard: 'Standard',
+}
+const DRAFT_LABELS: Record<string, string> = {
+  snake: 'Snake', linear: 'Linear', auction: 'Auction',
+}
+const STATUS_LABELS: Record<string, string> = {
+  pre_draft: 'Pre-Draft', drafting: 'Drafting', in_progress: 'In Season',
+  post_draft: 'In Season', completed: 'Complete',
+}
+const POOL_LABELS: Record<string, string> = {
+  both: 'NFL + CFB', nfl: 'NFL', cfb: 'CFB',
+}
+const fmt = (map: Record<string, string>, v?: string | null) =>
+  v ? (map[v] ?? v.replace(/_/g, ' ')) : ''
+
+// Status chip colors
+const STATUS_STYLES: Record<string, string> = {
+  pre_draft:   'bg-field-700 text-field-300',
+  drafting:    'bg-gold/20 text-gold',
+  in_progress: 'bg-nfl/20 text-nfl',
+  post_draft:  'bg-nfl/20 text-nfl',
+  completed:   'bg-field-700 text-field-400',
+}
+
 export function LeaguesView() {
   const { activeLeagueId, activeLeague, myMembership, setActiveLeague } = useAppStore()
   const { data: myLeagues = [], isLoading } = useMyLeagues()
@@ -169,16 +195,35 @@ function LeagueCard({ league, membership, isActive, isFirst, isLast, onSelect, o
                 <span className="text-xs bg-gold/20 text-gold px-1.5 py-0.5 rounded font-bold">ACTIVE</span>
               )}
             </div>
-            <div className="text-xs text-field-400 flex gap-3 mt-0.5">
-              {league.league_type === 'pickem'
-                ? <span className="text-gold font-bold">Pick'Em</span>
-                : <>
-                    <span className="capitalize">{league.scoring_type}</span>
-                    <span className="capitalize">{league.draft_type} draft</span>
-                    <span className="capitalize">{league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase()}</span>
-                  </>
-              }
-              <span className="capitalize">{league.draft_status}</span>
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+              {league.league_type === 'pickem' ? (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold/20 text-gold">
+                  Pick'Em
+                </span>
+              ) : (
+                <>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
+                    {fmt(SCORING_LABELS, league.scoring_type)}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
+                    {fmt(DRAFT_LABELS, league.draft_type)}
+                  </span>
+                  <span className={clsx(
+                    'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
+                    league.player_pool === 'cfb' ? 'bg-cfb/20 text-cfb'
+                    : league.player_pool === 'nfl' ? 'bg-nfl/20 text-nfl'
+                    : 'bg-field-700 text-field-300'
+                  )}>
+                    {fmt(POOL_LABELS, league.player_pool)}
+                  </span>
+                </>
+              )}
+              <span className={clsx(
+                'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
+                STATUS_STYLES[league.draft_status] ?? 'bg-field-700 text-field-300'
+              )}>
+                {fmt(STATUS_LABELS, league.draft_status)}
+              </span>
             </div>
           </div>
         </div>
