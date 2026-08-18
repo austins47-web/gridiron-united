@@ -26,6 +26,7 @@ import { PickEmView } from '@/components/pickem/PickEmView'
 import { LeagueChat } from '@/components/chat/LeagueChat'
 import { TradeCenter } from '@/components/trades/TradeCenter'
 import { LiveScoresView } from '@/components/scores/LiveScoresView'
+import { JoinPage } from '@/components/leagues/JoinPage'
 import { NewsView } from '@/components/scores/NewsView'
 
 const queryClient = new QueryClient({
@@ -166,6 +167,7 @@ function App() {
               <Route path="chat" element={<LeagueWrapper><LeagueChat /></LeagueWrapper>} />
               <Route path="trades" element={<LeagueWrapper><TradeCenter /></LeagueWrapper>} />
             </Route>
+            <Route path="/join/:code" element={<JoinPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AppInitializer>

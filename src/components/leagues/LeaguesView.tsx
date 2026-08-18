@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, useLeagueMembers, useLeagueRealtime } from '@/hooks/useLeague'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
-import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown } from 'lucide-react'
+import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown, QrCode } from 'lucide-react'
+import { QRModal } from './QRModal'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -12,6 +13,7 @@ export function LeaguesView() {
   const [showCreate, setShowCreate] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [qrLeague, setQrLeague] = useState<{ name: string; code: string } | null>(null)
   // User-controlled display order, stored in localStorage
   const [leagueOrder, setLeagueOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('league-order') ?? '[]') } catch { return [] }
@@ -83,6 +85,7 @@ export function LeaguesView() {
               onSelect={() => setActiveLeague(league, membership)}
               onMoveUp={() => moveLeague(league.id, -1)}
               onMoveDown={() => moveLeague(league.id, 1)}
+              onShowQR={() => setQrLeague({ name: league.name, code: league.invite_code })}
             />
           ))}
         </div>
@@ -111,6 +114,7 @@ export function LeaguesView() {
         </div>
       )}
 
+      {qrLeague && <QRModal leagueName={qrLeague.name} inviteCode={qrLeague.code} onClose={() => setQrLeague(null)} />}
       {showCreate && <CreateLeagueModal onClose={() => setShowCreate(false)} />}
       {showJoin && <JoinLeagueModal onClose={() => setShowJoin(false)} />}
       {showSettings && activeLeague && (
@@ -127,7 +131,7 @@ export function LeaguesView() {
   )
 }
 
-function LeagueCard({ league, membership, isActive, isFirst, isLast, onSelect, onMoveUp, onMoveDown }: any) {
+function LeagueCard({ league, membership, isActive, isFirst, isLast, onSelect, onMoveUp, onMoveDown, onShowQR }: any) {
   return (
     <div
       className={clsx(
@@ -174,6 +178,14 @@ function LeagueCard({ league, membership, isActive, isFirst, isLast, onSelect, o
             <div className="text-white font-bold">{membership.wins}-{membership.losses}{membership.ties > 0 ? `-${membership.ties}` : ''}</div>
             <div className="text-field-400 text-xs">{membership.points_for?.toFixed(1) ?? '0.0'} pts</div>
           </div>
+          {/* QR code button */}
+          <button
+            onClick={e => { e.stopPropagation(); onShowQR() }}
+            title="Show QR invite code"
+            className="p-1.5 text-field-500 hover:text-gold transition-colors rounded-lg hover:bg-field-700"
+          >
+            <QrCode className="w-4 h-4" />
+          </button>
           {/* Reorder arrows */}
           <div className="flex flex-col gap-0.5" onClick={e => e.stopPropagation()}>
             <button
@@ -268,12 +280,11 @@ function LeagueInfoPanel({ league, membership, isCommissioner }: any) {
             <span className="text-gold font-mono font-bold text-lg tracking-widest">
               {league.invite_code}
             </span>
-            <button
-              className="btn-ghost text-xs flex items-center gap-1"
-              onClick={copyInvite}
-            >
-              <Copy className="w-3 h-3" /> Copy
-            </button>
+            <div className="flex items-center gap-1">
+              <button className="btn-ghost text-xs flex items-center gap-1" onClick={copyInvite}>
+                <Copy className="w-3 h-3" /> Copy
+              </button>
+            </div>
           </div>
         </div>
       )}
