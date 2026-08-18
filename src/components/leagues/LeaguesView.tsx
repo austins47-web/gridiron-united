@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
-import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, useLeagueMembers, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
+import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
 import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown, QrCode, LogOut } from 'lucide-react'
 import { QRModal } from './QRModal'
@@ -85,8 +85,13 @@ export function LeaguesView() {
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="section-title">My Leagues</h1>
-        <div className="flex gap-2">
+        <div>
+          <h1 className="section-title !mb-0">Leagues</h1>
+          <p className="text-field-400 text-sm mt-0.5">
+            Switch leagues, invite players, and manage membership.
+          </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
           <button className="btn-outline" onClick={() => setShowJoin(true)}>
             <LogIn className="w-4 h-4" /> Join
           </button>
@@ -96,50 +101,73 @@ export function LeaguesView() {
         </div>
       </div>
 
-      {/* League cards */}
       {myLeagues.length === 0 ? (
         <EmptyLeagues onCreate={() => setShowCreate(true)} onJoin={() => setShowJoin(true)} />
       ) : (
-        <div className="grid gap-3">
-          {orderedLeagues.map(({ league, ...membership }, idx) => (
-            <LeagueCard
-              key={league.id}
-              league={league}
-              membership={membership}
-              isActive={league.id === activeLeagueId}
-              isFirst={idx === 0}
-              isLast={idx === orderedLeagues.length - 1}
-              onSelect={() => setActiveLeague(league, membership)}
-              onMoveUp={() => moveLeague(league.id, -1)}
-              onMoveDown={() => moveLeague(league.id, 1)}
-              onShowQR={() => setQrLeague({ name: league.name, code: league.invite_code })}
-              onLeave={() => setLeaveTarget({ id: league.id, name: league.name })}
-            />
-          ))}
-        </div>
-      )}
+        <>
+          {/* ── Switcher strip ── */}
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="font-cond font-black text-xs uppercase tracking-[0.18em] text-field-300 shrink-0">
+                Switch League
+              </h2>
+              <span className="font-cond font-bold text-xs text-field-500 tabular-nums shrink-0">
+                {orderedLeagues.length}
+              </span>
+              <div className="flex-1 h-px bg-field-700" />
+            </div>
 
-      {/* Active League Detail */}
-      {activeLeague && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="section-title">{activeLeague.name}</h2>
-            {myMembership?.is_commissioner && (
-              <button className="btn-outline" onClick={() => setShowSettings(true)}>
-                <Settings className="w-4 h-4" /> Settings
-              </button>
-            )}
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {orderedLeagues.map(({ league, ...membership }) => {
+                const active = league.id === activeLeagueId
+                return (
+                  <button
+                    key={league.id}
+                    onClick={() => setActiveLeague(league, membership)}
+                    className={clsx(
+                      'shrink-0 flex items-center gap-2 pl-2 pr-3 py-2 rounded-xl border transition-all',
+                      active
+                        ? 'border-gold bg-gold/10'
+                        : 'border-field-700 bg-field-800/60 hover:border-field-500',
+                    )}
+                  >
+                    <div className={clsx(
+                      'w-7 h-7 rounded-lg flex items-center justify-center font-cond font-black text-sm shrink-0',
+                      active ? 'bg-gold text-field-950' : 'bg-field-700 text-gold',
+                    )}>
+                      {league.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="text-left">
+                      <div className={clsx(
+                        'font-bold text-sm whitespace-nowrap max-w-[140px] truncate',
+                        active ? 'text-gold' : 'text-white',
+                      )}>
+                        {league.name}
+                      </div>
+                      <div className="font-cond font-bold text-[9px] uppercase tracking-[0.14em] text-field-500 whitespace-nowrap">
+                        {league.league_type === 'pickem' ? "Pick'Em" : fmt(SCORING_LABELS, league.scoring_type)}
+                        {membership.is_commissioner ? ' · Commish' : ''}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            <StandingsPanel leagueId={activeLeagueId} />
-            <LeagueInfoPanel
+          {/* ── Active league hub ── */}
+          {activeLeague && (
+            <LeagueHub
               league={activeLeague}
               membership={myMembership}
-              isCommissioner={myMembership?.is_commissioner ?? false}
+              orderedLeagues={orderedLeagues}
+              onOpenSettings={() => setShowSettings(true)}
+              onShowQR={() => setQrLeague({ name: activeLeague.name, code: activeLeague.invite_code })}
+              onLeave={() => setLeaveTarget({ id: activeLeague.id, name: activeLeague.name })}
+              onMove={(dir) => moveLeague(activeLeague.id, dir)}
             />
-          </div>
-        </div>
+          )}
+        </>
       )}
 
       {qrLeague && <QRModal leagueName={qrLeague.name} inviteCode={qrLeague.code} onClose={() => setQrLeague(null)} />}
@@ -162,113 +190,6 @@ export function LeaguesView() {
           }}
         />
       )}
-    </div>
-  )
-}
-
-function LeagueCard({ league, membership, isActive, isFirst, isLast, onSelect, onMoveUp, onMoveDown, onShowQR, onLeave }: any) {
-  return (
-    <div
-      className={clsx(
-        'card cursor-pointer transition-all border-2',
-        isActive
-          ? 'border-gold/60 bg-field-800/60'
-          : 'border-transparent hover:border-gold/20 hover:bg-field-800/40',
-      )}
-      onClick={onSelect}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={clsx(
-            'w-10 h-10 rounded-full flex items-center justify-center font-black text-lg shrink-0',
-            isActive ? 'bg-gold text-field-950' : 'bg-field-700 text-gold',
-          )}>
-            {league.name[0]}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-white">{league.name}</span>
-              {membership.is_commissioner && (
-                <Shield className="w-3.5 h-3.5 text-gold" title="Commissioner" />
-              )}
-              {isActive && (
-                <span className="text-xs bg-gold/20 text-gold px-1.5 py-0.5 rounded font-bold">ACTIVE</span>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-              {league.league_type === 'pickem' ? (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold/20 text-gold">
-                  Pick'Em
-                </span>
-              ) : (
-                <>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
-                    {fmt(SCORING_LABELS, league.scoring_type)}
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
-                    {fmt(DRAFT_LABELS, league.draft_type)}
-                  </span>
-                  <span className={clsx(
-                    'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
-                    league.player_pool === 'cfb' ? 'bg-cfb/20 text-cfb'
-                    : league.player_pool === 'nfl' ? 'bg-nfl/20 text-nfl'
-                    : 'bg-field-700 text-field-300'
-                  )}>
-                    {fmt(POOL_LABELS, league.player_pool)}
-                  </span>
-                </>
-              )}
-              <span className={clsx(
-                'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
-                STATUS_STYLES[league.draft_status] ?? 'bg-field-700 text-field-300'
-              )}>
-                {fmt(STATUS_LABELS, league.draft_status)}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="text-right text-sm mr-1">
-            <div className="text-white font-bold">{membership.wins}-{membership.losses}{membership.ties > 0 ? `-${membership.ties}` : ''}</div>
-            <div className="text-field-400 text-xs">{membership.points_for?.toFixed(1) ?? '0.0'} pts</div>
-          </div>
-          {/* QR code button */}
-          <button
-            onClick={e => { e.stopPropagation(); onShowQR() }}
-            title="Show QR invite code"
-            className="p-1.5 text-field-500 hover:text-gold transition-colors rounded-lg hover:bg-field-700"
-          >
-            <QrCode className="w-4 h-4" />
-          </button>
-          {/* Leave league button */}
-          <button
-            onClick={e => { e.stopPropagation(); onLeave() }}
-            title="Leave this league"
-            className="p-1.5 text-field-500 hover:text-red-400 transition-colors rounded-lg hover:bg-field-700"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-          {/* Reorder arrows */}
-          <div className="flex flex-col gap-0.5" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={onMoveUp}
-              disabled={isFirst}
-              title="Move up"
-              className="p-0.5 text-field-600 hover:text-field-300 disabled:opacity-20 disabled:cursor-default transition-colors"
-            >
-              <ChevronUp className="w-4 h-4" />
-            </button>
-            <button
-              onClick={onMoveDown}
-              disabled={isLast}
-              title="Move down"
-              className="p-0.5 text-field-600 hover:text-field-300 disabled:opacity-20 disabled:cursor-default transition-colors"
-            >
-              <ChevronDown className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
@@ -623,6 +544,122 @@ function LeaveLeagueModal({ leagueId, leagueName, onClose }: { leagueId: string;
             {leaveLeague.isPending ? 'Leaving…' : 'Leave League'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ─── League Hub — everything about the one active league ─────
+function LeagueHub({
+  league, membership, orderedLeagues, onOpenSettings, onShowQR, onLeave, onMove,
+}: any) {
+  const isCommissioner = membership?.is_commissioner ?? false
+  const isPickem = league.league_type === 'pickem'
+  const idx = orderedLeagues.findIndex((l: any) => l.league.id === league.id)
+  const isFirst = idx === 0
+  const isLast  = idx === orderedLeagues.length - 1
+
+  return (
+    <div className="space-y-4">
+      {/* Hub header */}
+      <div className="jumbotron">
+        <div className="relative p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="font-cond font-bold text-[10px] uppercase tracking-[0.2em] text-gold mb-1">
+                Active League
+              </div>
+              <h2 className="font-cond font-black uppercase text-white leading-none tracking-tight truncate"
+                  style={{ fontSize: 'clamp(1.4rem, 4.5vw, 2rem)' }}>
+                {league.name}
+              </h2>
+              <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                {isPickem ? (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold/20 text-gold">
+                    Pick'Em
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
+                      {fmt(SCORING_LABELS, league.scoring_type)}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
+                      {fmt(DRAFT_LABELS, league.draft_type)}
+                    </span>
+                    <span className={clsx(
+                      'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
+                      league.player_pool === 'cfb' ? 'bg-cfb/20 text-cfb'
+                      : league.player_pool === 'nfl' ? 'bg-nfl/20 text-nfl'
+                      : 'bg-field-700 text-field-300'
+                    )}>
+                      {fmt(POOL_LABELS, league.player_pool)}
+                    </span>
+                  </>
+                )}
+                <span className={clsx(
+                  'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
+                  STATUS_STYLES[league.draft_status] ?? 'bg-field-700 text-field-300'
+                )}>
+                  {fmt(STATUS_LABELS, league.draft_status)}
+                </span>
+                {isCommissioner && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold/15 text-gold flex items-center gap-1">
+                    <Shield className="w-2.5 h-2.5" /> Commissioner
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Reorder in the Home list */}
+            <div className="flex flex-col gap-0.5 shrink-0">
+              <button
+                onClick={() => onMove(-1)}
+                disabled={isFirst}
+                title="Move up in your league list"
+                className="p-1 text-field-600 hover:text-gold disabled:opacity-20 disabled:cursor-default transition-colors"
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onMove(1)}
+                disabled={isLast}
+                title="Move down in your league list"
+                className="p-1 text-field-600 hover:text-gold disabled:opacity-20 disabled:cursor-default transition-colors"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button className="btn-ghost" onClick={onShowQR}>
+              <QrCode className="w-3.5 h-3.5" /> Invite
+            </button>
+            {isCommissioner && (
+              <button className="btn-ghost" onClick={onOpenSettings}>
+                <Settings className="w-3.5 h-3.5" /> League settings
+              </button>
+            )}
+            <button
+              className="btn-ghost !text-red-400 !border-red-400/30 hover:!border-red-400/60"
+              onClick={onLeave}
+            >
+              <LogOut className="w-3.5 h-3.5" /> Leave
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Standings + info */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <StandingsPanel leagueId={league.id} />
+        <LeagueInfoPanel
+          league={league}
+          membership={membership}
+          isCommissioner={isCommissioner}
+        />
       </div>
     </div>
   )
