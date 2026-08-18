@@ -55,7 +55,18 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json; charset=utf-8',
     },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html }),
+    body: JSON.stringify({
+      from: FROM,
+      to: [to],
+      subject,
+      html,
+      headers: {
+        // Gmail and Yahoo require these on bulk mail. Without them
+        // reminders are far more likely to land in spam.
+        'List-Unsubscribe': `<${APP_URL}/app/settings>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+    }),
   })
 
   if (!res.ok) {
@@ -100,8 +111,9 @@ function renderEmail(r: Reminder): string {
 
         <tr><td style="padding:16px 28px;border-top:1px solid #273044;">
           <div style="font-size:11px;color:#5a6a8a;line-height:1.6;">
-            You're getting this because you have reminders on for this league.
-            <a href="${APP_URL}/app/settings" style="color:#8a9ab8;">Manage your reminders</a>.
+            You're receiving this because email reminders are on for
+            <strong style="color:#8a9ab8;">${escapeHtml(r.leagueName)}</strong>.<br>
+            <a href="${APP_URL}/app/settings" style="color:#F5A623;">Manage or turn off reminders</a>
           </div>
         </td></tr>
       </table>

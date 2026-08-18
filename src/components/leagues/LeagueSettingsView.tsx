@@ -3,8 +3,11 @@ import { useAppStore } from '@/store/appStore'
 import { useLeaveLeague, useUpdateMyMembership, useLeagueMembers } from '@/hooks/useLeague'
 import {
   Settings, User, Bell, Palette, LogOut, AlertCircle,
-  Save, Copy, Trophy, Shield, Check,
+  Save, Copy, Trophy, Shield, Check, Mail, RotateCcw, Globe,
 } from 'lucide-react'
+import {
+  useNotificationPrefs, useSaveNotificationPrefs, useClearLeaguePrefs, resolvePrefs,
+} from '@/hooks/useNotificationPrefs'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -168,28 +171,31 @@ function TeamSettings() {
 
 // ─── Preferences ─────────────────────────────────────────────────────
 function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; setTheme: (t: 'dark' | 'light') => void }) {
-  // Per-league notification prefs, stored locally
-  const { activeLeagueId } = useAppStore()
-  const prefKey = `gu_league_prefs_${activeLeagueId}`
+  const { activeLeagueId, activeLeague } = useAppStore()
+  const { data: prefRows = [], isLoading } = useNotificationPrefs()
+  const savePrefs  = useSaveNotificationPrefs()
+  const clearScope = useClearLeaguePrefs()
 
-  const [prefs, setPrefs] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(prefKey) ?? '{}')
-    } catch { return {} }
-  })
+  // 'global' edits the account-wide default; 'league' overrides this league
+  const [scope, setScope] = useState<'global' | 'league'>('global')
+  const leagueId = scope === 'league' ? activeLeagueId : null
 
-  const toggle = (key: string) => {
-    const next = { ...prefs, [key]: !prefs[key] }
-    setPrefs(next)
-    localStorage.setItem(prefKey, JSON.stringify(next))
-  }
+  const eff = resolvePrefs(prefRows, leagueId)
+  const hasOverride = prefRows.some(r => r.league_id === activeLeagueId)
 
-  const NOTIF_OPTS = [
-    { key: 'mute_chat',    label: 'Mute chat notifications',   desc: "Don't notify me about new league chat messages" },
-    { key: 'mute_trades',  label: 'Mute trade notifications',  desc: "Don't notify me about trade offers and activity" },
-    { key: 'mute_waivers', label: 'Mute waiver notifications', desc: "Don't notify me about waiver claim results" },
-    { key: 'mute_scoring', label: 'Mute scoring updates',      desc: "Don't notify me about live scoring changes" },
-  ]
+  const set = (key: string, value: any) =>
+    savePrefs.mutate({ leagueId, updates: { [key]: value } })
+
+  const isPickem = activeLeague?.league_type === 'pickem'
+
+  const EVENTS = [
+    { key: 'notify_pickem_deadline', label: 'Pick deadlines',   desc: 'When your picks are about to lock', show: isPickem },
+    { key: 'notify_draft',           label: 'Draft starting',   desc: 'Before your draft begins',          show: !isPickem },
+    { key: 'notify_on_the_clock',    label: "You're on the clock", desc: 'When it becomes your pick',      show: !isPickem },
+    { key: 'notify_trades',          label: 'Trade offers',     desc: 'New offers and ones about to expire', show: !isPickem },
+    { key: 'notify_lineup',          label: 'Lineup not set',   desc: 'Before kickoff if your lineup is empty', show: !isPickem },
+    { key: 'notify_weekly_recap',    label: 'Weekly recap',     desc: 'A summary once the week wraps',     show: true },
+  ].filter(e => e.show)
 
   return (
     <div className="space-y-4">
@@ -201,16 +207,13 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
         </div>
         <div className="grid grid-cols-2 gap-2">
           {(['dark', 'light'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTheme(t)}
+            <button key={t} onClick={() => setTheme(t)}
               className={clsx(
                 'flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all capitalize font-bold text-sm',
                 theme === t
                   ? 'border-gold bg-gold/10 text-gold'
                   : 'border-field-700 bg-field-800 text-field-400 hover:border-field-500 hover:text-white',
-              )}
-            >
+              )}>
               {theme === t && <Check className="w-3.5 h-3.5" />}
               {t} mode
             </button>
@@ -219,35 +222,117 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
         <p className="text-field-500 text-xs">Applies across every league.</p>
       </div>
 
-      {/* Notifications */}
-      <div className="panel space-y-3">
-        <div className="flex items-center gap-2">
-          <Bell className="w-4 h-4 text-gold" />
-          <h3 className="font-bold text-white text-sm">Notifications</h3>
+      {/* Email reminders */}
+      <div className="panel space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-gold" />
+            <h3 className="font-bold text-white text-sm">Email Reminders</h3>
+          </div>
+          {savePrefs.isPending && (
+            <span className="text-xs text-field-500">Saving…</span>
+          )}
         </div>
-        <p className="text-field-400 text-xs">
-          Mute specific notification types for this league only.
+
+        {/* Scope switch */}
+        <div className="flex gap-1 p-1 bg-field-900 rounded-lg">
+          {([
+            ['global', 'All leagues', <Globe className="w-3 h-3" key="g" />],
+            ['league', 'This league', <Trophy className="w-3 h-3" key="l" />],
+          ] as const).map(([val, label, icon]) => (
+            <button key={val} onClick={() => setScope(val)}
+              className={clsx(
+                'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-bold transition-colors',
+                scope === val ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white',
+              )}>
+              {icon}{label}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-xs text-field-500">
+          {scope === 'global'
+            ? 'Your default for every league you\'re in.'
+            : hasOverride
+              ? 'This league overrides your global settings.'
+              : 'Currently following your global settings. Changing anything here creates an override for this league only.'}
         </p>
 
-        <div className="space-y-1">
-          {NOTIF_OPTS.map(({ key, label, desc }) => (
-            <label
-              key={key}
-              className="flex items-start gap-3 p-3 rounded-lg bg-field-800/60 cursor-pointer hover:bg-field-800 transition-colors"
-            >
+        {isLoading ? (
+          <div className="h-24 rounded-lg bg-field-800 animate-pulse" />
+        ) : (
+          <>
+            {/* Master switch */}
+            <label className="flex items-start gap-3 p-3 rounded-lg bg-field-800/60 cursor-pointer hover:bg-field-800 transition-colors">
               <input
                 type="checkbox"
-                checked={!!prefs[key]}
-                onChange={() => toggle(key)}
+                checked={eff.email_enabled}
+                onChange={e => set('email_enabled', e.target.checked)}
                 className="w-4 h-4 accent-gold mt-0.5 shrink-0"
               />
               <div className="min-w-0">
-                <div className="text-sm text-white font-bold">{label}</div>
-                <div className="text-xs text-field-400">{desc}</div>
+                <div className="text-sm text-white font-bold flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-field-400" />
+                  Send me email reminders
+                </div>
+                <div className="text-xs text-field-400">
+                  Turn this off to stop all reminder emails {scope === 'league' ? 'for this league' : 'everywhere'}.
+                </div>
               </div>
             </label>
-          ))}
-        </div>
+
+            {/* Per-event toggles */}
+            <div className={clsx('space-y-1 transition-opacity', !eff.email_enabled && 'opacity-40 pointer-events-none')}>
+              {EVENTS.map(({ key, label, desc }) => (
+                <label key={key}
+                  className="flex items-start gap-3 p-3 rounded-lg bg-field-800/60 cursor-pointer hover:bg-field-800 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={(eff as any)[key]}
+                    onChange={e => set(key, e.target.checked)}
+                    className="w-4 h-4 accent-gold mt-0.5 shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm text-white font-bold">{label}</div>
+                    <div className="text-xs text-field-400">{desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {/* Lead time */}
+            <div className={clsx('space-y-1.5 transition-opacity', !eff.email_enabled && 'opacity-40 pointer-events-none')}>
+              <label className="text-sm text-field-300">How early should we warn you?</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[6, 12, 24, 48].map(h => (
+                  <button key={h} onClick={() => set('lead_hours_primary', h)}
+                    className={clsx(
+                      'py-2 rounded-lg text-xs font-bold transition-all',
+                      eff.lead_hours_primary === h
+                        ? 'bg-gold text-field-950'
+                        : 'bg-field-700 text-field-300 hover:bg-field-600',
+                    )}>
+                    {h}h
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-field-500">
+                You'll also get a final nudge {eff.lead_hours_secondary}h before.
+              </p>
+            </div>
+
+            {/* Reset override */}
+            {scope === 'league' && hasOverride && (
+              <button
+                onClick={() => { clearScope.mutate(activeLeagueId!); setScope('global') }}
+                className="flex items-center gap-1.5 text-xs font-bold text-field-400 hover:text-gold transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reset to my global settings
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   )
