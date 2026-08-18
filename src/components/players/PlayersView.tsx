@@ -134,7 +134,12 @@ export function PlayersView() {
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
       {/* Header + search bar */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <h1 className="section-title self-center shrink-0">Players</h1>
+        <div className="self-center shrink-0">
+              <div className="page-hero-eyebrow">Player Database</div>
+              <h1 className="font-cond font-black uppercase text-white leading-none tracking-tight text-2xl">
+                Players
+              </h1>
+            </div>
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-field-400" />
           <input

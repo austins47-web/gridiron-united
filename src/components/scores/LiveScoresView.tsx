@@ -732,7 +732,12 @@ export function LiveScoresView() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <h1 className="section-title !mb-0">Scores</h1>
+          <div className="page-hero">
+        <div className="page-hero-inner">
+          <div className="page-hero-eyebrow">Live Around the League</div>
+          <h1 className="page-hero-title mt-1">Scores</h1>
+        </div>
+      </div>
           {liveCount > 0 && (
             <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg px-2 py-1">
               <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />

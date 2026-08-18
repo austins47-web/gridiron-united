@@ -294,7 +294,12 @@ export function MockDraftHub() {
       <div className="flex items-center gap-3">
         <Trophy className="w-6 h-6 text-gold" />
         <div>
-          <h1 className="section-title">Mock Draft</h1>
+          <div className="page-hero">
+        <div className="page-hero-inner">
+          <div className="page-hero-eyebrow">Practice Room</div>
+          <h1 className="page-hero-title mt-1">Mock Draft</h1>
+        </div>
+      </div>
           <p className="text-field-400 text-sm">Practice your strategy. Invite friends. Draft against AI.</p>
         </div>
       </div>

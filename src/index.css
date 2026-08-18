@@ -23,20 +23,41 @@
   /* ── Buttons ── */
   .btn-gold {
     @apply font-cond font-bold text-sm uppercase tracking-wider px-4 py-2 rounded-lg
-           bg-gold text-field-950 hover:bg-gold-light transition-colors inline-flex items-center gap-2;
+           bg-gold text-field-950 inline-flex items-center gap-2;
+    transition: background-color .16s ease, box-shadow .16s ease, transform .1s ease;
   }
+  .btn-gold:hover {
+    @apply bg-gold-light;
+    box-shadow: 0 0 0 1px rgba(245,166,35,.5), 0 4px 14px -4px rgba(245,166,35,.55);
+  }
+  .btn-gold:active   { transform: translateY(1px) scale(.985); }
+
   .btn-outline {
     @apply font-cond font-bold text-sm uppercase tracking-wider px-4 py-2 rounded-lg
-           border border-gold/50 text-gold bg-transparent hover:bg-gold/10 transition-colors inline-flex items-center gap-2;
+           border border-gold/50 text-gold bg-transparent inline-flex items-center gap-2;
+    transition: background-color .16s ease, border-color .16s ease, transform .1s ease;
   }
+  .btn-outline:hover { @apply bg-gold/10 border-gold; }
+  .btn-outline:active{ transform: translateY(1px) scale(.985); }
+
   .btn-ghost {
     @apply font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-lg
-           border border-white/10 text-field-300 bg-transparent hover:border-field-500 hover:text-white transition-colors inline-flex items-center gap-2;
+           border border-white/10 text-field-300 bg-transparent inline-flex items-center gap-2;
+    transition: color .16s ease, border-color .16s ease, transform .1s ease;
   }
+  .btn-ghost:hover { @apply border-field-500 text-white; }
+  .btn-ghost:active{ transform: translateY(1px) scale(.985); }
+
   .btn-danger {
     @apply font-cond font-bold text-sm uppercase tracking-wider px-4 py-2 rounded-lg
-           bg-red-700 text-white hover:bg-red-600 transition-colors inline-flex items-center gap-2;
+           bg-red-700 text-white inline-flex items-center gap-2;
+    transition: background-color .16s ease, box-shadow .16s ease, transform .1s ease;
   }
+  .btn-danger:hover {
+    @apply bg-red-600;
+    box-shadow: 0 4px 14px -4px rgba(220,38,38,.6);
+  }
+  .btn-danger:active { transform: translateY(1px) scale(.985); }
 
   /* ── Inputs ── */
   .input {
@@ -49,23 +70,46 @@
   }
 
   /* ── Cards / Panels ── */
-  .card {
-    @apply bg-field-800 border border-field-700 rounded-xl p-4;
-  }
+  .card,
   .panel {
-    @apply bg-field-800 border border-field-700 rounded-xl p-4;
+    @apply relative bg-field-800 border border-field-700 rounded-xl p-4 overflow-hidden;
+    transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+  }
+  /* Faint chain-marker hairline across the top of every panel */
+  .card::before,
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%, rgba(245,166,35,.35) 30%, rgba(245,166,35,.35) 70%, transparent 100%);
+    opacity: .6;
+    pointer-events: none;
   }
 
   /* ── Section headings ── */
   .section-title {
-    @apply font-cond font-black text-xl uppercase tracking-wider text-white
-           flex items-center gap-3 mb-4;
+    @apply font-cond font-black uppercase text-white flex items-center gap-3 mb-4;
+    font-size: clamp(1.35rem, 3.2vw, 1.75rem);
+    letter-spacing: .04em;
+    line-height: 1;
+  }
+  /* Gold marker bar — the yard-line motif, scaled down */
+  .section-title::before {
+    content: '';
+    width: 4px;
+    align-self: stretch;
+    min-height: 1.1em;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #F5A623 0%, rgba(245,166,35,.35) 100%);
+    flex-shrink: 0;
   }
   .section-title::after {
     content: '';
     flex: 1;
     height: 1px;
-    @apply bg-field-700;
+    background: linear-gradient(90deg, rgba(39,48,68,1) 0%, rgba(39,48,68,0) 100%);
   }
 
   /* ── Position badges ── */
@@ -95,6 +139,9 @@
 
   /* ── Table ── */
   .data-table { @apply w-full text-sm border-collapse; }
+  .data-table tbody tr {
+    transition: background-color .14s ease;
+  }
   .data-table th {
     @apply font-cond font-bold text-xs uppercase tracking-wider text-field-300
            px-3 py-2.5 border-b border-field-700 text-left cursor-pointer
@@ -229,15 +276,109 @@
   }
   .ticker-cell:last-child { @apply border-r-0; }
 
+  /* ══ SHARED MOTION + DISPLAY PRIMITIVES ═════════════════════ */
+
+  /* Page header slab — the jumbotron, sized for interior pages */
+  .page-hero {
+    @apply relative overflow-hidden rounded-2xl border border-field-700 mb-5;
+    background: linear-gradient(180deg, rgba(22,27,39,.96) 0%, rgba(14,17,23,.98) 100%);
+  }
+  .page-hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: repeating-linear-gradient(
+      90deg,
+      rgba(138,154,184,.05) 0px, rgba(138,154,184,.05) 1px,
+      transparent 1px, transparent 40px);
+    pointer-events: none;
+  }
+  .page-hero::after {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg,
+      transparent 0%, #F5A623 15%, #f7b84e 50%, #F5A623 85%, transparent 100%);
+    pointer-events: none;
+  }
+  .page-hero-inner   { @apply relative p-5 sm:p-6; }
+  .page-hero-title {
+    @apply font-cond font-black uppercase text-white leading-none tracking-tight;
+    font-size: clamp(1.6rem, 5vw, 2.4rem);
+  }
+  .page-hero-eyebrow {
+    @apply font-cond font-bold uppercase text-gold;
+    font-size: .625rem;
+    letter-spacing: .2em;
+  }
+
+  /* Stat tile — scoreboard readout in a grid */
+  .stat-grid { @apply grid gap-px bg-field-700/70 rounded-xl overflow-hidden; }
+  .stat-tile { @apply bg-field-900/80 px-3 py-3 text-center; }
+  .stat-tile-value {
+    @apply font-cond font-black text-white leading-none tabular-nums;
+    font-size: clamp(1.25rem, 4vw, 1.9rem);
+  }
+  .stat-tile-label {
+    @apply font-cond font-bold uppercase text-field-400 mt-1;
+    font-size: .6rem;
+    letter-spacing: .16em;
+  }
+
+  /* Motion utilities */
+  @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes slide-in-left {
+    from { opacity: 0; transform: translateX(-12px) }
+    to   { opacity: 1; transform: translateX(0) }
+  }
+  @keyframes pop-in {
+    0%   { opacity: 0; transform: scale(.94) }
+    60%  { transform: scale(1.015) }
+    100% { opacity: 1; transform: scale(1) }
+  }
+  .fade-in  { animation: fade-in .3s ease both; }
+  .slide-in { animation: slide-in-left .34s cubic-bezier(.22,1,.36,1) both; }
+  .pop-in   { animation: pop-in .3s cubic-bezier(.22,1,.36,1) both; }
+
+  /* Stagger children on load — no per-item JS needed */
+  .stagger > * { animation: rise-in .42s cubic-bezier(.22,1,.36,1) both; }
+  .stagger > *:nth-child(1) { animation-delay: .02s }
+  .stagger > *:nth-child(2) { animation-delay: .06s }
+  .stagger > *:nth-child(3) { animation-delay: .10s }
+  .stagger > *:nth-child(4) { animation-delay: .14s }
+  .stagger > *:nth-child(5) { animation-delay: .18s }
+  .stagger > *:nth-child(6) { animation-delay: .22s }
+  .stagger > *:nth-child(7) { animation-delay: .26s }
+  .stagger > *:nth-child(8) { animation-delay: .30s }
+  .stagger > *:nth-child(n+9) { animation-delay: .34s }
+
+  /* Route transition wrapper */
+  .route-enter { animation: rise-in .34s cubic-bezier(.22,1,.36,1) both; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fade-in, .slide-in, .pop-in, .route-enter,
+    .stagger > *, .modal-box, .modal-overlay { animation: none !important; }
+    .btn-gold:active, .btn-outline:active,
+    .btn-ghost:active, .btn-danger:active { transform: none !important; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .rise-in, .play-clock { animation: none !important; }
   }
 
   /* ── Modal ── */
   .modal-overlay {
+    animation: overlay-in .18s ease both;
     @apply fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4;
   }
+  @keyframes modal-in {
+    from { opacity: 0; transform: translateY(12px) scale(.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes overlay-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
   .modal-box {
+    animation: modal-in .26s cubic-bezier(.22,1,.36,1) both;
     @apply bg-field-800 border border-field-600 rounded-2xl w-full max-w-2xl max-h-[90vh]
            overflow-y-auto shadow-2xl p-6;
   }
@@ -254,11 +395,24 @@
 
   /* ── Nav tab ── */
   .nav-tab {
-    @apply font-cond font-bold text-sm uppercase tracking-wider px-5 py-3.5
+    @apply relative font-cond font-bold text-sm uppercase tracking-wider px-5 py-3.5
            border-b-2 border-transparent text-field-300 cursor-pointer
            hover:text-white hover:bg-field-700/50 transition-colors whitespace-nowrap;
   }
-  .nav-tab.active { @apply text-gold border-b-gold bg-field-700/30; }
+  /* Animated gold underline that wipes in on the active tab */
+  .nav-tab::after {
+    content: '';
+    position: absolute;
+    left: 12px; right: 12px; bottom: -2px;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: #F5A623;
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform .22s cubic-bezier(.22,1,.36,1);
+  }
+  .nav-tab.active::after { transform: scaleX(1); }
+  .nav-tab.active { @apply text-gold bg-field-700/30; }
 
   /* ── Filter chip ── */
   .filter-chip {

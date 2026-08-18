@@ -230,7 +230,10 @@ export function AppShell() {
           <div className="flex-1 overflow-auto">
             <div className="max-w-[1400px] mx-auto p-4 md:p-6">
               <ErrorBoundary label="This page hit an error">
-                <Outlet />
+                {/* keyed on pathname so the entrance replays each navigation */}
+                <div key={location.pathname} className="route-enter">
+                  <Outlet />
+                </div>
               </ErrorBoundary>
             </div>
           </div>
