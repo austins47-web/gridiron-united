@@ -532,10 +532,12 @@ function nextWeeklyDeadline(day: number, time: string, tz = 'UTC'): Date {
 /** Render an instant in a zone, e.g. 'Wed, Aug 19, 5:00 PM MDT'. */
 function formatInZone(date: Date, tz: string): string {
   try {
+    // Intl inserts U+202F before AM/PM, which renders as "?" in some
+    // mail clients — normalise it to a plain space.
     return new Intl.DateTimeFormat('en-US', {
       timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
       hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-    }).format(date)
+    }).format(date).replace(/[\u202F\u00A0]/g, ' ')
   } catch {
     return date.toISOString()
   }

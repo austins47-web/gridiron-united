@@ -113,18 +113,27 @@ export function zoneAbbr(date: Date, tz: string): string {
 
 /** "Wednesday at 5:00 PM MDT" — rendered in `tz`. */
 export function describeDeadline(date: Date, tz: string): string {
-  return new Intl.DateTimeFormat('en-US', {
+  return clean(new Intl.DateTimeFormat('en-US', {
     timeZone: tz, weekday: 'long',
     hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-  }).format(date).replace(' at ', ' at ')
+  }).format(date))
 }
 
 /** Full date + time in `tz`, e.g. 'Wed, Aug 19, 5:00 PM MDT'. */
 export function formatInZone(date: Date, tz: string): string {
-  return new Intl.DateTimeFormat('en-US', {
+  return clean(new Intl.DateTimeFormat('en-US', {
     timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
     hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-  }).format(date)
+  }).format(date))
+}
+
+/**
+ * Intl separates the time from AM/PM with U+202F (narrow no-break
+ * space), which renders as "?" in some clients. Normalise to a
+ * plain space.
+ */
+function clean(s: string): string {
+  return s.replace(/[\u202F\u00A0]/g, ' ')
 }
 
 export const DAY_NAMES = [
