@@ -864,7 +864,7 @@ export function LiveScoresView() {
       {!query.isFetching && !query.isError && allGames.length === 0 && (
         <div className="panel text-center py-14 space-y-2">
           <div className="text-4xl">🏈</div>
-          <p className="text-white font-bold text-lg">No {tab} games — Week {week}</p>
+          <p className="text-white font-bold text-lg">No {tab} games — {weekOpt.label}</p>
           <p className="text-field-300 text-sm">Try a different week or check back on game days</p>
         </div>
       )}
