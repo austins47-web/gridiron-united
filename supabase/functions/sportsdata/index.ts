@@ -117,12 +117,21 @@ serve(async (req) => {
     } else if (endpoint.startsWith('nfl/scores/')) {
       const [,, season, week] = endpoint.split('/')
       const seasontype = url.searchParams.get('seasontype') ?? '2'
-      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?season=${season}&seasontype=${seasontype}&week=${week}`)
+      // ESPN requires 'dates' for year, not 'season'. Also needs limit to get all games.
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=${seasontype}&week=${week}&limit=20`)
 
     } else if (endpoint.startsWith('cfb/scores/')) {
       const [,, season, week] = endpoint.split('/')
       const seasontype = url.searchParams.get('seasontype') ?? '2'
-      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=50&week=${week}&season=${season}&seasontype=${seasontype}`)
+      if (week === '0') {
+        // Week 0 CFB games happen in late August — fetch by date range
+        const yr = parseInt(season)
+        data = await espnFetch(
+          `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=${yr}0822-${yr}0903`
+        )
+      } else {
+        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=50&dates=${season}&week=${week}&seasontype=${seasontype}`)
+      }
 
     } else if (endpoint === 'nfl/injuries') {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')

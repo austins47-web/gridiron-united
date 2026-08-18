@@ -608,8 +608,14 @@ async function fetchWeek(league: LeagueTab, season: number, week: number, season
   const res = await fetch(`${BASE}?endpoint=${encodeURIComponent(endpoint)}&seasontype=${seasonType}`, {
     headers: { apikey: ANON, Authorization: `Bearer ${ANON}` }
   })
-  if (!res.ok) throw new Error(`ESPN ${league} fetch failed: ${res.status}`)
+  if (!res.ok) {
+    console.warn(`ESPN ${league} fetch failed: ${res.status} for week=${week} seasonType=${seasonType}`)
+    return { games: [], currentWeek: week }
+  }
   const data = await res.json()
+  if (data.error || !data.events) {
+    return { games: [], currentWeek: week }
+  }
   const currentWeek = data.week?.number ?? week
   const games = (data.events ?? []).map((e: any) => parseGame(e, league))
   return { games, currentWeek }
