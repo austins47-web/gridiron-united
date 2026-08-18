@@ -27,6 +27,7 @@ import { LeagueChat } from '@/components/chat/LeagueChat'
 import { TradeCenter } from '@/components/trades/TradeCenter'
 import { LiveScoresView } from '@/components/scores/LiveScoresView'
 import { JoinPage } from '@/components/leagues/JoinPage'
+import { LeagueSettingsView } from '@/components/leagues/LeagueSettingsView'
 import { NewsView } from '@/components/scores/NewsView'
 
 const queryClient = new QueryClient({
@@ -164,6 +165,7 @@ function App() {
               <Route path="draft" element={<LeagueWrapper><DraftRoom /></LeagueWrapper>} />
               <Route path="scoring" element={<LeagueWrapper><ScoringView /></LeagueWrapper>} />
               <Route path="commissioner" element={<LeagueWrapper><CommissionerPanel /></LeagueWrapper>} />
+              <Route path="settings" element={<LeagueWrapper><LeagueSettingsView /></LeagueWrapper>} />
               <Route path="chat" element={<LeagueWrapper><LeagueChat /></LeagueWrapper>} />
               <Route path="trades" element={<LeagueWrapper><TradeCenter /></LeagueWrapper>} />
             </Route>

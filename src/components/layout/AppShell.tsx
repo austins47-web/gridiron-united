@@ -38,10 +38,11 @@ export function AppShell() {
     ...(!isPickEm ? [{ to: '/app/trades', label: 'Trades', emoji: '🔄' }] : []),
     { to: '/app/chat', label: 'Chat', emoji: '💬' },
     ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commissioner', emoji: '⚙️' }] : []),
+    { to: '/app/settings', label: 'Settings', emoji: '🛠️' },
   ] : []
 
   // Detect if we're on a league-specific route
-  const leagueRoutes = ['/app/roster', '/app/players', '/app/draft', '/app/scoring', '/app/commissioner', '/app/pickem', '/app/chat', '/app/trades']
+  const leagueRoutes = ['/app/roster', '/app/players', '/app/draft', '/app/scoring', '/app/commissioner', '/app/pickem', '/app/chat', '/app/trades', '/app/settings']
   const isOnLeagueRoute = leagueRoutes.some(r => location.pathname.startsWith(r))
   const isChat = location.pathname.startsWith('/app/chat')
 

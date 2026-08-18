@@ -207,6 +207,86 @@ export function useJoinLeague() {
   })
 }
 
+// Leave a league (any member; commissioner must hand off or delete instead)
+export function useLeaveLeague() {
+  const qc = useQueryClient()
+  const { user, activeLeagueId, setActiveLeague } = useAppStore()
+
+  return useMutation({
+    mutationFn: async (leagueId: string) => {
+      if (!user) throw new Error('Not logged in')
+
+      const { data: member, error: mErr } = await supabase
+        .from('league_members')
+        .select('id, is_commissioner')
+        .eq('league_id', leagueId)
+        .eq('user_id', user.id)
+        .single()
+      if (mErr || !member) throw new Error('You are not a member of this league')
+
+      if (member.is_commissioner) {
+        // Block only if they're the LAST commissioner
+        const { count } = await supabase
+          .from('league_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('league_id', leagueId)
+          .eq('is_commissioner', true)
+        if ((count ?? 0) <= 1) {
+          throw new Error(
+            'You are the only commissioner. Promote another member first, or delete the league.'
+          )
+        }
+      }
+
+      // Clean up this user's roster entries, then remove membership
+      await supabase.from('rosters').delete().eq('league_id', leagueId).eq('user_id', user.id)
+      const { error } = await supabase.from('league_members').delete().eq('id', member.id)
+      if (error) throw error
+
+      return leagueId
+    },
+    onSuccess: (leagueId) => {
+      qc.invalidateQueries({ queryKey: ['my-leagues'] })
+      qc.invalidateQueries({ queryKey: ['league-members', leagueId] })
+      if (activeLeagueId === leagueId) setActiveLeague(null, null)
+      toast.success('You left the league')
+    },
+    onError: (e: any) => toast.error(e.message),
+  })
+}
+
+// Update the current user's own membership settings (team name, etc.)
+export function useUpdateMyMembership() {
+  const qc = useQueryClient()
+  const { user, activeLeague, myMembership, setActiveLeague } = useAppStore()
+
+  return useMutation({
+    mutationFn: async (params: { leagueId: string; updates: Partial<LeagueMember> }) => {
+      if (!user) throw new Error('Not logged in')
+      const { data, error } = await supabase
+        .from('league_members')
+        .update(params.updates)
+        .eq('league_id', params.leagueId)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+      if (error) throw error
+      return data as LeagueMember
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ['my-leagues'] })
+      qc.invalidateQueries({ queryKey: ['league-members', updated.league_id] })
+      qc.invalidateQueries({ queryKey: ['standings', updated.league_id] })
+      // Keep the store in sync so the UI updates immediately
+      if (activeLeague && myMembership?.league_id === updated.league_id) {
+        setActiveLeague(activeLeague, updated)
+      }
+      toast.success('Settings saved')
+    },
+    onError: (e: any) => toast.error(e.message),
+  })
+}
+
 // Real-time league subscription
 export function useLeagueRealtime(leagueId: string | null) {
   const qc = useQueryClient()

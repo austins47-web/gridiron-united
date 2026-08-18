@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
-import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, useLeagueMembers, useLeagueRealtime } from '@/hooks/useLeague'
+import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, useLeagueMembers, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
-import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown, QrCode } from 'lucide-react'
+import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown, QrCode, LogOut } from 'lucide-react'
 import { QRModal } from './QRModal'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -14,6 +14,7 @@ export function LeaguesView() {
   const [showJoin, setShowJoin] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [qrLeague, setQrLeague] = useState<{ name: string; code: string } | null>(null)
+  const [leaveTarget, setLeaveTarget] = useState<{ id: string; name: string } | null>(null)
   // User-controlled display order, stored in localStorage
   const [leagueOrder, setLeagueOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('league-order') ?? '[]') } catch { return [] }
@@ -86,6 +87,7 @@ export function LeaguesView() {
               onMoveUp={() => moveLeague(league.id, -1)}
               onMoveDown={() => moveLeague(league.id, 1)}
               onShowQR={() => setQrLeague({ name: league.name, code: league.invite_code })}
+              onLeave={() => setLeaveTarget({ id: league.id, name: league.name })}
             />
           ))}
         </div>
@@ -115,6 +117,13 @@ export function LeaguesView() {
       )}
 
       {qrLeague && <QRModal leagueName={qrLeague.name} inviteCode={qrLeague.code} onClose={() => setQrLeague(null)} />}
+      {leaveTarget && (
+        <LeaveLeagueModal
+          leagueId={leaveTarget.id}
+          leagueName={leaveTarget.name}
+          onClose={() => setLeaveTarget(null)}
+        />
+      )}
       {showCreate && <CreateLeagueModal onClose={() => setShowCreate(false)} />}
       {showJoin && <JoinLeagueModal onClose={() => setShowJoin(false)} />}
       {showSettings && activeLeague && (
@@ -131,7 +140,7 @@ export function LeaguesView() {
   )
 }
 
-function LeagueCard({ league, membership, isActive, isFirst, isLast, onSelect, onMoveUp, onMoveDown, onShowQR }: any) {
+function LeagueCard({ league, membership, isActive, isFirst, isLast, onSelect, onMoveUp, onMoveDown, onShowQR, onLeave }: any) {
   return (
     <div
       className={clsx(
@@ -185,6 +194,14 @@ function LeagueCard({ league, membership, isActive, isFirst, isLast, onSelect, o
             className="p-1.5 text-field-500 hover:text-gold transition-colors rounded-lg hover:bg-field-700"
           >
             <QrCode className="w-4 h-4" />
+          </button>
+          {/* Leave league button */}
+          <button
+            onClick={e => { e.stopPropagation(); onLeave() }}
+            title="Leave this league"
+            className="p-1.5 text-field-500 hover:text-red-400 transition-colors rounded-lg hover:bg-field-700"
+          >
+            <LogOut className="w-4 h-4" />
           </button>
           {/* Reorder arrows */}
           <div className="flex flex-col gap-0.5" onClick={e => e.stopPropagation()}>
@@ -499,6 +516,66 @@ function JoinLeagueModal({ onClose }: { onClose: () => void }) {
           <button className="btn-ghost flex-1" onClick={onClose}>Cancel</button>
           <button className="btn-gold flex-1" onClick={handleSubmit} disabled={joinLeague.isPending}>
             {joinLeague.isPending ? 'Joining...' : 'Join League'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+function LeaveLeagueModal({ leagueId, leagueName, onClose }: { leagueId: string; leagueName: string; onClose: () => void }) {
+  const leaveLeague = useLeaveLeague()
+  const [confirmText, setConfirmText] = useState('')
+  const canLeave = confirmText.trim().toUpperCase() === 'LEAVE'
+
+  const handleLeave = async () => {
+    try {
+      await leaveLeague.mutateAsync(leagueId)
+      onClose()
+    } catch { /* toast shown by the hook */ }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-3">
+          <LogOut className="w-5 h-5 text-red-400" />
+          <h2 className="font-cond font-black text-lg text-white uppercase tracking-wider">
+            Leave League
+          </h2>
+        </div>
+
+        <p className="text-field-300 text-sm mb-3">
+          Leave <span className="text-white font-bold">"{leagueName}"</span>? Your roster will be
+          released and your history removed. This can't be undone.
+        </p>
+
+        <label className="label">
+          Type <span className="text-red-400 font-mono">LEAVE</span> to confirm
+        </label>
+        <input
+          className="input mb-4"
+          value={confirmText}
+          onChange={e => setConfirmText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && canLeave && handleLeave()}
+          placeholder="LEAVE"
+          autoFocus
+        />
+
+        <div className="flex gap-2">
+          <button className="btn-ghost flex-1" onClick={onClose}>Cancel</button>
+          <button
+            disabled={!canLeave || leaveLeague.isPending}
+            onClick={handleLeave}
+            className={clsx(
+              'flex-1 flex items-center justify-center gap-2 font-bold text-white px-4 py-2 rounded-lg transition-colors',
+              canLeave && !leaveLeague.isPending
+                ? 'bg-red-600 hover:bg-red-700'
+                : 'bg-field-700 text-field-500 cursor-not-allowed',
+            )}
+          >
+            {leaveLeague.isPending ? 'Leaving…' : 'Leave League'}
           </button>
         </div>
       </div>
