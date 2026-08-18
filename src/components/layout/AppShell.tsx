@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { NotificationsPanel } from '@/components/ui/NotificationsPanel'
 import { LeagueSelector } from '@/components/leagues/LeagueSelector'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 
 export function AppShell() {
   const { profile, unreadCount, signOut, activeLeague, activeLeagueId, myMembership } = useAppStore()
@@ -219,12 +220,16 @@ export function AppShell() {
         ) : isChat ? (
           /* Chat gets full remaining height with no padding */
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <Outlet />
+            <ErrorBoundary label="This page hit an error">
+              <Outlet />
+            </ErrorBoundary>
           </div>
         ) : (
           <div className="flex-1 overflow-auto">
             <div className="max-w-[1400px] mx-auto p-4 md:p-6">
-              <Outlet />
+              <ErrorBoundary label="This page hit an error">
+                <Outlet />
+              </ErrorBoundary>
             </div>
           </div>
         )}
