@@ -18,6 +18,7 @@ export function AppShell() {
 
   // ── Global tabs — always visible ──────────────────────────
   const globalTabs = [
+    { to: '/app/home',    label: 'Home',       emoji: '🏠' },
     { to: "/app/leagues", label: "My Leagues", emoji: "🏆" },
     { to: '/app/scores',  label: 'Live Scores', emoji: '📡' },
     { to: '/app/news',    label: 'News',         emoji: '📰' },
@@ -53,7 +54,7 @@ export function AppShell() {
       <header className="app-shell-top-nav sticky top-0 z-40 bg-field-950 border-b border-field-700 flex items-center justify-between px-4 h-14 shrink-0">
         {/* Logo */}
         <button
-          onClick={() => navigate('/app/leagues')}
+          onClick={() => navigate('/app/home')}
           className="flex items-center gap-3 hover:opacity-80 transition-opacity"
         >
           <div className="font-cond font-black text-xl uppercase tracking-wider">

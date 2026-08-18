@@ -28,6 +28,7 @@ import { TradeCenter } from '@/components/trades/TradeCenter'
 import { LiveScoresView } from '@/components/scores/LiveScoresView'
 import { JoinPage } from '@/components/leagues/JoinPage'
 import { LeagueSettingsView } from '@/components/leagues/LeagueSettingsView'
+import { HomeView } from '@/components/home/HomeView'
 import { NewsView } from '@/components/scores/NewsView'
 
 const queryClient = new QueryClient({
@@ -150,7 +151,8 @@ function App() {
               }
             >
               {/* Default /app → /app/leagues */}
-              <Route index element={<Navigate to="/app/leagues" replace />} />
+              <Route index element={<Navigate to="/app/home" replace />} />
+              <Route path="home" element={<HomeView />} />
               {/* These routes don't need league isolation */}
               <Route path="leagues" element={<LeaguesView />} />
               <Route path="scores" element={<LiveScoresView />} />
