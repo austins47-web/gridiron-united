@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { resolveWeekDeadline } from '@/lib/deadline'
+import {
+  computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal,
+} from './standings'
+import { WeekRecap, WeekInProgress } from './WeekRecap'
+import { StandingsTable } from './StandingsTable'
 import {
   Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp
 } from 'lucide-react'
@@ -196,7 +201,7 @@ export function PickEmView() {
   // All league members' picks for this week (revealed only after each game kicks off)
   const { data: allPicks = [] } = useQuery({
     queryKey: ['all-pickem-picks', activeLeagueId, week],
-    enabled: !!activeLeagueId && tab === 'results',
+    enabled: !!activeLeagueId && (tab === 'results' || tab === 'standings'),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pickem_picks')
@@ -224,21 +229,55 @@ export function PickEmView() {
     },
   })
 
-  // Standings
-  const { data: standings = [] } = useQuery({
-    queryKey: ['pickem-standings', activeLeagueId],
+  // ── Season-wide data for derived standings ──────────────────
+  // Standings are computed from picks joined to game results rather
+  // than read from a maintained table, so they can't drift and new
+  // members appear immediately at 0-0.
+  const { data: seasonGames = [] } = useQuery({
+    queryKey: ['pickem-season-games', 2026],
     enabled: !!activeLeagueId && tab === 'standings',
+    staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('pickem_standings')
-        .select('*, profile:profiles(username, display_name)')
-        .eq('league_id', activeLeagueId!)
+        .from('nfl_games')
+        .select('id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker')
         .eq('season', 2026)
-        .order('total_correct', { ascending: false })
       if (error) throw error
       return data ?? []
     },
   })
+
+  const { data: seasonPicks = [] } = useQuery({
+    queryKey: ['pickem-season-picks', activeLeagueId],
+    enabled: !!activeLeagueId && tab === 'standings',
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pickem_picks')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score')
+        .eq('league_id', activeLeagueId!)
+        .eq('season', 2026)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+
+  const standings = useMemo(
+    () => computeStandings(seasonGames as any, seasonPicks as any, leagueMembers as any),
+    [seasonGames, seasonPicks, leagueMembers],
+  )
+
+  // ── This week's results, for the recap post ─────────────────
+  const weekRows = useMemo(
+    () => computeWeek(games as any, allPicks as any, leagueMembers as any),
+    [games, allPicks, leagueMembers],
+  )
+  const weekComplete = useMemo(() => isWeekComplete(games as any), [games])
+  const weekTbTotal  = useMemo(() => tiebreakerTotal(games as any), [games])
+  const finishedCount = useMemo(
+    () => (games as any[]).filter(isFinal).length,
+    [games],
+  )
 
   // Sync picks into state
   useEffect(() => {
@@ -660,46 +699,20 @@ export function PickEmView() {
 
       {/* ── STANDINGS TAB ── */}
       {tab === 'standings' && (
-        <div className="panel !p-0 overflow-hidden">
-          <div className="px-4 py-3 border-b border-field-700 flex items-center justify-between">
-            <span className="font-bold text-white">Season Standings</span>
-            <span className="text-field-400 text-xs">2026 NFL Season</span>
-          </div>
-          {standings.length === 0 ? (
-            <div className="text-center py-8 text-field-400 text-sm">No picks submitted yet</div>
-          ) : (
-            <table className="data-table w-full">
-              <thead>
-                <tr>
-                  <th className="w-8">#</th>
-                  <th>Player</th>
-                  <th className="text-center">Correct</th>
-                  <th className="text-center">Total</th>
-                  <th className="text-center">%</th>
-                </tr>
-              </thead>
-              <tbody>
-                {standings.map((s: any, i: number) => (
-                  <tr key={s.id} className={s.user_id === user?.id ? 'bg-gold/[0.04]' : ''}>
-                    <td className="text-field-400 font-bold">{i + 1}</td>
-                    <td>
-                      <span className="font-bold text-white">
-                        {s.profile?.display_name || s.profile?.username}
-                      </span>
-                      {s.user_id === user?.id && (
-                        <span className="ml-1.5 text-xs text-gold font-bold">(you)</span>
-                      )}
-                    </td>
-                    <td className="text-center text-white font-bold">{s.total_correct}</td>
-                    <td className="text-center text-field-400">{s.total_picks}</td>
-                    <td className="text-center text-gold font-bold">
-                      {s.total_picks > 0 ? `${Math.round((s.total_correct / s.total_picks) * 100)}%` : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        <div className="space-y-4">
+          {/* End-of-week winner's post, once every game is final */}
+          {weekComplete ? (
+            <WeekRecap
+              week={week}
+              rows={weekRows}
+              tiebreakerTotal={weekTbTotal}
+              currentUserId={user?.id}
+            />
+          ) : finishedCount > 0 ? (
+            <WeekInProgress finished={finishedCount} total={games.length} />
+          ) : null}
+
+          <StandingsTable rows={standings} currentUserId={user?.id} />
         </div>
       )}
 
@@ -940,8 +953,16 @@ function PicksChart({
     )
   }
 
+  // Only show members who actually submitted picks this week.
+  // Someone who hasn't picked yet shouldn't appear as a row of
+  // blanks — they show up once they're in. You always see yourself.
+  const submittedIds = new Set(allPicks.map((p: any) => p.user_id))
+  const visibleMembers = leagueMembers.filter(
+    (m: any) => submittedIds.has(m.user_id) || m.user_id === userId
+  )
+
   // Sort members: current user first, then alphabetical
-  const sortedMembers = [...leagueMembers].sort((a, b) => {
+  const sortedMembers = [...visibleMembers].sort((a, b) => {
     if (a.user_id === userId) return -1
     if (b.user_id === userId) return 1
     const nameA = a.profile?.display_name || a.profile?.username || ''
