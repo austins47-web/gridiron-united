@@ -53,7 +53,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
     },
     body: JSON.stringify({ from: FROM, to: [to], subject, html }),
   })
@@ -123,8 +123,15 @@ const HOUR = 3600_000
 function hoursUntil(iso: string): number {
   return (new Date(iso).getTime() - Date.now()) / HOUR
 }
-/** True when `hrs` sits inside the window we're checking this pass. */
-function inWindow(hrs: number, target: number, slackHours = 0.3): boolean {
+/**
+ * True when `hrs` sits inside the window we're checking this pass.
+ *
+ * The window must be at least half the cron interval, or a pass can
+ * land either side of the target and miss the reminder completely.
+ * Running every 15 min => 0.25h half-interval; 0.5h gives margin for
+ * a slow pass without ever double-firing (reminder_log guards that).
+ */
+function inWindow(hrs: number, target: number, slackHours = 0.5): boolean {
   return hrs > 0 && Math.abs(hrs - target) <= slackHours
 }
 
@@ -138,7 +145,7 @@ serve(async (req) => {
   const provided = url.searchParams.get('key') ?? req.headers.get('x-cron-key')
   if (secret && provided !== secret) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), {
-      status: 401, headers: { ...CORS, 'Content-Type': 'application/json' },
+      status: 401, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' },
     })
   }
 
@@ -150,6 +157,7 @@ serve(async (req) => {
   )
 
   const reminders: Reminder[] = []
+  const nearMisses: any[] = []
   const now = new Date()
 
   try {
@@ -207,6 +215,14 @@ serve(async (req) => {
       const hrs = hoursUntil(next.toISOString())
       const wk = lg.current_week ?? 1
 
+      nearMisses.push({
+        league: lg.name,
+        type: 'pickem_deadline',
+        deadlineUtc: next.toISOString(),
+        hoursUntil: Number(hrs.toFixed(2)),
+        note: 'fires when hoursUntil is within 0.5 of a member lead time (default 24 or 2)',
+      })
+
       const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
 
       // Who has already picked this week?
@@ -232,7 +248,7 @@ serve(async (req) => {
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'pickem_deadline',
             dedupeKey: `pickem:${lg.id}:${lg.season ?? 2026}:w${wk}:${tag}`,
-            subject: `Week ${wk} picks due in ${Math.round(hrs)}h — ${lg.name}`,
+            subject: `Week ${wk} picks due in ${Math.round(hrs)}h - ${lg.name}`,
             heading: `Your Week ${wk} picks aren't in`,
             body: `Picks lock in about ${Math.round(hrs)} hours. Get them in before the deadline.`,
             ctaLabel: 'Make picks', ctaPath: '/app/pickem',
@@ -262,7 +278,7 @@ serve(async (req) => {
               leagueId: lg.id, leagueName: lg.name,
               eventType: 'on_the_clock',
               dedupeKey: `clock:${lg.id}:r${ds.current_round}:p${ds.current_pick}`,
-              subject: `You're on the clock — ${lg.name}`,
+              subject: `You're on the clock - ${lg.name}`,
               heading: "You're on the clock",
               body: `Round ${ds.current_round}, pick ${ds.current_pick}. Make your selection before the timer runs out.`,
               ctaLabel: 'Draft now', ctaPath: '/app/draft',
@@ -298,7 +314,7 @@ serve(async (req) => {
           leagueId: lg.id, leagueName: lg.name,
           eventType: 'trade_offer',
           dedupeKey: `trade:${t.id}:new`,
-          subject: `${who} sent you a trade — ${lg.name}`,
+          subject: `${who} sent you a trade - ${lg.name}`,
           heading: `Trade offer from ${who}`,
           body: 'Review the offer and accept, counter, or decline.',
           ctaLabel: 'Review trade', ctaPath: '/app/trades',
@@ -314,7 +330,7 @@ serve(async (req) => {
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'trade_expiring',
             dedupeKey: `trade:${t.id}:exp12`,
-            subject: `Trade from ${who} expires soon — ${lg.name}`,
+            subject: `Trade from ${who} expires soon - ${lg.name}`,
             heading: 'A trade offer is about to expire',
             body: `The offer from ${who} expires in about 12 hours. Respond before it lapses.`,
             ctaLabel: 'Review trade', ctaPath: '/app/trades',
@@ -355,7 +371,7 @@ serve(async (req) => {
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'lineup_empty',
             dedupeKey: `lineup:${lg.id}:w${lg.current_week ?? 1}`,
-            subject: `Your lineup is empty — ${lg.name}`,
+            subject: `Your lineup is empty - ${lg.name}`,
             heading: 'You have no players started',
             body: `Week ${lg.current_week ?? 1} kicks off today and your lineup is empty. Set it before game time.`,
             ctaLabel: 'Set lineup', ctaPath: '/app/roster',
@@ -383,7 +399,7 @@ serve(async (req) => {
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'weekly_recap',
             dedupeKey: `recap:${lg.id}:w${wk}`,
-            subject: `Week ${wk} wrapped — ${lg.name}`,
+            subject: `Week ${wk} wrapped - ${lg.name}`,
             heading: `Week ${wk} is in the books`,
             body: 'See where you landed in the standings and how the rest of the league did.',
             ctaLabel: 'View standings', ctaPath: '/app/leagues',
@@ -434,12 +450,12 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       ok: true, dryRun, considered: reminders.length, sent, skipped, failed,
-      ...(dryRun ? { preview: results } : {}),
-    }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+      ...(dryRun ? { preview: results, nearMisses } : {}),
+    }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
 
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), {
-      status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' },
     })
   }
 })
