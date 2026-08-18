@@ -77,9 +77,34 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
 
   const { data: schedule, isLoading: schedLoading } = useQuery({
     queryKey: ['team-schedule', league, teamId, SEASON],
-    queryFn: () => proxyFetch(`${league.toLowerCase()}/teams/${teamId}/schedule`, {
-      season: String(SEASON), seasontype: '2',
-    }),
+    queryFn: async () => {
+      if (league === 'NFL') {
+        // Merge preseason (type 1) + regular season (type 2)
+        const [preJson, regJson] = await Promise.all([
+          proxyFetch(`nfl/teams/${teamId}/schedule`, { season: String(SEASON), seasontype: '1' }),
+          proxyFetch(`nfl/teams/${teamId}/schedule`, { season: String(SEASON), seasontype: '2' }),
+        ])
+        const preEvents = (preJson?.events ?? []).map((e: any) => ({ ...e, _seasonType: 1 }))
+        const regEvents = (regJson?.events ?? []).map((e: any) => ({ ...e, _seasonType: 2 }))
+        const merged = [...preEvents, ...regEvents].sort(
+          (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        )
+        return { ...regJson, events: merged }
+      }
+      // CFB: W0 + regular (deduplicated)
+      const [w0Json, regJson] = await Promise.all([
+        proxyFetch(`cfb/teams/${teamId}/schedule`, { season: String(SEASON), seasontype: '2', week: '0' }).catch(() => ({ events: [] })),
+        proxyFetch(`cfb/teams/${teamId}/schedule`, { season: String(SEASON), seasontype: '2' }),
+      ])
+      const seen = new Set<string>()
+      const merged = [
+        ...(w0Json?.events ?? []).map((e: any) => ({ ...e, _week0: true })),
+        ...(regJson?.events ?? []),
+      ]
+        .filter((e: any) => { if (seen.has(e.id)) return false; seen.add(e.id); return true })
+        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      return { ...regJson, events: merged }
+    },
     staleTime: 5 * 60_000,
     enabled: tab === 'schedule' || tab === 'overview',
   })
@@ -241,7 +266,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
                   {games.filter(g => g.isFinal).map(g => (
                     <div key={g.id} className="flex items-center gap-3">
                       <span className={clsx('w-6 text-center text-xs font-black',
-                        g.result === 'W' ? 'text-emerald-400' : g.result === 'L' ? 'text-red-400' : 'text-field-400'
+                        g.result === 'W' ? 'text-gold' : g.result === 'L' ? 'text-red-400' : 'text-field-400'
                       )}>{g.result}</span>
                       {g.oppLogo && <img src={g.oppLogo} alt={g.oppAbbr} className="w-5 h-5 object-contain" />}
                       <span className="text-sm text-white flex-1">{g.isHome ? 'vs' : '@'} {g.oppName}</span>
@@ -284,7 +309,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
         {tab === 'schedule' && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-field-400 font-bold uppercase tracking-wider">{SEASON} Regular Season</span>
+              <span className="text-xs text-field-400 font-bold uppercase tracking-wider">{SEASON} Season Schedule</span>
               {schedLoading && <div className="w-3.5 h-3.5 border-2 border-field-600 border-t-gold rounded-full animate-spin" />}
             </div>
 
@@ -301,7 +326,18 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
                     g.isLive && 'border-red-500/40 bg-red-500/5'
                   )}>
                   {/* Week */}
-                  <span className="text-xs text-field-500 w-10 shrink-0 text-center">Wk {g.week}</span>
+                  <span className={clsx(
+                    'text-xs font-bold w-12 shrink-0 text-center',
+                    (g as any)._seasonType === 1 ? 'text-amber-400'
+                    : (g as any)._week0 ? 'text-sky-400'
+                    : 'text-field-500'
+                  )}>
+                    {(g as any)._seasonType === 1
+                      ? (g.week === 0 ? 'HOF' : `PRE${g.week}`)
+                      : (g as any)._week0
+                      ? 'W0'
+                      : `Wk ${g.week}`}
+                  </span>
 
                   {/* Opponent logo */}
                   {g.oppLogo
@@ -326,7 +362,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
                   {g.isFinal ? (
                     <div className="text-right shrink-0">
                       <span className={clsx('text-xs font-black mr-1.5',
-                        g.result === 'W' ? 'text-emerald-400' : g.result === 'L' ? 'text-red-400' : 'text-field-400'
+                        g.result === 'W' ? 'text-gold' : g.result === 'L' ? 'text-red-400' : 'text-field-400'
                       )}>{g.result}</span>
                       <span className="text-sm font-bold text-white tabular-nums">{g.usScore}–{g.oppScore}</span>
                     </div>

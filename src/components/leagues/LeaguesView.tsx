@@ -157,9 +157,14 @@ function LeagueCard({ league, membership, isActive, isFirst, isLast, onSelect, o
               )}
             </div>
             <div className="text-xs text-field-400 flex gap-3 mt-0.5">
-              <span className="capitalize">{league.scoring_type}</span>
-              <span className="capitalize">{league.draft_type} draft</span>
-              <span className="capitalize">{league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase()}</span>
+              {league.league_type === 'pickem'
+                ? <span className="text-gold font-bold">Pick'Em</span>
+                : <>
+                    <span className="capitalize">{league.scoring_type}</span>
+                    <span className="capitalize">{league.draft_type} draft</span>
+                    <span className="capitalize">{league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase()}</span>
+                  </>
+              }
               <span className="capitalize">{league.draft_status}</span>
             </div>
           </div>
@@ -242,12 +247,12 @@ function LeagueInfoPanel({ league, membership, isCommissioner }: any) {
 
       <div className="grid grid-cols-2 gap-2 text-sm">
         {[
-          ['Format', league.scoring_type?.toUpperCase()],
+          ['Format', league.league_type === 'pickem' ? "Pick'Em" : league.scoring_type?.toUpperCase()],
           ['Draft', league.draft_type],
           ['Teams', league.num_teams],
           ['Season', `Week ${league.current_week ?? 1}`],
           ['Status', league.draft_status],
-          ['Pool', league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase() ?? 'Both'],
+          ...(league.league_type !== 'pickem' ? [['Pool', league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase() ?? 'Both'] as [string, string]] : []),
         ].map(([label, value]) => (
           <div key={label} className="bg-field-800/50 rounded p-2">
             <div className="text-field-400 text-xs">{label}</div>

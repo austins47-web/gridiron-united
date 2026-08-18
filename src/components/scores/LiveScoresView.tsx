@@ -150,7 +150,7 @@ function gameHasFav(favs: Set<string>, game: LiveGame): boolean {
 
 function StatusBadge({ game, compact = false }: { game: LiveGame, compact?: boolean }) {
   if (game.status === 'post') {
-    return <span className={clsx('font-bold text-emerald-400', compact ? 'text-[10px]' : 'text-xs')}>Final</span>
+    return <span className={clsx('font-bold text-field-300', compact ? 'text-[10px]' : 'text-xs')}>Final</span>
   }
   if (game.status === 'pre') {
     return <span className={clsx('text-field-300', compact ? 'text-[10px]' : 'text-xs')}>{game.statusText}</span>
@@ -567,19 +567,45 @@ type StatusFilter = 'All' | 'Live' | 'Final' | 'Upcoming'
 // Season constants
 const NFL_SEASON  = 2026
 const CFB_SEASON  = 2026
-const NFL_WEEKS   = Array.from({ length: 18 }, (_, i) => i + 1)  // 1–18 regular season
-const CFB_WEEKS   = Array.from({ length: 15 }, (_, i) => i + 1)  // 1–15
+// ── Week option descriptors ────────────────────────────────
+type WeekOpt = { value: string; label: string; seasonType: number; week: number }
 
-const WEEK_KEY    = 'gu_scores_week'
+const NFL_WEEK_OPTIONS: WeekOpt[] = [
+  { value: 'hof',  label: 'Hall of Fame Game', seasonType: 1, week: 0 },
+  { value: 'pre1', label: 'Preseason Wk 1',    seasonType: 1, week: 1 },
+  { value: 'pre2', label: 'Preseason Wk 2',    seasonType: 1, week: 2 },
+  { value: 'pre3', label: 'Preseason Wk 3',    seasonType: 1, week: 3 },
+  ...Array.from({ length: 18 }, (_, i) => ({
+    value: String(i + 1), label: `Week ${i + 1}`, seasonType: 2, week: i + 1,
+  })),
+  { value: 'wc',   label: 'Wild Card',         seasonType: 3, week: 1 },
+  { value: 'div',  label: 'Divisional',        seasonType: 3, week: 2 },
+  { value: 'conf', label: 'Conference Champ.', seasonType: 3, week: 3 },
+  { value: 'sb',   label: 'Super Bowl',        seasonType: 3, week: 4 },
+]
+const CFB_WEEK_OPTIONS: WeekOpt[] = [
+  { value: '0', label: 'Week 0', seasonType: 2, week: 0 },
+  ...Array.from({ length: 15 }, (_, i) => ({
+    value: String(i + 1), label: `Week ${i + 1}`, seasonType: 2, week: i + 1,
+  })),
+]
+function resolveNFLOpt(k: string): WeekOpt {
+  return NFL_WEEK_OPTIONS.find(o => o.value === k) ?? NFL_WEEK_OPTIONS[4]
+}
+function resolveCFBOpt(k: string): WeekOpt {
+  return CFB_WEEK_OPTIONS.find(o => o.value === k) ?? CFB_WEEK_OPTIONS[1]
+}
+
+const WEEK_KEY    = 'gu_scores_week_v2'   // v2: string keys
 const TAB_KEY     = 'gu_scores_tab'
 
-async function fetchWeek(league: LeagueTab, season: number, week: number): Promise<{ games: LiveGame[]; currentWeek: number }> {
+async function fetchWeek(league: LeagueTab, season: number, week: number, seasonType = 2): Promise<{ games: LiveGame[]; currentWeek: number }> {
   const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
   const BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sportsdata`
   const endpoint = league === 'NFL'
     ? `nfl/scores/${season}/${week}`
     : `cfb/scores/${season}/${week}`
-  const res = await fetch(`${BASE}?endpoint=${encodeURIComponent(endpoint)}`, {
+  const res = await fetch(`${BASE}?endpoint=${encodeURIComponent(endpoint)}&seasontype=${seasonType}`, {
     headers: { apikey: ANON, Authorization: `Bearer ${ANON}` }
   })
   if (!res.ok) throw new Error(`ESPN ${league} fetch failed: ${res.status}`)
@@ -594,10 +620,12 @@ export function LiveScoresView() {
 
   const [tab, setTab] = useState<LeagueTab>(() =>
     (localStorage.getItem(TAB_KEY) as LeagueTab | null) ?? 'NFL')
-  const [nflWeek, setNflWeek] = useState<number>(() =>
-    Number(localStorage.getItem(`${WEEK_KEY}_NFL`)) || 1)
-  const [cfbWeek, setCfbWeek] = useState<number>(() =>
-    Number(localStorage.getItem(`${WEEK_KEY}_CFB`)) || 1)
+  const [nflWeekKey, setNflWeekKey] = useState<string>(() =>
+    localStorage.getItem(`${WEEK_KEY}_NFL`) ?? '1')
+  const [cfbWeekKey, setCfbWeekKey] = useState<string>(() =>
+    localStorage.getItem(`${WEEK_KEY}_CFB`) ?? '1')
+  const nflOpt = resolveNFLOpt(nflWeekKey)
+  const cfbOpt = resolveCFBOpt(cfbWeekKey)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     (localStorage.getItem(VIEW_KEY) as ViewMode | null) ?? 'grid')
@@ -614,12 +642,13 @@ export function LiveScoresView() {
     if (tid) setTeamPage({ id: tid, league })
   }
 
-  const week    = tab === 'NFL' ? nflWeek : cfbWeek
-  const setWeek = tab === 'NFL' ? setNflWeek : setCfbWeek
+  const weekOpt  = tab === 'NFL' ? nflOpt : cfbOpt
+  const weekKey  = tab === 'NFL' ? nflWeekKey : cfbWeekKey
+  const setWeekKey = tab === 'NFL' ? setNflWeekKey : setCfbWeekKey
 
   useEffect(() => { localStorage.setItem(TAB_KEY, tab) }, [tab])
-  useEffect(() => { localStorage.setItem(`${WEEK_KEY}_NFL`, String(nflWeek)) }, [nflWeek])
-  useEffect(() => { localStorage.setItem(`${WEEK_KEY}_CFB`, String(cfbWeek)) }, [cfbWeek])
+  useEffect(() => { localStorage.setItem(`${WEEK_KEY}_NFL`, nflWeekKey) }, [nflWeekKey])
+  useEffect(() => { localStorage.setItem(`${WEEK_KEY}_CFB`, cfbWeekKey) }, [cfbWeekKey])
   useEffect(() => { localStorage.setItem(VIEW_KEY, viewMode) }, [viewMode])
   useEffect(() => { localStorage.setItem(COLS_KEY, String(cols)) }, [cols])
 
@@ -642,9 +671,9 @@ export function LiveScoresView() {
   const { data: oddsMap } = useNflOdds()
 
   const query = useQuery({
-    queryKey: ['scores', tab, tab === 'NFL' ? NFL_SEASON : CFB_SEASON, week, refreshTick],
+    queryKey: ['scores', tab, tab === 'NFL' ? NFL_SEASON : CFB_SEASON, weekKey, refreshTick],
     queryFn: async () => {
-      const result = await fetchWeek(tab, tab === 'NFL' ? NFL_SEASON : CFB_SEASON, week)
+      const result = await fetchWeek(tab, tab === 'NFL' ? NFL_SEASON : CFB_SEASON, weekOpt.week, weekOpt.seasonType)
       setLastUpdated(new Date())
       return result
     },
@@ -663,8 +692,6 @@ export function LiveScoresView() {
   const allGames  = query.data?.games ?? []
   const liveCount = allGames.filter(g => g.status === 'in').length
   const statusOrder: Record<string, number> = { in: 0, pre: 1, post: 2 }
-  const weeks = tab === 'NFL' ? NFL_WEEKS : CFB_WEEKS
-
   const favGames = allGames
     .filter(g => gameHasFav(favTeams, g))
     .sort((a, b) => (statusOrder[a.status] ?? 1) - (statusOrder[b.status] ?? 1))
@@ -737,15 +764,37 @@ export function LiveScoresView() {
 
         {/* Week picker — dropdown only */}
         <div className="flex items-center gap-2 bg-field-800 border border-field-700 rounded-lg px-3 py-1.5">
-          <span className="text-xs text-field-400 font-bold uppercase tracking-wider shrink-0">Week</span>
+          <span className="text-xs text-field-400 font-bold uppercase tracking-wider shrink-0">
+            {tab === 'NFL' ? 'NFL' : 'CFB'}
+          </span>
           <select
-            value={week}
-            onChange={e => setWeek(Number(e.target.value))}
+            value={weekKey}
+            onChange={e => setWeekKey(e.target.value)}
             className="bg-transparent text-white text-sm font-bold cursor-pointer outline-none"
           >
-            {weeks.map(w => (
-              <option key={w} value={w} className="bg-field-800 text-white">Week {w}</option>
-            ))}
+            {tab === 'NFL' ? (
+              <>
+                <optgroup label="── PRESEASON ──" style={{ background: '#161b27', color: '#e8a020' }}>
+                  {NFL_WEEK_OPTIONS.filter(o => o.seasonType === 1).map(o => (
+                    <option key={o.value} value={o.value} style={{ background: '#161b27' }}>{o.label}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="── REGULAR SEASON ──" style={{ background: '#161b27', color: '#8a9ab8' }}>
+                  {NFL_WEEK_OPTIONS.filter(o => o.seasonType === 2).map(o => (
+                    <option key={o.value} value={o.value} style={{ background: '#161b27' }}>{o.label}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="── POSTSEASON ──" style={{ background: '#161b27', color: '#F5A623' }}>
+                  {NFL_WEEK_OPTIONS.filter(o => o.seasonType === 3).map(o => (
+                    <option key={o.value} value={o.value} style={{ background: '#161b27' }}>{o.label}</option>
+                  ))}
+                </optgroup>
+              </>
+            ) : (
+              CFB_WEEK_OPTIONS.map(o => (
+                <option key={o.value} value={o.value} style={{ background: '#161b27' }}>{o.label}</option>
+              ))
+            )}
           </select>
         </div>
 
@@ -830,7 +879,7 @@ export function LiveScoresView() {
               {favGames.length > 0 && (
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-cond font-bold text-xs uppercase tracking-wider text-field-300">
-                    All {tab} Games · Week {week}
+                    All {tab} Games · {weekOpt.label}
                   </span>
                   <span className="text-xs text-field-400">tap ⭐ to favorite</span>
                 </div>

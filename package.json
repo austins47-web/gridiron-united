@@ -12,10 +12,10 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "@tanstack/react-query": "^5.17.0",
-    "@vercel/speed-insights": "^2.0.0",
-    "@vitejs/plugin-react": "^4.2.1",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
+    "@vercel/speed-insights": "^2.0.0",
+    "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.17",
     "clsx": "^2.1.0",
     "date-fns": "^3.2.0",
@@ -33,6 +33,7 @@
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
+    "canvas": "^3.2.3",
     "eslint": "^8.56.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5"

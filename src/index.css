@@ -72,8 +72,8 @@
   .pos-badge {
     @apply font-cond font-bold text-xs uppercase tracking-wider px-1.5 py-0.5 rounded;
   }
-  .pos-QB   { @apply bg-amber-500/20 text-amber-400; }
-  .pos-RB   { @apply bg-emerald-500/20 text-emerald-400; }
+  .pos-QB   { @apply bg-gold/20 text-gold; }
+  .pos-RB   { @apply bg-teal-500/20 text-teal-400; }
   .pos-WR   { @apply bg-sky-500/20 text-sky-400; }
   .pos-TE   { @apply bg-orange-500/20 text-orange-400; }
   .pos-K    { @apply bg-purple-500/20 text-purple-400; }
@@ -88,8 +88,8 @@
   .league-nfl { @apply bg-nfl/15 text-nfl; }
 
   /* ── Status badges ── */
-  .status-active      { @apply bg-emerald-500/20 text-emerald-400; }
-  .status-questionable { @apply bg-yellow-500/20 text-yellow-400; }
+  .status-active      { @apply bg-nfl/20 text-nfl; }
+  .status-questionable { @apply bg-gold/20 text-gold; }
   .status-out         { @apply bg-red-500/20 text-red-400; }
   .status-ir          { @apply bg-pink-500/20 text-pink-400; }
 
@@ -134,7 +134,7 @@
 
   /* ── Realtime indicator ── */
   .live-dot {
-    @apply w-2 h-2 rounded-full bg-emerald-400 animate-pulse;
+    @apply w-2 h-2 rounded-full bg-red-400 animate-pulse;
   }
 
   /* ── Modal ── */
@@ -183,19 +183,19 @@
 
   /* ── Trade chat card (dark mode default) ── */
   .trade-chat-card {
-    background-color: rgba(6, 78, 59, 0.25);
-    border-color: rgba(16, 185, 129, 0.35);
+    background-color: rgba(22, 27, 39, 0.9);
+    border-color: rgba(39, 48, 68, 0.8);
   }
   .trade-chat-header {
-    background-color: rgba(16, 185, 129, 0.15);
-    border-color: rgba(16, 185, 129, 0.25);
+    background-color: rgba(30, 37, 53, 0.8);
+    border-color: rgba(39, 48, 68, 0.6);
   }
-  .trade-chat-title  { color: #6ee7b7; }
-  .trade-chat-time   { color: #34d399; }
-  .trade-chat-label  { color: #6ee7b7; }
+  .trade-chat-title  { color: #F5A623; }
+  .trade-chat-time   { color: #8a9ab8; }
+  .trade-chat-label  { color: #F5A623; }
   .trade-chat-player { color: #f3f4f6; }
-  .trade-chat-empty  { color: #6b7280; }
-  .trade-chat-divider { border-color: rgba(16, 185, 129, 0.2); }
+  .trade-chat-empty  { color: #5a6a8a; }
+  .trade-chat-divider { border-color: rgba(39, 48, 68, 0.5); }
 }
 
 /* ══════════════════════════════════════════════════════════════

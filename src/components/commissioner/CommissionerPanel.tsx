@@ -5,11 +5,12 @@ import { supabase } from '@/lib/supabase'
 import { useDeleteLeague } from '@/hooks/useLeague'
 import { buildSlotDefs } from '@/types/database'
 import { CfbPostseasonManager } from './CfbPostseasonManager'
+import { PickDeadlineSettings } from './PickDeadlineSettings'
 import type { League, Player, RosterSlotConfig } from '@/types/database'
 import {
   Shield, Users, Zap, TrendingUp, Trash2, Plus, Search,
   Save, RotateCcw, AlertCircle, ChevronDown, ChevronUp,
-  Edit3, Check, X, Crown, ArrowLeftRight
+  Edit3, Check, X, Crown, ArrowLeftRight, Clock
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -87,6 +88,7 @@ export function CommissionerPanel() {
   const [tab, setTab] = useState<CommTab>('scoring')
 
   const isCommissioner = myMembership?.is_commissioner
+  const isPickem = activeLeague?.league_type === 'pickem'
 
   if (!activeLeagueId) {
     return (
@@ -108,15 +110,21 @@ export function CommissionerPanel() {
     )
   }
 
-  const TABS: { id: CommTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'scoring', label: 'Scoring', icon: <TrendingUp className="w-4 h-4" /> },
-    { id: 'rosters', label: 'Rosters', icon: <Users className="w-4 h-4" /> },
-    { id: 'players', label: 'Player Scores', icon: <Zap className="w-4 h-4" /> },
-    { id: 'members', label: 'Members', icon: <Crown className="w-4 h-4" /> },
-    { id: 'league', label: 'League', icon: <Shield className="w-4 h-4" /> },
-    { id: 'cfb_postseason', label: 'CFB Playoffs', icon: <span className="text-sm">🎓</span> },
-    { id: 'trades', label: 'Trades', icon: <span className="text-sm">🔄</span> },
-  ]
+  const TABS: { id: CommTab; label: string; icon: React.ReactNode }[] = isPickem
+    ? [
+        { id: 'league',  label: 'League',   icon: <Shield className="w-4 h-4" /> },
+        { id: 'members', label: 'Members',  icon: <Crown className="w-4 h-4" /> },
+        { id: 'scoring', label: 'Pick Deadline', icon: <Clock className="w-4 h-4" /> },
+      ]
+    : [
+        { id: 'scoring', label: 'Scoring', icon: <TrendingUp className="w-4 h-4" /> },
+        { id: 'rosters', label: 'Rosters', icon: <Users className="w-4 h-4" /> },
+        { id: 'players', label: 'Player Scores', icon: <Zap className="w-4 h-4" /> },
+        { id: 'members', label: 'Members', icon: <Crown className="w-4 h-4" /> },
+        { id: 'league', label: 'League', icon: <Shield className="w-4 h-4" /> },
+        { id: 'cfb_postseason', label: 'CFB Playoffs', icon: <span className="text-sm">🎓</span> },
+        { id: 'trades', label: 'Trades', icon: <span className="text-sm">🔄</span> },
+      ]
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
@@ -149,7 +157,15 @@ export function CommissionerPanel() {
       </div>
 
       {/* Tab Content */}
-      {tab === 'scoring' && <ScoringEditor league={activeLeague!} onSaved={setActiveLeague} />}
+      {tab === 'scoring' && (isPickem
+        ? <PickDeadlineSettings
+            leagueId={activeLeagueId!}
+            initialLockType={(activeLeague as any)?.pick_lock_type ?? 'kickoff'}
+            initialDeadlineDay={(activeLeague as any)?.pick_deadline_day ?? 3}
+            initialDeadlineTime={(activeLeague as any)?.pick_deadline_time ?? '18:00'}
+          />
+        : <ScoringEditor league={activeLeague!} onSaved={setActiveLeague} />
+      )}
       {tab === 'rosters' && <RosterEditor leagueId={activeLeagueId} league={activeLeague!} />}
       {tab === 'players' && <PlayerScoreEditor />}
       {tab === 'members' && <MembersManager leagueId={activeLeagueId} league={activeLeague!} />}
@@ -330,7 +346,7 @@ function ScoringEditor({ league, onSaved }: { league: League; onSaved: (l: Leagu
                     >+</button>
                     <span className={clsx(
                       'text-xs font-bold w-8 text-right',
-                      scores[row.key] > 0 ? 'text-green-400' : scores[row.key] < 0 ? 'text-red-400' : 'text-field-500'
+                      scores[row.key] > 0 ? 'text-nfl' : scores[row.key] < 0 ? 'text-red-400' : 'text-field-500'
                     )}>
                       {scores[row.key] > 0 ? `+${scores[row.key]}` : scores[row.key]}
                     </span>
@@ -743,7 +759,7 @@ function PlayerScoreEditor() {
               Covers all active NFL players, all 32 D/ST units, and FBS college football players.
             </p>
             {syncResult && (
-              <p className="text-emerald-400 text-xs mt-1 font-bold">
+              <p className="text-nfl text-xs mt-1 font-bold">
                 ✓ Last sync: {syncResult.players} total players ({syncResult.withProjections} NFL with projections)
               </p>
             )}

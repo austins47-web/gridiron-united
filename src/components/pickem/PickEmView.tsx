@@ -66,17 +66,22 @@ const WEEK_END_DATES: Record<number, string> = {
   16: '2026-12-29T03:00:00Z',
   17: '2027-01-06T03:00:00Z',
   18: '2027-01-11T03:00:00Z',
+  // ── Postseason ──
+  19: '2027-01-19T05:00:00Z',  // Wild Card weekend end
+  20: '2027-01-26T05:00:00Z',  // Divisional weekend end
+  21: '2027-02-02T05:00:00Z',  // Conference Championships end
+  22: '2027-02-09T05:00:00Z',  // Super Bowl end
 }
 
 function getActiveWeek(): number {
   const now = new Date()
   // Before season starts → Week 1
   if (now < new Date('2026-09-09T00:00:00Z')) return 1
-  for (let w = 1; w <= 18; w++) {
-    const end = new Date(WEEK_END_DATES[w])
-    if (now < end) return w
+  for (let w = 1; w <= 22; w++) {
+    const end = WEEK_END_DATES[w] ? new Date(WEEK_END_DATES[w]) : null
+    if (end && now < end) return w
   }
-  return 18
+  return 22
 }
 
 function isGameLocked(gameDate: string | null, deadline: string | null): boolean {
@@ -347,7 +352,7 @@ export function PickEmView() {
             <div className={clsx(
               'flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-bold border',
               pickedCount === totalGames
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                ? 'bg-gold/10 border-gold/30 text-gold'
                 : 'bg-field-800 border-field-700 text-field-300'
             )}>
               {pickedCount === totalGames && <Check className="w-3.5 h-3.5" />}
@@ -368,7 +373,11 @@ export function PickEmView() {
           >
             <Calendar className="w-4 h-4 text-field-400" />
             <span className="font-cond font-black text-white text-base uppercase tracking-wider">
-              Week {week}
+              {week === 19 ? 'Wild Card'
+               : week === 20 ? 'Divisional'
+               : week === 21 ? 'Conf. Champ.'
+               : week === 22 ? 'Super Bowl'
+               : `Week ${week}`}
             </span>
             {week === activeWeek && (
               <span className="text-xs font-bold text-gold bg-gold/10 border border-gold/30 rounded px-1.5 py-0.5 uppercase tracking-wider">
@@ -383,9 +392,14 @@ export function PickEmView() {
               <div className="px-3 py-2 border-b border-field-700">
                 <span className="text-field-400 text-xs font-bold uppercase tracking-wider">Select Week</span>
               </div>
-              <div className="max-h-64 overflow-y-auto">
+              <div className="max-h-72 overflow-y-auto">
+                {/* Regular season weeks */}
+                <div className="px-3 py-1 border-b border-field-700">
+                  <span className="text-field-500 text-[10px] font-bold uppercase tracking-wider">Regular Season</span>
+                </div>
                 {Array.from({ length: 18 }, (_, i) => i + 1).map(w => {
-                  const isOver = new Date() >= new Date(WEEK_END_DATES[w])
+                  const endDate = WEEK_END_DATES[w]
+                  const isOver = endDate ? new Date() >= new Date(endDate) : false
                   const isCurrent = w === activeWeek
                   return (
                     <button
@@ -393,14 +407,43 @@ export function PickEmView() {
                       onClick={() => { setWeek(w); setWeekDropdownOpen(false) }}
                       className={clsx(
                         'w-full text-left px-4 py-2.5 flex items-center justify-between transition-colors',
-                        week === w
-                          ? 'bg-gold/10 text-gold'
-                          : 'text-field-200 hover:bg-field-700',
+                        week === w ? 'bg-gold/10 text-gold' : 'text-field-200 hover:bg-field-700',
                       )}
                     >
                       <span className="font-cond font-bold text-sm">Week {w}</span>
-                      <span className={clsx('text-xs font-bold uppercase tracking-wider', 
-                        isCurrent ? 'text-gold' : isOver ? 'text-field-500' : 'text-emerald-400'
+                      <span className={clsx('text-xs font-bold uppercase tracking-wider',
+                        isCurrent ? 'text-gold' : isOver ? 'text-field-500' : 'text-field-300'
+                      )}>
+                        {isCurrent ? 'Current' : isOver ? 'Complete' : 'Upcoming'}
+                      </span>
+                    </button>
+                  )
+                })}
+                {/* Postseason weeks */}
+                <div className="px-3 py-1 border-t border-b border-field-700 mt-1">
+                  <span className="text-gold text-[10px] font-bold uppercase tracking-wider">Postseason</span>
+                </div>
+                {[
+                  { w: 19, label: 'Wild Card' },
+                  { w: 20, label: 'Divisional' },
+                  { w: 21, label: 'Conference Champ.' },
+                  { w: 22, label: 'Super Bowl' },
+                ].map(({ w, label }) => {
+                  const endDate = WEEK_END_DATES[w]
+                  const isOver = endDate ? new Date() >= new Date(endDate) : false
+                  const isCurrent = w === activeWeek
+                  return (
+                    <button
+                      key={w}
+                      onClick={() => { setWeek(w); setWeekDropdownOpen(false) }}
+                      className={clsx(
+                        'w-full text-left px-4 py-2.5 flex items-center justify-between transition-colors',
+                        week === w ? 'bg-gold/10 text-gold' : 'text-field-200 hover:bg-field-700',
+                      )}
+                    >
+                      <span className="font-cond font-bold text-sm">{label}</span>
+                      <span className={clsx('text-xs font-bold uppercase tracking-wider',
+                        isCurrent ? 'text-gold' : isOver ? 'text-field-500' : 'text-field-300'
                       )}>
                         {isCurrent ? 'Current' : isOver ? 'Complete' : 'Upcoming'}
                       </span>
@@ -698,7 +741,7 @@ function GamePickCard({
             <Lock className="w-3 h-3" /> Locked
           </span>
         )}
-        {isFinal && <span className="text-xs text-emerald-400 font-bold">Final</span>}
+        {isFinal && <span className="text-xs text-field-300 font-bold">Final</span>}
         {odds && !isFinal && (
           <span className="flex items-center gap-1 text-xs text-field-500">
             <TrendingUp className="w-3 h-3 text-gold/50" />
@@ -775,14 +818,14 @@ function GamePickCard({
                         <span>Win%</span>
                         <span className={clsx(
                           'font-black',
-                          winPct >= 60 ? 'text-emerald-400' : winPct <= 40 ? 'text-field-400' : 'text-white'
+                          winPct >= 60 ? 'text-nfl' : winPct <= 40 ? 'text-field-400' : 'text-white'
                         )}>{winPct}%</span>
                       </div>
                       <div className="w-full h-1 bg-field-700 rounded-full overflow-hidden">
                         <div
                           className={clsx(
                             'h-full rounded-full transition-all',
-                            winPct >= 60 ? 'bg-emerald-500' : winPct <= 40 ? 'bg-field-500' : 'bg-gold'
+                            winPct >= 60 ? 'bg-nfl' : winPct <= 40 ? 'bg-field-500' : 'bg-gold'
                           )}
                           style={{ width: `${winPct}%` }}
                         />
@@ -804,7 +847,7 @@ function GamePickCard({
               )}
               {isPicked && isFinal && isWinner && (
                 <div className="absolute top-2 right-2">
-                  <Check className="w-4 h-4 text-emerald-400" />
+                  <Check className="w-4 h-4 text-gold" />
                 </div>
               )}
               {isPicked && isFinal && !isWinner && (
