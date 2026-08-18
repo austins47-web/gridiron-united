@@ -5,7 +5,8 @@ import { useAppStore } from '@/store/appStore'
 import { buildSlotDefs } from '@/types/database'
 import type { Player, ScoringRules } from '@/types/database'
 import { PlayerProfileDrawer } from './PlayerProfileDrawer'
-import { TeamPage } from '@/components/teams/TeamPage'
+import { lazy, Suspense } from 'react'
+const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
 import { getTeamId } from '@/components/teams/teamIds'
 import { Search, ChevronLeft, ChevronRight, Plus, Check, X, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
@@ -119,11 +120,13 @@ export function PlayersView() {
   // Show team page if one is selected
   if (teamPage) {
     return (
-      <TeamPage
-        teamId={teamPage.id}
-        league={teamPage.league}
-        onBack={() => setTeamPage(null)}
-      />
+      <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" /></div>}>
+        <TeamPage
+          teamId={teamPage.id}
+          league={teamPage.league}
+          onBack={() => setTeamPage(null)}
+        />
+      </Suspense>
     )
   }
 

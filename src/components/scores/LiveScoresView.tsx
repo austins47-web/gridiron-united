@@ -5,8 +5,9 @@ import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Colum
 import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
 import { GameDetailModal } from './GameDetailModal'
-import { TeamPage } from '@/components/teams/TeamPage'
+import { lazy, Suspense } from 'react'
 import { getTeamId } from '@/components/teams/teamIds'
+const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -716,7 +717,11 @@ export function LiveScoresView() {
   const sharedProps = { viewMode, cols, favTeams, onToggleFav: toggleFav, oddsMap, onSelect: setSelectedGame }
 
   if (teamPage) {
-    return <TeamPage teamId={teamPage.id} league={teamPage.league} onBack={() => setTeamPage(null)} />
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" /></div>}>
+        <TeamPage teamId={teamPage.id} league={teamPage.league} onBack={() => setTeamPage(null)} />
+      </Suspense>
+    )
   }
 
   return (

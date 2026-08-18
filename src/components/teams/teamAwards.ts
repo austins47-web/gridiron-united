@@ -672,15 +672,9 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
   },
 
   '12': { // Arizona
-    nagurski: [{ year: 1993, name: 'Rob Waldrop' }],
-    jimThorpe: [
-      { year: 1990, name: 'Darryll Lewis' },
-      { year: 2007, name: 'Antoine Cason' },
-    ],
-    bednarik: [{ year: 2014, name: 'Scooby Wright III' }],
-    nagurski: [
-      { year: 1993, name: 'Rob Waldrop' },
-    ],
+    nagurski:  [{ year: 1993, name: 'Rob Waldrop' }],
+    jimThorpe: [{ year: 1990, name: 'Darryll Lewis' }, { year: 2007, name: 'Antoine Cason' }],
+    bednarik:  [{ year: 2014, name: 'Scooby Wright III' }],
   },
 
   '8': { // Arkansas
@@ -726,10 +720,6 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     biletnikoff: [{ year: 2015, name: 'Corey Coleman' }],
     jimThorpe:   [{ year: 1986, name: 'Thomas Everett' }],
     butkus:      [{ year: 1985, name: 'Brian Bosworth' }, { year: 1986, name: 'Brian Bosworth' }],
-    // Mike Singletary won the Davey O'Brien Memorial Trophy 1979-80 (pre-QB era)
-    daveyOBrien: [
-      { year: 2011, name: 'Robert Griffin III' },
-    ],
   },
 
   '68': { // Boise State
@@ -1058,7 +1048,6 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     bednarik:    [{ year: 2012, name: 'Manti Te\'o' }, { year: 2020, name: 'Zaven Collins' }],
     nagurski:    [{ year: 2023, name: 'Xavier Watts' }],
     jimThorpe:   [],
-    daveyOBrien: [],
   },
 
   '158': { // Nebraska — 5 claimed championships
@@ -1140,9 +1129,6 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     jimThorpe:  [],
   },
 
-  '2390': { // Miami (FL) — see above, separate from '2084'
-
-  },
 
   '130': { // Michigan — 4 claimed championships
     natChamps:  [1947,1948,1997,2023],
@@ -1196,8 +1182,6 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     outland:   [{ year: 1979, name: 'Jim Ritcher' }],
   },
 
-  '158': { // Nebraska — see above
-  },
 
   '194': { // Ohio State — 9 NCAA-recognized championships
     natChamps:  [1942,1954,1957,1961,1968,1970,2002,2014,2024],
@@ -1406,18 +1390,16 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     natChamps:  [2025],
     heismans:   [{ year: 2025, name: 'Fernando Mendoza' }],
     maxwell:    [{ year: 2025, name: 'Fernando Mendoza' }],
-    walterCamp: [{ year: 2025, name: 'Fernando Mendoza' }],
+    walterCamp: [{ year: 1989, name: 'Anthony Thompson' }, { year: 2025, name: 'Fernando Mendoza' }],
     daveyOBrien:[{ year: 2025, name: 'Fernando Mendoza' }],
     doakWalker: [{ year: 1989, name: 'Anthony Thompson' }],
-    walterCamp: [{ year: 1989, name: 'Anthony Thompson' }, { year: 2025, name: 'Fernando Mendoza' }],
   },
 
   '96': { // Kentucky
-    outland:    [{ year: 1950, name: 'Bob Gain' }],
-    nagurski:   [],
-    butkus:     [{ year: 2018, name: 'Josh Allen' }],
-    bednarik:   [{ year: 2018, name: 'Josh Allen' }],
-    nagurski:   [{ year: 2018, name: 'Josh Allen' }],
+    outland:  [{ year: 1950, name: 'Bob Gain' }],
+    butkus:   [{ year: 2018, name: 'Josh Allen' }],
+    bednarik: [{ year: 2018, name: 'Josh Allen' }],
+    nagurski: [{ year: 2018, name: 'Josh Allen' }],
   },
 
   '2294': { // Iowa
@@ -1430,9 +1412,6 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     jimThorpe:  [{ year: 2015, name: 'Desmond King' }],
   },
 
-  '66': { // Iowa State
-    nagurski:   [],
-  },
 
   '356': { // Illinois — 1 claimed championship
     natChamps:  [1951],
@@ -1459,8 +1438,6 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     outland:    [],
   },
 
-  '135': { // Minnesota — see above
-  },
 
   '2084': { // Miami (FL) alt ESPN ID
     natChamps:  [1983,1987,1989,1991,2001],
@@ -1484,33 +1461,17 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     daveyOBrien:[],
   },
 
-  '2509': { // Oklahoma — see above (duplicate key avoided)
-  },
 
   '344': { // Mississippi State
     jimThorpe:  [{ year: 2012, name: 'Johnthan Banks' }],
   },
 
-  '120': { // Maryland — see above
-  },
 
-  '59': { // Georgia Tech — 4 claimed championships (see above)
-  },
 
-  '221': { // Pittsburgh — see above
-  },
 
-  '2390': { // Miami (FL) main ESPN ID — see above (covered under 2390)
-  },
 
-  '2483': { // Oregon — see above
-  },
 
-  '2': { // Auburn — see above
-  },
 
-  '2': { // Also Auburn — handled above
-  },
 
   // Additional schools with Outland/specialty awards
 
@@ -1601,15 +1562,8 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
     nagurski:   [{ year: 2002, name: 'Terrell Suggs' }],
   },
 
-  '99': { // LSU — see above
-  },
 
-  '290': { // Georgia Southern
-    nagurski:   [],
-  },
 
-  '2116': { // UCF — see above
-  },
 
   '328': { // Utah State
     outland:    [{ year: 1961, name: 'Merlin Olsen' }],
@@ -1617,14 +1571,8 @@ export const CFB_AWARDS: Record<string, Partial<CFBTeamAwards>> = {
 
   // ── New entries for awards missed ────────────────────────────
 
-  '47': { // Mississippi State (duplicate key '344' used above)
-  },
 
-  '2509': { // Oklahoma (already covered above)
-  },
 
-  '2277': { // Oklahoma State (already covered above)
-  },
 
   '2306': { // Kansas State (already covered above as 2305)
     daveyOBrien:[{ year: 1998, name: 'Michael Bishop' }],
