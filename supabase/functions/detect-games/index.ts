@@ -32,12 +32,6 @@ serve(async (req) => {
   const upserted: string[] = []
   const errors: string[] = []
 
-  // Fetch both scoreboards via the proxy
-  const sources = [
-    { league: 'NFL', endpoint: 'nfl/live-scores' },
-    { league: 'CFB', endpoint: 'cfb/scores/2026/1' }, // will be dynamic below
-  ]
-
   // For CFB we need current week — derive from date
   // CFB season: weeks 1-15 roughly, starts early Sep
   const cfbWeek = Math.max(1, Math.ceil((now.getTime() - new Date('2026-08-28').getTime()) / (7 * 24 * 60 * 60 * 1000)))
@@ -48,21 +42,32 @@ serve(async (req) => {
     { league: 'CFB', endpoint: `cfb/scores/${season}/${cfbWeek}`, week: Math.min(cfbWeek, 15) },
   ]
 
-  for (const { league, endpoint, week } of scoreboardSources) {
-    let data: any
-    try { data = await proxyFetch(endpoint) } catch (e: any) { errors.push(`${league}: ${e.message}`); continue }
+  // Fetch both scoreboards in parallel — they don't depend on each other.
+  const fetched = await Promise.all(
+    scoreboardSources.map(async (s) => {
+      try {
+        return { ...s, data: await proxyFetch(s.endpoint) }
+      } catch (e: any) {
+        errors.push(`${s.league}: ${e.message}`)
+        return { ...s, data: null }
+      }
+    })
+  )
 
-    const events = data.events ?? []
-    for (const event of events) {
-      const comp   = event.competitions?.[0]
-      if (!comp) continue
-      const home   = comp.competitors?.find((c: any) => c.homeAway === 'home')
-      const away   = comp.competitors?.find((c: any) => c.homeAway === 'away')
-      const status = mapStatus(event.status?.type?.name ?? '')
-      const gameId = String(event.id)
+  // Build every row first, then write each league in ONE batched
+  // upsert. The previous version issued a separate round trip per
+  // game — 70+ sequential calls on a full CFB Saturday, which blew
+  // past pg_net's 5s timeout every run.
+  for (const { league, week, data } of fetched) {
+    if (!data) continue
 
-      const { error } = await supabase.from('live_games').upsert({
-        game_id:    gameId,
+    const rows = (data.events ?? []).flatMap((event: any) => {
+      const comp = event.competitions?.[0]
+      if (!comp) return []
+      const home = comp.competitors?.find((c: any) => c.homeAway === 'home')
+      const away = comp.competitors?.find((c: any) => c.homeAway === 'away')
+      return [{
+        game_id:    String(event.id),
         league,
         season,
         week,
@@ -70,14 +75,20 @@ serve(async (req) => {
         away_team:  away?.team?.abbreviation ?? '',
         home_score: parseInt(home?.score ?? '0') || 0,
         away_score: parseInt(away?.score ?? '0') || 0,
-        status,
+        status:     mapStatus(event.status?.type?.name ?? ''),
         start_time: event.date ? new Date(event.date).toISOString() : null,
         updated_at: now.toISOString(),
-      }, { onConflict: 'game_id' })
+      }]
+    })
 
-      if (error) errors.push(`${gameId}: ${error.message}`)
-      else upserted.push(gameId)
-    }
+    if (rows.length === 0) continue
+
+    const { error } = await supabase
+      .from('live_games')
+      .upsert(rows, { onConflict: 'game_id' })
+
+    if (error) errors.push(`${league} batch: ${error.message}`)
+    else upserted.push(...rows.map((r: any) => r.game_id))
   }
 
   // Expire stale in_progress games
@@ -89,5 +100,11 @@ serve(async (req) => {
       .not('game_id', 'in', `(${upserted.map(g => `"${g}"`).join(',')})`)
   }
 
-  return new Response(JSON.stringify({ upserted: upserted.length, week_nfl: Math.min(nflWeek,18), week_cfb: Math.min(cfbWeek,15), errors }), { headers: CORS })
+  return new Response(JSON.stringify({
+    upserted: upserted.length,
+    week_nfl: Math.min(nflWeek, 18),
+    week_cfb: Math.min(cfbWeek, 15),
+    ms: Date.now() - now.getTime(),
+    errors,
+  }), { headers: CORS })
 })
