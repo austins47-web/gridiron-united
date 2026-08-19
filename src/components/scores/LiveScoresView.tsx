@@ -6,7 +6,7 @@ import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
 import { GameDetailModal } from './GameDetailModal'
 import { lazy, Suspense } from 'react'
-import { getTeamId } from '@/components/teams/teamIds'
+import { getTeamId, teamLogoUrl } from '@/components/teams/teamIds'
 import { NFL_SEASON as SEASON_NFL, CFB_SEASON as SEASON_CFB } from '@/lib/season'
 const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
 
@@ -170,6 +170,38 @@ function StatusBadge({ game, compact = false }: { game: LiveGame, compact?: bool
   )
 }
 
+// ── Team logo, with a graceful blank fallback (never a broken-image icon) ──
+function TeamLogo({ team, league, size = 16 }: { team: GameTeam; league: 'NFL' | 'CFB'; size?: number }) {
+  const src = teamLogoUrl(team, league)
+  if (!src) return <span className="shrink-0" style={{ width: size, height: size }} />
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      className="shrink-0 object-contain"
+      style={{ width: size, height: size }}
+      onError={e => { e.currentTarget.style.visibility = 'hidden' }}
+    />
+  )
+}
+
+// Per-team favorite toggle. Previously each card had ONE star that
+// toggled an ambiguous team (whichever wasn't already favorited) —
+// there was no way to tell which team you'd actually be favoriting.
+// Every team now gets its own star.
+function FavStar({ active, onClick }: { active: boolean; onClick: (e: React.MouseEvent) => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="shrink-0 text-field-600 hover:text-gold transition-colors"
+      title={active ? 'Remove from favorites' : 'Add to favorites'}
+    >
+      <Star className={clsx('w-3 h-3', active && 'fill-gold text-gold')} />
+    </button>
+  )
+}
+
 // ── GRID CARD ────────────────────────────────────────────────
 
 function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
@@ -184,8 +216,6 @@ function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: 
   const isFinal = game.status === 'post'
   const awayScore = parseInt(game.away.score) || 0
   const homeScore = parseInt(game.home.score) || 0
-  const homeIsFav = teamIsFav(favTeams, game.home)
-  const awayIsFav = teamIsFav(favTeams, game.away)
 
   return (
     <div
@@ -208,10 +238,6 @@ function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: 
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {game.broadcast && <span className="text-xs text-field-300 font-bold">{game.broadcast}</span>}
-          <button onClick={() => onToggleFav(awayIsFav ? game.away.abbr : game.home.abbr)}
-            className="text-field-500 hover:text-gold transition-colors">
-            <Star className={clsx('w-3.5 h-3.5', (homeIsFav || awayIsFav) && 'fill-gold text-gold')} />
-          </button>
         </div>
       </div>
 
@@ -229,9 +255,11 @@ function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: 
             <div className="w-2 shrink-0 flex justify-center">
               {hasBall && <div className="w-1.5 h-1.5 rounded-full bg-gold" />}
             </div>
+            <FavStar active={isFav} onClick={e => { e.stopPropagation(); onToggleFav(team.abbr) }} />
             {team.rank
               ? <span className="text-[9px] font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
               : <span className="w-5 shrink-0" />}
+            <TeamLogo team={team} league={game.league} size={18} />
             <button
               className={clsx(
                 'font-cond font-bold text-sm flex-1 truncate text-left hover:text-gold transition-colors',
@@ -354,7 +382,9 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
       return (
         <div className="flex items-center gap-2 min-w-0 flex-row-reverse">
           {hasBall ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" /> : <div className="w-2 shrink-0" />}
+          <FavStar active={isFav} onClick={e => { e.stopPropagation(); onToggleFav(team.abbr) }} />
           {team.rank ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-left">#{team.rank}</span> : <span className="w-5 shrink-0" />}
+          <TeamLogo team={team} league={game.league} size={20} />
           <button
             className={clsx('font-cond font-black text-base shrink-0 w-10 text-right hover:text-gold transition-colors',
               isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
@@ -373,7 +403,9 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
     return (
       <div className="flex items-center gap-2 min-w-0">
         {hasBall ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" /> : <div className="w-2 shrink-0" />}
+        <FavStar active={isFav} onClick={e => { e.stopPropagation(); onToggleFav(team.abbr) }} />
         {team.rank ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span> : <span className="w-5 shrink-0" />}
+        <TeamLogo team={team} league={game.league} size={20} />
         <button
           className={clsx('font-cond font-black text-base shrink-0 w-10 text-left hover:text-gold transition-colors',
             isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
@@ -491,11 +523,6 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
           </span>
         )}
       </div>
-
-      <button onClick={() => onToggleFav(awayIsFav ? game.away.abbr : game.home.abbr)}
-        className="text-field-500 hover:text-gold transition-colors shrink-0">
-        <Star className={clsx('w-3.5 h-3.5', anyFav && 'fill-gold text-gold')} />
-      </button>
     </div>
   )
 }

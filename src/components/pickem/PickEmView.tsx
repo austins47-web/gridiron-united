@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { resolveWeekDeadline } from '@/lib/deadline'
+import { teamLogoUrl } from '@/components/teams/teamIds'
 import {
   computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal,
 } from './standings'
@@ -835,6 +836,18 @@ function GamePickCard({
               )}
             >
               <span className="text-xs text-field-500 uppercase tracking-wider">{label}</span>
+              {(() => {
+                const logo = teamLogoUrl({ abbr: team }, 'NFL')
+                return logo ? (
+                  <img
+                    src={logo}
+                    alt=""
+                    loading="lazy"
+                    className="w-8 h-8 object-contain"
+                    onError={e => { e.currentTarget.style.visibility = 'hidden' }}
+                  />
+                ) : null
+              })()}
               <span className="text-2xl font-black tracking-wide">{team}</span>
               <span className="text-xs text-field-400 truncate max-w-full">
                 {info.name.split(' ').slice(-1)[0]}

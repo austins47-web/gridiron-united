@@ -77,3 +77,24 @@ export function getTeamId(teamName: string, league: 'NFL' | 'CFB'): string | nul
   if (league === 'NFL') return NFL_TEAM_IDS[teamName] ?? null
   return CFB_TEAM_IDS[teamName] ?? null
 }
+
+/**
+ * ESPN's team-logo CDN. NFL logos are keyed by lowercase abbreviation;
+ * CFB logos are keyed by ESPN's numeric team id (there's no reliable
+ * abbreviation-based path for the 130+ FBS schools). Pass whichever
+ * you have — abbr for NFL, and either an id already on hand or a
+ * team name we can resolve via CFB_TEAM_IDS for CFB.
+ */
+export function teamLogoUrl(
+  team: { abbr?: string; name?: string; id?: string | null },
+  league: 'NFL' | 'CFB',
+): string | null {
+  if (league === 'NFL') {
+    const abbr = team.abbr?.toLowerCase()
+    if (!abbr) return null
+    return `https://a.espncdn.com/i/teamlogos/nfl/500/${abbr}.png`
+  }
+  const id = team.id ?? (team.name ? CFB_TEAM_IDS[team.name] : null) ?? (team.abbr ? CFB_TEAM_IDS[team.abbr] : null)
+  if (!id) return null
+  return `https://a.espncdn.com/i/teamlogos/ncaa/500/${id}.png`
+}
