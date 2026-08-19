@@ -843,7 +843,7 @@ function GamePickCard({
                     src={logo}
                     alt=""
                     loading="lazy"
-                    className="w-8 h-8 object-contain"
+                    className="w-11 h-11 object-contain"
                     onError={e => { e.currentTarget.style.visibility = 'hidden' }}
                   />
                 ) : null

@@ -204,8 +204,9 @@ function FavStar({ active, onClick }: { active: boolean; onClick: (e: React.Mous
 
 // ── GRID CARD ────────────────────────────────────────────────
 
-function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
+function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
   game: LiveGame
+  cols: ColCount
   favTeams: Set<string>
   onToggleFav: (abbr: string) => void
   odds?: GameOdds | null
@@ -216,11 +217,13 @@ function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: 
   const isFinal = game.status === 'post'
   const awayScore = parseInt(game.away.score) || 0
   const homeScore = parseInt(game.home.score) || 0
+  const scale = CARD_SCALE[cols]
 
   return (
     <div
       className={clsx(
-        'bg-field-800 border rounded-xl p-3 flex flex-col gap-2 min-w-0 cursor-pointer hover:border-field-500 transition-colors',
+        'bg-field-800 border rounded-xl flex flex-col gap-2 min-w-0 cursor-pointer hover:border-field-500 transition-colors',
+        scale.pad,
         isLive && game.redZone ? 'border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.12)]'
         : isLive ? 'border-gold/30'
         : 'border-field-700',
@@ -230,7 +233,8 @@ function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: 
       <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           <span className={clsx(
-            'shrink-0 font-cond font-black text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded',
+            'shrink-0 font-cond font-black uppercase tracking-wider rounded',
+            scale.league,
             game.league === 'NFL' ? 'bg-nfl/20 text-nfl' : 'bg-cfb/20 text-cfb',
           )}>{game.league}</span>
           <StatusBadge game={game} compact />
@@ -259,16 +263,17 @@ function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: 
             {team.rank
               ? <span className="text-[9px] font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
               : <span className="w-5 shrink-0" />}
-            <TeamLogo team={team} league={game.league} size={18} />
+            <TeamLogo team={team} league={game.league} size={scale.logo} />
             <button
               className={clsx(
-                'font-cond font-bold text-sm flex-1 truncate text-left hover:text-gold transition-colors',
+                'font-cond font-bold flex-1 truncate text-left hover:text-gold transition-colors',
+                scale.abbr,
                 isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
               )}
               onClick={e => { e.stopPropagation(); onTeamClick(team, game.league) }}
             >
               {team.abbr}
-              <span className="text-field-300 font-normal text-xs ml-1 hidden sm:inline">
+              <span className={clsx('text-field-300 font-normal ml-1 hidden sm:inline', scale.name)}>
                 {team.name !== team.abbr ? team.name : ''}
               </span>
             </button>
@@ -277,7 +282,8 @@ function GridCard({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: 
             )}
             {game.status !== 'pre' && (
               <span className={clsx(
-                'font-cond font-black text-lg leading-none w-7 text-right shrink-0',
+                'font-cond font-black leading-none text-right shrink-0',
+                scale.score,
                 isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
               )}>{team.score}</span>
             )}
@@ -384,7 +390,7 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
           {hasBall ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" /> : <div className="w-2 shrink-0" />}
           <FavStar active={isFav} onClick={e => { e.stopPropagation(); onToggleFav(team.abbr) }} />
           {team.rank ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-left">#{team.rank}</span> : <span className="w-5 shrink-0" />}
-          <TeamLogo team={team} league={game.league} size={20} />
+          <TeamLogo team={team} league={game.league} size={26} />
           <button
             className={clsx('font-cond font-black text-base shrink-0 w-10 text-right hover:text-gold transition-colors',
               isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
@@ -405,7 +411,7 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
         {hasBall ? <div className="w-2 h-2 rounded-full bg-gold shrink-0" /> : <div className="w-2 shrink-0" />}
         <FavStar active={isFav} onClick={e => { e.stopPropagation(); onToggleFav(team.abbr) }} />
         {team.rank ? <span className="text-xs font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span> : <span className="w-5 shrink-0" />}
-        <TeamLogo team={team} league={game.league} size={20} />
+        <TeamLogo team={team} league={game.league} size={26} />
         <button
           className={clsx('font-cond font-black text-base shrink-0 w-10 text-left hover:text-gold transition-colors',
             isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
@@ -557,6 +563,18 @@ const GRID_COLS: Record<ColCount, string> = {
   5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
 }
 
+// Fewer columns = wider cards, so everything inside scales up to use
+// the extra room. Without this, going from 5 columns to 2 just made
+// the cards wider with the same small text floating in empty space.
+const CARD_SCALE: Record<ColCount, {
+  logo: number; pad: string; abbr: string; name: string; score: string; league: string
+}> = {
+  2: { logo: 34, pad: 'p-4',   abbr: 'text-lg',   name: 'text-sm',   score: 'text-3xl w-11', league: 'text-xs px-2 py-1' },
+  3: { logo: 28, pad: 'p-3.5', abbr: 'text-base', name: 'text-xs',   score: 'text-2xl w-9',  league: 'text-[10px] px-2 py-0.5' },
+  4: { logo: 24, pad: 'p-3',   abbr: 'text-sm',   name: 'text-xs',   score: 'text-xl w-8',   league: 'text-[9px] px-1.5 py-0.5' },
+  5: { logo: 20, pad: 'p-2.5', abbr: 'text-sm',   name: 'text-[11px]', score: 'text-lg w-7', league: 'text-[9px] px-1.5 py-0.5' },
+}
+
 function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSelect, onTeamClick }: {
   games: LiveGame[]
   viewMode: ViewMode
@@ -583,7 +601,7 @@ function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSe
 
   return (
     <div className={clsx('grid gap-3', GRID_COLS[cols])}>
-      {games.map(g => <GridCard key={g.id} game={g} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect} onTeamClick={onTeamClick} />)}
+      {games.map(g => <GridCard key={g.id} game={g} cols={cols} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect} onTeamClick={onTeamClick} />)}
     </div>
   )
 }
