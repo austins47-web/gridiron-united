@@ -212,7 +212,8 @@ export function useHomeData() {
     }
 
     // 5. Commissioner: league not full pre-draft
-    if (membership.is_commissioner && league.draft_status === 'pre_draft' && memberCount < league.num_teams) {
+    // Pick'Em has no roster size to fill and no draft to prepare for.
+    if (!isPickem && membership.is_commissioner && league.draft_status === 'pre_draft' && memberCount < league.num_teams) {
       actions.push({
         id: `full-${league.id}`, kind: 'league_not_full', priority: 4,
         leagueId: league.id, leagueName: league.name,

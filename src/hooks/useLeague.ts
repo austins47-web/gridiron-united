@@ -191,7 +191,7 @@ export function useJoinLeague() {
         .from('league_members')
         .select('id', { count: 'exact', head: true })
         .eq('league_id', league.id)
-      if ((count ?? 0) >= league.num_teams) throw new Error('League is full')
+      if ((count ?? 0) >= (league.league_type === 'pickem' ? 500 : league.num_teams)) throw new Error('League is full')
 
       const { data: membership, error: me } = await supabase
         .from('league_members')

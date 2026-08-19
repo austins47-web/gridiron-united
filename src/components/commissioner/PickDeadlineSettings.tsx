@@ -1,55 +1,106 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Clock, AlarmClock, Lock, CheckCircle2, AlertCircle, Globe } from 'lucide-react'
 import clsx from 'clsx'
 import { supabase } from '@/lib/supabase'
-import {
-  nextWeeklyDeadline, localZone, formatInZone, DAY_NAMES, to12Hour,
-} from '@/lib/deadline'
+import { useAppStore } from '@/store/appStore'
+import { nextWeeklyDeadline, localZone, formatInZone, DAY_NAMES } from '@/lib/deadline'
 
 interface Props {
   leagueId: string
   initialLockType: 'deadline' | 'kickoff'
-  initialDeadlineDay: number    // 0=Sun … 6=Sat, in initialTz
-  initialDeadlineTime: string   // 'HH:MM' wall clock, in initialTz
-  initialTz?: string | null     // IANA zone the above are expressed in
+  initialDeadlineDay: number
+  initialDeadlineTime: string   // 'HH:MM' 24h, wall clock in initialTz
+  initialTz?: string | null
+}
+
+const COMMON_ZONES = [
+  'America/New_York', 'America/Chicago', 'America/Denver',
+  'America/Phoenix', 'America/Los_Angeles', 'America/Anchorage',
+  'Pacific/Honolulu', 'Europe/London', 'UTC',
+]
+
+const HOURS   = Array.from({ length: 12 }, (_, i) => i + 1)
+const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5)
+
+/** '17:05' -> { hour12: 5, minute: 5, ampm: 'PM' } */
+function parse24(t: string) {
+  const [h, m] = (t || '18:00').split(':').map(Number)
+  return {
+    hour12: h % 12 === 0 ? 12 : h % 12,
+    minute: Number.isFinite(m) ? m : 0,
+    ampm: h >= 12 ? 'PM' : 'AM',
+  }
+}
+
+/** (5, 5, 'PM') -> '17:05' */
+function to24(hour12: number, minute: number, ampm: string): string {
+  let h = hour12 % 12
+  if (ampm === 'PM') h += 12
+  return `${String(h).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
 export function PickDeadlineSettings({
   leagueId, initialLockType, initialDeadlineDay, initialDeadlineTime, initialTz,
 }: Props) {
   const viewerZone = localZone()
+  const qc = useQueryClient()
+  const { activeLeague, myMembership, setActiveLeague } = useAppStore()
 
-  const [lockType,     setLockType]     = useState<'deadline' | 'kickoff'>(initialLockType)
-  const [deadlineDay,  setDeadlineDay]  = useState(initialDeadlineDay)
-  const [deadlineTime, setDeadlineTime] = useState(initialDeadlineTime)
-  // The zone the deadline is defined in. Defaults to whoever is editing.
-  const [tz, setTz] = useState<string>(initialTz || viewerZone)
+  const init = parse24(initialDeadlineTime)
+
+  const [lockType,    setLockType]    = useState<'deadline' | 'kickoff'>(initialLockType)
+  const [deadlineDay, setDeadlineDay] = useState(initialDeadlineDay ?? 3)
+  const [hour12,      setHour12]      = useState(init.hour12)
+  const [minute,      setMinute]      = useState(init.minute)
+  const [ampm,        setAmpm]        = useState(init.ampm)
+  const [tz,          setTz]          = useState<string>(initialTz || viewerZone)
 
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle')
 
+  const deadlineTime = to24(hour12, minute, ampm)
+
   const dirty =
     lockType     !== initialLockType ||
-    deadlineDay  !== initialDeadlineDay ||
+    deadlineDay  !== (initialDeadlineDay ?? 3) ||
     deadlineTime !== initialDeadlineTime ||
     tz           !== (initialTz || viewerZone)
 
-  // Resolve the next actual occurrence so we can show real times
   const next = nextWeeklyDeadline(deadlineDay, deadlineTime, tz)
   const viewerDiffers = tz !== viewerZone
 
   async function save() {
     setSaving(true); setStatus('idle')
-    const { error } = await supabase.from('leagues').update({
+
+    const payload = {
       pick_lock_type:     lockType,
       pick_deadline_day:  lockType === 'deadline' ? deadlineDay  : null,
       pick_deadline_time: lockType === 'deadline' ? deadlineTime : null,
       pick_deadline_tz:   lockType === 'deadline' ? tz           : null,
-    }).eq('id', leagueId)
+    }
+
+    const { error } = await supabase.from('leagues').update(payload).eq('id', leagueId)
     setSaving(false)
-    setStatus(error ? 'error' : 'saved')
-    if (!error) setTimeout(() => setStatus('idle'), 3000)
+
+    if (error) { setStatus('error'); return }
+
+    // Push straight into the store. Without this the Pick'Em page keeps
+    // rendering the OLD lock rule — and the wrong commissioner banner —
+    // until a full page reload.
+    if (activeLeague && activeLeague.id === leagueId) {
+      setActiveLeague({ ...activeLeague, ...payload } as any, myMembership as any)
+    }
+    qc.invalidateQueries({ queryKey: ['my-leagues'] })
+    qc.invalidateQueries({ queryKey: ['pickem-settings'] })
+
+    setStatus('saved')
+    setTimeout(() => setStatus('idle'), 3000)
   }
+
+  const selectCls =
+    'bg-field-700 border border-field-600 rounded-lg px-3 py-2 text-white text-sm ' +
+    'focus:outline-none focus:border-gold transition-colors cursor-pointer'
 
   return (
     <div className="space-y-6">
@@ -58,7 +109,7 @@ export function PickDeadlineSettings({
         <p className="text-field-400 text-sm">Control when picks lock each week.</p>
       </div>
 
-      {/* Mode cards */}
+      {/* Mode */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {[
           { val: 'deadline' as const, icon: Clock,      title: 'Weekly Deadline', desc: 'All picks lock at the same time every week' },
@@ -78,7 +129,6 @@ export function PickDeadlineSettings({
         ))}
       </div>
 
-      {/* Deadline config */}
       {lockType === 'deadline' && (
         <div className="bg-field-800 border border-field-600 rounded-xl p-4 space-y-4">
           <p className="text-xs text-field-400 uppercase tracking-wider font-bold">Deadline Settings</p>
@@ -98,31 +148,33 @@ export function PickDeadlineSettings({
             </div>
           </div>
 
-          {/* Time */}
+          {/* Time — dropdowns rather than a native time input, which
+              renders differently in every browser and is poor on mobile */}
           <div className="space-y-1.5">
             <label className="text-sm text-field-300">Time</label>
-            <div className="flex items-center gap-3 flex-wrap">
-              <input type="time" value={deadlineTime}
-                onChange={e => setDeadlineTime(e.target.value)}
-                className="bg-field-700 border border-field-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-gold transition-colors" />
-              <span className="text-sm text-field-400">
-                {DAY_NAMES[deadlineDay]}s at {to12Hour(deadlineTime)}
-              </span>
+            <div className="flex items-center gap-2">
+              <select value={hour12} onChange={e => setHour12(Number(e.target.value))} className={selectCls}>
+                {HOURS.map(h => <option key={h} value={h} className="bg-field-800">{h}</option>)}
+              </select>
+              <span className="text-field-400 font-bold">:</span>
+              <select value={minute} onChange={e => setMinute(Number(e.target.value))} className={selectCls}>
+                {MINUTES.map(m => (
+                  <option key={m} value={m} className="bg-field-800">{String(m).padStart(2, '0')}</option>
+                ))}
+              </select>
+              <select value={ampm} onChange={e => setAmpm(e.target.value)} className={selectCls}>
+                <option value="AM" className="bg-field-800">AM</option>
+                <option value="PM" className="bg-field-800">PM</option>
+              </select>
             </div>
           </div>
 
           {/* Timezone */}
           <div className="space-y-1.5">
             <label className="text-sm text-field-300 flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-field-400" />
-              Timezone
+              <Globe className="w-3.5 h-3.5 text-field-400" /> Timezone
             </label>
-            <select
-              value={tz}
-              onChange={e => setTz(e.target.value)}
-              className="w-full bg-field-700 border border-field-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-gold transition-colors"
-            >
-              {/* The editor's own zone first, then common US zones */}
+            <select value={tz} onChange={e => setTz(e.target.value)} className={selectCls + ' w-full'}>
               {[viewerZone, ...COMMON_ZONES.filter(z => z !== viewerZone)].map(z => (
                 <option key={z} value={z} className="bg-field-800">
                   {z.replace(/_/g, ' ')}{z === viewerZone ? '  (your timezone)' : ''}
@@ -130,28 +182,27 @@ export function PickDeadlineSettings({
               ))}
             </select>
             <p className="text-xs text-field-500">
-              The deadline is fixed to this zone, so it stays at the same local
-              time year-round — daylight saving is handled automatically.
+              Fixed to this zone, so it stays at the same local time year-round —
+              daylight saving is handled automatically.
             </p>
           </div>
 
-          {/* Live preview — the important bit */}
-          <div className="bg-field-700 rounded-lg px-3 py-2.5 space-y-1.5">
-            <div className="flex items-start gap-2">
+          {/* Preview */}
+          <div className="bg-field-700 rounded-lg px-3 py-2.5">
+            <div className="flex items-start gap-2 text-xs">
               <Lock size={14} className="text-gold shrink-0 mt-0.5" />
-              <div className="text-xs">
+              <div>
                 <p className="text-field-300">
                   Picks lock every <span className="text-white font-bold">{DAY_NAMES[deadlineDay]}</span> at{' '}
-                  <span className="text-white font-bold">{to12Hour(deadlineTime)}</span>{' '}
-                  <span className="text-field-400">({tz.split('/').pop()?.replace(/_/g, ' ')})</span>
+                  <span className="text-white font-bold">
+                    {hour12}:{String(minute).padStart(2, '0')} {ampm}
+                  </span>
                 </p>
                 <p className="text-field-500 mt-1">
                   Next: <span className="text-field-300">{formatInZone(next, tz)}</span>
                 </p>
                 {viewerDiffers && (
-                  <p className="text-gold/80 mt-0.5">
-                    Your time: {formatInZone(next, viewerZone)}
-                  </p>
+                  <p className="text-gold/80 mt-0.5">Your time: {formatInZone(next, viewerZone)}</p>
                 )}
               </div>
             </div>
@@ -159,7 +210,6 @@ export function PickDeadlineSettings({
         </div>
       )}
 
-      {/* Kickoff info */}
       {lockType === 'kickoff' && (
         <div className="bg-field-800 border border-field-600 rounded-xl p-4 space-y-2">
           <div className="flex items-center gap-2 mb-1">
@@ -174,7 +224,6 @@ export function PickDeadlineSettings({
         </div>
       )}
 
-      {/* Save */}
       <div className="flex items-center gap-3">
         <button onClick={save} disabled={!dirty || saving}
           className={clsx('flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all',
@@ -192,15 +241,3 @@ export function PickDeadlineSettings({
     </div>
   )
 }
-
-const COMMON_ZONES = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Phoenix',
-  'America/Los_Angeles',
-  'America/Anchorage',
-  'Pacific/Honolulu',
-  'Europe/London',
-  'UTC',
-]

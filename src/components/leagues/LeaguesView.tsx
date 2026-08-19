@@ -597,12 +597,14 @@ function LeagueHub({
                     </span>
                   </>
                 )}
-                <span className={clsx(
-                  'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
-                  STATUS_STYLES[league.draft_status] ?? 'bg-field-700 text-field-300'
-                )}>
-                  {fmt(STATUS_LABELS, league.draft_status)}
-                </span>
+                {!isPickem && (
+                  <span className={clsx(
+                    'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
+                    STATUS_STYLES[league.draft_status] ?? 'bg-field-700 text-field-300'
+                  )}>
+                    {fmt(STATUS_LABELS, league.draft_status)}
+                  </span>
+                )}
                 {isCommissioner && (
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold/15 text-gold flex items-center gap-1">
                     <Shield className="w-2.5 h-2.5" /> Commissioner

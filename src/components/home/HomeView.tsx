@@ -439,20 +439,27 @@ function TeamCard({ team, index }: { team: TeamRow; index: number }) {
           </div>
         ) : (
           <div className="text-xs text-field-500 mt-0.5">
-            {preDraft ? 'Waiting to draft' : isPickem ? 'Season underway' : 'No matchup this week'}
+            {isPickem ? 'Picks open' : preDraft ? 'Waiting to draft' : 'No matchup this week'}
           </div>
         )}
       </div>
 
       <div className="text-right shrink-0 pr-1">
-        {preDraft ? (
+        {isPickem ? (
+          <>
+            <div className="font-cond font-black text-lg text-white tabular-nums leading-none">
+              {team.wins}
+            </div>
+            <div className="readout-label mt-1">Correct</div>
+          </>
+        ) : preDraft ? (
           <>
             <div className="font-cond font-black text-lg text-white tabular-nums leading-none">
               {team.memberCount}<span className="text-field-500">/{team.numTeams}</span>
             </div>
             <div className="readout-label mt-1">Members</div>
           </>
-        ) : isPickem ? (
+        ) : false ? (
           <>
             <div className="font-cond font-black text-lg text-white tabular-nums leading-none">
               {team.wins}
