@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
+import { CURRENT_SEASON } from '@/lib/season'
 
 type CommTab = 'scoring' | 'rosters' | 'players' | 'members' | 'league' | 'cfb_postseason' | 'trades'
 
@@ -192,7 +193,7 @@ function LeagueManager({ league }: { league: League }) {
           ['Draft Type', league.draft_type],
           ['Player Pool', league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase()],
           ['Teams', String(league.num_teams)],
-          ['Season', String(league.season ?? 2025)],
+          ['Season', String(league.season ?? CURRENT_SEASON)],
         ].map(([label, value]) => (
           <div key={label} className="bg-field-800/60 rounded-lg p-3">
             <div className="text-field-400 text-xs mb-1">{label}</div>

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Trophy, Calendar, Users, MapPin, Award, Medal, LayoutDashboard } from 'lucide-react'
 import clsx from 'clsx'
 import { NFL_AWARDS, CFB_AWARDS } from './teamAwards'
+import { CURRENT_SEASON } from '@/lib/season'
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -66,7 +67,7 @@ function parseEvent(ev: any, teamId: string, league: 'NFL' | 'CFB') {
 export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
   const [tab, setTab] = useState<Tab>('overview')
   const [imgErr, setImgErr] = useState(false)
-  const SEASON = 2026
+  const SEASON = CURRENT_SEASON
 
   const infoEndpoint = `${league.toLowerCase()}/teams/${teamId}/info`
   const { data: info, isLoading: infoLoading } = useQuery({

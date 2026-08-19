@@ -10,6 +10,7 @@ import {
 } from '@/hooks/useNotificationPrefs'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
+import { CURRENT_SEASON } from '@/lib/season'
 
 type Tab = 'team' | 'preferences' | 'league' | 'danger'
 
@@ -360,7 +361,7 @@ function LeagueInfo() {
             ['Format', isPickem ? "Pick'Em" : league.scoring_type?.toUpperCase()],
             ...(!isPickem ? [['Draft', league.draft_type]] as [string, string][] : []),
             ['Members', `${members.length} / ${league.num_teams}`],
-            ['Season', String(league.season ?? 2026)],
+            ['Season', String(league.season ?? CURRENT_SEASON)],
             ['Status', league.draft_status],
           ].map(([label, value]) => (
             <div key={label} className="bg-field-800/60 rounded-lg p-3">

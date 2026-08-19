@@ -14,6 +14,7 @@ import {
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { useNflOdds } from '@/hooks/useNflOdds'
+import { CURRENT_SEASON } from '@/lib/season'
 
 const TEAM_INFO: Record<string, { name: string }> = {
   ARI: { name: 'Arizona Cardinals' },
@@ -135,7 +136,7 @@ export function PickEmView() {
         .select('*')
         .eq('league_id', activeLeagueId!)
         .eq('week', week)
-        .eq('season', 2026)
+        .eq('season', CURRENT_SEASON)
         .maybeSingle()
       return data
     },
@@ -148,7 +149,7 @@ export function PickEmView() {
       const { data, error } = await supabase
         .from('nfl_games')
         .select('*')
-        .eq('season', 2026)
+        .eq('season', CURRENT_SEASON)
         .eq('week', week)
         .order('game_date', { ascending: true })
       if (error) throw error
@@ -192,7 +193,7 @@ export function PickEmView() {
         .eq('league_id', activeLeagueId!)
         .eq('user_id', user!.id)
         .eq('week', week)
-        .eq('season', 2026)
+        .eq('season', CURRENT_SEASON)
       if (error) throw error
       return data ?? []
     },
@@ -208,7 +209,7 @@ export function PickEmView() {
         .select('*, profile:profiles(username, display_name)')
         .eq('league_id', activeLeagueId!)
         .eq('week', week)
-        .eq('season', 2026)
+        .eq('season', CURRENT_SEASON)
       if (error) throw error
       return data ?? []
     },
@@ -234,14 +235,14 @@ export function PickEmView() {
   // than read from a maintained table, so they can't drift and new
   // members appear immediately at 0-0.
   const { data: seasonGames = [] } = useQuery({
-    queryKey: ['pickem-season-games', 2026],
+    queryKey: ['pickem-season-games', CURRENT_SEASON],
     enabled: !!activeLeagueId && tab === 'standings',
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('nfl_games')
         .select('id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker')
-        .eq('season', 2026)
+        .eq('season', CURRENT_SEASON)
       if (error) throw error
       return data ?? []
     },
@@ -256,7 +257,7 @@ export function PickEmView() {
         .from('pickem_picks')
         .select('game_id, user_id, week, picked_team, tiebreaker_score')
         .eq('league_id', activeLeagueId!)
-        .eq('season', 2026)
+        .eq('season', CURRENT_SEASON)
       if (error) throw error
       return data ?? []
     },
@@ -321,7 +322,7 @@ export function PickEmView() {
         .upsert({
           league_id: activeLeagueId,
           week,
-          season: 2026,
+          season: CURRENT_SEASON,
           pick_deadline: isoDeadline,
         }, { onConflict: 'league_id,week,season' })
       if (error) throw error
@@ -343,7 +344,7 @@ export function PickEmView() {
         .upsert({
           league_id: activeLeagueId,
           week,
-          season: 2026,
+          season: CURRENT_SEASON,
           pick_deadline: null,
         }, { onConflict: 'league_id,week,season' })
       await refetchSettings()
@@ -363,7 +364,7 @@ export function PickEmView() {
         user_id: user.id,
         game_id: gameId,
         week,
-        season: 2026,
+        season: CURRENT_SEASON,
         picked_team: team,
         tiebreaker_score: tiebreakerScore[gameId] ? parseInt(tiebreakerScore[gameId]) : null,
       }))
@@ -408,7 +409,7 @@ export function PickEmView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="section-title">Pick'Em</h1>
-          <p className="text-field-400 text-sm">{activeLeague.name} · 2026 NFL Season</p>
+          <p className="text-field-400 text-sm">{activeLeague.name} · {CURRENT_SEASON} NFL Season</p>
         </div>
         <div className="flex items-center gap-2">
           {pickedCount > 0 && (

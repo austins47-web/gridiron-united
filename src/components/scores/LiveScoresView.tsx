@@ -7,6 +7,7 @@ import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
 import { GameDetailModal } from './GameDetailModal'
 import { lazy, Suspense } from 'react'
 import { getTeamId } from '@/components/teams/teamIds'
+import { NFL_SEASON as SEASON_NFL, CFB_SEASON as SEASON_CFB } from '@/lib/season'
 const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
 
 // ── Types ────────────────────────────────────────────────────
@@ -566,8 +567,8 @@ type LeagueTab  = 'NFL' | 'CFB'
 type StatusFilter = 'All' | 'Live' | 'Final' | 'Upcoming'
 
 // Season constants
-const NFL_SEASON  = 2026
-const CFB_SEASON  = 2026
+const NFL_SEASON  = SEASON_NFL
+const CFB_SEASON  = SEASON_CFB
 // ── Week option descriptors ────────────────────────────────
 type WeekOpt = { value: string; label: string; seasonType: number; week: number }
 

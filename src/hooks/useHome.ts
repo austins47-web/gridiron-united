@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { useMyLeagues } from './useLeague'
 import type { League, LeagueMember } from '@/types/database'
+import { CURRENT_SEASON } from '@/lib/season'
 
 export type ActionKind =
   | 'on_the_clock' | 'draft_live' | 'draft_soon'
@@ -97,7 +98,7 @@ export function useHomeData() {
             .select('league_id, week')
             .in('league_id', leagueIds)
             .eq('user_id', user!.id)
-            .eq('season', 2026),
+            .eq('season', CURRENT_SEASON),
         ])
 
       return {

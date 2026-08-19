@@ -6,8 +6,9 @@ import type { CfpTeam, BowlGame } from '@/types/database'
 import { Trophy, Plus, Check, X, Edit2, Trash2, Star, GraduationCap, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
+import { CURRENT_SEASON } from '@/lib/season'
 
-const CURRENT_SEASON = 2026
+// season comes from @/lib/season
 
 const CFP_ROUNDS = ['quarterfinal', 'semifinal', 'championship'] as const
 const BOWL_ROUNDS = ['quarterfinal', 'semifinal', 'championship'] as const
