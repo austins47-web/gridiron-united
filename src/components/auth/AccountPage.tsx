@@ -208,9 +208,12 @@ export function AccountPage() {
 
     setUploading(true)
     try {
-      // Always use the same path so upsert replaces the old file
+      // Always use the same path so upsert replaces the old file.
+      // No leading 'avatars/' here — .from('avatars') already scopes
+      // every call to that bucket, so adding it again nested the
+      // object at avatars/avatars/<uid> instead of avatars/<uid>.
       const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
-      const path = `avatars/${user.id}.${ext}`
+      const path = `${user.id}.${ext}`
 
       const { error: upErr } = await supabase.storage
         .from('avatars')
@@ -291,11 +294,16 @@ export function AccountPage() {
         .eq('id', user.id)
       if (profileErr) throw profileErr
 
-      // Delete avatar from storage if it exists
+      // Delete avatar from storage if it exists.
+      // Split on the LAST '/avatars/' — the public URL contains it
+      // twice (once from the API path, once from the bucket name),
+      // and splitting on the first occurrence left a stray 'avatars/'
+      // in the result, targeting a path that was never uploaded.
       if (profile?.avatar_url) {
-        const path = profile.avatar_url.split('/avatars/')[1]?.split('?')[0]
+        const parts = profile.avatar_url.split('/avatars/')
+        const path = parts.length > 1 ? parts[parts.length - 1]?.split('?')[0] : null
         if (path) {
-          await supabase.storage.from('avatars').remove([`avatars/${path}`])
+          await supabase.storage.from('avatars').remove([path])
         }
       }
 
