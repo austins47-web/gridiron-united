@@ -254,8 +254,16 @@ export function useNflOdds() {
   return useQuery({
     queryKey: ['all-odds'],
     queryFn: fetchAllOdds,
-    staleTime: 5 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
+    // Odds move slowly outside the hour before kickoff, and this hook
+    // burns two calls per fetch (NFL + CFB) against a 500/month free
+    // tier. The previous 10-min interval plus default window-focus
+    // refetching meant tabbing back into Live Scores throughout the
+    // day could burn through a month's quota in days.
+    staleTime: 30 * 60 * 1000,       // don't consider stale for 30 min
+    refetchInterval: 30 * 60 * 1000, // and only poll every 30 min
+    refetchIntervalInBackground: false, // never poll while tab is hidden
+    refetchOnWindowFocus: false,     // returning to the tab shouldn't refetch
+    refetchOnReconnect: false,
     enabled: !!import.meta.env.VITE_ODDS_API_KEY,
   })
 }
