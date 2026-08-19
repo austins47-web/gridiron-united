@@ -137,7 +137,7 @@ export function LeagueSettingsModal({ league, onClose, onSaved }: Props) {
         </div>
 
         {!isCommissioner && (
-          <div className="mx-5 mt-4 p-3 rounded bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm">
+          <div className="mx-5 mt-4 p-3 rounded bg-gold/10 border border-gold/20 text-gold text-sm">
             Only the commissioner can edit league settings. You can view them here.
           </div>
         )}

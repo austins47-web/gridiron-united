@@ -507,7 +507,7 @@ export function AccountPage() {
                     /[^A-Za-z0-9]/.test(newPassword),
                   ].filter(Boolean).length
                   const labels = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Very strong']
-                  const colors = ['', 'bg-red-500', 'bg-orange-400', 'bg-yellow-400', 'bg-emerald-400', 'bg-emerald-500']
+                  const colors = ['', 'bg-red-500', 'bg-orange-400', 'bg-gold', 'bg-nfl', 'bg-nfl']
                   return (
                     <div className="mt-1.5">
                       <div className="flex gap-1 mb-1">
@@ -515,7 +515,7 @@ export function AccountPage() {
                           <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i <= score ? colors[score] : 'bg-field-700'}`} />
                         ))}
                       </div>
-                      <span className={`text-xs font-bold ${score <= 1 ? 'text-red-400' : score <= 2 ? 'text-orange-400' : score <= 3 ? 'text-gold' : 'text-emerald-400'}`}>
+                      <span className={`text-xs font-bold ${score <= 1 ? 'text-red-400' : score <= 2 ? 'text-orange-400' : score <= 3 ? 'text-gold' : 'text-nfl'}`}>
                         {labels[score]}
                       </span>
                     </div>

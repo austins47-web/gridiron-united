@@ -90,7 +90,7 @@ function ScoringSection({ title, rows }: { title: string; rows: [string, number]
         {rows.map(([label, value]) => (
           <div key={label} className="flex items-center justify-between py-2 border-b border-field-800 last:border-0">
             <span className="text-field-300 text-sm">{label}</span>
-            <span className={value > 0 ? 'text-green-400 font-bold' : value < 0 ? 'text-red-400 font-bold' : 'text-field-400 font-bold'}>
+            <span className={value > 0 ? 'text-nfl font-bold' : value < 0 ? 'text-red-400 font-bold' : 'text-field-400 font-bold'}>
               {value > 0 ? `+${value}` : value}
             </span>
           </div>

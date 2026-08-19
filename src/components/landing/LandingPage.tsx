@@ -298,7 +298,7 @@ export function LandingPage() {
                 desc: 'Keep 1–3 of your best players from the prior season. Balances annual draft excitement with smart long-term roster planning.' },
               { emoji: '👑', title: 'Dynasty', tag: 'Long-Term', tagCls: 'bg-cfb/20 text-cfb',
                 desc: 'Keep your entire roster forever. College rookies become NFL stars on your team. Build a dynasty that spans years — or decades.' },
-              { emoji: '🎯', title: "Pick'Em", tag: 'Predictions', tagCls: 'bg-emerald-500/20 text-emerald-400',
+              { emoji: '🎯', title: "Pick'Em", tag: 'Predictions', tagCls: 'bg-nfl/20 text-nfl',
                 desc: "Pick the winner of every NFL game each week. Live odds and win probabilities guide your picks. Tiebreaker: predict the combined final score." },
             ].map(({ emoji, title, tag, tagCls, desc }) => (
               <div key={title} className="bg-field-800 border border-field-700 rounded-2xl p-6 hover:border-field-500 transition-all">

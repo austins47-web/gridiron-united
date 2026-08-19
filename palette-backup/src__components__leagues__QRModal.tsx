@@ -17,7 +17,7 @@ export function QRModal({ leagueName, inviteCode, onClose }: Props) {
     QRCode.toCanvas(canvasRef.current, url, {
       width: 280,
       margin: 2,
-      color: { dark: '#ffffff', light: '#1C1712' },
+      color: { dark: '#ffffff', light: '#161b27' },
     })
   }, [url])
 

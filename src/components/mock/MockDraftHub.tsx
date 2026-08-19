@@ -371,9 +371,9 @@ export function MockDraftHub() {
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={clsx(
                         'text-xs font-bold px-2 py-1 rounded uppercase',
-                        mock.status === 'completed' ? 'bg-green-400/10 text-green-400' :
+                        mock.status === 'completed' ? 'bg-nfl/10 text-nfl' :
                         mock.status === 'in_progress' ? 'bg-gold/20 text-gold animate-pulse' :
-                        mock.status === 'paused' ? 'bg-yellow-400/10 text-yellow-400' :
+                        mock.status === 'paused' ? 'bg-gold/10 text-gold' :
                         'bg-field-700 text-field-400'
                       )}>
                         {mock.status === 'in_progress' ? 'Live' : mock.status}
@@ -1329,8 +1329,8 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
 
       {/* Paused banner */}
       {isPaused && (
-        <div className="bg-yellow-400/10 border border-yellow-400/40 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-yellow-400 font-bold">
+        <div className="bg-gold/10 border border-gold/40 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-gold font-bold">
             <Pause className="w-4 h-4" />
             Draft is paused
           </div>
@@ -1361,7 +1361,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
             </div>
             <div className={clsx('font-bold', amOnClock && !isPaused ? 'text-gold text-lg' : 'text-white')}>
               {isPaused
-                ? <span className="text-yellow-400">Paused — resume to continue</span>
+                ? <span className="text-gold">Paused — resume to continue</span>
                 : aiThinking
                 ? <span className="flex items-center gap-2"><Bot className="w-4 h-4 animate-pulse" /> {autoDraft ? 'Autodrafting…' : 'AI is picking…'}</span>
                 : amOnClock ? '🏈 YOUR PICK!' : `On the clock: ${currentPickerName}`}
@@ -1373,7 +1373,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
           {mock.pick_timer > 0 && !isPaused && (
             <div className={clsx(
               'flex items-center gap-1.5 text-lg font-black tabular-nums',
-              timer <= 10 ? 'text-red-400 animate-pulse' : timer <= 20 ? 'text-yellow-400' : 'text-white',
+              timer <= 10 ? 'text-red-400 animate-pulse' : timer <= 20 ? 'text-gold' : 'text-white',
             )}>
               <Clock className="w-4 h-4" />
               {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}

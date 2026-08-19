@@ -1002,7 +1002,7 @@ function MembersManager({ leagueId, league }: { leagueId: string; league: League
                     {!isMe && (
                       <>
                         <button
-                          className={clsx('btn-ghost !py-1 !px-2 text-xs', m.is_commissioner ? 'text-yellow-400' : 'text-gold')}
+                          className={clsx('btn-ghost !py-1 !px-2 text-xs', m.is_commissioner ? 'text-gold' : 'text-gold')}
                           onClick={() => toggleCommissioner(m)}
                           title={m.is_commissioner ? 'Remove commissioner' : 'Make commissioner'}
                         >

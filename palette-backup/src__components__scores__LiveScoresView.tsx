@@ -791,25 +791,25 @@ export function LiveScoresView() {
           >
             {tab === 'NFL' ? (
               <>
-                <optgroup label="── PRESEASON ──" style={{ background: '#1C1712', color: '#F0C846' }}>
+                <optgroup label="── PRESEASON ──" style={{ background: '#161b27', color: '#e8a020' }}>
                   {NFL_WEEK_OPTIONS.filter(o => o.seasonType === 1).map(o => (
-                    <option key={o.value} value={o.value} style={{ background: '#1C1712' }}>{o.label}</option>
+                    <option key={o.value} value={o.value} style={{ background: '#161b27' }}>{o.label}</option>
                   ))}
                 </optgroup>
-                <optgroup label="── REGULAR SEASON ──" style={{ background: '#1C1712', color: '#A0917F' }}>
+                <optgroup label="── REGULAR SEASON ──" style={{ background: '#161b27', color: '#8a9ab8' }}>
                   {NFL_WEEK_OPTIONS.filter(o => o.seasonType === 2).map(o => (
-                    <option key={o.value} value={o.value} style={{ background: '#1C1712' }}>{o.label}</option>
+                    <option key={o.value} value={o.value} style={{ background: '#161b27' }}>{o.label}</option>
                   ))}
                 </optgroup>
-                <optgroup label="── POSTSEASON ──" style={{ background: '#1C1712', color: '#CE7B45' }}>
+                <optgroup label="── POSTSEASON ──" style={{ background: '#161b27', color: '#F5A623' }}>
                   {NFL_WEEK_OPTIONS.filter(o => o.seasonType === 3).map(o => (
-                    <option key={o.value} value={o.value} style={{ background: '#1C1712' }}>{o.label}</option>
+                    <option key={o.value} value={o.value} style={{ background: '#161b27' }}>{o.label}</option>
                   ))}
                 </optgroup>
               </>
             ) : (
               CFB_WEEK_OPTIONS.map(o => (
-                <option key={o.value} value={o.value} style={{ background: '#1C1712' }}>{o.label}</option>
+                <option key={o.value} value={o.value} style={{ background: '#161b27' }}>{o.label}</option>
               ))
             )}
           </select>

@@ -325,7 +325,7 @@ function FriendsTab({ friends, outgoingRequests, unreadCounts, onViewProfile, on
                     <div className="text-field-400 text-xs">@{p.username}</div>
                   </div>
                   {isFriend ? (
-                    <span className="text-xs text-green-400 font-bold flex items-center gap-1">
+                    <span className="text-xs text-nfl font-bold flex items-center gap-1">
                       <UserCheck className="w-3.5 h-3.5" /> Friends
                     </span>
                   ) : isPending ? (
@@ -914,7 +914,7 @@ function FriendProfile({ friend, onBack, onMessage }: {
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={clsx(
                       'text-xs font-bold px-1.5 py-0.5 rounded uppercase',
-                      league.draft_status === 'completed' ? 'bg-green-400/10 text-green-400' :
+                      league.draft_status === 'completed' ? 'bg-nfl/10 text-nfl' :
                       league.draft_status === 'in_progress' ? 'bg-gold/20 text-gold' :
                       'bg-field-700 text-field-400',
                     )}>
@@ -1000,7 +1000,7 @@ function RosterRow({ entry }: { entry: FriendRosterEntry }) {
       <span className="text-field-400 truncate hidden sm:block">{p.team}</span>
       <span className={clsx(
         'text-xs font-bold shrink-0',
-        p.status === 'questionable' ? 'text-yellow-400' :
+        p.status === 'questionable' ? 'text-gold' :
         p.status === 'out' || p.status === 'ir' ? 'text-red-400' : 'text-white',
       )}>
         {p.proj_pts?.toFixed(1)}

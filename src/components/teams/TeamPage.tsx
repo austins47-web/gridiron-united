@@ -328,7 +328,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
                   {/* Week */}
                   <span className={clsx(
                     'text-xs font-bold w-12 shrink-0 text-center',
-                    (g as any)._seasonType === 1 ? 'text-amber-400'
+                    (g as any)._seasonType === 1 ? 'text-cfb'
                     : (g as any)._week0 ? 'text-sky-400'
                     : 'text-field-500'
                   )}>

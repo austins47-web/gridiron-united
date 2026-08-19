@@ -155,16 +155,16 @@ function CfpManager() {
         <div className="text-center py-6 text-field-500 text-sm">No CFP teams added yet</div>
       ) : (
         <div className="space-y-2">
-          <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1 flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Still Active
+          <div className="text-xs font-bold uppercase tracking-wider text-nfl mb-1 flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-nfl" /> Still Active
           </div>
           {activeTeams.map(team => (
-            <div key={team.id} className="flex items-center gap-3 bg-field-800 border border-emerald-500/20 rounded-xl px-3 py-2.5">
+            <div key={team.id} className="flex items-center gap-3 bg-field-800 border border-nfl/20 rounded-xl px-3 py-2.5">
               <div className="w-6 h-6 rounded-full bg-cfb/20 border border-cfb/30 flex items-center justify-center shrink-0">
                 <span className="text-[10px] font-black text-cfb">{team.seed ?? '?'}</span>
               </div>
               <span className="font-cond font-bold text-white flex-1">{team.team_name}</span>
-              <span className="text-xs text-emerald-400 font-bold bg-emerald-400/10 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-nfl font-bold bg-nfl/10 px-2 py-0.5 rounded-full">
                 Scoring Active
               </span>
               {/* Eliminate by round */}
@@ -439,7 +439,7 @@ function GameRow({ game, editingId, editScore, onEdit, onSave, onCancel, onDelet
           {game.status === 'final' ? (
             <span className="text-field-300 font-mono text-xs">
               {game.away_score} – {game.home_score}
-              <span className="text-emerald-400 ml-1.5 font-bold">Final</span>
+              <span className="text-nfl ml-1.5 font-bold">Final</span>
             </span>
           ) : (
             <span className="text-field-500 text-xs capitalize">{game.status}</span>

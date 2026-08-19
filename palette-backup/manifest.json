@@ -1,0 +1,8 @@
+{
+  "tailwind.config.js": "tailwind.config.js",
+  "src/index.css": "src__index.css",
+  "generate-og.cjs": "generate-og.cjs",
+  "src/components/scores/LiveScoresView.tsx": "src__components__scores__LiveScoresView.tsx",
+  "src/components/leagues/QRModal.tsx": "src__components__leagues__QRModal.tsx",
+  "supabase/functions/send-reminders/index.ts": "supabase__functions__send-reminders__index.ts"
+}

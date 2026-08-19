@@ -543,7 +543,7 @@ export function LeagueChat() {
 
         <div className="flex justify-between mt-1 px-1">
           <span className="text-xs text-field-600">Enter to send · @ to mention</span>
-          <span className={clsx('text-xs', text.length > 450 ? 'text-yellow-400' : 'text-field-600')}>
+          <span className={clsx('text-xs', text.length > 450 ? 'text-gold' : 'text-field-600')}>
             {text.length}/500
           </span>
         </div>

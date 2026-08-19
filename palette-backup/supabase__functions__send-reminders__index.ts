@@ -77,17 +77,17 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
 
 // ── Email template — dark, on-brand, no external assets ───────
 function renderEmail(r: Reminder): string {
-  const accent = r.urgent ? '#CE7B45' : '#A0917F'
+  const accent = r.urgent ? '#F5A623' : '#8a9ab8'
   return `<!doctype html>
 <html>
-<body style="margin:0;padding:0;background:#14100D;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#14100D;padding:32px 16px;">
+<body style="margin:0;padding:0;background:#0e1117;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0e1117;padding:32px 16px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-             style="max-width:520px;background:#1C1712;border:1px solid #322A21;border-radius:16px;overflow:hidden;">
+             style="max-width:520px;background:#161b27;border:1px solid #273044;border-radius:16px;overflow:hidden;">
 
         <!-- gold chain marker -->
-        <tr><td style="height:3px;background:#CE7B45;font-size:0;line-height:0;">&nbsp;</td></tr>
+        <tr><td style="height:3px;background:#F5A623;font-size:0;line-height:0;">&nbsp;</td></tr>
 
         <tr><td style="padding:28px 28px 8px;">
           <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:${accent};font-weight:700;">
@@ -96,29 +96,29 @@ function renderEmail(r: Reminder): string {
           <div style="font-size:24px;font-weight:800;color:#ffffff;margin-top:8px;line-height:1.2;">
             ${escapeHtml(r.heading)}
           </div>
-          <div style="font-size:15px;color:#A0917F;margin-top:10px;line-height:1.5;">
+          <div style="font-size:15px;color:#8a9ab8;margin-top:10px;line-height:1.5;">
             ${escapeHtml(r.body)}
           </div>
         </td></tr>
 
         <tr><td style="padding:20px 28px 28px;">
           <a href="${APP_URL}${r.ctaPath}"
-             style="display:inline-block;background:#CE7B45;color:#0B0908;text-decoration:none;
+             style="display:inline-block;background:#F5A623;color:#08090f;text-decoration:none;
                     font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px;">
             ${escapeHtml(r.ctaLabel)}
           </a>
         </td></tr>
 
-        <tr><td style="padding:16px 28px;border-top:1px solid #322A21;">
-          <div style="font-size:11px;color:#6E6153;line-height:1.6;">
+        <tr><td style="padding:16px 28px;border-top:1px solid #273044;">
+          <div style="font-size:11px;color:#5a6a8a;line-height:1.6;">
             You're receiving this because email reminders are on for
-            <strong style="color:#A0917F;">${escapeHtml(r.leagueName)}</strong>.<br>
-            <a href="${APP_URL}/app/settings" style="color:#CE7B45;">Manage or turn off reminders</a>
+            <strong style="color:#8a9ab8;">${escapeHtml(r.leagueName)}</strong>.<br>
+            <a href="${APP_URL}/app/settings" style="color:#F5A623;">Manage or turn off reminders</a>
           </div>
         </td></tr>
       </table>
 
-      <div style="font-size:11px;color:#4A4034;margin-top:16px;">Gridiron United</div>
+      <div style="font-size:11px;color:#3a4560;margin-top:16px;">Gridiron United</div>
     </td></tr>
   </table>
 </body>

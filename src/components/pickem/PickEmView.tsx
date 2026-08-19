@@ -627,7 +627,7 @@ export function PickEmView() {
       {tab === 'picks' && (
         <div className="space-y-3">
           {lockedCount > 0 && lockedCount < totalGames && (
-            <div className="flex items-center gap-2 text-xs text-yellow-400/80 bg-yellow-500/5 border border-yellow-500/20 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-gold/80 bg-gold/5 border border-gold/20 rounded-lg px-3 py-2">
               <Lock className="w-3.5 h-3.5 shrink-0" />
               <span>{lockedCount} of {totalGames} games locked</span>
             </div>
@@ -780,7 +780,7 @@ function GamePickCard({
       <div className="flex items-center justify-between">
         <span className="text-field-400 text-xs">{gameTime}</span>
         {locked && !isFinal && (
-          <span className="flex items-center gap-1 text-xs text-yellow-400 font-bold">
+          <span className="flex items-center gap-1 text-xs text-gold font-bold">
             <Lock className="w-3 h-3" /> Locked
           </span>
         )}
@@ -824,7 +824,7 @@ function GamePickCard({
                 isPicked && !isFinal
                   ? 'border-gold bg-gold/15 text-gold scale-[1.02]'
                   : isPicked && isWinner
-                  ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
+                  ? 'border-nfl bg-nfl/15 text-nfl'
                   : isPicked && isFinal && !isWinner
                   ? 'border-red-500/40 bg-red-500/10 text-red-400'
                   : isLoser
@@ -1104,7 +1104,7 @@ function PicksChart({
                   {isFinal && (
                     <span className={clsx(
                       'font-black text-sm',
-                      winner === game.away_team ? 'text-emerald-400' : 'text-field-500'
+                      winner === game.away_team ? 'text-nfl' : 'text-field-500'
                     )}>{game.away_score}</span>
                   )}
                 </div>
@@ -1115,7 +1115,7 @@ function PicksChart({
                   {isFinal && (
                     <span className={clsx(
                       'font-black text-sm',
-                      winner === game.home_team ? 'text-emerald-400' : 'text-field-500'
+                      winner === game.home_team ? 'text-nfl' : 'text-field-500'
                     )}>{game.home_score}</span>
                   )}
                 </div>
@@ -1125,9 +1125,9 @@ function PicksChart({
               </div>
               <div className="text-right shrink-0">
                 {isFinal
-                  ? <span className="text-xs font-bold text-emerald-400">Final</span>
+                  ? <span className="text-xs font-bold text-nfl">Final</span>
                   : revealed
-                  ? <span className="text-xs text-yellow-400/80 flex items-center gap-0.5"><Eye className="w-2.5 h-2.5" /> Live</span>
+                  ? <span className="text-xs text-gold/80 flex items-center gap-0.5"><Eye className="w-2.5 h-2.5" /> Live</span>
                   : <span className="text-xs text-field-500">{kickoffTime}</span>
                 }
               </div>
@@ -1141,7 +1141,7 @@ function PicksChart({
                     <div
                       className={clsx(
                         'flex items-center justify-center',
-                        winner === game.away_team ? 'bg-emerald-500' : isFinal ? 'bg-red-500/50' : 'bg-field-500'
+                        winner === game.away_team ? 'bg-nfl' : isFinal ? 'bg-red-500/50' : 'bg-field-500'
                       )}
                       style={{ width: `${awayPct}%` }}
                     >
@@ -1152,7 +1152,7 @@ function PicksChart({
                     <div
                       className={clsx(
                         'flex items-center justify-center',
-                        winner === game.home_team ? 'bg-emerald-500' : isFinal ? 'bg-red-500/50' : 'bg-gold/60'
+                        winner === game.home_team ? 'bg-nfl' : isFinal ? 'bg-red-500/50' : 'bg-gold/60'
                       )}
                       style={{ width: `${homePct}%` }}
                     >
@@ -1201,7 +1201,7 @@ function PicksChart({
                     ) : (
                       <span className={clsx(
                         'font-cond font-black',
-                        isCorrect ? 'text-emerald-400' : isWrong ? 'text-red-400' : 'text-white'
+                        isCorrect ? 'text-nfl' : isWrong ? 'text-red-400' : 'text-white'
                       )}>
                         {picked}
                         {isCorrect && ' ✓'}
@@ -1240,7 +1240,7 @@ function PicksChart({
                   )
                 })}
                 {isFinal && (
-                  <span className="text-xs rounded px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 font-bold">
+                  <span className="text-xs rounded px-1.5 py-0.5 bg-nfl/10 text-nfl font-bold">
                     Actual: {(game.home_score ?? 0) + (game.away_score ?? 0)}
                   </span>
                 )}

@@ -6,16 +6,16 @@ const W = 1200, H = 630
 const c = createCanvas(W, H)
 const ctx = c.getContext('2d')
 
-const BG       = '#0B0908'
-const CARD     = '#1C1712'
-const BORDER   = '#322A21'
-const GOLD     = '#CE7B45'
+const BG       = '#08090f'
+const CARD     = '#161b27'
+const BORDER   = '#273044'
+const GOLD     = '#F5A623'
 const WHITE    = '#ffffff'
-const MUTED    = '#A0917F'
-const DIM      = '#6E6153'
-const DARKER   = '#4A4034'
-const NFL_BLUE = '#5AA9FF'
-const CFB_AMB  = '#F0C846'
+const MUTED    = '#8a9ab8'
+const DIM      = '#5a6a8a'
+const DARKER   = '#3a4560'
+const NFL_BLUE = '#4a9fe8'
+const CFB_AMB  = '#e8a020'
 const QB_GOLD  = '#fbbf24'
 
 // Left col: x=50 to x=660 (610px usable). Right col: x=680 to x=1150.

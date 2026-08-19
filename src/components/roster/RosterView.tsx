@@ -191,19 +191,19 @@ export function RosterView() {
 
       {/* Healthy player on IR banner */}
       {healthyOnIR.length > 0 && (
-        <div className="bg-yellow-500/10 border border-yellow-500/40 rounded-xl px-4 py-3 space-y-1.5">
+        <div className="bg-gold/10 border border-gold/40 rounded-xl px-4 py-3 space-y-1.5">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
-            <span className="text-yellow-300 font-bold text-sm">
+            <AlertTriangle className="w-4 h-4 text-gold shrink-0" />
+            <span className="text-gold font-bold text-sm">
               {healthyOnIR.length} player{healthyOnIR.length > 1 ? 's' : ''} in IR {healthyOnIR.length > 1 ? 'are' : 'is'} healthy
             </span>
           </div>
-          <p className="text-yellow-400/80 text-xs pl-6">
+          <p className="text-gold/80 text-xs pl-6">
             Move {healthyOnIR.length > 1 ? 'these players' : 'this player'} back to your active roster or bench — IR is only for injured players.
           </p>
           <div className="pl-6 flex flex-wrap gap-2">
             {healthyOnIR.map(r => (
-              <span key={r.id} className="text-xs bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 px-2 py-0.5 rounded-full font-bold">
+              <span key={r.id} className="text-xs bg-gold/20 border border-gold/30 text-gold px-2 py-0.5 rounded-full font-bold">
                 {r.player?.name} ({r.player?.team})
               </span>
             ))}
@@ -417,7 +417,7 @@ function RosterSlotRow({
         effectiveLocked && !entry && 'opacity-30',
         // Move mode visual states (only when not locked)
         !effectiveLocked && moving && isSource && 'ring-2 ring-gold/60 bg-gold/5 opacity-70',
-        !effectiveLocked && moving && isValidTarget && !isSource && 'ring-2 ring-green-400/50 bg-green-400/5 cursor-pointer hover:bg-green-400/10',
+        !effectiveLocked && moving && isValidTarget && !isSource && 'ring-2 ring-green-400/50 bg-nfl/5 cursor-pointer hover:bg-nfl/10',
         !effectiveLocked && moving && !isValidTarget && !isSource && 'opacity-40 cursor-not-allowed',
         !effectiveLocked && !moving && entry && 'cursor-pointer hover:bg-field-800/60',
         !player && !effectiveLocked && 'opacity-60',
@@ -446,7 +446,7 @@ function RosterSlotRow({
                 <span className={player.league === 'NFL' ? 'text-nfl' : 'text-cfb'}>{player.league}</span>
                 {player.status !== 'active' && (
                   <span className={clsx('ml-1 font-bold uppercase',
-                    player.status === 'questionable' ? 'text-yellow-400' : 'text-red-400')}>
+                    player.status === 'questionable' ? 'text-gold' : 'text-red-400')}>
                     {player.status === 'questionable' ? ' Q' : ` ${player.status.toUpperCase()}`}
                   </span>
                 )}
@@ -455,7 +455,7 @@ function RosterSlotRow({
           </div>
         ) : (
           <span className={clsx('text-sm italic',
-            moving && isValidTarget ? 'text-green-400 font-bold' : 'text-field-500')}>
+            moving && isValidTarget ? 'text-nfl font-bold' : 'text-field-500')}>
             {moving && isValidTarget ? '↓ Place here' : 'Empty'}
           </span>
         )}
@@ -463,7 +463,7 @@ function RosterSlotRow({
 
       {/* Swap indicator */}
       {isSwapTarget && (
-        <div className="shrink-0 text-green-400 text-xs font-bold px-1">↕ Swap</div>
+        <div className="shrink-0 text-nfl text-xs font-bold px-1">↕ Swap</div>
       )}
 
       {/* Locked indicator */}

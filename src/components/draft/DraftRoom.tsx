@@ -347,8 +347,8 @@ export function DraftRoom() {
 
       {/* Paused banner */}
       {isPaused && (
-        <div className="bg-yellow-400/10 border border-yellow-400/40 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-yellow-400 font-bold">
+        <div className="bg-gold/10 border border-gold/40 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-gold font-bold">
             <Pause className="w-4 h-4" /> Draft is paused
           </div>
           {isCommissioner && (
@@ -370,7 +370,7 @@ export function DraftRoom() {
           </div>
           <div className={clsx('font-bold', isMyTurn && !isPaused ? 'text-gold text-lg' : 'text-white')}>
             {isPaused
-              ? <span className="text-yellow-400">Paused — waiting for commissioner</span>
+              ? <span className="text-gold">Paused — waiting for commissioner</span>
               : autoDraft && isMyTurn
               ? <span className="flex items-center gap-2"><Bot className="w-4 h-4 animate-pulse text-gold" /> Autodrafting…</span>
               : isMyTurn ? '🏈 YOUR PICK!' : `On the clock: ${currentPickerName}`}
@@ -381,7 +381,7 @@ export function DraftRoom() {
           {pickLimit > 0 && !isPaused && (
             <div className={clsx(
               'flex items-center gap-1.5 text-lg font-black tabular-nums',
-              timer <= 10 ? 'text-red-400 animate-pulse' : timer <= 20 ? 'text-yellow-400' : 'text-white',
+              timer <= 10 ? 'text-red-400 animate-pulse' : timer <= 20 ? 'text-gold' : 'text-white',
             )}>
               <Clock className="w-4 h-4" />
               {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}
@@ -795,7 +795,7 @@ function PreDraftLobby({ league, members, isCommissioner, draftState }: any) {
         <div className="flex items-center gap-2 mb-3">
           <Users className="w-4 h-4 text-gold" />
           <span className="text-xs font-bold text-field-400 uppercase tracking-wider">Teams Joined ({members.length}/{league?.num_teams})</span>
-          {members.length >= (league?.num_teams ?? 2) && <span className="ml-auto flex items-center gap-1 text-xs text-green-400 font-bold"><CheckCircle className="w-3.5 h-3.5" /> League Full</span>}
+          {members.length >= (league?.num_teams ?? 2) && <span className="ml-auto flex items-center gap-1 text-xs text-nfl font-bold"><CheckCircle className="w-3.5 h-3.5" /> League Full</span>}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {members.map((m: any, i: number) => (

@@ -336,7 +336,7 @@ function CreateLeagueModal({ onClose }: { onClose: () => void }) {
               maxLength={40}
             />
             <div className="flex justify-end mt-1">
-              <span className={clsx('text-xs font-mono', form.name.length >= 35 ? 'text-yellow-400' : 'text-field-600')}>
+              <span className={clsx('text-xs font-mono', form.name.length >= 35 ? 'text-gold' : 'text-field-600')}>
                 {form.name.length}/40
               </span>
             </div>
