@@ -421,7 +421,7 @@ function RosterEditor({ leagueId, league }: { leagueId: string; league: League }
     queryFn: async () => {
       const { data, error } = await supabase
         .from('league_members')
-        .select('*, profile:profiles(id, username, display_name)')
+        .select('*, profile:profiles(id, username, display_name, avatar_url)')
         .eq('league_id', leagueId)
         .order('draft_position')
       if (error) throw error
@@ -564,8 +564,11 @@ function RosterEditor({ leagueId, league }: { leagueId: string; league: League }
                   : 'border-field-700 bg-field-800/50 text-white hover:border-field-600',
               )}
             >
-              <div className="w-8 h-8 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold shrink-0">
-                {(m.profile?.display_name || m.profile?.username || '?')[0].toUpperCase()}
+              <div className="w-8 h-8 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold shrink-0 overflow-hidden">
+                {m.profile?.avatar_url
+                  ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                  : (m.profile?.display_name || m.profile?.username || '?')[0].toUpperCase()
+                }
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-bold truncate">{m.profile?.display_name || m.profile?.username}</div>
@@ -979,8 +982,11 @@ function MembersManager({ leagueId, league }: { leagueId: string; league: League
           <div key={m.id} className="panel space-y-3">
             {/* Header row */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-field-700 flex items-center justify-center text-gold font-black shrink-0">
-                {name[0].toUpperCase()}
+              <div className="w-10 h-10 rounded-full bg-field-700 flex items-center justify-center text-gold font-black shrink-0 overflow-hidden">
+                {m.profile?.avatar_url
+                  ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                  : name[0].toUpperCase()
+                }
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">

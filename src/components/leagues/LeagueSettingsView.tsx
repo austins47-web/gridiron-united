@@ -390,8 +390,11 @@ function LeagueInfo() {
         <div className="space-y-1">
           {members.map((m: any) => (
             <div key={m.id} className="flex items-center gap-3 py-2 border-b border-field-700/50 last:border-0">
-              <div className="w-8 h-8 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold shrink-0">
-                {(m.profile?.display_name || m.profile?.username || '?')[0].toUpperCase()}
+              <div className="w-8 h-8 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold shrink-0 overflow-hidden">
+                {m.profile?.avatar_url
+                  ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                  : (m.profile?.display_name || m.profile?.username || '?')[0].toUpperCase()
+                }
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-white font-bold truncate flex items-center gap-1.5">

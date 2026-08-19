@@ -801,8 +801,11 @@ function PreDraftLobby({ league, members, isCommissioner, draftState }: any) {
           {members.map((m: any, i: number) => (
             <div key={m.id} className="flex items-center gap-2 bg-field-800 rounded-lg p-2.5 border border-field-700">
               <span className="text-field-500 text-xs w-4 shrink-0">{i + 1}</span>
-              <div className="w-7 h-7 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold shrink-0">
-                {(m.profile?.display_name || m.profile?.username || '?')[0]?.toUpperCase()}
+              <div className="w-7 h-7 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold shrink-0 overflow-hidden">
+                {m.profile?.avatar_url
+                  ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                  : (m.profile?.display_name || m.profile?.username || '?')[0]?.toUpperCase()
+                }
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-bold text-white truncate">{m.profile?.display_name || m.profile?.username}</div>

@@ -208,8 +208,11 @@ function StandingsPanel({ leagueId }: { leagueId: string | null }) {
           <div key={m.id} className="flex items-center justify-between py-1.5 border-b border-field-700/50 last:border-0">
             <div className="flex items-center gap-2">
               <span className="text-field-400 text-xs w-4">{i + 1}</span>
-              <div className="w-6 h-6 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold">
-                {(m.profile?.display_name || m.profile?.username || '?')[0]?.toUpperCase()}
+              <div className="w-6 h-6 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold overflow-hidden shrink-0">
+                {m.profile?.avatar_url
+                  ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                  : (m.profile?.display_name || m.profile?.username || '?')[0]?.toUpperCase()
+                }
               </div>
               <span className="text-sm text-white">{m.team_name || m.profile?.display_name || m.profile?.username}</span>
             </div>

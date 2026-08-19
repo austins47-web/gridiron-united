@@ -723,7 +723,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
     queryFn: async () => {
       const { data } = await supabase
         .from('mock_draft_slots')
-        .select('*, profile:profiles(username, display_name)')
+        .select('*, profile:profiles(username, display_name, avatar_url)')
         .eq('mock_draft_id', mock.id)
         .order('slot_number')
       return (data ?? []) as MockSlot[]
@@ -1135,10 +1135,15 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                 )}>
                   <span className="text-field-500 text-sm w-6 text-center font-bold">#{slot.slot_number}</span>
                   <div className={clsx(
-                    'w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0',
+                    'w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0 overflow-hidden',
                     isAi ? 'bg-field-700 text-field-400' : isMe ? 'bg-gold text-field-950' : 'bg-field-700 text-gold',
                   )}>
-                    {isAi ? <Bot className="w-4 h-4" /> : (slot.profile?.display_name || slot.profile?.username || '?')[0].toUpperCase()}
+                    {isAi
+                      ? <Bot className="w-4 h-4" />
+                      : slot.profile?.avatar_url
+                        ? <img src={slot.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                        : (slot.profile?.display_name || slot.profile?.username || '?')[0].toUpperCase()
+                    }
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-white text-sm font-bold truncate">
