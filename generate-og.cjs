@@ -6,14 +6,14 @@ const W = 1200, H = 630
 const c = createCanvas(W, H)
 const ctx = c.getContext('2d')
 
-const BG       = '#0B0908'
-const CARD     = '#1C1712'
-const BORDER   = '#322A21'
+const BG       = '#0A0A0A'
+const CARD     = '#1C1C1C'
+const BORDER   = '#303030'
 const GOLD     = '#CE7B45'
 const WHITE    = '#ffffff'
-const MUTED    = '#A0917F'
-const DIM      = '#6E6153'
-const DARKER   = '#4A4034'
+const MUTED    = '#A3A3A3'
+const DIM      = '#666666'
+const DARKER   = '#4A4A4A'
 const NFL_BLUE = '#5AA9FF'
 const CFB_AMB  = '#F0C846'
 const QB_GOLD  = '#fbbf24'
