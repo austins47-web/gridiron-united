@@ -288,7 +288,7 @@ export function PlayersView() {
                         </div>
                       )}
                       {showConfHeader && conference && (
-                        <div className="px-3 py-0.5 text-[12px] font-bold text-field-500 uppercase tracking-wider bg-field-850">
+                        <div className="px-3 py-0.5 text-[12px] font-bold text-field-500 uppercase tracking-wider bg-field-800">
                           {conference}
                         </div>
                       )}

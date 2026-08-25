@@ -958,6 +958,36 @@
 }
 [data-theme="light"] .ticker-cell { border-color: #e5e7eb !important; }
 
+/* ── field-N opacity variants used directly in JSX ──────────────
+   Tailwind generates these from the same dark hex the solid
+   bg-field-N classes use, so with no light override they kept
+   rendering their literal dark color regardless of theme — dark
+   text on a dark cell, a dark ticker header on an otherwise white
+   card, etc. Static/panel roles reuse the same solid tone already
+   established for the non-opacity version of that field-N (so
+   layering hierarchy matches); hover: roles use the light hover
+   tint already used elsewhere, since a "white on white" hover
+   would show no feedback at all. */
+[data-theme="light"] .bg-field-500\/30 { background-color: #6b7280 !important; }
+[data-theme="light"] .bg-field-600\/20 { background-color: #d1d5db !important; }
+[data-theme="light"] .bg-field-600\/30 { background-color: #d1d5db !important; }
+[data-theme="light"] .bg-field-700\/70 { background-color: #edf0f7 !important; }
+[data-theme="light"] .bg-field-800\/20 { background-color: #ffffff !important; }
+[data-theme="light"] .bg-field-800\/30 { background-color: #ffffff !important; }
+[data-theme="light"] .bg-field-800\/50 { background-color: #ffffff !important; }
+[data-theme="light"] .bg-field-800\/70 { background-color: #ffffff !important; }
+[data-theme="light"] .bg-field-800\/80 { background-color: #ffffff !important; }
+[data-theme="light"] .bg-field-900\/40 { background-color: #e8ecf4 !important; }
+[data-theme="light"] .bg-field-900\/60 { background-color: #e8ecf4 !important; }
+[data-theme="light"] .bg-field-900\/70 { background-color: #e8ecf4 !important; }
+[data-theme="light"] .bg-field-900\/80 { background-color: #e8ecf4 !important; }
+[data-theme="light"] .bg-field-950\/85 { background-color: #dde2ee !important; }
+
+[data-theme="light"] .hover\:bg-field-700\/60:hover { background-color: #f3f4f6 !important; }
+[data-theme="light"] .hover\:bg-field-800\/20:hover { background-color: #f3f4f6 !important; }
+[data-theme="light"] .hover\:bg-field-800\/30:hover { background-color: #f3f4f6 !important; }
+[data-theme="light"] .hover\:bg-field-800\/50:hover { background-color: #f3f4f6 !important; }
+
 /* ── Live Scores list row light mode ── */
 [data-theme="light"] .bg-field-500 {
   background-color: #6b7280 !important;
