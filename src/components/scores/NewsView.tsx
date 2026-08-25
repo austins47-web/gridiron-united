@@ -411,7 +411,7 @@ export function NewsView() {
             className={clsx(
               'px-5 py-1.5 rounded-lg text-sm font-bold transition-colors uppercase tracking-wide',
               tab === t
-                ? t === 'nfl' ? 'bg-nfl text-white' : 'bg-cfb text-white'
+                ? 'bg-gold text-field-950'
                 : 'text-field-400 hover:text-white'
             )}
           >

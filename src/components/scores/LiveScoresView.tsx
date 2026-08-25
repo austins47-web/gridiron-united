@@ -814,7 +814,7 @@ export function LiveScoresView() {
             className={clsx(
               'px-6 py-1.5 rounded-lg text-sm font-black transition-colors uppercase tracking-wide',
               tab === t
-                ? t === 'NFL' ? 'bg-nfl text-white' : 'bg-cfb text-white'
+                ? 'bg-gold text-field-950'
                 : 'text-field-400 hover:text-white'
             )}>
             {t}
@@ -837,25 +837,25 @@ export function LiveScoresView() {
           >
             {tab === 'NFL' ? (
               <>
-                <optgroup label="── PRESEASON ──" style={{ background: '#1C1712', color: '#F0C846' }}>
+                <optgroup label="── PRESEASON ──" style={{ background: '#1C1C1C', color: '#F0C846' }}>
                   {NFL_WEEK_OPTIONS.filter(o => o.seasonType === 1).map(o => (
-                    <option key={o.value} value={o.value} style={{ background: '#1C1712' }}>{o.label}</option>
+                    <option key={o.value} value={o.value} style={{ background: '#1C1C1C' }}>{o.label}</option>
                   ))}
                 </optgroup>
-                <optgroup label="── REGULAR SEASON ──" style={{ background: '#1C1712', color: '#A0917F' }}>
+                <optgroup label="── REGULAR SEASON ──" style={{ background: '#1C1C1C', color: '#A3A3A3' }}>
                   {NFL_WEEK_OPTIONS.filter(o => o.seasonType === 2).map(o => (
-                    <option key={o.value} value={o.value} style={{ background: '#1C1712' }}>{o.label}</option>
+                    <option key={o.value} value={o.value} style={{ background: '#1C1C1C' }}>{o.label}</option>
                   ))}
                 </optgroup>
-                <optgroup label="── POSTSEASON ──" style={{ background: '#1C1712', color: '#CE7B45' }}>
+                <optgroup label="── POSTSEASON ──" style={{ background: '#1C1C1C', color: '#CE7B45' }}>
                   {NFL_WEEK_OPTIONS.filter(o => o.seasonType === 3).map(o => (
-                    <option key={o.value} value={o.value} style={{ background: '#1C1712' }}>{o.label}</option>
+                    <option key={o.value} value={o.value} style={{ background: '#1C1C1C' }}>{o.label}</option>
                   ))}
                 </optgroup>
               </>
             ) : (
               CFB_WEEK_OPTIONS.map(o => (
-                <option key={o.value} value={o.value} style={{ background: '#1C1712' }}>{o.label}</option>
+                <option key={o.value} value={o.value} style={{ background: '#1C1C1C' }}>{o.label}</option>
               ))
             )}
           </select>
