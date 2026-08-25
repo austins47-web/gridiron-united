@@ -225,7 +225,7 @@ function MentionDropdown({ members, query, onSelect, anchorRef }: {
             <img src={m.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
           ) : (
             <div className="w-6 h-6 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
-              <span className="text-[10px] font-black text-gold">
+              <span className="text-[12px] font-black text-gold">
                 {(m.display_name || m.username).slice(0, 2).toUpperCase()}
               </span>
             </div>
@@ -515,7 +515,7 @@ export function LeagueChat() {
             <div className="w-6 h-6 rounded-full overflow-hidden bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
               {profile?.avatar_url
                 ? <img src={profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                : <span className="text-[10px] font-black text-gold">{(profile?.username || '?').slice(0,2).toUpperCase()}</span>
+                : <span className="text-[12px] font-black text-gold">{(profile?.username || '?').slice(0,2).toUpperCase()}</span>
               }
             </div>
             <input

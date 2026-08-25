@@ -58,7 +58,7 @@ export function HomeView() {
           {/* Eyebrow */}
           <div className="flex items-center gap-2 mb-1">
             <span className="w-1.5 h-1.5 rounded-full bg-gold" />
-            <span className="font-cond font-bold text-[10px] uppercase tracking-[0.2em] text-gold">
+            <span className="font-cond font-bold text-[12px] uppercase tracking-[0.2em] text-gold">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
             </span>
           </div>
@@ -165,7 +165,7 @@ function QuickActions() {
           className="flex flex-col items-center gap-1.5 py-3 rounded-xl border border-field-700 bg-field-800/60 text-field-300 hover:border-gold/50 hover:text-gold transition-colors"
         >
           {icon}
-          <span className="font-cond font-bold text-[10px] uppercase tracking-[0.14em]">
+          <span className="font-cond font-bold text-[12px] uppercase tracking-[0.14em]">
             {label}
           </span>
         </button>
@@ -210,7 +210,7 @@ function RecentActivity() {
                 <div className="text-xs text-field-500 truncate">{n.body}</div>
               )}
             </div>
-            <span className="text-[10px] text-field-600 shrink-0 mt-0.5 tabular-nums">
+            <span className="text-[12px] text-field-600 shrink-0 mt-0.5 tabular-nums">
               {timeAgo(n.created_at)}
             </span>
           </div>
@@ -246,7 +246,7 @@ function SectionHead({
       {action && (
         <button
           onClick={action.onClick}
-          className="shrink-0 font-cond font-bold text-[11px] uppercase tracking-wider text-field-400 hover:text-gold transition-colors flex items-center gap-0.5"
+          className="shrink-0 font-cond font-bold text-[13px] uppercase tracking-wider text-field-400 hover:text-gold transition-colors flex items-center gap-0.5"
         >
           {action.label} <ChevronRight className="w-3 h-3" />
         </button>
@@ -269,12 +269,12 @@ function ScoreTicker() {
         {liveCount > 0 ? (
           <>
             <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-            <span className="font-cond font-bold text-[10px] uppercase tracking-[0.18em] text-red-400">
+            <span className="font-cond font-bold text-[12px] uppercase tracking-[0.18em] text-red-400">
               {liveCount} Live
             </span>
           </>
         ) : (
-          <span className="font-cond font-bold text-[10px] uppercase tracking-[0.18em] text-field-400">
+          <span className="font-cond font-bold text-[12px] uppercase tracking-[0.18em] text-field-400">
             Around the League
           </span>
         )}
@@ -311,7 +311,7 @@ function ScoreTicker() {
                 )}
               </div>
               <div className={clsx(
-                'text-[9px] mt-0.5 truncate',
+                'text-[11px] mt-0.5 truncate',
                 g.status === 'in' ? 'text-red-400 font-bold' : 'text-field-500',
               )}>
                 {g.detail}
@@ -356,7 +356,7 @@ function ActionCard({ action, index, onGo }: { action: ActionItem; index: number
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="font-cond font-bold text-[10px] uppercase tracking-[0.16em] text-field-500 truncate">
+        <div className="font-cond font-bold text-[12px] uppercase tracking-[0.16em] text-field-500 truncate">
           {action.leagueName}
         </div>
         <div className={clsx(
@@ -369,7 +369,7 @@ function ActionCard({ action, index, onGo }: { action: ActionItem; index: number
       </div>
 
       <span className={clsx(
-        'shrink-0 font-cond font-bold text-[11px] uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors',
+        'shrink-0 font-cond font-bold text-[13px] uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors',
         urgent
           ? 'bg-gold text-field-950'
           : 'bg-field-700 text-field-300 group-hover:bg-gold group-hover:text-field-950',
@@ -417,7 +417,7 @@ function TeamCard({ team, index }: { team: TeamRow; index: number }) {
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="font-cond font-bold text-[10px] uppercase tracking-[0.16em] text-field-500 truncate flex items-center gap-1.5">
+        <div className="font-cond font-bold text-[12px] uppercase tracking-[0.16em] text-field-500 truncate flex items-center gap-1.5">
           {team.leagueName}
           {isPickem && <span className="text-gold">· Pick'Em</span>}
           {team.isCommissioner && <span className="text-field-400">· Commish</span>}
@@ -431,7 +431,7 @@ function TeamCard({ team, index }: { team: TeamRow; index: number }) {
             <span className={clsx('font-cond font-black tabular-nums', winning ? 'text-gold' : 'text-field-300')}>
               {team.matchup.myScore.toFixed(1)}
             </span>
-            <span className="text-field-600 text-[10px]">VS</span>
+            <span className="text-field-600 text-[12px]">VS</span>
             <span className="font-cond font-black tabular-nums text-field-300">
               {team.matchup.oppScore.toFixed(1)}
             </span>
@@ -488,7 +488,7 @@ function EmptyHome() {
     <div className="max-w-lg mx-auto px-4 py-10">
       <div className="jumbotron">
         <div className="relative p-8 text-center">
-          <div className="font-cond font-bold text-[10px] uppercase tracking-[0.2em] text-gold mb-2">
+          <div className="font-cond font-bold text-[12px] uppercase tracking-[0.2em] text-gold mb-2">
             Gridiron United
           </div>
           <h1 className="font-cond font-black uppercase text-white leading-[0.95] tracking-tight mb-3"

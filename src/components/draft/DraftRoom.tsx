@@ -519,7 +519,7 @@ export function DraftRoom() {
                 )}>
                   {tab.label}
                   {tab.badge > 0 && (
-                    <span className={clsx('text-[10px] font-black px-1 py-0.5 rounded-full min-w-[16px] text-center',
+                    <span className={clsx('text-[12px] font-black px-1 py-0.5 rounded-full min-w-[16px] text-center',
                       sidebarTab === tab.id ? 'bg-gold text-field-950' : 'bg-field-700 text-field-400')}>
                       {tab.badge}
                     </span>
@@ -534,7 +534,7 @@ export function DraftRoom() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-white">
                       <Zap className="w-3.5 h-3.5 text-gold" /> Draft Queue
-                      {queue.length > 0 && <span className="bg-gold text-field-950 text-[10px] font-black px-1.5 py-0.5 rounded-full">{queue.length}</span>}
+                      {queue.length > 0 && <span className="bg-gold text-field-950 text-[12px] font-black px-1.5 py-0.5 rounded-full">{queue.length}</span>}
                     </div>
                     {queue.length > 0 && <button className="text-xs text-field-400 hover:text-red-400 transition-colors" onClick={() => setQueue([])}>Clear</button>}
                   </div>
@@ -549,7 +549,7 @@ export function DraftRoom() {
                       {queuedPlayers.map((p, idx) => (
                         <div key={p.id} className="flex items-center gap-1.5 bg-field-800 rounded-lg p-2">
                           <span className="text-field-500 text-xs font-bold w-4 shrink-0">{idx + 1}</span>
-                          <span className={`pos-badge pos-${p.pos} text-[10px]`}>{p.pos}</span>
+                          <span className={`pos-badge pos-${p.pos} text-[12px]`}>{p.pos}</span>
                           <span className="text-white text-xs font-bold truncate flex-1">{p.name}</span>
                           <div className="flex items-center gap-0.5 shrink-0">
                             <button className="w-5 h-5 flex items-center justify-center btn-ghost !p-0 disabled:opacity-20" disabled={idx === 0} onClick={() => moveQueueItem(idx, -1)}><ChevronUp className="w-3 h-3" /></button>
@@ -573,7 +573,7 @@ export function DraftRoom() {
                         {myPicks.map(pick => (
                           <div key={pick.id} className="flex items-center gap-2 bg-field-800 rounded p-1.5">
                             <span className="text-field-500 text-xs w-5 shrink-0">R{pick.round_number}</span>
-                            <span className={`pos-badge pos-${pick.player?.pos} text-[10px]`}>{pick.player?.pos}</span>
+                            <span className={`pos-badge pos-${pick.player?.pos} text-[12px]`}>{pick.player?.pos}</span>
                             <div className="min-w-0 flex-1">
                               <div className="text-white text-xs font-bold truncate">{pick.player?.name}</div>
                               <div className="text-field-500 text-xs">{pick.player?.team}</div>
@@ -594,7 +594,7 @@ export function DraftRoom() {
                       return (
                         <div key={pick.id} className="flex items-center gap-2 text-xs">
                           <span className="text-field-500 shrink-0 w-6">#{pick.pick_number}</span>
-                          <span className={`pos-badge pos-${pick.player?.pos} text-[10px]`}>{pick.player?.pos}</span>
+                          <span className={`pos-badge pos-${pick.player?.pos} text-[12px]`}>{pick.player?.pos}</span>
                           <span className="text-white font-bold truncate">{pick.player?.name}</span>
                           <span className="text-field-400 shrink-0 truncate max-w-[55px] text-xs">
                             {(picker as any)?.profile?.display_name || (picker as any)?.profile?.username}
@@ -708,7 +708,7 @@ function DraftBoard({ picks, members, totalTeams, numRounds, currentPick }: {
               return (
                 <tr key={r} className="border-b border-field-800">
                   <td className="text-field-500 text-xs font-bold text-center p-2 bg-field-900">
-                    {r}{isEvenRound && <div className="text-[8px] text-field-600">↩</div>}
+                    {r}{isEvenRound && <div className="text-[10px] text-field-600">↩</div>}
                   </td>
                   {displayMembers.map((m: any, colIdx: number) => {
                     const pickNumber = (r - 1) * totalTeams + (isEvenRound ? totalTeams - colIdx : colIdx + 1)
@@ -723,17 +723,17 @@ function DraftBoard({ picks, members, totalTeams, numRounds, currentPick }: {
                           <div>
                             <div className="flex items-center justify-center gap-1 mb-0.5">
                               <span className={`pos-badge pos-${pick.player?.pos}`} style={{ fontSize: 9 }}>{pick.player?.pos}</span>
-                              <span className={clsx('text-[9px]', pick.player?.league === 'NFL' ? 'text-nfl' : 'text-cfb')}>{pick.player?.league}</span>
+                              <span className={clsx('text-[11px]', pick.player?.league === 'NFL' ? 'text-nfl' : 'text-cfb')}>{pick.player?.league}</span>
                             </div>
                             <div className="text-white font-bold" style={{ fontSize: 10, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '0 auto' }} title={pick.player?.name}>{pick.player?.name}</div>
                             <div className="text-field-500 mt-0.5" style={{ fontSize: 9 }}>{pick.player?.team}</div>
                           </div>
                         ) : isCurrentPick ? (
-                          <div className="text-gold text-[10px] font-bold animate-pulse py-2">On clock</div>
+                          <div className="text-gold text-[12px] font-bold animate-pulse py-2">On clock</div>
                         ) : pickNumber < currentPick ? (
                           <div className="text-field-700 text-xs py-3">·</div>
                         ) : (
-                          <div className="text-field-800 text-[10px] py-3">#{pickNumber}</div>
+                          <div className="text-field-800 text-[12px] py-3">#{pickNumber}</div>
                         )}
                       </td>
                     )
@@ -917,7 +917,7 @@ function CompletedDraft({ picks, members, totalTeams, numRounds }: {
                       <td key={m.id} className="text-center text-xs px-1 py-2">
                         {pick ? (
                           <div>
-                            <span className={clsx('pos-badge text-[10px]', `pos-${pick.player?.pos}`)}>{pick.player?.pos}</span>
+                            <span className={clsx('pos-badge text-[12px]', `pos-${pick.player?.pos}`)}>{pick.player?.pos}</span>
                             <div className="text-white font-bold truncate max-w-[80px] mx-auto text-xs mt-0.5">{pick.player?.name}</div>
                           </div>
                         ) : <span className="text-field-700">—</span>}

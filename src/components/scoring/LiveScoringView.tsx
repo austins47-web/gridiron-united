@@ -193,7 +193,7 @@ export function LiveScoringView() {
               <div className="flex flex-col items-center gap-1 w-14 shrink-0">
                 <span className="text-xs text-field-500 font-bold uppercase">{r.slot}</span>
                 <span className={clsx(
-                  'text-[10px] font-black px-1.5 py-0.5 rounded border',
+                  'text-[12px] font-black px-1.5 py-0.5 rounded border',
                   POS_COLOR[p?.pos ?? 'FLEX']
                 )}>{p?.pos}</span>
               </div>

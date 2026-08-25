@@ -41,7 +41,7 @@ export function WeekRecap({
         {/* Eyebrow */}
         <div className="flex items-center gap-2 mb-3">
           <Trophy className="w-3.5 h-3.5 text-gold" />
-          <span className="font-cond font-bold text-[10px] uppercase tracking-[0.22em] text-gold">
+          <span className="font-cond font-bold text-[12px] uppercase tracking-[0.22em] text-gold">
             Week {week} Final
           </span>
         </div>
@@ -58,7 +58,7 @@ export function WeekRecap({
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="font-cond font-bold text-[10px] uppercase tracking-[0.18em] text-field-400">
+            <p className="font-cond font-bold text-[12px] uppercase tracking-[0.18em] text-field-400">
               {winners.length > 1 ? `${winners.length}-way tie` : 'Winner'}
             </p>
             <h2
@@ -77,7 +77,7 @@ export function WeekRecap({
                 {totalGames > 0 ? Math.round((top.correct / totalGames) * 100) : 0}% correct
               </span>
               {youWon && (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold text-field-950">
+                <span className="text-[12px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold text-field-950">
                   That's you
                 </span>
               )}
@@ -106,7 +106,7 @@ export function WeekRecap({
         {/* Runners-up */}
         {runnersUp.length > 0 && (
           <div className="mt-4">
-            <p className="font-cond font-bold text-[10px] uppercase tracking-[0.18em] text-field-500 mb-2">
+            <p className="font-cond font-bold text-[12px] uppercase tracking-[0.18em] text-field-500 mb-2">
               Also this week
             </p>
             <div className="space-y-1">
@@ -147,7 +147,7 @@ export function WeekInProgress({ finished, total }: { finished: number; total: n
   return (
     <div className="rounded-xl border border-field-700 bg-field-800/60 px-4 py-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="flex items-center gap-1.5 font-cond font-bold text-[10px] uppercase tracking-[0.18em] text-field-300">
+        <span className="flex items-center gap-1.5 font-cond font-bold text-[12px] uppercase tracking-[0.18em] text-field-300">
           <Flame className="w-3.5 h-3.5 text-gold" />
           Week in progress
         </span>

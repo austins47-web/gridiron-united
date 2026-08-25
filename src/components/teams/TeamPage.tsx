@@ -431,7 +431,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
                   {g.oppLogo
                     ? <img src={g.oppLogo} alt={g.oppAbbr} className="w-7 h-7 object-contain shrink-0" />
                     : <div className="w-7 h-7 rounded-full bg-field-700 flex items-center justify-center shrink-0">
-                        <span className="text-[9px] font-black text-field-400">{g.oppAbbr}</span>
+                        <span className="text-[11px] font-black text-field-400">{g.oppAbbr}</span>
                       </div>
                   }
 
@@ -508,14 +508,14 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
                             {a.headshot?.href
                               ? <img src={a.headshot.href} alt={a.fullName} className="w-7 h-7 rounded-full object-cover shrink-0" />
                               : <div className="w-7 h-7 rounded-full bg-field-700 shrink-0 flex items-center justify-center">
-                                  <span className="text-[9px] text-field-500 font-black">{a.position?.abbreviation}</span>
+                                  <span className="text-[11px] text-field-500 font-black">{a.position?.abbreviation}</span>
                                 </div>
                             }
                             <span className="text-sm text-white font-bold flex-1 truncate">{a.fullName ?? a.displayName}</span>
                             <span className="text-xs text-field-500 hidden sm:block">{a.displayHeight} · {a.displayWeight}</span>
-                            <span className="text-[10px] text-field-600 shrink-0">{a.position?.abbreviation}</span>
+                            <span className="text-[12px] text-field-600 shrink-0">{a.position?.abbreviation}</span>
                             {a.experience?.displayValue && (
-                              <span className="text-[10px] text-field-600 w-6 text-center shrink-0">{a.experience.displayValue.charAt(0)}</span>
+                              <span className="text-[12px] text-field-600 w-6 text-center shrink-0">{a.experience.displayValue.charAt(0)}</span>
                             )}
                           </div>
                         ))}

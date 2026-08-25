@@ -309,7 +309,7 @@ function CFBNewsTab() {
                   ))
                 : CONF_ORDER.filter(c => cfbTeamsByConf[c]?.length).map(conf => (
                     <div key={conf}>
-                      <div className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cfb/70 bg-field-900 sticky top-0">
+                      <div className="px-3 py-1 text-[12px] font-black uppercase tracking-widest text-cfb/70 bg-field-900 sticky top-0">
                         {conf}
                       </div>
                       {cfbTeamsByConf[conf].map(t => (

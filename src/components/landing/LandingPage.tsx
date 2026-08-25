@@ -307,7 +307,7 @@ export function LandingPage() {
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-cond font-black text-xl uppercase tracking-wider text-white">{title}</h3>
-                      <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${tagCls}`}>{tag}</span>
+                      <span className={`text-[11px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${tagCls}`}>{tag}</span>
                     </div>
                     <p className="text-field-400 text-sm leading-relaxed">{desc}</p>
                   </div>

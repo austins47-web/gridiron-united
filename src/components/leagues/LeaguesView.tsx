@@ -144,7 +144,7 @@ export function LeaguesView() {
                       )}>
                         {league.name}
                       </div>
-                      <div className="font-cond font-bold text-[9px] uppercase tracking-[0.14em] text-field-500 whitespace-nowrap">
+                      <div className="font-cond font-bold text-[11px] uppercase tracking-[0.14em] text-field-500 whitespace-nowrap">
                         {league.league_type === 'pickem' ? "Pick'Em" : fmt(SCORING_LABELS, league.scoring_type)}
                         {membership.is_commissioner ? ' · Commish' : ''}
                       </div>
@@ -570,7 +570,7 @@ function LeagueHub({
         <div className="relative p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="font-cond font-bold text-[10px] uppercase tracking-[0.2em] text-gold mb-1">
+              <div className="font-cond font-bold text-[12px] uppercase tracking-[0.2em] text-gold mb-1">
                 Active League
               </div>
               <h2 className="font-cond font-black uppercase text-white leading-none tracking-tight truncate"
@@ -579,19 +579,19 @@ function LeagueHub({
               </h2>
               <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                 {isPickem ? (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold/20 text-gold">
+                  <span className="text-[12px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold/20 text-gold">
                     Pick'Em
                   </span>
                 ) : (
                   <>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
+                    <span className="text-[12px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
                       {fmt(SCORING_LABELS, league.scoring_type)}
                     </span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
+                    <span className="text-[12px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-field-700 text-field-300">
                       {fmt(DRAFT_LABELS, league.draft_type)}
                     </span>
                     <span className={clsx(
-                      'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
+                      'text-[12px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
                       league.player_pool === 'cfb' ? 'bg-cfb/20 text-cfb'
                       : league.player_pool === 'nfl' ? 'bg-nfl/20 text-nfl'
                       : 'bg-field-700 text-field-300'
@@ -602,14 +602,14 @@ function LeagueHub({
                 )}
                 {!isPickem && (
                   <span className={clsx(
-                    'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
+                    'text-[12px] font-bold uppercase tracking-wider px-2 py-0.5 rounded',
                     STATUS_STYLES[league.draft_status] ?? 'bg-field-700 text-field-300'
                   )}>
                     {fmt(STATUS_LABELS, league.draft_status)}
                   </span>
                 )}
                 {isCommissioner && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold/15 text-gold flex items-center gap-1">
+                  <span className="text-[12px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gold/15 text-gold flex items-center gap-1">
                     <Shield className="w-2.5 h-2.5" /> Commissioner
                   </span>
                 )}

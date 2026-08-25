@@ -127,7 +127,7 @@ export function LeagueSelector() {
                             {league.name}
                           </span>
                           {isActive && (
-                            <span className="text-[9px] bg-gold/20 text-gold px-1 py-0.5 rounded font-bold shrink-0">
+                            <span className="text-[11px] bg-gold/20 text-gold px-1 py-0.5 rounded font-bold shrink-0">
                               ACTIVE
                             </span>
                           )}

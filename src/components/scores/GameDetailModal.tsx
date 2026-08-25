@@ -146,7 +146,7 @@ export function GameDetailModal({ gameId, league, onClose }: Props) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-field-700 shrink-0">
           <div className="flex items-center gap-2">
             <span className={clsx(
-              'font-cond font-black text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded',
+              'font-cond font-black text-[12px] uppercase tracking-wider px-1.5 py-0.5 rounded',
               league === 'NFL' ? 'bg-nfl/20 text-nfl' : 'bg-cfb/20 text-cfb',
             )}>{league}</span>
             {data && (
@@ -254,7 +254,7 @@ export function GameDetailModal({ gameId, league, onClose }: Props) {
                     <div className="text-right shrink-0 ml-3">
                       <div className="font-cond font-black text-white text-sm">{p.stat}</div>
                       <div className={clsx(
-                        'text-[10px] font-bold',
+                        'text-[12px] font-bold',
                         p.team === 'away' ? 'text-field-300' : 'text-gold',
                       )}>
                         {p.team === 'away' ? data.awayName : data.homeName}

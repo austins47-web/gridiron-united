@@ -742,7 +742,7 @@ export function AccountPage() {
                         className="w-full h-full"
                       />
                     </div>
-                    <span className="text-[10px] text-field-500 group-hover:text-field-300 transition-colors leading-none text-center">
+                    <span className="text-[12px] text-field-500 group-hover:text-field-300 transition-colors leading-none text-center">
                       {preset.label}
                     </span>
                   </button>

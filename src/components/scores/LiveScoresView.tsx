@@ -152,10 +152,10 @@ function gameHasFav(favs: Set<string>, game: LiveGame): boolean {
 
 function StatusBadge({ game, compact = false }: { game: LiveGame, compact?: boolean }) {
   if (game.status === 'post') {
-    return <span className={clsx('font-bold text-field-300', compact ? 'text-[10px]' : 'text-xs')}>Final</span>
+    return <span className={clsx('font-bold text-field-300', compact ? 'text-[12px]' : 'text-xs')}>Final</span>
   }
   if (game.status === 'pre') {
-    return <span className={clsx('text-field-300', compact ? 'text-[10px]' : 'text-xs')}>{game.statusText}</span>
+    return <span className={clsx('text-field-300', compact ? 'text-[12px]' : 'text-xs')}>{game.statusText}</span>
   }
   const quarters = ['', 'Q1', 'Q2', 'Q3', 'Q4', 'OT', '2OT']
   const halves   = ['', '1st', '2nd', 'OT']
@@ -164,8 +164,8 @@ function StatusBadge({ game, compact = false }: { game: LiveGame, compact?: bool
   return (
     <div className="flex items-center gap-1">
       <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
-      <span className={clsx('font-bold text-red-400', compact ? 'text-[10px]' : 'text-xs')}>{label}</span>
-      {game.clock && <span className={clsx('text-field-300', compact ? 'text-[10px]' : 'text-xs')}>{game.clock}</span>}
+      <span className={clsx('font-bold text-red-400', compact ? 'text-[12px]' : 'text-xs')}>{label}</span>
+      {game.clock && <span className={clsx('text-field-300', compact ? 'text-[12px]' : 'text-xs')}>{game.clock}</span>}
     </div>
   )
 }
@@ -238,7 +238,7 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
             game.league === 'NFL' ? 'bg-nfl/20 text-nfl' : 'bg-cfb/20 text-cfb',
           )}>{game.league}</span>
           <StatusBadge game={game} compact />
-          {game.redZone && isLive && <span className="text-[9px] font-black text-red-400">RZ</span>}
+          {game.redZone && isLive && <span className="text-[11px] font-black text-red-400">RZ</span>}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {game.broadcast && <span className="text-xs text-field-300 font-bold">{game.broadcast}</span>}
@@ -261,7 +261,7 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
             </div>
             <FavStar active={isFav} onClick={e => { e.stopPropagation(); onToggleFav(team.abbr) }} />
             {team.rank
-              ? <span className="text-[9px] font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
+              ? <span className="text-[11px] font-black text-cfb w-5 shrink-0 text-right">#{team.rank}</span>
               : <span className="w-5 shrink-0" />}
             <TeamLogo team={team} league={game.league} size={scale.logo} />
             <button
@@ -443,7 +443,7 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
           game.league === 'NFL' ? 'bg-nfl/20 text-nfl' : 'bg-cfb/20 text-cfb',
         )}>{game.league}</span>
         <StatusBadge game={game} compact />
-        {game.redZone && isLive && <span className="text-[9px] font-black text-red-400">RZ</span>}
+        {game.redZone && isLive && <span className="text-[11px] font-black text-red-400">RZ</span>}
       </div>
 
       <div className="shrink-0 w-[180px] min-w-0">
@@ -504,10 +504,10 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
               <div className="flex justify-between mt-1">
                 <div className="flex items-center gap-1">
                   <div className="w-2 h-2 rounded-sm bg-field-500 shrink-0" />
-                  <span className="text-[10px] text-field-400">{game.away.abbr}</span>
+                  <span className="text-[12px] text-field-400">{game.away.abbr}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-field-400">{game.home.abbr}</span>
+                  <span className="text-[12px] text-field-400">{game.home.abbr}</span>
                   <div className="w-2 h-2 rounded-sm bg-gold/80 shrink-0" />
                 </div>
               </div>
@@ -524,7 +524,7 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
           <span className="text-xs text-field-200 font-bold truncate w-full text-right">{game.broadcast}</span>
         )}
         {game.venue && (
-          <span className="text-[10px] text-field-500 truncate w-full text-right leading-tight" title={game.venue}>
+          <span className="text-[12px] text-field-500 truncate w-full text-right leading-tight" title={game.venue}>
             {game.venue.split(',')[0]}
           </span>
         )}
@@ -570,9 +570,9 @@ const CARD_SCALE: Record<ColCount, {
   logo: number; pad: string; abbr: string; name: string; score: string; league: string
 }> = {
   2: { logo: 34, pad: 'p-4',   abbr: 'text-lg',   name: 'text-sm',   score: 'text-3xl w-11', league: 'text-xs px-2 py-1' },
-  3: { logo: 28, pad: 'p-3.5', abbr: 'text-base', name: 'text-xs',   score: 'text-2xl w-9',  league: 'text-[10px] px-2 py-0.5' },
-  4: { logo: 24, pad: 'p-3',   abbr: 'text-sm',   name: 'text-xs',   score: 'text-xl w-8',   league: 'text-[9px] px-1.5 py-0.5' },
-  5: { logo: 20, pad: 'p-2.5', abbr: 'text-sm',   name: 'text-[11px]', score: 'text-lg w-7', league: 'text-[9px] px-1.5 py-0.5' },
+  3: { logo: 28, pad: 'p-3.5', abbr: 'text-base', name: 'text-xs',   score: 'text-2xl w-9',  league: 'text-[12px] px-2 py-0.5' },
+  4: { logo: 24, pad: 'p-3',   abbr: 'text-sm',   name: 'text-xs',   score: 'text-xl w-8',   league: 'text-[11px] px-1.5 py-0.5' },
+  5: { logo: 20, pad: 'p-2.5', abbr: 'text-sm',   name: 'text-[13px]', score: 'text-lg w-7', league: 'text-[11px] px-1.5 py-0.5' },
 }
 
 function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSelect, onTeamClick }: {

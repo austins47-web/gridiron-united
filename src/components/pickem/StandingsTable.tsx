@@ -29,7 +29,7 @@ export function StandingsTable({
               <Crown className="w-5 h-5 text-field-950" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-cond font-bold text-[10px] uppercase tracking-[0.2em] text-gold">
+              <p className="font-cond font-bold text-[12px] uppercase tracking-[0.2em] text-gold">
                 Season Leader
               </p>
               <p className="font-cond font-black text-white text-2xl leading-none truncate mt-0.5">
@@ -61,7 +61,7 @@ export function StandingsTable({
                   <th
                     key={h}
                     className={clsx(
-                      'px-3 py-2 font-cond font-bold text-[10px] uppercase tracking-[0.14em] text-field-500 whitespace-nowrap',
+                      'px-3 py-2 font-cond font-bold text-[12px] uppercase tracking-[0.14em] text-field-500 whitespace-nowrap',
                       i === 1 ? 'text-left' : i === 0 ? 'text-left w-10' : 'text-center',
                     )}
                   >
@@ -101,14 +101,14 @@ export function StandingsTable({
                           {r.name}
                         </span>
                         {isYou && (
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-gold shrink-0">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-gold shrink-0">
                             you
                           </span>
                         )}
                         {r.streak >= 2 && (
                           <span
                             title={`${r.streak} weekly wins in a row`}
-                            className="flex items-center gap-0.5 text-[9px] font-bold text-gold shrink-0"
+                            className="flex items-center gap-0.5 text-[11px] font-bold text-gold shrink-0"
                           >
                             <Flame className="w-3 h-3" />{r.streak}
                           </span>

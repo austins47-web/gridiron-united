@@ -281,14 +281,14 @@ export function PlayersView() {
                     <div key={team}>
                       {showLeagueHeader && (
                         <div className={clsx(
-                          'px-3 py-1 text-[10px] font-black uppercase tracking-widest sticky top-0',
+                          'px-3 py-1 text-[12px] font-black uppercase tracking-widest sticky top-0',
                           league === 'NFL' ? 'text-nfl/80 bg-field-900' : 'text-cfb/80 bg-field-900',
                         )}>
                           {league}
                         </div>
                       )}
                       {showConfHeader && conference && (
-                        <div className="px-3 py-0.5 text-[10px] font-bold text-field-500 uppercase tracking-wider bg-field-850">
+                        <div className="px-3 py-0.5 text-[12px] font-bold text-field-500 uppercase tracking-wider bg-field-850">
                           {conference}
                         </div>
                       )}
@@ -300,7 +300,7 @@ export function PlayersView() {
                         onClick={() => { setFilter('team', team); setTeamDropdownOpen(false); setTeamSearch('') }}
                       >
                         <span className={clsx(
-                          'text-[10px] font-bold px-1 py-0.5 rounded shrink-0',
+                          'text-[12px] font-bold px-1 py-0.5 rounded shrink-0',
                           league === 'NFL' ? 'league-nfl' : 'league-cfb',
                         )}>
                           {league}
@@ -439,7 +439,7 @@ export function PlayersView() {
                             </button>
                             {/* NFL rookie badge */}
                             {p.is_rookie && p.league === 'NFL' && (
-                              <span className="text-[9px] font-black bg-gold text-field-950 px-1 py-0.5 rounded leading-none shrink-0">R</span>
+                              <span className="text-[11px] font-black bg-gold text-field-950 px-1 py-0.5 rounded leading-none shrink-0">R</span>
                             )}
                             {/* CFB class badge */}
                             {p.league === 'CFB' && p.depth_pos && (() => {
@@ -453,20 +453,20 @@ export function PlayersView() {
                               }
                               const label = short[p.depth_pos]
                               if (!label) return null
-                              return <span className={`text-[9px] font-black px-1 py-0.5 rounded leading-none shrink-0 ${colors[p.depth_pos]}`}>{label}</span>
+                              return <span className={`text-[11px] font-black px-1 py-0.5 rounded leading-none shrink-0 ${colors[p.depth_pos]}`}>{label}</span>
                             })()}
                           </div>
                           {/* Subtitle: team (mobile) + depth pos (NFL) */}
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className={clsx(
-                              'text-[10px] font-bold uppercase tracking-wider',
+                              'text-[12px] font-bold uppercase tracking-wider',
                               p.league === 'NFL' ? 'text-nfl/70' : 'text-cfb/70',
                             )}>{p.league}</span>
                             {p.league === 'NFL' && p.depth_pos && (
-                              <span className="text-field-500 text-[10px] hidden sm:inline">{p.depth_pos}</span>
+                              <span className="text-field-500 text-[12px] hidden sm:inline">{p.depth_pos}</span>
                             )}
                             <button
-                              className="text-field-400 text-[10px] sm:hidden truncate hover:text-gold transition-colors text-left"
+                              className="text-field-400 text-[12px] sm:hidden truncate hover:text-gold transition-colors text-left"
                               onClick={() => { const tid = getTeamId(p.team, p.league); if (tid) setTeamPage({ id: tid, league: p.league }); else setFilter('team', p.team) }}
                             >{p.team}</button>
                           </div>

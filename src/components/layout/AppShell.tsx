@@ -62,8 +62,8 @@ export function AppShell() {
             <span className="text-white"> United</span>
           </div>
           <div className="hidden md:flex items-center gap-1.5">
-            <span className="font-cond font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md bg-cfb/20 text-cfb border border-cfb/30">CFB</span>
-            <span className="font-cond font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md bg-nfl/20 text-nfl border border-nfl/30">NFL</span>
+            <span className="font-cond font-bold text-[12px] uppercase tracking-wider px-2 py-0.5 rounded-md bg-cfb/20 text-cfb border border-cfb/30">CFB</span>
+            <span className="font-cond font-bold text-[12px] uppercase tracking-wider px-2 py-0.5 rounded-md bg-nfl/20 text-nfl border border-nfl/30">NFL</span>
           </div>
         </button>
 
@@ -101,7 +101,7 @@ export function AppShell() {
             >
               <Bell size={18} />
               {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-gold text-field-950 font-cond font-black text-[9px] flex items-center justify-center">
+                <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-gold text-field-950 font-cond font-black text-[11px] flex items-center justify-center">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}

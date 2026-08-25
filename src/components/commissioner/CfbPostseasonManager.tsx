@@ -162,7 +162,7 @@ function CfpManager() {
           {activeTeams.map(team => (
             <div key={team.id} className="flex items-center gap-3 bg-field-800 border border-nfl/20 rounded-xl px-3 py-2.5">
               <div className="w-6 h-6 rounded-full bg-cfb/20 border border-cfb/30 flex items-center justify-center shrink-0">
-                <span className="text-[10px] font-black text-cfb">{team.seed ?? '?'}</span>
+                <span className="text-[12px] font-black text-cfb">{team.seed ?? '?'}</span>
               </div>
               <span className="font-cond font-bold text-white flex-1">{team.team_name}</span>
               <span className="text-xs text-nfl font-bold bg-nfl/10 px-2 py-0.5 rounded-full">
@@ -175,7 +175,7 @@ function CfpManager() {
                     key={round}
                     onClick={() => toggleEliminated.mutate({ id: team.id, is_eliminated: true, round })}
                     title={`Eliminated in ${round}`}
-                    className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-1 rounded border border-field-600 text-field-400 hover:border-red-500/50 hover:text-red-400 transition-colors"
+                    className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-1 rounded border border-field-600 text-field-400 hover:border-red-500/50 hover:text-red-400 transition-colors"
                   >
                     {round === 'quarterfinal' ? 'QF' : round === 'semifinal' ? 'SF' : 'CHAMP'}
                   </button>
@@ -417,7 +417,7 @@ function GameRow({ game, editingId, editScore, onEdit, onSave, onCancel, onDelet
         <div className="flex items-center gap-2">
           <span className="font-bold text-white truncate">{game.bowl_name}</span>
           {game.is_cfp && (
-            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold border border-gold/30 shrink-0">
+            <span className="text-[11px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-gold/20 text-gold border border-gold/30 shrink-0">
               CFP {game.cfp_round?.slice(0,4).toUpperCase()}
             </span>
           )}

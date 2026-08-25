@@ -27,6 +27,21 @@ export default {
         condensed: ['Barlow Condensed', 'sans-serif'],
         sans: ['Barlow', 'sans-serif'],
       },
+      // Moderate global bump to the small/body end of the type scale.
+      // Micro-text (badges, timestamps, labels like "AWAY"/"HOME",
+      // team names under an abbreviation) was consistently sized at
+      // the stock Tailwind minimum or smaller via arbitrary values,
+      // which reads as genuinely hard to read on most screens.
+      // Only xs-xl move — 2xl and up are already display/headline
+      // sizes tuned for specific hero layouts and aren't what was
+      // reported as too small.
+      fontSize: {
+        xs:   ['0.8125rem', { lineHeight: '1.125rem' }],  // 13px, was 12px
+        sm:   ['0.9375rem', { lineHeight: '1.375rem' }],  // 15px, was 14px
+        base: ['1.0625rem', { lineHeight: '1.625rem' }],  // 17px, was 16px
+        lg:   ['1.1875rem', { lineHeight: '1.75rem'  }],  // 19px, was 18px
+        xl:   ['1.3125rem', { lineHeight: '1.75rem'  }],  // 21px, was 20px
+      },
       animation: {
         'pulse-slow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'blink': 'blink 1s ease-in-out infinite',

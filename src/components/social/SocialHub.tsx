@@ -381,7 +381,7 @@ function FriendsTab({ friends, outgoingRequests, unreadCounts, onViewProfile, on
                   >
                     <MessageCircle className="w-4 h-4" />
                     {unread > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-gold text-field-950 text-[10px] font-black rounded-full flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-gold text-field-950 text-[12px] font-black rounded-full flex items-center justify-center">
                         {unread}
                       </span>
                     )}
@@ -575,7 +575,7 @@ function MessagesTab({ friends, unreadCounts, onOpen }: {
             <div className="relative shrink-0">
               <Avatar profile={f.friend} size="md" />
               {unread > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-gold text-field-950 text-[10px] font-black rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-gold text-field-950 text-[12px] font-black rounded-full flex items-center justify-center">
                   {unread}
                 </span>
               )}
@@ -994,7 +994,7 @@ function RosterRow({ entry }: { entry: FriendRosterEntry }) {
       <span className="text-white font-bold flex-1 truncate flex items-center gap-1">
         {p.name}
         {p.is_rookie && (
-          <span className="text-[9px] font-black bg-gold text-field-950 px-0.5 rounded leading-none">R</span>
+          <span className="text-[11px] font-black bg-gold text-field-950 px-0.5 rounded leading-none">R</span>
         )}
       </span>
       <span className="text-field-400 truncate hidden sm:block">{p.team}</span>

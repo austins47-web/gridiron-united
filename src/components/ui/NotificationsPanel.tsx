@@ -39,7 +39,7 @@ export function NotificationsPanel({ onClose }: Props) {
             Notifications
           </span>
           {unreadCount > 0 && (
-            <span className="bg-gold text-field-900 font-cond font-black text-[10px] px-1.5 py-0.5 rounded-full">
+            <span className="bg-gold text-field-900 font-cond font-black text-[12px] px-1.5 py-0.5 rounded-full">
               {unreadCount}
             </span>
           )}

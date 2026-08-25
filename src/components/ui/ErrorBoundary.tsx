@@ -95,7 +95,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <summary className="text-xs text-field-400 uppercase tracking-wider font-bold cursor-pointer">
               Stack trace
             </summary>
-            <pre className="text-[10px] text-field-300 mt-2 overflow-x-auto whitespace-pre-wrap">
+            <pre className="text-[12px] text-field-300 mt-2 overflow-x-auto whitespace-pre-wrap">
               {error.stack}
             </pre>
           </details>
@@ -106,7 +106,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <summary className="text-xs text-field-400 uppercase tracking-wider font-bold cursor-pointer">
               Component stack
             </summary>
-            <pre className="text-[10px] text-field-300 mt-2 overflow-x-auto whitespace-pre-wrap">
+            <pre className="text-[12px] text-field-300 mt-2 overflow-x-auto whitespace-pre-wrap">
               {info.componentStack}
             </pre>
           </details>

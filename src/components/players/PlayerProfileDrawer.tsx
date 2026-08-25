@@ -254,7 +254,7 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
               <span className="text-field-500 text-xs">· {player.conference}</span>
             )}
             {player.is_rookie && player.league === 'NFL' && (
-              <span className="text-[10px] font-black bg-gold text-field-950 px-1.5 py-0.5 rounded">ROOKIE</span>
+              <span className="text-[12px] font-black bg-gold text-field-950 px-1.5 py-0.5 rounded">ROOKIE</span>
             )}
             {player.league === 'CFB' && player.depth_pos && CLASS_SHORT[player.depth_pos] && (
               <span className={`text-xs font-black px-1.5 py-0.5 rounded ${CLASS_COLORS[player.depth_pos]}`}>
@@ -318,7 +318,7 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
                   ].map(({ label, value }) => (
                     <div key={label} className="bg-field-800 rounded-xl p-3 text-center border border-field-700">
                       <div className="font-cond font-black text-2xl text-white">{value}</div>
-                      <div className="text-[10px] text-field-400 font-bold uppercase tracking-wider mt-0.5">{label}</div>
+                      <div className="text-[12px] text-field-400 font-bold uppercase tracking-wider mt-0.5">{label}</div>
                     </div>
                   ))}
                 </div>
@@ -412,7 +412,7 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
                         <div className="text-xs text-field-400 mt-1 line-clamp-2">{item.desc}</div>
                       )}
                       {item.published && (
-                        <div className="text-[10px] text-field-500 mt-1.5">{timeAgo(item.published)}</div>
+                        <div className="text-[12px] text-field-500 mt-1.5">{timeAgo(item.published)}</div>
                       )}
                     </div>
                     <ExternalLink className="w-3.5 h-3.5 text-field-500 shrink-0 mt-0.5" />

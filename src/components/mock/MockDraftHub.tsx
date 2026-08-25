@@ -1251,7 +1251,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                         <div className="truncate" style={{maxWidth: '80px'}}>
                           {s.user_id ? (s.profile?.display_name || s.profile?.username || s.team_name) : `AI ${s.slot_number}`}
                         </div>
-                        {isMe && <div className="text-[9px] text-gold/60 font-normal">YOU</div>}
+                        {isMe && <div className="text-[11px] text-gold/60 font-normal">YOU</div>}
                       </th>
                     )
                   })}
@@ -1460,7 +1460,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                         <td onClick={amOnClock && !isPaused && !autoDraft ? () => handleHumanPick(p.id) : undefined}>
                           <div className="font-bold text-white text-sm flex items-center gap-1.5">
                             {p.name}
-                            {p.is_rookie && <span className="text-[10px] font-black bg-gold text-field-950 px-1 py-0.5 rounded leading-none">R</span>}
+                            {p.is_rookie && <span className="text-[12px] font-black bg-gold text-field-950 px-1 py-0.5 rounded leading-none">R</span>}
                           </div>
                           <div className="text-field-400 text-xs">{p.team} · <span className={p.league === 'NFL' ? 'text-nfl' : 'text-cfb'}>{p.league}</span></div>
                         </td>
@@ -1519,7 +1519,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                 {tab.label}
                 {tab.badge > 0 && (
                   <span className={clsx(
-                    'text-[10px] font-black px-1 py-0.5 rounded-full min-w-[16px] text-center leading-none',
+                    'text-[12px] font-black px-1 py-0.5 rounded-full min-w-[16px] text-center leading-none',
                     sidebarTab === tab.id ? 'bg-gold text-field-950' : 'bg-field-700 text-field-400',
                   )}>
                     {tab.badge}
@@ -1535,7 +1535,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-gold uppercase tracking-wider flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5" /> Draft Queue
-                  {queue.length > 0 && <span className="bg-gold text-field-950 text-[10px] font-black px-1.5 py-0.5 rounded-full">{queue.length}</span>}
+                  {queue.length > 0 && <span className="bg-gold text-field-950 text-[12px] font-black px-1.5 py-0.5 rounded-full">{queue.length}</span>}
                 </span>
                 {queue.length > 0 && (
                   <button className="text-xs text-field-400 hover:text-red-400 transition-colors" onClick={() => setQueue([])}>Clear</button>
@@ -1594,7 +1594,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                     {allPos.map(pos => (
                       <div key={pos}>
                         <div className="text-xs font-bold text-field-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                          <span className={clsx('pos-badge text-[9px]', `pos-${pos}`)}>{pos}</span>
+                          <span className={clsx('pos-badge text-[11px]', `pos-${pos}`)}>{pos}</span>
                           <span>{byPos[pos].length}</span>
                         </div>
                         <div className="space-y-0.5">
@@ -1717,7 +1717,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                         style={{width: '108px', minWidth: '108px'}}
                       >
                         <div className="truncate px-1" title={name}>{name}</div>
-                        {isMe && <div className="text-[9px] text-gold/50 font-normal leading-none mt-0.5">YOU</div>}
+                        {isMe && <div className="text-[11px] text-gold/50 font-normal leading-none mt-0.5">YOU</div>}
                       </th>
                     )
                   })}
@@ -1744,7 +1744,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                           {roundNum}
                         </div>
                         {mock.draft_type === 'snake' && (
-                          <div className="text-[8px] text-field-600 text-center mt-0.5 leading-none">
+                          <div className="text-[10px] text-field-600 text-center mt-0.5 leading-none">
                             {isEvenRound ? '←' : '→'}
                           </div>
                         )}
@@ -1784,7 +1784,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                                   <span className={clsx('pos-badge', `pos-${player.pos}`)} style={{fontSize: '10px', padding: '1px 5px'}}>
                                     {player.pos}
                                   </span>
-                                  <span className="text-field-600 text-[9px]">#{pick?.pick_number}</span>
+                                  <span className="text-field-600 text-[11px]">#{pick?.pick_number}</span>
                                 </div>
                                 {/* Full player name */}
                                 <div

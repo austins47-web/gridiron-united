@@ -469,7 +469,7 @@ export function PickEmView() {
               <div className="max-h-72 overflow-y-auto">
                 {/* Regular season weeks */}
                 <div className="px-3 py-1 border-b border-field-700">
-                  <span className="text-field-500 text-[10px] font-bold uppercase tracking-wider">Regular Season</span>
+                  <span className="text-field-500 text-[12px] font-bold uppercase tracking-wider">Regular Season</span>
                 </div>
                 {Array.from({ length: 18 }, (_, i) => i + 1).map(w => {
                   const endDate = WEEK_END_DATES[w]
@@ -495,7 +495,7 @@ export function PickEmView() {
                 })}
                 {/* Postseason weeks */}
                 <div className="px-3 py-1 border-t border-b border-field-700 mt-1">
-                  <span className="text-gold text-[10px] font-bold uppercase tracking-wider">Postseason</span>
+                  <span className="text-gold text-[12px] font-bold uppercase tracking-wider">Postseason</span>
                 </div>
                 {[
                   { w: 19, label: 'Wild Card' },
@@ -896,7 +896,7 @@ function GamePickCard({
                   </div>
                   {winPct !== null && (
                     <div className="w-full">
-                      <div className="flex justify-between text-[9px] text-field-500 mb-0.5">
+                      <div className="flex justify-between text-[11px] text-field-500 mb-0.5">
                         <span>Win%</span>
                         <span className={clsx(
                           'font-black',
@@ -1159,7 +1159,7 @@ function PicksChart({
                   )}
                 </div>
                 {game.is_tiebreaker && (
-                  <span className="text-[9px] font-bold text-gold bg-gold/10 px-1 py-0.5 rounded uppercase tracking-wider">TB</span>
+                  <span className="text-[11px] font-bold text-gold bg-gold/10 px-1 py-0.5 rounded uppercase tracking-wider">TB</span>
                 )}
               </div>
               <div className="text-right shrink-0">
@@ -1175,7 +1175,7 @@ function PicksChart({
             {/* Pick bar */}
             {total > 0 && (
               <div className="space-y-0.5">
-                <div className="flex rounded overflow-hidden h-3.5 text-[9px] font-black">
+                <div className="flex rounded overflow-hidden h-3.5 text-[11px] font-black">
                   {awayPct > 0 && (
                     <div
                       className={clsx(
@@ -1199,7 +1199,7 @@ function PicksChart({
                     </div>
                   )}
                 </div>
-                <div className="flex justify-between text-[9px] text-field-500">
+                <div className="flex justify-between text-[11px] text-field-500">
                   <span>{awayCount}p</span>
                   <span>{homeCount}p</span>
                 </div>
@@ -1234,7 +1234,7 @@ function PicksChart({
                     </span>
                     <span className="text-field-700 mx-0.5">·</span>
                     {!isPickVisibleForUser(game, m.user_id) ? (
-                      <span className="text-field-600 text-[9px]">🔒</span>
+                      <span className="text-field-600 text-[11px]">🔒</span>
                     ) : !picked ? (
                       <span className="text-field-600 italic">—</span>
                     ) : (
@@ -1255,7 +1255,7 @@ function PicksChart({
             {/* Tiebreaker guesses */}
             {game.is_tiebreaker && (revealed || allPicks.some((p: any) => p.game_id === game.id && p.user_id === userId)) && (
               <div className="flex flex-wrap items-center gap-1.5 border-t border-field-700/60 pt-1.5">
-                <span className="text-[9px] font-bold text-gold uppercase tracking-wider flex items-center gap-1">
+                <span className="text-[11px] font-bold text-gold uppercase tracking-wider flex items-center gap-1">
                   <Target className="w-2.5 h-2.5" /> TB:
                 </span>
                 {sortedMembers.map(m => {
