@@ -28,7 +28,7 @@
   }
   .btn-gold:hover {
     @apply bg-gold-light;
-    box-shadow: 0 0 0 1px rgba(245,166,35,.5), 0 4px 14px -4px rgba(245,166,35,.55);
+    box-shadow: 0 0 0 1px rgba(206, 123, 69,.5), 0 4px 14px -4px rgba(206, 123, 69,.55);
   }
   .btn-gold:active   { transform: translateY(1px) scale(.985); }
 
@@ -83,7 +83,7 @@
     top: 0; left: 0; right: 0;
     height: 1px;
     background: linear-gradient(90deg,
-      transparent 0%, rgba(245,166,35,.35) 30%, rgba(245,166,35,.35) 70%, transparent 100%);
+      transparent 0%, rgba(206, 123, 69,.35) 30%, rgba(206, 123, 69,.35) 70%, transparent 100%);
     opacity: .6;
     pointer-events: none;
   }
@@ -102,14 +102,14 @@
     align-self: stretch;
     min-height: 1.1em;
     border-radius: 2px;
-    background: linear-gradient(180deg, #CE7B45 0%, rgba(245,166,35,.35) 100%);
+    background: linear-gradient(180deg, #CE7B45 0%, rgba(206, 123, 69,.35) 100%);
     flex-shrink: 0;
   }
   .section-title::after {
     content: '';
     flex: 1;
     height: 1px;
-    background: linear-gradient(90deg, rgba(39,48,68,1) 0%, rgba(39,48,68,0) 100%);
+    background: linear-gradient(90deg, rgba(48, 48, 48,1) 0%, rgba(48, 48, 48,0) 100%);
   }
 
   /* ── Position badges ── */
@@ -191,7 +191,7 @@
   .jumbotron {
     @apply relative overflow-hidden rounded-2xl border border-field-700;
     background:
-      linear-gradient(180deg, rgba(22,27,39,0.96) 0%, rgba(14,17,23,0.98) 100%);
+      linear-gradient(180deg, rgba(28, 28, 28,0.96) 0%, rgba(20, 20, 20,0.98) 100%);
   }
   /* Yard lines — every 5th heavier, like real field markings */
   .jumbotron::before {
@@ -201,8 +201,8 @@
     background-image:
       repeating-linear-gradient(
         90deg,
-        rgba(138,154,184,0.055) 0px,
-        rgba(138,154,184,0.055) 1px,
+        rgba(163, 163, 163,0.055) 0px,
+        rgba(163, 163, 163,0.055) 1px,
         transparent 1px,
         transparent 44px
       );
@@ -241,22 +241,22 @@
     position: absolute;
     left: 0; top: 0; bottom: 0;
     width: 3px;
-    background: #4A4034;
+    background: #4A4A4A;
     transition: background .18s ease;
   }
   .lower-third:hover { @apply border-field-500; }
   .lower-third:hover::before { background: #CE7B45; }
 
   .lower-third.is-urgent {
-    border-color: rgba(245,166,35,0.55);
-    background: linear-gradient(90deg, rgba(245,166,35,0.10) 0%, rgba(22,27,39,1) 55%);
+    border-color: rgba(206, 123, 69,0.55);
+    background: linear-gradient(90deg, rgba(206, 123, 69,0.10) 0%, rgba(28, 28, 28,1) 55%);
   }
   .lower-third.is-urgent::before { background: #CE7B45; }
 
   /* Play clock — only on the single most urgent item */
   @keyframes play-clock {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(245,166,35,0.35); }
-    50%      { box-shadow: 0 0 0 6px rgba(245,166,35,0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(206, 123, 69,0.35); }
+    50%      { box-shadow: 0 0 0 6px rgba(206, 123, 69,0); }
   }
   .play-clock { animation: play-clock 2s ease-out infinite; }
 
@@ -281,14 +281,14 @@
   /* Page header slab — the jumbotron, sized for interior pages */
   .page-hero {
     @apply relative overflow-hidden rounded-2xl border border-field-700 mb-5;
-    background: linear-gradient(180deg, rgba(22,27,39,.96) 0%, rgba(14,17,23,.98) 100%);
+    background: linear-gradient(180deg, rgba(28, 28, 28,.96) 0%, rgba(20, 20, 20,.98) 100%);
   }
   .page-hero::before {
     content: '';
     position: absolute; inset: 0;
     background-image: repeating-linear-gradient(
       90deg,
-      rgba(138,154,184,.05) 0px, rgba(138,154,184,.05) 1px,
+      rgba(163, 163, 163,.05) 0px, rgba(163, 163, 163,.05) 1px,
       transparent 1px, transparent 40px);
     pointer-events: none;
   }
@@ -433,19 +433,19 @@
 
   /* ── Trade chat card (dark mode default) ── */
   .trade-chat-card {
-    background-color: rgba(22, 27, 39, 0.9);
-    border-color: rgba(39, 48, 68, 0.8);
+    background-color: rgba(28, 28, 28, 0.9);
+    border-color: rgba(48, 48, 48, 0.8);
   }
   .trade-chat-header {
-    background-color: rgba(30, 37, 53, 0.8);
-    border-color: rgba(39, 48, 68, 0.6);
+    background-color: rgba(38, 38, 38, 0.8);
+    border-color: rgba(48, 48, 48, 0.6);
   }
   .trade-chat-title  { color: #CE7B45; }
-  .trade-chat-time   { color: #A0917F; }
+  .trade-chat-time   { color: #A3A3A3; }
   .trade-chat-label  { color: #CE7B45; }
   .trade-chat-player { color: #f3f4f6; }
-  .trade-chat-empty  { color: #6E6153; }
-  .trade-chat-divider { border-color: rgba(39, 48, 68, 0.5); }
+  .trade-chat-empty  { color: #666666; }
+  .trade-chat-divider { border-color: rgba(48, 48, 48, 0.5); }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -596,7 +596,6 @@
 [data-theme="light"] ::-webkit-scrollbar-thumb:hover { background-color: #9ca3af !important; }
 
 /* ── Misc backgrounds common in the app ── */
-[data-theme="light"] .bg-\[\#14100D\],
 [data-theme="light"] .bg-field-900\/50 { background-color: #f0f2f7 !important; }
 
 /* ── Gold tint backgrounds ── */
@@ -764,8 +763,8 @@
 }
 
 /* Scoring badge backgrounds */
-[data-theme="light"] .league-selector-dropdown .bg-nfl\/15 { background-color: rgba(74,159,232,0.15) !important; }
-[data-theme="light"] .league-selector-dropdown .bg-cfb\/15 { background-color: rgba(232,160,32,0.15) !important; }
+[data-theme="light"] .league-selector-dropdown .bg-nfl\/15 { background-color: rgba(90, 169, 255,0.15) !important; }
+[data-theme="light"] .league-selector-dropdown .bg-cfb\/15 { background-color: rgba(240, 200, 70,0.15) !important; }
 [data-theme="light"] .league-selector-dropdown .bg-gray-600\/20 { background-color: #f3f4f6 !important; }
 
 /* Loading skeleton */

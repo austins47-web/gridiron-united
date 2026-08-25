@@ -146,7 +146,7 @@ export function LandingPage() {
         <FieldLines />
         {/* glow orb */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] rounded-full blur-[150px] pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse, rgba(245,166,35,0.07) 0%, transparent 70%)' }}
+          style={{ background: 'radial-gradient(ellipse, rgba(206, 123, 69,0.07) 0%, transparent 70%)' }}
         />
         {/* floating emojis */}
         <div className="absolute top-[22%] left-[7%]  text-5xl opacity-[0.18] float-a">🏈</div>
@@ -182,7 +182,7 @@ export function LandingPage() {
           <div className="anim-fade-up d5 flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <button
               onClick={() => navigate('/auth?mode=signup')}
-              className="w-full sm:w-auto font-cond font-black text-base uppercase tracking-widest px-10 py-4 rounded-xl bg-gold text-field-950 hover:bg-gold-light transition-all hover:scale-105 hover:shadow-[0_8px_40px_rgba(245,166,35,0.4)] active:scale-100"
+              className="w-full sm:w-auto font-cond font-black text-base uppercase tracking-widest px-10 py-4 rounded-xl bg-gold text-field-950 hover:bg-gold-light transition-all hover:scale-105 hover:shadow-[0_8px_40px_rgba(206, 123, 69,0.4)] active:scale-100"
             >
               Start Playing Free
             </button>
@@ -321,7 +321,7 @@ export function LandingPage() {
       {/* ── FINAL CTA ───────────────────────────────────── */}
       <section className="relative py-28 px-6 overflow-hidden">
         <div className="absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse at center, rgba(245,166,35,0.08) 0%, transparent 65%)' }}
+          style={{ background: 'radial-gradient(ellipse at center, rgba(206, 123, 69,0.08) 0%, transparent 65%)' }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-field-900/30 to-transparent" />
         <div className="relative max-w-3xl mx-auto text-center">
@@ -334,7 +334,7 @@ export function LandingPage() {
           </p>
           <button
             onClick={() => navigate('/auth?mode=signup')}
-            className="font-cond font-black text-lg uppercase tracking-widest px-14 py-5 rounded-xl bg-gold text-field-950 hover:bg-gold-light transition-all hover:scale-105 hover:shadow-[0_14px_50px_rgba(245,166,35,0.45)] active:scale-100"
+            className="font-cond font-black text-lg uppercase tracking-widest px-14 py-5 rounded-xl bg-gold text-field-950 hover:bg-gold-light transition-all hover:scale-105 hover:shadow-[0_14px_50px_rgba(206, 123, 69,0.45)] active:scale-100"
           >
             Create Free Account
           </button>
