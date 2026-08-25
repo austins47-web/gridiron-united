@@ -182,6 +182,7 @@ export function CommissionerPanel() {
 function LeagueManager({ league }: { league: League }) {
   const deleteLeague = useDeleteLeague()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const isPickem = league.league_type === 'pickem'
 
   return (
     <div className="space-y-4">
@@ -189,10 +190,23 @@ function LeagueManager({ league }: { league: League }) {
       <div className="panel grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
         {[
           ['League Name', league.name],
-          ['Scoring', league.scoring_type?.toUpperCase()],
-          ['Draft Type', league.draft_type],
-          ['Player Pool', league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase()],
-          ['Teams', String(league.num_teams)],
+          // Scoring type is a fantasy-league concept — for Pick'Em,
+          // the scoring_type column just holds a leftover default
+          // from row creation, not anything real. Show the format
+          // instead, matching the equivalent panel in LeaguesView.
+          isPickem
+            ? ['Format', "Pick'Em"]
+            : ['Scoring', league.scoring_type?.toUpperCase()],
+          // Draft type, team cap, and player pool are all fantasy-draft
+          // concepts with no meaning in Pick'Em — no draft, no roster
+          // of drafted players, and the team cap is an internal
+          // ceiling, not a real number to show. Matches the same
+          // exclusions already applied to this panel in LeaguesView.
+          ...(isPickem ? [] : [
+            ['Draft Type', league.draft_type],
+            ['Player Pool', league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase()],
+            ['Teams', String(league.num_teams)],
+          ]),
           ['Season', String(league.season ?? CURRENT_SEASON)],
         ].map(([label, value]) => (
           <div key={label} className="bg-field-800/60 rounded-lg p-3">
@@ -229,7 +243,9 @@ function LeagueManager({ league }: { league: League }) {
             <div>
               <div className="text-sm font-bold text-white">Delete this league</div>
               <div className="text-xs text-field-400 mt-0.5">
-                Permanently removes all rosters, draft picks, and settings. This cannot be undone.
+                {isPickem
+                  ? 'Permanently removes all picks, standings, and settings. This cannot be undone.'
+                  : 'Permanently removes all rosters, draft picks, and settings. This cannot be undone.'}
               </div>
             </div>
             <button
@@ -244,8 +260,10 @@ function LeagueManager({ league }: { league: League }) {
           <div className="space-y-3">
             <p className="text-sm text-red-300">
               Are you sure you want to delete{' '}
-              <span className="font-bold text-white">"{league.name}"</span>?
-              Every roster, draft pick, and matchup will be gone permanently.
+              <span className="font-bold text-white">"{league.name}"</span>?{' '}
+              {isPickem
+                ? 'Every pick and standing will be gone permanently.'
+                : 'Every roster, draft pick, and matchup will be gone permanently.'}
             </p>
             <div className="flex gap-2">
               <button
@@ -894,6 +912,7 @@ function PlayerScoreEditor() {
 function MembersManager({ leagueId, league }: { leagueId: string; league: League }) {
   const { user } = useAppStore()
   const qc = useQueryClient()
+  const isPickem = league.league_type === 'pickem'
 
   const { data: members = [], refetch } = useQuery({
     queryKey: ['comm-members-full', leagueId],
@@ -971,7 +990,11 @@ function MembersManager({ leagueId, league }: { leagueId: string; league: League
 
   return (
     <div className="space-y-3">
-      <p className="text-field-400 text-sm">Manage team names, standings, draft positions, waiver priority, and commissioner status.</p>
+      <p className="text-field-400 text-sm">
+        {isPickem
+          ? 'Manage team names and commissioner status.'
+          : 'Manage team names, standings, draft positions, waiver priority, and commissioner status.'}
+      </p>
 
       {members.map((m: any) => {
         const isMe = m.user_id === user?.id
@@ -998,7 +1021,9 @@ function MembersManager({ leagueId, league }: { leagueId: string; league: League
                     </span>
                   )}
                 </div>
-                <div className="text-field-400 text-xs">{m.team_name} · Draft #{m.draft_position ?? '—'} · Waiver #{m.waiver_priority ?? '—'}</div>
+                <div className="text-field-400 text-xs">
+                  {isPickem ? m.team_name : `${m.team_name} · Draft #${m.draft_position ?? '—'} · Waiver #${m.waiver_priority ?? '—'}`}
+                </div>
               </div>
               <div className="flex gap-1 shrink-0">
                 {!isEditing ? (
@@ -1045,6 +1070,8 @@ function MembersManager({ leagueId, league }: { leagueId: string; league: League
                   <label className="label text-xs">Team Name</label>
                   <input className="input text-sm" value={editTeamName} onChange={e => setEditTeamName(e.target.value)} />
                 </div>
+                {!isPickem && (
+                  <>
                 <div>
                   <label className="label text-xs">Draft Position</label>
                   <input type="number" className="input text-sm" value={editDraftPos} onChange={e => setEditDraftPos(e.target.value)} />
@@ -1065,6 +1092,8 @@ function MembersManager({ leagueId, league }: { leagueId: string; league: League
                   <label className="label text-xs">Points For</label>
                   <input type="number" step="0.1" className="input text-sm" value={editPF} onChange={e => setEditPF(e.target.value)} />
                 </div>
+                  </>
+                )}
               </div>
             )}
           </div>
