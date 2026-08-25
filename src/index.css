@@ -491,6 +491,22 @@
 [data-theme="light"] .border-field-700 { border-color: #d1d5db !important; }
 [data-theme="light"] .border-field-600 { border-color: #c4c9d4 !important; }
 [data-theme="light"] .border-field-500 { border-color: #9ca3af !important; }
+[data-theme="light"] .border-field-400 { border-color: #6b7280 !important; }
+[data-theme="light"] .border-field-800 { border-color: #e5e7eb !important; }
+
+/* Opacity variants — border alpha mainly affects crispness rather
+   than legibility the way a background fill does, so every variant
+   just reuses its base color's solid light value. */
+[data-theme="light"] .border-field-500\/25 { border-color: #9ca3af !important; }
+[data-theme="light"] .border-field-500\/30 { border-color: #9ca3af !important; }
+[data-theme="light"] .border-field-600\/30 { border-color: #c4c9d4 !important; }
+[data-theme="light"] .border-field-700\/40 { border-color: #d1d5db !important; }
+[data-theme="light"] .border-field-700\/50 { border-color: #d1d5db !important; }
+[data-theme="light"] .border-field-700\/60 { border-color: #d1d5db !important; }
+[data-theme="light"] .border-field-700\/70 { border-color: #d1d5db !important; }
+[data-theme="light"] .border-field-800\/30 { border-color: #e5e7eb !important; }
+[data-theme="light"] .border-field-800\/50 { border-color: #e5e7eb !important; }
+[data-theme="light"] .border-field-800\/60 { border-color: #e5e7eb !important; }
 
 [data-theme="light"] .text-field-100 { color: #111827 !important; }
 [data-theme="light"] .text-field-200 { color: #1f2937 !important; }
@@ -498,6 +514,12 @@
 [data-theme="light"] .text-field-400 { color: #4b5563 !important; }
 [data-theme="light"] .text-field-500 { color: #6b7280 !important; }
 [data-theme="light"] .text-field-600 { color: #9ca3af !important; }
+[data-theme="light"] .text-field-700 { color: #d1d5db !important; }
+[data-theme="light"] .text-field-800 { color: #e5e7eb !important; }
+/* NOTE: text-field-900/950 intentionally NOT overridden — every
+   usage is paired with bg-gold (e.g. "bg-gold text-field-950") for
+   dark text on a gold badge, which must stay dark in both themes
+   since gold itself doesn't change with theme. */
 
 [data-theme="light"] .text-white { color: #111827 !important; }
 [data-theme="light"] .text-gray-100 { color: #111827 !important; }
@@ -957,6 +979,29 @@
   border-color: rgba(232,149,14,0.5) !important;
 }
 [data-theme="light"] .ticker-cell { border-color: #e5e7eb !important; }
+
+/* ── page-hero (Scores, Players, etc. — the non-Home page header) ──
+   Structurally the same broadcast-card pattern as .jumbotron but
+   never got its own light treatment, so every page using it (per
+   the user: "almost every page") stayed on its dark gradient
+   regardless of theme. */
+[data-theme="light"] .page-hero {
+  background: linear-gradient(180deg, #ffffff 0%, #f4f6fb 100%) !important;
+  border-color: #d1d5db !important;
+}
+[data-theme="light"] .page-hero::before {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(17,24,39,0.045) 0px, rgba(17,24,39,0.045) 1px,
+    transparent 1px, transparent 40px) !important;
+}
+[data-theme="light"] .page-hero-title { color: #111827 !important; }
+
+/* ── stat-tile (the readout grid used alongside .page-hero) ──────
+   Same bug as .readout-value/.readout-label on Home, via a
+   differently-named parallel class used on other pages. */
+[data-theme="light"] .stat-tile-value { color: #111827 !important; }
+[data-theme="light"] .stat-tile-label { color: #4b5563 !important; }
 
 /* ── field-N opacity variants used directly in JSX ──────────────
    Tailwind generates these from the same dark hex the solid
