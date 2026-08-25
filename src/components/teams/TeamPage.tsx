@@ -4,7 +4,10 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Trophy, Calendar, Users, MapPin, Award, Medal, LayoutDashboard } from 'lucide-react'
 import clsx from 'clsx'
 import { NFL_AWARDS, CFB_AWARDS } from './teamAwards'
+import { teamLogoUrl } from './teamIds'
 import { CURRENT_SEASON } from '@/lib/season'
+import { supabase } from '@/lib/supabase'
+import { byeWeeksForTeam } from '@/lib/byeWeeks'
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -38,8 +41,14 @@ function parseEvent(ev: any, teamId: string, league: 'NFL' | 'CFB') {
   const statusType = comp.status?.type?.name ?? ev.status?.type?.name ?? ''
   const isFinal = statusType.toLowerCase().includes('final') || statusType.toLowerCase().includes('complete')
   const isLive  = statusType.toLowerCase().includes('progress')
-  const usScore  = parseInt(us?.score  ?? '0') || 0
-  const oppScore = parseInt(opp?.score ?? '0') || 0
+  // ESPN's team-schedule endpoint returns score as an OBJECT
+  // ({ value, displayValue }), unlike the scoreboard endpoint used
+  // elsewhere in this app where it's a plain string. parseInt() on
+  // an object coerces to "[object Object]" -> NaN -> silently 0,
+  // which is why every completed game showed 0-0 here regardless
+  // of the real result.
+  const usScore  = Number(us?.score?.value  ?? us?.score  ?? 0) || 0
+  const oppScore = Number(opp?.score?.value ?? opp?.score ?? 0) || 0
   const result = isFinal
     ? usScore > oppScore ? 'W' : usScore < oppScore ? 'L' : 'T'
     : null
@@ -53,7 +62,15 @@ function parseEvent(ev: any, teamId: string, league: 'NFL' | 'CFB') {
     isNeutral:  comp.neutralSite ?? false,
     oppAbbr:    opp?.team?.abbreviation ?? opp?.abbreviation ?? '??',
     oppName:    opp?.team?.displayName ?? opp?.displayName ?? 'TBD',
-    oppLogo:    opp?.team?.logo ?? opp?.logo ?? null,
+    // ESPN's team-schedule endpoint nests logos in an array
+    // (team.logos[0].href), not a singular .logo field — the old
+    // code read a field that never existed, so this always
+    // silently rendered nothing. Use the same shared logo helper
+    // as Live Scores / Pick'Em instead of re-deriving it here.
+    oppLogo:    teamLogoUrl(
+                  { abbr: opp?.team?.abbreviation, name: opp?.team?.displayName, id: opp?.team?.id },
+                  league,
+                ),
     usScore,
     oppScore,
     isFinal,
@@ -136,6 +153,59 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
     (schedule?.events ?? []).map((ev: any) => parseEvent(ev, teamId, league)),
     [schedule, teamId, league]
   )
+
+  // ── Bye weeks — derived from nfl_games, NFL regular season only ──
+  // A team is on bye if it simply doesn't appear anywhere in that
+  // week's rows. Nothing to maintain separately; this can never
+  // drift out of sync with the real schedule.
+  const teamAbbr = team?.abbreviation as string | undefined
+
+  const { data: seasonGames = [] } = useQuery({
+    queryKey: ['nfl-games-all-weeks', CURRENT_SEASON],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('nfl_games')
+        .select('week, home_team, away_team')
+        .eq('season', CURRENT_SEASON)
+      if (error) throw error
+      return data ?? []
+    },
+    enabled: league === 'NFL' && (tab === 'schedule' || tab === 'overview'),
+    staleTime: 15 * 60_000,
+  })
+
+  const byeWeeks = useMemo(
+    () => (league === 'NFL' && teamAbbr ? byeWeeksForTeam(seasonGames as any, teamAbbr) : []),
+    [seasonGames, teamAbbr, league],
+  )
+
+  // One render list mixing real games with bye-week placeholders,
+  // in week order. Byes only ever apply to regular-season weeks, so
+  // they're inserted right before the next regular-season game that
+  // has a higher week number than the last one seen.
+  type ScheduleRow = { kind: 'game'; game: ReturnType<typeof parseEvent> } | { kind: 'bye'; week: number }
+  const scheduleRows = useMemo<ScheduleRow[]>(() => {
+    if (byeWeeks.length === 0) return games.map(g => ({ kind: 'game', game: g }))
+
+    const rows: ScheduleRow[] = []
+    const remainingByes = [...byeWeeks].sort((a, b) => a - b)
+    let lastRegularWeek = 0
+
+    for (const g of games) {
+      const isRegular = (g as any)._seasonType !== 1 && !(g as any)._week0
+      if (isRegular && typeof g.week === 'number') {
+        while (remainingByes.length && remainingByes[0] < g.week && remainingByes[0] > lastRegularWeek) {
+          rows.push({ kind: 'bye', week: remainingByes.shift()! })
+        }
+        lastRegularWeek = g.week
+      }
+      rows.push({ kind: 'game', game: g })
+    }
+    // Any bye weeks after the last listed game (rare, but complete)
+    for (const w of remainingByes) rows.push({ kind: 'bye', week: w })
+
+    return rows
+  }, [games, byeWeeks])
 
   const awards = league === 'CFB'
     ? CFB_AWARDS[teamId]
@@ -321,7 +391,24 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
             )}
 
             <div className="space-y-1.5">
-              {games.map(g => (
+              {scheduleRows.map(row => {
+                if (row.kind === 'bye') {
+                  return (
+                    <div key={`bye-${row.week}`}
+                      className="panel flex items-center gap-3 py-2.5 border-dashed opacity-70">
+                      <span className="text-xs font-bold w-12 shrink-0 text-center text-field-500">
+                        Wk {row.week}
+                      </span>
+                      <div className="w-7 h-7 rounded-full bg-field-700/50 flex items-center justify-center shrink-0">
+                        <Calendar className="w-3.5 h-3.5 text-field-500" />
+                      </div>
+                      <span className="text-sm text-field-400 font-bold uppercase tracking-wider">Bye Week</span>
+                    </div>
+                  )
+                }
+
+                const g = row.game
+                return (
                 <div key={g.id}
                   className={clsx('panel flex items-center gap-3 py-2.5',
                     g.isLive && 'border-red-500/40 bg-red-500/5'
@@ -378,7 +465,8 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
                     </span>
                   )}
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}

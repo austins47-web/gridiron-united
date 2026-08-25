@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { resolveWeekDeadline } from '@/lib/deadline'
 import { teamLogoUrl } from '@/components/teams/teamIds'
+import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import {
   computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal,
 } from './standings'
@@ -157,6 +158,14 @@ export function PickEmView() {
       return data ?? []
     },
   })
+
+  // Only meaningful once real games are loaded for the week — an
+  // empty games array (still loading, or no schedule yet) would
+  // otherwise read as "everyone's on bye."
+  const byeTeams = useMemo(
+    () => (games.length > 0 ? byeTeamsForWeek(games as any) : []),
+    [games],
+  )
 
   // ── The deadline actually in force for this week ─────────────
   //
@@ -560,6 +569,22 @@ export function PickEmView() {
               <Settings className="w-3.5 h-3.5" />
             </button>
           )}
+        </div>
+      )}
+
+      {/* Bye teams this week — derived from nfl_games, so it can
+          never drift out of sync with the real schedule */}
+      {byeTeams.length > 0 && (
+        <div className="flex items-start gap-2 text-xs bg-field-800/40 border border-field-700/50 rounded-lg px-3 py-2">
+          <Calendar className="w-3.5 h-3.5 text-field-500 shrink-0 mt-0.5" />
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span className="text-field-500 font-bold shrink-0">On bye:</span>
+            {byeTeams.map((abbr, i) => (
+              <span key={abbr} className="text-field-400">
+                {TEAM_INFO[abbr]?.name ?? abbr}{i < byeTeams.length - 1 ? ',' : ''}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
