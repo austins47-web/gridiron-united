@@ -7,7 +7,7 @@ import type { League, LeagueMember } from '@/types/database'
 import clsx from 'clsx'
 
 export function LeagueSelector() {
-  const { user, activeLeague, setActiveLeague } = useAppStore()
+  const { user, activeLeague, activeLeagueId, setActiveLeague } = useAppStore()
   const [leagues, setLeagues] = useState<Array<{ league: League; membership: LeagueMember }>>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -33,9 +33,17 @@ export function LeagueSelector() {
         .map(m => ({ league: m.leagues as unknown as League, membership: m as LeagueMember }))
       setLeagues(items)
 
-      // Auto-select first league if none active
+      // Restore whichever league was active before a refresh —
+      // localStorage persists the id across reloads (see appStore's
+      // setActiveLeague). Only fall back to items[0] when there's
+      // no persisted choice, or the persisted league no longer
+      // applies (left the league, id stale from another account).
       if (items.length > 0 && !activeLeague) {
-        setActiveLeague(items[0].league, items[0].membership)
+        const restored = activeLeagueId
+          ? items.find(i => i.league.id === activeLeagueId)
+          : null
+        const pick = restored ?? items[0]
+        setActiveLeague(pick.league, pick.membership)
       }
     }
     setLoading(false)

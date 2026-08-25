@@ -42,7 +42,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   session: null,
   profile: null,
   authLoading: true,
-  activeLeagueId: null,
+  activeLeagueId: (typeof window !== 'undefined'
+    ? localStorage.getItem('gu-active-league-id')
+    : null),
   activeLeague: null,
   myMembership: null,
   notifications: [],
@@ -57,8 +59,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   setProfile: (profile) => set({ profile }),
   setAuthLoading: (authLoading) => set({ authLoading }),
 
-  setActiveLeague: (activeLeague, myMembership) =>
-    set({ activeLeague, myMembership, activeLeagueId: activeLeague?.id ?? null }),
+  setActiveLeague: (activeLeague, myMembership) => {
+    const id = activeLeague?.id ?? null
+    // Persisted so a page refresh restores the same league instead
+    // of falling back to whichever league a fresh, unordered query
+    // happens to return first.
+    if (id) localStorage.setItem('gu-active-league-id', id)
+    else localStorage.removeItem('gu-active-league-id')
+    set({ activeLeague, myMembership, activeLeagueId: id })
+  },
 
   setActiveLeagueId: (activeLeagueId) => set({ activeLeagueId }),
 
@@ -103,6 +112,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut()
+    localStorage.removeItem('gu-active-league-id')
     set({
       user: null,
       session: null,
