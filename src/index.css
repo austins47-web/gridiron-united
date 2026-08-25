@@ -216,6 +216,7 @@
     height: 2px;
     background: linear-gradient(90deg,
       transparent 0%, #CE7B45 15%, #DE9163 50%, #CE7B45 85%, transparent 100%);
+    animation: chain-shimmer 1.2s cubic-bezier(.4,0,.2,1) both;
     pointer-events: none;
   }
 
@@ -297,7 +298,37 @@
     position: absolute; top: 0; left: 0; right: 0; height: 2px;
     background: linear-gradient(90deg,
       transparent 0%, #CE7B45 15%, #DE9163 50%, #CE7B45 85%, transparent 100%);
+    animation: chain-shimmer 1.2s cubic-bezier(.4,0,.2,1) both;
     pointer-events: none;
+  }
+  @keyframes chain-shimmer {
+    from { filter: brightness(1) drop-shadow(0 0 0 rgba(222,145,99,0)); }
+    35%  { filter: brightness(1.9) drop-shadow(0 0 6px rgba(222,145,99,.7)); }
+    to   { filter: brightness(1) drop-shadow(0 0 0 rgba(222,145,99,0)); }
+  }
+
+  /* Hover lift — clickable cards (game cards, team cards, league
+     cards, action cards). One shared class so every card in the
+     app lifts the same amount instead of drifting inconsistently. */
+  .hover-lift {
+    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px -8px rgba(0,0,0,.5);
+  }
+  [data-theme="light"] .hover-lift:hover {
+    box-shadow: 0 10px 24px -8px rgba(0,0,0,.15);
+  }
+
+  /* Score flash — a brief highlight on the cell when a live score
+     actually changes value, paired with the count-up in useScoreTick. */
+  .score-flash {
+    transition: background-color .5s ease;
+  }
+  .score-flash.is-flashing {
+    background-color: rgba(206,123,69,.35);
+    border-radius: 6px;
   }
   .page-hero-inner   { @apply relative p-5 sm:p-6; }
   .page-hero-title {
@@ -362,6 +393,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     .rise-in, .play-clock { animation: none !important; }
+    .jumbotron::after, .page-hero::after { animation: none !important; }
+    .hover-lift:hover { transform: none !important; }
   }
 
   /* ── Modal ── */

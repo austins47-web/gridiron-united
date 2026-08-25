@@ -344,7 +344,7 @@ function ActionCard({ action, index, onGo }: { action: ActionItem; index: number
       onClick={handleClick}
       style={{ animationDelay: `${100 + index * 45}ms` }}
       className={clsx(
-        'lower-third rise-in w-full flex items-center gap-3 pl-4 pr-3 py-3 text-left group',
+        'lower-third hover-lift rise-in w-full flex items-center gap-3 pl-4 pr-3 py-3 text-left group',
         urgent && 'is-urgent play-clock',
       )}
     >
@@ -405,7 +405,7 @@ function TeamCard({ team, index }: { team: TeamRow; index: number }) {
       onClick={open}
       style={{ animationDelay: `${140 + index * 40}ms` }}
       className={clsx(
-        'lower-third rise-in w-full flex items-center gap-3 pl-4 pr-3 py-3 text-left',
+        'lower-third hover-lift rise-in w-full flex items-center gap-3 pl-4 pr-3 py-3 text-left',
         isActive && 'border-gold/40',
       )}
     >

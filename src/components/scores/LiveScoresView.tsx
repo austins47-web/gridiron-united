@@ -4,6 +4,8 @@ import { useAppStore } from '@/store/appStore'
 import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4 } from 'lucide-react'
 import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
+import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
+import { useScoreTick } from '@/hooks/useScoreTick'
 import { GameDetailModal } from './GameDetailModal'
 import { lazy, Suspense } from 'react'
 import { getTeamId, teamLogoUrl } from '@/components/teams/teamIds'
@@ -218,11 +220,15 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
   const awayScore = parseInt(game.away.score) || 0
   const homeScore = parseInt(game.home.score) || 0
   const scale = CARD_SCALE[cols]
+  // Always exactly two teams, so both hooks are called unconditionally
+  // at the top level — never inside the per-team .map() below.
+  const awayTick = useScoreTick(awayScore)
+  const homeTick = useScoreTick(homeScore)
 
   return (
     <div
       className={clsx(
-        'bg-field-800 border rounded-xl flex flex-col gap-2 min-w-0 cursor-pointer hover:border-field-500 transition-colors',
+        'bg-field-800 border rounded-xl flex flex-col gap-2 min-w-0 hover-lift cursor-pointer hover:border-field-500',
         scale.pad,
         isLive && game.redZone ? 'border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.12)]'
         : isLive ? 'border-gold/30'
@@ -246,9 +252,9 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
       </div>
 
       {[
-        { team: game.away, ahead: awayScore > homeScore },
-        { team: game.home, ahead: homeScore > awayScore },
-      ].map(({ team, ahead }) => {
+        { team: game.away, ahead: awayScore > homeScore, tick: awayTick },
+        { team: game.home, ahead: homeScore > awayScore, tick: homeTick },
+      ].map(({ team, ahead, tick }) => {
         const isFav   = teamIsFav(favTeams, team)
         const hasBall = isLive && game.possession === team.abbr
         const winning = (isLive || isFinal) && ahead
@@ -282,10 +288,11 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
             )}
             {game.status !== 'pre' && (
               <span className={clsx(
-                'font-cond font-black leading-none text-right shrink-0',
+                'score-flash font-cond font-black leading-none text-right shrink-0 px-0.5',
                 scale.score,
+                tick.flashing && 'is-flashing',
                 isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
-              )}>{team.score}</span>
+              )}>{tick.display}</span>
             )}
           </div>
         )
@@ -377,6 +384,13 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
   const homeIsFav = teamIsFav(favTeams, game.home)
   const awayIsFav = teamIsFav(favTeams, game.away)
   const anyFav    = homeIsFav || awayIsFav
+  // TeamBlock below is a component defined inline, which React
+  // remounts on every ListRow re-render — so any hook called INSIDE
+  // it would lose its "previous score" state constantly and never
+  // detect a real change. Ticking here, in the stable outer
+  // component, and passing the result down as a prop avoids that.
+  const awayTick = useScoreTick(awayScore)
+  const homeTick = useScoreTick(homeScore)
 
   const TeamBlock = ({ team, ahead, reverse = false }: { team: GameTeam, ahead: boolean, reverse?: boolean }) => {
     const isFav   = teamIsFav(favTeams, team)
@@ -430,7 +444,7 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
   return (
     <div
       className={clsx(
-        'flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all w-full cursor-pointer hover:border-field-500',
+        'flex items-center gap-4 px-4 py-3.5 rounded-xl border hover-lift w-full cursor-pointer hover:border-field-500',
         isLive && game.redZone ? 'border-red-500/30 bg-red-500/[0.03]'
         : isLive ? 'border-gold/25 bg-field-800'
         : anyFav ? 'border-field-600 bg-field-800'
@@ -453,11 +467,13 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
       <div className="shrink-0 flex items-center gap-1.5 w-20 justify-center">
         {game.status !== 'pre' ? (
           <>
-            <span className={clsx('font-cond font-black text-2xl w-7 text-right leading-none',
-              awayScore > homeScore ? 'text-white' : 'text-field-400')}>{game.away.score}</span>
+            <span className={clsx('score-flash font-cond font-black text-2xl w-7 text-right leading-none px-0.5',
+              awayTick.flashing && 'is-flashing',
+              awayScore > homeScore ? 'text-white' : 'text-field-400')}>{awayTick.display}</span>
             <span className="text-field-500 text-sm font-bold">–</span>
-            <span className={clsx('font-cond font-black text-2xl w-7 text-left leading-none',
-              homeScore > awayScore ? 'text-white' : 'text-field-400')}>{game.home.score}</span>
+            <span className={clsx('score-flash font-cond font-black text-2xl w-7 text-left leading-none px-0.5',
+              homeTick.flashing && 'is-flashing',
+              homeScore > awayScore ? 'text-white' : 'text-field-400')}>{homeTick.display}</span>
           </>
         ) : (
           <span className="text-field-300 text-sm font-bold uppercase tracking-widest">vs</span>
@@ -542,12 +558,14 @@ function ColsPicker({ value, onChange }: { value: ColCount, onChange: (v: ColCou
     { val: 4, icon: <Columns4 className="w-3.5 h-3.5" />, label: '4' },
     { val: 5, icon: <LayoutGrid className="w-3.5 h-3.5" />, label: '5' },
   ]
+  const { containerRef, indicatorStyle } = useSlidingIndicator(value)
   return (
-    <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+    <div ref={containerRef} className="pill-tabs relative flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+      <div className="absolute top-0.5 bottom-0.5 bg-field-700 rounded-md z-0" style={indicatorStyle} />
       {options.map(({ val, icon, label }) => (
-        <button key={val} onClick={() => onChange(val)} title={`${label} per row`}
-          className={clsx('flex items-center gap-1 font-cond font-bold text-xs px-2 py-1.5 rounded-md transition-colors',
-            value === val ? 'bg-field-700 text-white' : 'text-field-400 hover:text-white')}>
+        <button key={val} data-tab-key={val} onClick={() => onChange(val)} title={`${label} per row`}
+          className={clsx('relative z-10 flex items-center gap-1 font-cond font-bold text-xs px-2 py-1.5 rounded-md transition-colors',
+            value === val ? 'text-white' : 'text-field-400 hover:text-white')}>
           {icon}
           <span className="hidden sm:inline">{label}</span>
         </button>
@@ -681,6 +699,8 @@ export function LiveScoresView() {
   const nflOpt = resolveNFLOpt(nflWeekKey)
   const cfbOpt = resolveCFBOpt(cfbWeekKey)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
+  const { containerRef: leagueTabRef, indicatorStyle: leagueTabIndicator } = useSlidingIndicator(tab)
+  const { containerRef: statusRef, indicatorStyle: statusIndicator } = useSlidingIndicator(statusFilter)
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     (localStorage.getItem(VIEW_KEY) as ViewMode | null) ?? 'grid')
   const [cols, setCols] = useState<ColCount>(() =>
@@ -808,13 +828,14 @@ export function LiveScoresView() {
       </div>
 
       {/* ── League tabs ── */}
-      <div className="flex gap-1 p-1 bg-field-900 rounded-xl border border-field-800 w-fit">
+      <div ref={leagueTabRef} className="relative flex gap-1 p-1 bg-field-900 rounded-xl border border-field-800 w-fit">
+        <div className="absolute top-1 bottom-1 bg-gold rounded-lg z-0" style={leagueTabIndicator} />
         {(['NFL', 'CFB'] as LeagueTab[]).map(t => (
-          <button key={t} onClick={() => { setTab(t); setStatusFilter('All') }}
+          <button key={t} data-tab-key={t} onClick={() => { setTab(t); setStatusFilter('All') }}
             className={clsx(
-              'px-6 py-1.5 rounded-lg text-sm font-black transition-colors uppercase tracking-wide',
+              'relative z-10 px-6 py-1.5 rounded-lg text-sm font-black transition-colors uppercase tracking-wide',
               tab === t
-                ? 'bg-gold text-field-950'
+                ? 'text-field-950'
                 : 'text-field-400 hover:text-white'
             )}>
             {t}
@@ -862,12 +883,14 @@ export function LiveScoresView() {
         </div>
 
         {/* Status filter */}
-        <div className="pill-tabs flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+        <div ref={statusRef} className="pill-tabs relative flex gap-0.5 bg-field-800 border border-field-700 rounded-lg p-0.5">
+          <div className={clsx('absolute top-0.5 bottom-0.5 rounded-md z-0',
+            statusFilter === 'Live' ? 'bg-red-500/20' : 'bg-field-700')} style={statusIndicator} />
           {(['All', 'Live', 'Final', 'Upcoming'] as StatusFilter[]).map(f => (
-            <button key={f} onClick={() => setStatusFilter(f)}
-              className={clsx('font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
+            <button key={f} data-tab-key={f} onClick={() => setStatusFilter(f)}
+              className={clsx('relative z-10 font-cond font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-md transition-colors',
                 statusFilter === f
-                  ? f === 'Live' ? 'bg-red-500/20 text-red-400' : 'bg-field-700 text-white'
+                  ? f === 'Live' ? 'text-red-400' : 'text-white'
                   : 'text-field-400 hover:text-white')}>{f}</button>
           ))}
         </div>

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useNFLNews, useCFBNews } from '@/hooks/useLiveStats'
 import { ExternalLink, Clock, Search, X } from 'lucide-react'
 import clsx from 'clsx'
+import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
 
 // ── NFL teams for the filter picker ──────────────────────────
 const NFL_TEAMS = [
@@ -357,6 +358,7 @@ function CFBNewsTab() {
 // ── Main component ────────────────────────────────────────────
 export function NewsView() {
   const [tab, setTab] = useState<'nfl' | 'cfb'>('nfl')
+  const { containerRef: newsTabRef, indicatorStyle: newsTabIndicator } = useSlidingIndicator(tab)
   const [teamFilter, setTeamFilter] = useState('')
   const [search, setSearch]         = useState('')
   const [showTeamPicker, setShowTeamPicker] = useState(false)
@@ -403,15 +405,17 @@ export function NewsView() {
     <div className="space-y-4 max-w-3xl mx-auto">
 
       {/* ── Tabs ── */}
-      <div className="flex gap-1 p-1 bg-field-900 rounded-xl border border-field-800 w-fit">
+      <div ref={newsTabRef} className="relative flex gap-1 p-1 bg-field-900 rounded-xl border border-field-800 w-fit">
+        <div className="absolute top-1 bottom-1 bg-gold rounded-lg z-0" style={newsTabIndicator} />
         {(['nfl', 'cfb'] as const).map(t => (
           <button
             key={t}
+            data-tab-key={t}
             onClick={() => { setTab(t); setSearch(''); setTeamFilter('') }}
             className={clsx(
-              'px-5 py-1.5 rounded-lg text-sm font-bold transition-colors uppercase tracking-wide',
+              'relative z-10 px-5 py-1.5 rounded-lg text-sm font-bold transition-colors uppercase tracking-wide',
               tab === t
-                ? 'bg-gold text-field-950'
+                ? 'text-field-950'
                 : 'text-field-400 hover:text-white'
             )}
           >
