@@ -76,16 +76,29 @@ async function fetchSummary(gameId: string, league: 'NFL' | 'CFB'): Promise<Game
   // Top performers
   const topPerformers: TopPerformer[] = []
   const leaders: any[] = d.leaders ?? []
+  // ESPN's real shape is THREE levels, not two:
+  //   leaders[team].leaders[category].leaders[athlete]
+  // leaders[team] is one side's set of stat categories (passing,
+  // rushing, receiving...); leaders[team].leaders[category] is a
+  // single category like "passingYards"; the actual athlete only
+  // shows up one level deeper, in category.leaders[]. The previous
+  // version treated the middle (category) objects as if they WERE
+  // athlete entries — category.athlete, category.team, and
+  // category.displayValue all don't exist, so `athlete` was always
+  // undefined and every entry got silently skipped. That's why this
+  // tab reported "not available" even for finished games with real
+  // ESPN data.
   for (const group of leaders) {
-    for (const leader of (group.leaders ?? [])) {
-      const athlete = leader.athlete
+    const isAway = away.team?.id === group.team?.id
+    for (const category of (group.leaders ?? [])) {
+      const topLeader = category.leaders?.[0]
+      const athlete = topLeader?.athlete
       if (!athlete) continue
-      const isAway = away.team?.id === leader.team?.id
       topPerformers.push({
         name: athlete.shortName ?? athlete.displayName ?? '',
         team: isAway ? 'away' : 'home',
-        stat: leader.displayValue ?? '',
-        desc: group.shortText ?? group.text ?? '',
+        stat: topLeader.displayValue ?? String(topLeader.mainStat?.value ?? ''),
+        desc: category.displayName ?? category.name ?? '',
       })
     }
   }
