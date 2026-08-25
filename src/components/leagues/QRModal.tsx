@@ -10,7 +10,11 @@ interface Props {
 
 export function QRModal({ leagueName, inviteCode, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [url] = useState(() => `https://gridiron-united.vercel.app/join/${inviteCode}`)
+  // Was hardcoded to the old gridiron-united.vercel.app URL — every
+  // QR code and copy-link pointed at the wrong domain since the
+  // custom domain was set up. window.location.origin always matches
+  // wherever this is actually running.
+  const [url] = useState(() => `${window.location.origin}/join/${inviteCode}`)
 
   useEffect(() => {
     if (!canvasRef.current) return

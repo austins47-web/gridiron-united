@@ -13,7 +13,7 @@
 // Secrets required:
 //   RESEND_API_KEY   — from resend.com
 //   REMINDER_FROM    — e.g. "Gridiron United <noreply@yourdomain.com>"
-//   APP_URL          — https://gridiron-united.vercel.app
+//   APP_URL          — https://www.gridironunited.app
 //   CRON_SECRET      — any random string; must match the caller
 // ══════════════════════════════════════════════════════════════
 
@@ -25,7 +25,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const APP_URL = Deno.env.get('APP_URL') ?? 'https://gridiron-united.vercel.app'
+const APP_URL = Deno.env.get('APP_URL') ?? 'https://www.gridironunited.app'
 const FROM    = Deno.env.get('REMINDER_FROM') ?? 'Gridiron United <onboarding@resend.dev>'
 
 // ── Types ─────────────────────────────────────────────────────
