@@ -246,11 +246,17 @@ function LeagueInfoPanel({ league, membership, isCommissioner }: any) {
       <div className="grid grid-cols-2 gap-2 text-sm">
         {[
           ['Format', league.league_type === 'pickem' ? "Pick'Em" : league.scoring_type?.toUpperCase()],
-          ['Draft', league.draft_type],
-          ['Teams', league.num_teams],
           ['Season', `Week ${league.current_week ?? 1}`],
-          ['Status', league.draft_status],
-          ...(league.league_type !== 'pickem' ? [['Pool', league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase() ?? 'Both'] as [string, string]] : []),
+          // Draft type, team cap, and draft status are all draft-lifecycle
+          // concepts with no meaning in a Pick'Em league — there's no
+          // draft, and the "500" team cap is an internal ceiling we set
+          // so joining is never blocked, not a real number to show anyone.
+          ...(league.league_type !== 'pickem' ? [
+            ['Draft', league.draft_type] as [string, string],
+            ['Teams', league.num_teams] as [string, string],
+            ['Status', fmt(STATUS_LABELS, league.draft_status)] as [string, string],
+            ['Pool', league.player_pool === 'both' ? 'NFL + CFB' : league.player_pool?.toUpperCase() ?? 'Both'] as [string, string],
+          ] : []),
         ].map(([label, value]) => (
           <div key={label} className="bg-field-800/50 rounded p-2">
             <div className="text-field-400 text-xs">{label}</div>
@@ -278,9 +284,11 @@ function LeagueInfoPanel({ league, membership, isCommissioner }: any) {
       <div className="border-t border-field-700 pt-3">
         <div className="text-xs text-field-400 mb-1">Your Team</div>
         <div className="text-white font-bold">{membership?.team_name ?? 'My Team'}</div>
-        <div className="text-xs text-field-400 mt-0.5">
-          Draft #{membership?.draft_position ?? '—'} · {membership?.waiver_priority ?? '—'} waiver priority
-        </div>
+        {league.league_type !== 'pickem' && (
+          <div className="text-xs text-field-400 mt-0.5">
+            Draft #{membership?.draft_position ?? '—'} · {membership?.waiver_priority ?? '—'} waiver priority
+          </div>
+        )}
       </div>
     </div>
   )
