@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { createPortal } from 'react-dom'
 import { X, Newspaper, BarChart2, User, ExternalLink, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
 import type { Player } from '@/types/database'
@@ -144,6 +145,14 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
   const [tab, setTab]       = useState<Tab>('overview')
   const [imgError, setImgError] = useState(false)
 
+  // Lock page scroll while the drawer is open, so the list behind
+  // it can't keep scrolling underneath the overlay.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
   const { data: profile, isLoading } = useQuery({
     queryKey: ['player-profile', player.id],
     queryFn:  () => fetchProfile(player),
@@ -195,7 +204,20 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
     </div>
   )
 
-  return (
+  // Rendered via a portal straight to document.body. Without this,
+  // the drawer inherits its "fixed" positioning from whatever
+  // ancestor happens to have a CSS transform — and AppShell's
+  // .route-enter page-transition wrapper does (its animation's
+  // final keyframe is transform: translateY(0), which per the CSS
+  // spec still counts as "has a transform" even though it's a
+  // visual no-op). That makes .route-enter a new containing block
+  // for every fixed-position descendant, so "fixed to the viewport"
+  // silently became "fixed to the top of the scrollable page
+  // content" instead — if you'd scrolled down the player list
+  // before opening this, the drawer rendered above your current
+  // scroll position and you had to scroll back up to find it.
+  // Portaling to document.body escapes that ancestor entirely.
+  return createPortal(
     <>
       <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
@@ -424,6 +446,7 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
 
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
