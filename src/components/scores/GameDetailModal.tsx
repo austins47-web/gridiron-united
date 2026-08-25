@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X, Newspaper, BarChart2, Users, ExternalLink } from 'lucide-react'
 import clsx from 'clsx'
+import { teamLogoUrl } from '@/components/teams/teamIds'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -17,6 +18,10 @@ interface TopPerformer {
 interface GameSummary {
   awayName: string
   homeName: string
+  awayAbbr: string
+  homeAbbr: string
+  awayId: string
+  homeId: string
   awayScore: string
   homeScore: string
   status: string
@@ -113,6 +118,10 @@ async function fetchSummary(gameId: string, league: 'NFL' | 'CFB'): Promise<Game
   return {
     awayName:  away.team?.shortDisplayName ?? away.team?.displayName ?? '',
     homeName:  home.team?.shortDisplayName ?? home.team?.displayName ?? '',
+    awayAbbr:  away.team?.abbreviation ?? '',
+    homeAbbr:  home.team?.abbreviation ?? '',
+    awayId:    String(away.team?.id ?? ''),
+    homeId:    String(home.team?.id ?? ''),
     awayScore: away.score ?? '0',
     homeScore: home.score ?? '0',
     status:    comp.status?.type?.shortDetail ?? '',
@@ -251,30 +260,50 @@ export function GameDetailModal({ gameId, league, onClose }: Props) {
           )}
 
           {data && tab === 'players' && (
-            <div className="p-4 space-y-2">
+            <div className="p-4 space-y-5">
               {data.topPerformers.length === 0 ? (
                 <p className="text-center text-field-400 text-sm py-8">
                   Player stats aren't available — ESPN only provides leaders during and after live games.
                   Check back once the game starts.
                 </p>
               ) : (
-                data.topPerformers.map((p, i) => (
-                  <div key={i} className="flex items-center justify-between bg-field-800/50 rounded-lg px-3 py-2.5">
-                    <div className="min-w-0">
-                      <div className="font-bold text-white text-sm truncate">{p.name}</div>
-                      <div className="text-xs text-field-400">{p.desc}</div>
-                    </div>
-                    <div className="text-right shrink-0 ml-3">
-                      <div className="font-cond font-black text-white text-sm">{p.stat}</div>
-                      <div className={clsx(
-                        'text-[12px] font-bold',
-                        p.team === 'away' ? 'text-field-300' : 'text-gold',
-                      )}>
-                        {p.team === 'away' ? data.awayName : data.homeName}
+                (['away', 'home'] as const).map(side => {
+                  const rows = data.topPerformers.filter(p => p.team === side)
+                  if (rows.length === 0) return null
+                  const abbr = side === 'away' ? data.awayAbbr : data.homeAbbr
+                  const id   = side === 'away' ? data.awayId   : data.homeId
+                  const name = side === 'away' ? data.awayName : data.homeName
+                  const logo = teamLogoUrl({ abbr, id }, league)
+                  return (
+                    <div key={side}>
+                      {/* Team header — identity lives here once, not on every row */}
+                      <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-field-700">
+                        {logo
+                          ? <img src={logo} alt="" className="w-5 h-5 object-contain shrink-0" />
+                          : <div className="w-5 h-5 rounded-full bg-field-700 shrink-0" />}
+                        <span className="font-cond font-bold text-xs uppercase tracking-wider text-white">
+                          {name}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {rows.map((p, i) => (
+                          <div key={i} className="flex items-center justify-between bg-field-800/50 rounded-lg px-3 py-2.5">
+                            <div className="min-w-0">
+                              <div className="font-bold text-white text-sm truncate">{p.name}</div>
+                              <div className="font-cond font-bold text-[11px] uppercase tracking-wider text-gold/80 mt-0.5">
+                                {p.desc}
+                              </div>
+                            </div>
+                            <div className="font-cond font-black text-white text-sm text-right shrink-0 ml-3">
+                              {p.stat}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
           )}
