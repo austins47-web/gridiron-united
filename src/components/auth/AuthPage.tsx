@@ -1,20 +1,58 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import toast from 'react-hot-toast'
 
-type Mode = 'signin' | 'signup' | 'forgot'
+type Mode = 'signin' | 'signup' | 'forgot' | 'reset'
+
+// Two independent ways to detect a recovery link, because relying
+// on only one is genuinely unsafe here. Supabase's client parses
+// recovery tokens and fires PASSWORD_RECOVERY as part of its own
+// init sequence — which can run before this component ever mounts
+// and subscribes a listener, and onAuthStateChange never replays
+// events to a subscriber that arrives late. Checking the URL
+// directly on first render is synchronous and doesn't have that
+// race. Kept both: the URL check catches the common case, the
+// event listener catches it if the URL's tokens haven't been
+// parsed yet when this mounts.
+function isRecoveryUrl(): boolean {
+  const hash = window.location.hash.replace(/^#/, '')
+  const hashParams = new URLSearchParams(hash)
+  const search = new URLSearchParams(window.location.search)
+  return hashParams.get('type') === 'recovery' || search.get('type') === 'recovery'
+}
 
 export function AuthPage() {
   const { user, authLoading } = useAppStore()
   const [searchParams] = useSearchParams()
-  const initialMode = (searchParams.get('mode') === 'signup' ? 'signup' : 'signin') as Mode
+  const initialMode = isRecoveryUrl()
+    ? 'reset'
+    : ((searchParams.get('mode') === 'signup' ? 'signup' : 'signin') as Mode)
   const [mode, setMode] = useState<Mode>(initialMode)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ email: '', password: '', username: '', displayName: '' })
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
-  if (!authLoading && user) return <Navigate to="/app/leagues" replace />
+  // Backup path: if the URL's recovery tokens hadn't been parsed
+  // into the URL yet at mount time (or already got stripped from
+  // the address bar — Supabase does this via history.replaceState
+  // right after reading them), this catches the event when it
+  // actually fires instead.
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setMode('reset')
+    })
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  // The recovery link DOES establish a real (temporary) session, so
+  // `user` is already truthy at this point — this guard used to fire
+  // unconditionally and redirect straight to the app before the
+  // reset form below ever had a chance to render. Recovery mode has
+  // to be excluded from it explicitly.
+  if (!authLoading && user && mode !== 'reset') return <Navigate to="/app/leagues" replace />
 
   const update = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [field]: e.target.value }))
@@ -61,6 +99,25 @@ export function AuthPage() {
     setLoading(false)
   }
 
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (newPassword.length < 8) { toast.error('Password must be 8+ characters'); return }
+    if (newPassword !== confirmPassword) { toast.error("Passwords don't match"); return }
+    setLoading(true)
+    // The recovery session from the email link is already active at
+    // this point, so this both sets the new password AND leaves the
+    // person signed in — no need to make them log in again after.
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) toast.error(error.message)
+    else toast.success('Password updated!')
+    setLoading(false)
+    // Navigate away from /auth regardless of mode state — updateUser
+    // succeeding means `user` is now genuinely, permanently set, so
+    // this sends them into the app instead of leaving them stuck on
+    // a reset form with nothing left to do.
+    if (!error) window.location.href = '/app/leagues'
+  }
+
   return (
     <div className="min-h-screen bg-field-900 flex items-center justify-center p-4"
          style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 1px), rgba(245,197,24,.025) calc(10% - 1px), rgba(245,197,24,.025) 10%)' }}>
@@ -79,6 +136,10 @@ export function AuthPage() {
 
         <div className="panel">
           {/* Mode tabs */}
+          {/* Mode tabs — hidden during password recovery, since
+              switching to Sign In / Create Account mid-recovery
+              would abandon the reset flow with no way back to it. */}
+          {mode !== 'reset' && (
           <div className="flex gap-1 mb-6 bg-field-700 rounded-lg p-1">
             {(['signin', 'signup'] as Mode[]).map(m => (
               <button
@@ -91,6 +152,7 @@ export function AuthPage() {
               </button>
             ))}
           </div>
+          )}
 
           {mode === 'signin' && (
             <form onSubmit={handleSignIn} className="space-y-4">
@@ -158,6 +220,27 @@ export function AuthPage() {
               <button type="button" onClick={() => setMode('signin')}
                 className="w-full text-center text-sm text-gray-500 hover:text-gold transition-colors">
                 ← Back to sign in
+              </button>
+            </form>
+          )}
+
+          {mode === 'reset' && (
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <p className="text-sm text-gray-400">Choose a new password for your account.</p>
+              <div>
+                <label className="label">New Password</label>
+                <input className="input" type="password" value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="8+ characters" required minLength={8} />
+              </div>
+              <div>
+                <label className="label">Confirm Password</label>
+                <input className="input" type="password" value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="8+ characters" required minLength={8} />
+              </div>
+              <button type="submit" disabled={loading} className="btn-gold w-full py-3">
+                {loading ? 'Updating…' : 'Update Password'}
               </button>
             </form>
           )}
