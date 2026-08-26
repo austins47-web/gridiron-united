@@ -138,21 +138,29 @@ export function LeagueSelector() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className={clsx(
-                            'font-cond font-bold text-xs uppercase tracking-wider px-1.5 py-0.5 rounded',
-                            league.scoring_type === 'ppr'
-                              ? 'bg-nfl/15 text-nfl'
-                              : league.scoring_type === 'half_ppr'
-                              ? 'bg-cfb/15 text-cfb'
-                              : 'bg-gray-600/20 text-gray-500',
-                          )}>
-                            {league.scoring_type?.toUpperCase().replace('_', '-')}
-                          </span>
-                          <span className="text-xs text-gray-600">{league.num_teams} teams</span>
-                          <span className="text-xs text-gray-600 capitalize">{league.draft_status}</span>
-                          <span className="text-xs text-gray-500">
-                            {membership.wins}-{membership.losses}
-                          </span>
+                          {league.league_type === 'pickem' ? (
+                            <span className="font-cond font-bold text-xs uppercase tracking-wider px-1.5 py-0.5 rounded bg-gold/15 text-gold">
+                              Pick'Em
+                            </span>
+                          ) : (
+                            <>
+                              <span className={clsx(
+                                'font-cond font-bold text-xs uppercase tracking-wider px-1.5 py-0.5 rounded',
+                                league.scoring_type === 'ppr'
+                                  ? 'bg-nfl/15 text-nfl'
+                                  : league.scoring_type === 'half_ppr'
+                                  ? 'bg-cfb/15 text-cfb'
+                                  : 'bg-gray-600/20 text-gray-500',
+                              )}>
+                                {league.scoring_type?.toUpperCase().replace('_', '-')}
+                              </span>
+                              <span className="text-xs text-gray-600">{league.num_teams} teams</span>
+                              <span className="text-xs text-gray-600 capitalize">{league.draft_status?.replace('_', '-')}</span>
+                              <span className="text-xs text-gray-500">
+                                {membership.wins}-{membership.losses}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
