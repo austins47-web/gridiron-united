@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
+import { ModalPortal } from '@/components/ui/ModalPortal'
 import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown, QrCode, LogOut } from 'lucide-react'
 import { QRModal } from './QRModal'
 import toast from 'react-hot-toast'
@@ -333,7 +334,7 @@ function CreateLeagueModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalPortal onClose={onClose}>
       <div className="modal-box w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="section-title mb-4">Create League</h2>
         <div className="space-y-3">
@@ -462,7 +463,7 @@ function CreateLeagueModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 
@@ -477,7 +478,7 @@ function JoinLeagueModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalPortal onClose={onClose}>
       <div className="modal-box w-full max-w-sm" onClick={e => e.stopPropagation()}>
         <h2 className="section-title mb-4">Join League</h2>
         <p className="text-field-400 text-sm mb-4">Enter the invite code from your league commissioner.</p>
@@ -496,7 +497,7 @@ function JoinLeagueModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 
@@ -514,7 +515,7 @@ function LeaveLeagueModal({ leagueId, leagueName, onClose }: { leagueId: string;
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalPortal onClose={onClose}>
       <div className="modal-box w-full max-w-sm" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-3">
           <LogOut className="w-5 h-5 text-red-400" />
@@ -556,7 +557,7 @@ function LeaveLeagueModal({ leagueId, leagueName, onClose }: { leagueId: string;
           </button>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 
