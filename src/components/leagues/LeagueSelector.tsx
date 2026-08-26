@@ -1,53 +1,50 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, Trophy, Shield } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
+import { useMyLeagues } from '@/hooks/useLeague'
 import type { League, LeagueMember } from '@/types/database'
 import clsx from 'clsx'
 
 export function LeagueSelector() {
-  const { user, activeLeague, activeLeagueId, setActiveLeague } = useAppStore()
-  const [leagues, setLeagues] = useState<Array<{ league: League; membership: LeagueMember }>>([])
+  const { activeLeague, activeLeagueId, setActiveLeague } = useAppStore()
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
   const qc = useQueryClient()
 
+  // Previously this component fetched its own copy of "my leagues"
+  // via a plain useState + manual Supabase call, entirely separate
+  // from react-query. That meant leaving a league correctly
+  // invalidated the ['my-leagues'] cache everywhere else in the app
+  // — but this dropdown never saw it, since a manual fetch stored
+  // in local state is invisible to query-cache invalidation. It
+  // kept showing leagues you'd already left until a full page
+  // reload. Using the same useMyLeagues() hook everything else
+  // reads means there's only one source of truth now, so leaving
+  // a league here can never drift out of sync with anywhere else.
+  const { data: myLeagues = [], isLoading: loading } = useMyLeagues()
+  const leagues = useMemo(
+    () => myLeagues
+      .filter((m: any) => m.league)
+      .map((m: any) => {
+        const { league, ...membership } = m
+        return { league: league as League, membership: membership as LeagueMember }
+      }),
+    [myLeagues],
+  )
+
+  // Restore whichever league was active before a refresh —
+  // localStorage persists the id across reloads (see appStore's
+  // setActiveLeague). Only fall back to leagues[0] when there's no
+  // persisted choice, or the persisted league no longer applies
+  // (left the league, id stale from another account).
   useEffect(() => {
-    if (!user) return
-    loadLeagues()
-  }, [user])
-
-  async function loadLeagues() {
-    if (!user) return
-    setLoading(true)
-
-    const { data: memberships } = await supabase
-      .from('league_members')
-      .select('*, leagues(*)')
-      .eq('user_id', user.id)
-
-    if (memberships) {
-      const items = memberships
-        .filter(m => m.leagues)
-        .map(m => ({ league: m.leagues as unknown as League, membership: m as LeagueMember }))
-      setLeagues(items)
-
-      // Restore whichever league was active before a refresh —
-      // localStorage persists the id across reloads (see appStore's
-      // setActiveLeague). Only fall back to items[0] when there's
-      // no persisted choice, or the persisted league no longer
-      // applies (left the league, id stale from another account).
-      if (items.length > 0 && !activeLeague) {
-        const restored = activeLeagueId
-          ? items.find(i => i.league.id === activeLeagueId)
-          : null
-        const pick = restored ?? items[0]
-        setActiveLeague(pick.league, pick.membership)
-      }
-    }
-    setLoading(false)
-  }
+    if (leagues.length === 0 || activeLeague) return
+    const restored = activeLeagueId
+      ? leagues.find(i => i.league.id === activeLeagueId)
+      : null
+    const pick = restored ?? leagues[0]
+    setActiveLeague(pick.league, pick.membership)
+  }, [leagues, activeLeague, activeLeagueId, setActiveLeague])
 
   function switchLeague(league: League, membership: LeagueMember) {
     if (league.id === activeLeague?.id) { setOpen(false); return }
