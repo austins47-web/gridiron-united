@@ -93,7 +93,15 @@ function getActiveWeek(): number {
   return 22
 }
 
-function isGameLocked(gameDate: string | null, deadline: string | null): boolean {
+function isGameLocked(gameDate: string | null, deadline: string | null, status?: string | null): boolean {
+  // Status is checked independently of time, as a backstop. Every
+  // existing check here only ever compared clock time to kickoff or
+  // deadline — meaning a game that's already final or in progress
+  // could still show as pickable if its stored kickoff time somehow
+  // sits in the future (a bad sync, clock skew, or in testing, a
+  // manually-finalized game). A pick should never be editable once
+  // the outcome is actually known, independent of what the clock says.
+  if (status === 'final' || status === 'in_progress') return true
   if (!gameDate) return false
   const now = new Date()
   // If commissioner set a custom deadline, use whichever is earlier
@@ -395,12 +403,12 @@ export function PickEmView() {
 
   const tiebreakerGame = games.find((g: any) => g.is_tiebreaker)
   const regularGames = games.filter((g: any) => !g.is_tiebreaker)
-  const lockedCount = games.filter((g: any) => isGameLocked(g.game_date, weekDeadline)).length
+  const lockedCount = games.filter((g: any) => isGameLocked(g.game_date, weekDeadline, g.status)).length
   const pickedCount = Object.keys(pendingPicks).filter(id => games.some((g: any) => g.id === id)).length
   const totalGames = games.length
 
   // Determine if the whole week is still open for picks
-  const anyUnlocked = games.some((g: any) => !isGameLocked(g.game_date, weekDeadline))
+  const anyUnlocked = games.some((g: any) => !isGameLocked(g.game_date, weekDeadline, g.status))
 
   if (!activeLeagueId || activeLeague?.league_type !== 'pickem') {
     return (
@@ -680,7 +688,7 @@ export function PickEmView() {
               deadline={weekDeadline}
               odds={oddsMap?.get(`${game.away_team}@${game.home_team}`) ?? null}
               onPick={(team) => {
-                if (isGameLocked(game.game_date, weekDeadline)) return
+                if (isGameLocked(game.game_date, weekDeadline, game.status)) return
                 setPendingPicks(p => ({ ...p, [game.id]: team }))
               }}
             />
@@ -700,7 +708,7 @@ export function PickEmView() {
                 deadline={weekDeadline}
                 odds={oddsMap?.get(`${tiebreakerGame.away_team}@${tiebreakerGame.home_team}`) ?? null}
                 onPick={(team) => {
-                  if (isGameLocked(tiebreakerGame.game_date, weekDeadline)) return
+                  if (isGameLocked(tiebreakerGame.game_date, weekDeadline, tiebreakerGame.status)) return
                   setPendingPicks(p => ({ ...p, [tiebreakerGame.id]: team }))
                 }}
                 isTiebreaker
@@ -771,7 +779,7 @@ function GamePickCard({
   tiebreakerScore?: string
   onTiebreakerScore?: (val: string) => void
 }) {
-  const locked = isGameLocked(game.game_date, deadline)
+  const locked = isGameLocked(game.game_date, deadline, game.status)
   const gameTime = game.game_date
     ? new Date(game.game_date).toLocaleString('en-US', {
         weekday: 'short', month: 'short', day: 'numeric',
