@@ -1,6 +1,7 @@
 import { Crown, Flame, Minus } from 'lucide-react'
 import clsx from 'clsx'
 import { rankOf, type StandingRow } from './standings'
+import { useFlipList } from '@/hooks/useFlipList'
 
 export function StandingsTable({
   rows, currentUserId,
@@ -8,6 +9,13 @@ export function StandingsTable({
   rows: StandingRow[]
   currentUserId?: string
 }) {
+  // Rows are already sorted by rank (rankOf/computeStandings does
+  // that upstream) — this just animates the reorder whenever that
+  // order changes, e.g. after a week's picks grade and someone
+  // moves up. Hook is called unconditionally before the early
+  // return below, since hooks can't follow a conditional return.
+  const tbodyRef = useFlipList(rows.map(r => r.userId))
+
   if (rows.length === 0) {
     return (
       <div className="panel text-center py-8">
@@ -70,7 +78,7 @@ export function StandingsTable({
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody ref={tbodyRef as any}>
               {rows.map((r, i) => {
                 const rank = rankOf(rows, i)
                 const isYou = r.userId === currentUserId
@@ -78,6 +86,7 @@ export function StandingsTable({
                 return (
                   <tr
                     key={r.userId}
+                    data-flip-key={r.userId}
                     className={clsx(
                       'border-b border-field-700/40 last:border-0 transition-colors',
                       isYou ? 'bg-gold/[0.06]' : 'hover:bg-field-800/40',
