@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { createPortal } from 'react-dom'
 import { X, Newspaper, BarChart2, Users, ExternalLink } from 'lucide-react'
 import clsx from 'clsx'
 import { teamLogoUrl } from '@/components/teams/teamIds'
@@ -144,6 +145,13 @@ interface Props {
 export function GameDetailModal({ gameId, league, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('stats')
 
+  // Lock page scroll while open, matching PlayerProfileDrawer.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['game-summary', gameId],
     queryFn: () => fetchSummary(gameId, league),
@@ -151,7 +159,17 @@ export function GameDetailModal({ gameId, league, onClose }: Props) {
     retry: 1,
   })
 
-  return (
+  // Rendered via a portal straight to document.body — same fix and
+  // same reason as PlayerProfileDrawer. This modal lives inside
+  // AppShell's .route-enter page-transition wrapper, whose
+  // animation's final keyframe is transform: translateY(0). Per the
+  // CSS spec, ANY element with a transform (even a resting, visually
+  // no-op one) becomes a new containing block for position:fixed
+  // descendants — so "fixed to the viewport" was silently "fixed to
+  // the scrollable page content's own box" instead. That's exactly
+  // what produced the heavy black margin: the inset-0 backdrop was
+  // being measured against that box, not the real screen edges.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
@@ -295,7 +313,7 @@ export function GameDetailModal({ gameId, league, onClose }: Props) {
                                 {p.desc}
                               </div>
                             </div>
-                            <div className="font-cond font-black text-white text-sm text-right shrink-0 ml-3">
+                            <div className="font-bold text-white text-sm text-right shrink-0 ml-3">
                               {p.stat}
                             </div>
                           </div>
@@ -341,6 +359,7 @@ export function GameDetailModal({ gameId, league, onClose }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
