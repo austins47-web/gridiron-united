@@ -6,6 +6,7 @@ import { ModalPortal } from '@/components/ui/ModalPortal'
 import { resolveWeekDeadline } from '@/lib/deadline'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { byeTeamsForWeek } from '@/lib/byeWeeks'
+import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal,
 } from './standings'
@@ -200,6 +201,7 @@ export function PickEmView() {
   })
 
   const weekDeadline = effectiveDeadline ? effectiveDeadline.toISOString() : null
+  const countdownMs = useCountdown(weekDeadline)
 
   // My picks for this week
   const { data: myPicks = [] } = useQuery({
@@ -604,17 +606,38 @@ export function PickEmView() {
         </div>
       </div>
 
-      {/* Deadline banner */}
+      {/* Deadline banner — switches to a live ticking countdown once
+          inside the final hour, with color escalating gold -> red
+          as it approaches zero. Outside that window the static
+          formatted date/time is more useful than a number that's
+          days away from meaning anything. */}
       {weekDeadline && (
-        <div className="flex items-center gap-2 text-xs bg-field-800/60 border border-field-700 rounded-lg px-3 py-2">
-          <Clock className="w-3.5 h-3.5 text-gold shrink-0" />
+        <div className={clsx(
+          'flex items-center gap-2 text-xs border rounded-lg px-3 py-2 transition-colors',
+          countdownMs != null && countdownMs <= 5 * 60 * 1000
+            ? 'bg-red-500/10 border-red-500/40'
+            : 'bg-field-800/60 border-field-700',
+        )}>
+          <Clock className={clsx('w-3.5 h-3.5 shrink-0',
+            countdownMs != null && countdownMs <= 5 * 60 * 1000 ? 'text-red-400' : 'text-gold')} />
           <span className="text-field-300">
-            <span className="text-gold font-bold">Pick deadline:</span> {formatDeadline(weekDeadline)}
-            {deadlineSource === 'league-rule' && (
-              <span className="text-field-500 ml-1.5">· league rule</span>
-            )}
-            {deadlineSource === 'override' && (
-              <span className="text-field-500 ml-1.5">· this week only</span>
+            {countdownMs != null ? (
+              <>
+                <span className={clsx('font-bold font-cond tabular-nums',
+                  countdownMs <= 5 * 60 * 1000 ? 'text-red-400' : 'text-gold')}>
+                  Locks in {formatCountdown(countdownMs)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-gold font-bold">Pick deadline:</span> {formatDeadline(weekDeadline)}
+                {deadlineSource === 'league-rule' && (
+                  <span className="text-field-500 ml-1.5">· league rule</span>
+                )}
+                {deadlineSource === 'override' && (
+                  <span className="text-field-500 ml-1.5">· this week only</span>
+                )}
+              </>
             )}
           </span>
           {isCommissioner && (

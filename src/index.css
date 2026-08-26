@@ -330,6 +330,18 @@
     background-color: rgba(206,123,69,.35);
     border-radius: 6px;
   }
+
+  /* Bye-week ghosting — a very slow, quiet opacity cycle on the
+     dashed bye-week row's border, so an empty week reads as
+     genuinely idle rather than looking like a broken/missing row.
+     Deliberately much slower and subtler than the live-dot pulse —
+     this signals absence, not urgency, so it shouldn't compete for
+     attention the way an urgent indicator does. */
+  .bye-ghost { animation: bye-ghost-cycle 4s ease-in-out infinite; }
+  @keyframes bye-ghost-cycle {
+    0%, 100% { border-color: rgba(48,48,48,1); }
+    50%      { border-color: rgba(74,74,74,1); }
+  }
   .page-hero-inner   { @apply relative p-5 sm:p-6; }
   .page-hero-title {
     @apply font-cond font-black uppercase text-white leading-none tracking-tight;
@@ -395,6 +407,7 @@
     .rise-in, .play-clock { animation: none !important; }
     .jumbotron::after, .page-hero::after { animation: none !important; }
     .hover-lift:hover { transform: none !important; }
+    .bye-ghost { animation: none !important; }
   }
 
   /* ── Modal ── */
@@ -526,6 +539,11 @@
 [data-theme="light"] .border-field-500 { border-color: #9ca3af !important; }
 [data-theme="light"] .border-field-400 { border-color: #6b7280 !important; }
 [data-theme="light"] .border-field-800 { border-color: #e5e7eb !important; }
+[data-theme="light"] .bye-ghost { animation: bye-ghost-cycle-light 4s ease-in-out infinite !important; }
+@keyframes bye-ghost-cycle-light {
+  0%, 100% { border-color: #d1d5db; }
+  50%      { border-color: #9ca3af; }
+}
 
 /* Opacity variants — border alpha mainly affects crispness rather
    than legibility the way a background fill does, so every variant

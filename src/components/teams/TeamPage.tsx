@@ -395,7 +395,7 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
                 if (row.kind === 'bye') {
                   return (
                     <div key={`bye-${row.week}`}
-                      className="panel flex items-center gap-3 py-2.5 border-dashed opacity-70">
+                      className="panel bye-ghost flex items-center gap-3 py-2.5 border-dashed opacity-70">
                       <span className="text-xs font-bold w-12 shrink-0 text-center text-field-500">
                         Wk {row.week}
                       </span>
