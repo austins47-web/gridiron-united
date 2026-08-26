@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
-import { Send, MessageSquare } from 'lucide-react'
+import { Send, MessageSquare, Image as ImageIcon, Search, Loader2 } from 'lucide-react'
 import clsx from 'clsx'
+import toast from 'react-hot-toast'
 import { UserProfileModal } from './UserProfileModal'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -154,6 +155,18 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
     )
   }
 
+  // Image / GIF — same prefixed-message-text convention as
+  // TRADE_COMPLETED: above, just for user-sent content instead of a
+  // system-generated card. IMAGE: is a user's own upload (Supabase
+  // Storage URL); GIF: is a GIPHY result. Rendered inside the same
+  // bubble wrapper (avatar, sender, timestamp) as a normal message —
+  // only what's inside the bubble itself changes.
+  const isImage = msg.message.startsWith('IMAGE:')
+  const isGif   = msg.message.startsWith('GIF:')
+  const mediaUrl = isImage ? msg.message.slice('IMAGE:'.length)
+                  : isGif  ? msg.message.slice('GIF:'.length)
+                  : null
+
   return (
     <div className={clsx('flex gap-2 items-end', isOwn ? 'flex-row-reverse' : 'flex-row')}>
       <div className="w-7 shrink-0">
@@ -180,13 +193,102 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
           </div>
         )}
         <div className={clsx(
-          'px-3 py-2 rounded-2xl text-sm leading-relaxed break-words',
+          mediaUrl
+            ? 'rounded-2xl overflow-hidden border max-w-[220px]'
+            : 'px-3 py-2 rounded-2xl text-sm leading-relaxed break-words',
           isOwn
-            ? 'chat-bubble-own bg-gold/20 border border-gold/30 text-white rounded-br-sm'
-            : 'chat-bubble-other bg-field-700 border border-field-600 text-field-100 rounded-bl-sm',
+            ? clsx('chat-bubble-own border-gold/30', !mediaUrl && 'bg-gold/20 text-white rounded-br-sm')
+            : clsx('chat-bubble-other border-field-600', !mediaUrl && 'bg-field-700 text-field-100 rounded-bl-sm'),
         )}>
-          <MessageText text={msg.message} myUsername={myUsername} onMentionClick={onMentionClick} />
+          {mediaUrl ? (
+            <img src={mediaUrl} alt={isGif ? 'GIF' : 'Shared image'}
+              className="block w-full h-auto" loading="lazy" />
+          ) : (
+            <MessageText text={msg.message} myUsername={myUsername} onMentionClick={onMentionClick} />
+          )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── GIF picker ────────────────────────────────────────────────
+
+interface GifResult { id: string; title: string; url: string }
+
+function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onClose: () => void }) {
+  const [query, setQuery] = useState('')
+  const [gifs, setGifs] = useState<GifResult[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { searchRef.current?.focus() }, [])
+
+  // Trending on open, debounced re-search as the person types —
+  // not on every keystroke, to avoid hammering the proxy.
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const url = import.meta.env.VITE_SUPABASE_URL
+        const anon = import.meta.env.VITE_SUPABASE_ANON_KEY
+        const qs = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''
+        const r = await fetch(`${url}/functions/v1/giphy-search${qs}`, {
+          headers: { apikey: anon, Authorization: `Bearer ${anon}` },
+        })
+        const data = await r.json()
+        if (!r.ok || data.error) throw new Error(data.error ?? 'GIF search failed')
+        setGifs(data.gifs ?? [])
+      } catch (e: any) {
+        setError(e.message ?? 'GIF search failed')
+        setGifs([])
+      } finally {
+        setLoading(false)
+      }
+    }, query ? 350 : 0)
+    return () => clearTimeout(t)
+  }, [query])
+
+  return (
+    <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-field-700">
+        <Search className="w-3.5 h-3.5 text-field-500 shrink-0" />
+        <input
+          ref={searchRef}
+          className="flex-1 bg-transparent text-sm text-white placeholder-field-500 outline-none min-w-0"
+          placeholder="Search GIFs…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === 'Escape' && onClose()}
+        />
+        <button onClick={onClose} className="text-field-500 hover:text-white transition-colors text-xs font-bold shrink-0">
+          Close
+        </button>
+      </div>
+      <div className="max-h-64 overflow-y-auto p-2">
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 text-field-500 animate-spin" />
+          </div>
+        )}
+        {!loading && error && (
+          <p className="text-field-400 text-xs text-center py-6 px-3">{error}</p>
+        )}
+        {!loading && !error && gifs.length === 0 && (
+          <p className="text-field-400 text-xs text-center py-6">No GIFs found</p>
+        )}
+        {!loading && !error && gifs.length > 0 && (
+          <div className="grid grid-cols-3 gap-1.5">
+            {gifs.map(g => (
+              <button key={g.id} onClick={() => onSelect(g.url)}
+                className="rounded-lg overflow-hidden border border-field-700 hover:border-gold/50 transition-colors aspect-square bg-field-900">
+                <img src={g.url} alt={g.title} className="w-full h-full object-cover" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -254,6 +356,11 @@ export function LeagueChat() {
   const inputWrapRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   const [profileUsername, setProfileUsername] = useState<string | null>(null)
+
+  // ── Image + GIF state ───────────────────────────────────────
+  const [showGifPicker, setShowGifPicker] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── @ mention state ─────────────────────────────────────────
   const [mentionQuery, setMentionQuery] = useState<string | null>(null) // null = not active
@@ -433,6 +540,64 @@ export function LeagueChat() {
     }
   }
 
+  // ── Send an image or GIF — same insert path as a text message,
+  // just no trimmed-text requirement and no @mention scanning
+  // (nobody's typing an @handle into a GIF).
+  const sendMediaMessage = async (prefix: 'IMAGE:' | 'GIF:', url: string) => {
+    if (!activeLeagueId || !user) return
+    try {
+      const { error } = await supabase
+        .from('league_messages')
+        .insert({
+          league_id: activeLeagueId,
+          user_id: user.id,
+          message: prefix + url,
+          is_system: false,
+        })
+      if (error) throw error
+      setAutoScroll(true)
+    } catch (e: any) {
+      toast.error('Failed to send: ' + e.message)
+    }
+  }
+
+  const handleGifSelect = (url: string) => {
+    setShowGifPicker(false)
+    sendMediaMessage('GIF:', url)
+  }
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow selecting the same file again later
+    if (!file || !user) return
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file')
+      return
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('Image must be under 8MB')
+      return
+    }
+
+    setUploadingImage(true)
+    try {
+      const ext = file.name.split('.').pop() || 'jpg'
+      const path = `${user.id}/${Date.now()}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(path, file, { contentType: file.type })
+      if (uploadError) throw uploadError
+
+      const { data: pub } = supabase.storage.from('chat-images').getPublicUrl(path)
+      await sendMediaMessage('IMAGE:', pub.publicUrl)
+    } catch (e: any) {
+      toast.error('Failed to upload image: ' + e.message)
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
   if (!activeLeagueId) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center gap-3">
@@ -511,6 +676,12 @@ export function LeagueChat() {
             />
           )}
 
+          {/* GIF picker — same floating position as the mention
+              dropdown, just triggered by a button instead of typing */}
+          {showGifPicker && (
+            <GifPicker onSelect={handleGifSelect} onClose={() => setShowGifPicker(false)} />
+          )}
+
           <div className="chat-input-wrap flex items-center gap-2 bg-field-700 border border-field-600 rounded-xl px-3 py-2 focus-within:border-gold/50 transition-colors">
             <div className="w-6 h-6 rounded-full overflow-hidden bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
               {profile?.avatar_url
@@ -528,6 +699,39 @@ export function LeagueChat() {
               maxLength={500}
               disabled={sending}
             />
+
+            {/* Hidden file input, triggered by the image button below */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              className="hidden"
+              onChange={handleImageSelect}
+            />
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingImage || sending}
+              title="Send a photo"
+              className={clsx(
+                'shrink-0 p-1.5 rounded-lg transition-colors',
+                uploadingImage ? 'text-field-600 cursor-wait' : 'text-field-400 hover:text-gold hover:bg-gold/10',
+              )}
+            >
+              {uploadingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+            </button>
+
+            <button
+              onClick={() => setShowGifPicker(v => !v)}
+              title="Send a GIF"
+              className={clsx(
+                'shrink-0 px-1.5 py-1 rounded-lg font-cond font-black text-[11px] uppercase tracking-wider transition-colors',
+                showGifPicker ? 'text-gold bg-gold/10' : 'text-field-400 hover:text-gold hover:bg-gold/10',
+              )}
+            >
+              GIF
+            </button>
+
             <button
               onClick={sendMessage}
               disabled={!text.trim() || sending}
