@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
+import { ModalPortal } from '@/components/ui/ModalPortal'
 import { resolveWeekDeadline } from '@/lib/deadline'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { byeTeamsForWeek } from '@/lib/byeWeeks'
@@ -11,7 +12,7 @@ import {
 import { WeekRecap, WeekInProgress } from './WeekRecap'
 import { StandingsTable } from './StandingsTable'
 import {
-  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp
+  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp, Shuffle
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -401,6 +402,53 @@ export function PickEmView() {
 
   const { data: oddsMap } = useNflOdds()
 
+  // Fills in the favored side of every still-open game, using the
+  // same odds cache the pick cards already display. Games with no
+  // odds available (spread/moneyline never synced, or a bye-week-
+  // adjacent quirk) are left untouched rather than guessed at —
+  // silently defaulting one side would be indistinguishable from a
+  // real signal, and this only fills pendingPicks, never submits,
+  // so the person still reviews everything before saving.
+  function handleFillFavorites() {
+    let filled = 0, skipped = 0
+    const next = { ...pendingPicks }
+    for (const g of games) {
+      if (isGameLocked(g.game_date, weekDeadline, g.status)) continue
+      const odds = oddsMap?.get(`${g.away_team}@${g.home_team}`)
+      if (!odds) { skipped++; continue }
+      let favorite: string | null = null
+      if (odds.homeWinPct != null && odds.awayWinPct != null) {
+        favorite = odds.homeWinPct >= odds.awayWinPct ? g.home_team : g.away_team
+      } else if (odds.spread != null) {
+        // Spread is stored as the home team's number — negative
+        // means the home team is favored.
+        favorite = odds.spread < 0 ? g.home_team : g.away_team
+      }
+      if (!favorite) { skipped++; continue }
+      next[g.id] = favorite
+      filled++
+    }
+    setPendingPicks(next)
+    if (filled === 0) toast.error("No odds available yet for this week's games")
+    else if (skipped > 0) toast.success(`Filled ${filled} favorite${filled === 1 ? '' : 's'} — ${skipped} game${skipped === 1 ? '' : 's'} had no odds yet`)
+    else toast.success(`Filled ${filled} favorite${filled === 1 ? '' : 's'}`)
+  }
+
+  // Same idea, but a genuine 50/50 coin flip per game instead of
+  // reading the odds — for anyone who just wants every game filled
+  // in without thinking about it.
+  function handleRandomPicks() {
+    let filled = 0
+    const next = { ...pendingPicks }
+    for (const g of games) {
+      if (isGameLocked(g.game_date, weekDeadline, g.status)) continue
+      next[g.id] = Math.random() < 0.5 ? g.home_team : g.away_team
+      filled++
+    }
+    setPendingPicks(next)
+    toast.success(`Randomly filled ${filled} pick${filled === 1 ? '' : 's'}`)
+  }
+
   const tiebreakerGame = games.find((g: any) => g.is_tiebreaker)
   const regularGames = games.filter((g: any) => !g.is_tiebreaker)
   const lockedCount = games.filter((g: any) => isGameLocked(g.game_date, weekDeadline, g.status)).length
@@ -596,6 +644,24 @@ export function PickEmView() {
         </div>
       )}
 
+      {/* Quick-fill — only fills open games into pendingPicks, never
+          submits on its own. The existing Save/Submit button below
+          is still the one real commit action either way. */}
+      {anyUnlocked && (
+        <div className="flex items-center gap-2">
+          <button onClick={handleFillFavorites}
+            className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
+            <TrendingUp className="w-3.5 h-3.5" />
+            Fill Favorites
+          </button>
+          <button onClick={handleRandomPicks}
+            className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
+            <Shuffle className="w-3.5 h-3.5" />
+            Random
+          </button>
+        </div>
+      )}
+
       {/* Commissioner tools */}
       {isCommissioner && !weekDeadline && (
         <div className="flex items-center justify-between bg-field-800/40 border border-field-700/50 rounded-lg px-3 py-2">
@@ -614,7 +680,7 @@ export function PickEmView() {
 
       {/* Deadline editor modal */}
       {showDeadlineEditor && (
-        <div className="modal-overlay" onClick={() => setShowDeadlineEditor(false)}>
+        <ModalPortal onClose={() => setShowDeadlineEditor(false)}>
           <div className="modal-box modal-sm" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-4">
               <Clock className="w-5 h-5 text-gold" />
@@ -650,7 +716,7 @@ export function PickEmView() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* Close dropdown when clicking outside */}
