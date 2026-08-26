@@ -180,15 +180,20 @@ function App() {
         position="bottom-center"
         toastOptions={{
           style: {
-            background: '#1c3320',
-            color: '#f0f0e8',
-            border: '1px solid rgba(245,197,24,0.2)',
+            background: '#1C1C1C',
+            color: '#F5F5F5',
+            border: '1px solid rgba(206,123,69,0.3)',
             fontFamily: 'Barlow Condensed, sans-serif',
             fontWeight: 700,
             fontSize: '14px',
             letterSpacing: '0.04em',
           },
-          success: { iconTheme: { primary: '#F5C518', secondary: '#1a0800' } },
+          // Copper for success, matching every other "positive/highlighted"
+          // indicator in the app — this app deliberately retokenized every
+          // other green success color to copper/blue already; the toast
+          // config just never got updated. Plain green/yellow (the library
+          // defaults) never appear anywhere else on purpose.
+          success: { iconTheme: { primary: '#CE7B45', secondary: '#0A0A0A' } },
           error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
         }}
       />
