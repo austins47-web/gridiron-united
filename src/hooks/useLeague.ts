@@ -249,8 +249,24 @@ export function useLeaveLeague() {
 
       // Clean up this user's roster entries, then remove membership
       await supabase.from('rosters').delete().eq('league_id', leagueId).eq('user_id', user.id)
-      const { error } = await supabase.from('league_members').delete().eq('id', member.id)
+
+      // .select() after .delete() so we get back the actual deleted
+      // row(s). Without it, a delete silently blocked by RLS (zero
+      // rows affected) returns error: null — indistinguishable from
+      // genuine success — and that's exactly what happened here:
+      // league_members had no DELETE policy at all, so every leave
+      // attempt reported success while never actually removing the
+      // membership row. Checking the row count closes that class of
+      // bug for good, not just this one instance of it.
+      const { data: deleted, error } = await supabase
+        .from('league_members')
+        .delete()
+        .eq('id', member.id)
+        .select('id')
       if (error) throw error
+      if (!deleted || deleted.length === 0) {
+        throw new Error('Could not leave the league — the membership was not removed. Please try again or contact support.')
+      }
 
       return leagueId
     },
