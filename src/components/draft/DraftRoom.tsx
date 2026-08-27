@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useDraftState, useDraftPicks, useStartDraft, useScheduleDraft,
   useCancelSchedule, useMakePick, useDraftRealtime, type DraftPickWithPlayer
@@ -8,6 +9,7 @@ import { useLeagueMembers } from '@/hooks/useLeague'
 import { useRosteredPlayerIds } from '@/hooks/useRoster'
 import { useAppStore } from '@/store/appStore'
 import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
+import { useDraftReactions } from '@/hooks/useDraftReactions'
 import { supabase } from '@/lib/supabase'
 import type { Player } from '@/types/database'
 import {
@@ -124,6 +126,8 @@ export function DraftRoom() {
     }
     prevTopPickId.current = topId
   }, [picks])
+
+  const { reactions, sendReaction } = useDraftReactions(activeLeagueId)
 
   // Keep refs in sync
   useEffect(() => { autoDraftRef.current = autoDraft }, [autoDraft])
@@ -370,6 +374,22 @@ export function DraftRoom() {
     <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4">
       <BroadcastOpen storageKey={`bcopen-draft-${activeLeagueId}`} tagline="The Draft Is Live" />
 
+      {/* Reaction bursts — portaled to document.body, same reason
+          as every other fixed-position overlay in this app: this
+          component renders inside AppShell's .route-enter wrapper,
+          whose page-transition leaves a resting transform, which
+          hijacks position:fixed for anything nested inside it. */}
+      {createPortal(
+        <div style={{ position: 'fixed', bottom: 90, right: 24, zIndex: 90, pointerEvents: 'none' }}>
+          {reactions.map(r => (
+            <div key={r.id} className="reaction-burst" style={{ position: 'absolute', right: 0, bottom: 0, fontSize: 28 }}>
+              {r.emoji}
+            </div>
+          ))}
+        </div>,
+        document.body,
+      )}
+
       {/* Paused banner */}
       {isPaused && (
         <div className="bg-gold/10 border border-gold/40 rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
@@ -412,6 +432,22 @@ export function DraftRoom() {
               {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}
             </div>
           )}
+
+          {/* Reactions — ephemeral, broadcast to everyone else
+              watching this draft room via a separate realtime
+              channel from pick sync (see useDraftReactions) */}
+          <div className="flex items-center gap-1 bg-field-800 border border-field-700 rounded-lg px-1.5 py-1">
+            {['🔥', '😱', '💰', '👀'].map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => sendReaction(emoji)}
+                className="text-base hover:scale-125 transition-transform leading-none px-0.5"
+                title="React"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
 
           {/* Autodraft toggle */}
           <button

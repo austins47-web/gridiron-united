@@ -15,7 +15,20 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
+// CORS: this was missing Access-Control-Allow-Headers entirely,
+// which only breaks in a REAL browser — the client sends custom
+// Authorization/apikey headers, which triggers a preflight OPTIONS
+// check, and without explicitly allowing those header names the
+// browser blocks the real request even with Origin: *. Every
+// PowerShell test of this endpoint passed regardless, since CORS
+// preflight is a browser-only mechanism — curl/Invoke-WebRequest
+// never enforce it, so this class of bug is invisible to that kind
+// of testing no matter how many times it's run. Matched to
+// sportsdata's exact working header set instead of guessing.
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })

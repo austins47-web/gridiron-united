@@ -3,6 +3,7 @@ import { useNFLNews, useCFBNews } from '@/hooks/useLiveStats'
 import { ExternalLink, Clock, Search, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
+import { useFeedCut, FeedCutOverlay } from '@/components/ui/FeedCut'
 
 // ── NFL teams for the filter picker ──────────────────────────
 const NFL_TEAMS = [
@@ -359,6 +360,7 @@ function CFBNewsTab() {
 export function NewsView() {
   const [tab, setTab] = useState<'nfl' | 'cfb'>('nfl')
   const { containerRef: newsTabRef, indicatorStyle: newsTabIndicator } = useSlidingIndicator(tab)
+  const { cutting: feedCutting, trigger: triggerFeedCut } = useFeedCut()
   const [teamFilter, setTeamFilter] = useState('')
   const [search, setSearch]         = useState('')
   const [showTeamPicker, setShowTeamPicker] = useState(false)
@@ -402,7 +404,8 @@ export function NewsView() {
   const selectedTeam = NFL_TEAMS.find(t => t.abbr === teamFilter)
 
   return (
-    <div className="space-y-4 max-w-3xl mx-auto">
+    <div className="relative space-y-4 max-w-3xl mx-auto">
+      <FeedCutOverlay active={feedCutting} />
 
       {/* ── Tabs ── */}
       <div ref={newsTabRef} className="relative flex gap-1 p-1 bg-field-900 rounded-xl border border-field-800 w-fit">
@@ -411,7 +414,7 @@ export function NewsView() {
           <button
             key={t}
             data-tab-key={t}
-            onClick={() => { setTab(t); setSearch(''); setTeamFilter('') }}
+            onClick={() => { if (t !== tab) triggerFeedCut(); setTab(t); setSearch(''); setTeamFilter('') }}
             className={clsx(
               'relative z-10 px-5 py-1.5 rounded-lg text-sm font-bold transition-colors uppercase tracking-wide',
               tab === t

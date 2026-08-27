@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/appStore'
+import { useFeedCut, FeedCutOverlay } from '@/components/ui/FeedCut'
 import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4 } from 'lucide-react'
 import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
@@ -692,6 +693,7 @@ export function LiveScoresView() {
 
   const [tab, setTab] = useState<LeagueTab>(() =>
     (localStorage.getItem(TAB_KEY) as LeagueTab | null) ?? 'NFL')
+  const { cutting: feedCutting, trigger: triggerFeedCut } = useFeedCut()
   const [nflWeekKey, setNflWeekKey] = useState<string>(() =>
     localStorage.getItem(`${WEEK_KEY}_NFL`) ?? '1')
   const [cfbWeekKey, setCfbWeekKey] = useState<string>(() =>
@@ -793,7 +795,8 @@ export function LiveScoresView() {
 
   return (
     <>
-    <div className="space-y-4">
+    <div className="relative space-y-4">
+      <FeedCutOverlay active={feedCutting} />
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -831,7 +834,7 @@ export function LiveScoresView() {
       <div ref={leagueTabRef} className="relative flex gap-1 p-1 bg-field-900 rounded-xl border border-field-800 w-fit">
         <div className="absolute top-1 bottom-1 bg-gold rounded-lg z-0" style={leagueTabIndicator} />
         {(['NFL', 'CFB'] as LeagueTab[]).map(t => (
-          <button key={t} data-tab-key={t} onClick={() => { setTab(t); setStatusFilter('All') }}
+          <button key={t} data-tab-key={t} onClick={() => { if (t !== tab) triggerFeedCut(); setTab(t); setStatusFilter('All') }}
             className={clsx(
               'relative z-10 px-6 py-1.5 rounded-lg text-sm font-black transition-colors uppercase tracking-wide',
               tab === t

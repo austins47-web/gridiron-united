@@ -4,7 +4,8 @@ import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, useLeagueRe
 import { LeagueSettingsModal } from './LeagueSettingsModal'
 import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
 import { ModalPortal } from '@/components/ui/ModalPortal'
-import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown, QrCode, LogOut } from 'lucide-react'
+import { FranchiseCard } from '@/components/ui/FranchiseCard'
+import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown, QrCode, LogOut, Share2 } from 'lucide-react'
 import { QRModal } from './QRModal'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -568,6 +569,7 @@ function LeagueHub({
   league, membership, orderedLeagues, onOpenSettings, onShowQR, onLeave, onMove,
 }: any) {
   const isCommissioner = membership?.is_commissioner ?? false
+  const [showFranchiseCard, setShowFranchiseCard] = useState(false)
   const isPickem = league.league_type === 'pickem'
   const idx = orderedLeagues.findIndex((l: any) => l.league.id === league.id)
   const isFirst = idx === 0
@@ -656,6 +658,11 @@ function LeagueHub({
             <button className="btn-ghost" onClick={onShowQR}>
               <QrCode className="w-3.5 h-3.5" /> Invite
             </button>
+            {!isPickem && (
+              <button className="btn-ghost" onClick={() => setShowFranchiseCard(true)}>
+                <Share2 className="w-3.5 h-3.5" /> Share
+              </button>
+            )}
             {isCommissioner && (
               <button className="btn-ghost" onClick={onOpenSettings}>
                 <Settings className="w-3.5 h-3.5" /> League settings
@@ -680,6 +687,10 @@ function LeagueHub({
           isCommissioner={isCommissioner}
         />
       </div>
+
+      {showFranchiseCard && (
+        <FranchiseCard league={league} membership={membership} onClose={() => setShowFranchiseCard(false)} />
+      )}
     </div>
   )
 }

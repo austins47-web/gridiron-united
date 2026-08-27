@@ -399,6 +399,34 @@
   .ticker-scroll-track { animation: ticker-scroll 32s linear infinite; }
   @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
+  /* ── Draft reaction burst — floating emoji for useDraftReactions ── */
+  .reaction-burst { animation: reaction-rise 2.2s ease-out forwards; }
+  @keyframes reaction-rise {
+    0%   { opacity: 0; transform: translateY(0) scale(.6); }
+    15%  { opacity: 1; transform: translateY(-10px) scale(1.1); }
+    100% { opacity: 0; transform: translateY(-140px) scale(1); }
+  }
+
+  /* ── Feed cut — broadcast-style transition for the NFL/CFB toggle ── */
+  .feed-cut-overlay {
+    position: absolute; inset: 0; z-index: 40; pointer-events: none;
+    background: rgba(206,123,69,.16);
+    animation: feed-cut-flash .38s ease-out forwards;
+  }
+  @keyframes feed-cut-flash {
+    0%   { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .feed-cut-scanline {
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, #DE9163, transparent);
+    animation: feed-cut-sweep .38s cubic-bezier(.2,0,.2,1) forwards;
+  }
+  @keyframes feed-cut-sweep {
+    0%   { top: 0; opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+
   .page-hero-inner   { @apply relative p-5 sm:p-6; }
   .page-hero-title {
     @apply font-cond font-black uppercase text-white leading-none tracking-tight;
@@ -472,6 +500,8 @@
     .wkreveal-eyebrow, .wkreveal-title, .wkreveal-row, .wkreveal-winner,
     .wkreveal-spark { animation: none !important; opacity: 1 !important; }
     .ticker-live-dot, .ticker-scroll-track { animation: none !important; }
+    .feed-cut-overlay, .feed-cut-scanline { animation: none !important; display: none !important; }
+    .reaction-burst { animation: none !important; display: none !important; }
   }
 
   /* ── Modal ── */
