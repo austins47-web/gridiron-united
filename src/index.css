@@ -363,6 +363,42 @@
      the two features stay independently readable/changeable even
      though they share one keyframe. */
   .message-reveal { animation: pick-reveal .5s cubic-bezier(.2,0,.2,1) both; }
+
+  /* ── Broadcast open — wordmark assembly for BroadcastOpen.tsx ── */
+  .bcopen-yardlines { animation: bcopen-yardIn .6s ease forwards; }
+  @keyframes bcopen-yardIn { to { opacity: 1; } }
+  .bcopen-sweep { animation: bcopen-sweepGo 1.1s cubic-bezier(.4,0,.2,1) .1s forwards; }
+  @keyframes bcopen-sweepGo { from { left: -40%; } to { left: 100%; } }
+  .bcopen-bar { animation: bcopen-barGrow .5s cubic-bezier(.2,0,.2,1) .7s forwards; }
+  @keyframes bcopen-barGrow { to { width: 220px; margin-left: -110px; } }
+  .bcopen-letter { animation: bcopen-letterIn .4s cubic-bezier(.2,0,.2,1) forwards; }
+  @keyframes bcopen-letterIn { to { opacity: 1; transform: translateY(0); } }
+  .bcopen-tagline { animation: bcopen-tagIn .5s ease 1.9s forwards; }
+  @keyframes bcopen-tagIn { to { opacity: 1; } }
+  .bcopen-fadeout { animation: bcopen-fadeOut .4s ease forwards; }
+  @keyframes bcopen-fadeOut { to { opacity: 0; } }
+
+  /* ── Week reveal — Pick'Em result sequence for AnimatedWeekReveal.tsx ── */
+  .wkreveal-eyebrow { animation: wkreveal-fadeUp .4s ease .2s forwards; }
+  .wkreveal-title   { animation: wkreveal-fadeUp .4s ease .35s forwards; }
+  @keyframes wkreveal-fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .wkreveal-row { animation: wkreveal-rowIn .35s cubic-bezier(.2,0,.2,1) forwards; }
+  @keyframes wkreveal-rowIn { to { opacity: 1; transform: translateY(0); } }
+  .wkreveal-winner { animation: wkreveal-winnerIn .55s cubic-bezier(.2,0,.2,1) forwards; }
+  @keyframes wkreveal-winnerIn {
+    0%   { opacity: 0; transform: scale(.92); }
+    60%  { opacity: 1; transform: scale(1.03); background-color: rgba(206,123,69,.22); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  .wkreveal-spark { animation: wkreveal-sparkFall 1.1s ease-out forwards; }
+  @keyframes wkreveal-sparkFall { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(60px) scale(.4); } }
+
+  /* ── Live ticker strip ── */
+  .ticker-live-dot { animation: ticker-pulse 1.6s ease-in-out infinite; }
+  @keyframes ticker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  .ticker-scroll-track { animation: ticker-scroll 32s linear infinite; }
+  @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
   .page-hero-inner   { @apply relative p-5 sm:p-6; }
   .page-hero-title {
     @apply font-cond font-black uppercase text-white leading-none tracking-tight;
@@ -431,6 +467,11 @@
     .bye-ghost { animation: none !important; }
     .pick-reveal { animation: none !important; }
     .message-reveal { animation: none !important; }
+    .bcopen-yardlines, .bcopen-sweep, .bcopen-bar, .bcopen-letter,
+    .bcopen-tagline, .bcopen-fadeout { animation: none !important; opacity: 1 !important; }
+    .wkreveal-eyebrow, .wkreveal-title, .wkreveal-row, .wkreveal-winner,
+    .wkreveal-spark { animation: none !important; opacity: 1 !important; }
+    .ticker-live-dot, .ticker-scroll-track { animation: none !important; }
   }
 
   /* ── Modal ── */

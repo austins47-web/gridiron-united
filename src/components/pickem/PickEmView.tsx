@@ -11,6 +11,7 @@ import {
   computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal,
 } from './standings'
 import { WeekRecap, WeekInProgress } from './WeekRecap'
+import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
 import {
   Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp, Shuffle
@@ -824,9 +825,15 @@ export function PickEmView() {
       {/* ── STANDINGS TAB ── */}
       {tab === 'standings' && (
         <div className="space-y-4">
-          {/* End-of-week winner's post, once every game is final */}
+          {/* End-of-week winner's post, once every game is final.
+              AnimatedWeekReveal plays the reveal sequence exactly
+              once per league+week (localStorage-gated), then
+              settles into rendering this exact WeekRecap for every
+              later view — so a returning visitor sees precisely
+              what they always would have. */}
           {weekComplete ? (
-            <WeekRecap
+            <AnimatedWeekReveal
+              leagueId={activeLeagueId!}
               week={week}
               rows={weekRows}
               tiebreakerTotal={weekTbTotal}

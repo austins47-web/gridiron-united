@@ -7,6 +7,7 @@ import { usePlayers, DEFAULT_FILTERS } from '@/hooks/usePlayers'
 import { useLeagueMembers } from '@/hooks/useLeague'
 import { useRosteredPlayerIds } from '@/hooks/useRoster'
 import { useAppStore } from '@/store/appStore'
+import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
 import { supabase } from '@/lib/supabase'
 import type { Player } from '@/types/database'
 import {
@@ -367,6 +368,7 @@ export function DraftRoom() {
   // ── Live draft ─────────────────────────────────────────────────────
   return (
     <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4">
+      <BroadcastOpen storageKey={`bcopen-draft-${activeLeagueId}`} tagline="The Draft Is Live" />
 
       {/* Paused banner */}
       {isPaused && (

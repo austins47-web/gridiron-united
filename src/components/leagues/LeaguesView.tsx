@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
+import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown, QrCode, LogOut } from 'lucide-react'
 import { QRModal } from './QRModal'
@@ -574,6 +575,10 @@ function LeagueHub({
 
   return (
     <div className="space-y-4">
+      <BroadcastOpen
+        storageKey={`bcopen-league-${league.id}`}
+        tagline={isPickem ? "Pick every game. Beat the league." : "NFL + College. One Roster."}
+      />
       {/* Hub header */}
       <div className="jumbotron">
         <div className="relative p-5">

@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { Bell, User, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
+import { LiveTickerStrip } from './LiveTickerStrip'
 import { NotificationsPanel } from '@/components/ui/NotificationsPanel'
 import { LeagueSelector } from '@/components/leagues/LeagueSelector'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -170,6 +171,8 @@ export function AppShell() {
           </NavLink>
         ))}
       </nav>
+
+      <LiveTickerStrip />
 
       {/* ── League sub-nav — only when a league is selected ── */}
       {activeLeagueId && leagueTabs.length > 0 && (
