@@ -252,7 +252,7 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
   }, [query])
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl">
+    <div className="absolute bottom-full left-0 mb-1 z-50 w-72 bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-field-700">
         <Search className="w-3.5 h-3.5 text-field-500 shrink-0" />
         <input
@@ -267,7 +267,7 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
           Close
         </button>
       </div>
-      <div className="max-h-64 overflow-y-auto p-2">
+      <div className="max-h-72 overflow-y-auto p-2">
         {loading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-5 h-5 text-field-500 animate-spin" />
@@ -280,7 +280,17 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
           <p className="text-field-400 text-xs text-center py-6">No GIFs found</p>
         )}
         {!loading && !error && gifs.length > 0 && (
-          <div className="grid grid-cols-3 gap-1.5">
+          // Fixed w-72 popover / grid-cols-4 -> each tile is a
+          // small, predictable ~68px square regardless of how wide
+          // the chat panel itself happens to be. The previous
+          // version spanned the FULL chat width (left-0 right-0) —
+          // with only 3 columns dividing a wide panel, each tile
+          // became hundreds of pixels tall via aspect-square, and
+          // the max-h-64 scroll container then cropped the view
+          // down to just the top sliver of that oversized first
+          // row. That's what looked like broken/cropped GIFs; the
+          // images themselves were always fine.
+          <div className="grid grid-cols-4 gap-1.5">
             {gifs.map(g => (
               <button key={g.id} onClick={() => onSelect(g.url)}
                 className="rounded-lg overflow-hidden border border-field-700 hover:border-gold/50 transition-colors aspect-square bg-field-900">
@@ -725,7 +735,7 @@ export function LeagueChat() {
               onClick={() => setShowGifPicker(v => !v)}
               title="Send a GIF"
               className={clsx(
-                'shrink-0 px-1.5 py-1 rounded-lg font-cond font-black text-[11px] uppercase tracking-wider transition-colors',
+                'shrink-0 p-1.5 rounded-lg font-cond font-black text-[11px] uppercase tracking-wider leading-none transition-colors',
                 showGifPicker ? 'text-gold bg-gold/10' : 'text-field-400 hover:text-gold hover:bg-gold/10',
               )}
             >
