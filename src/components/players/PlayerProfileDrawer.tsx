@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
-import { X, Newspaper, BarChart2, User, ExternalLink, AlertTriangle } from 'lucide-react'
+import { X, Newspaper, BarChart2, User, ExternalLink, AlertTriangle, Link2 } from 'lucide-react'
 import clsx from 'clsx'
 import type { Player } from '@/types/database'
+import { useAppStore } from '@/store/appStore'
+import { useMyRoster } from '@/hooks/useRoster'
 
 // ── Helpers ───────────────────────────────────────────────────
 function toEspnId(player: Player): number {
@@ -144,6 +146,25 @@ type Tab = 'overview' | 'stats' | 'news'
 export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: Player; onClose: () => void; onTeamClick?: () => void }) {
   const [tab, setTab]       = useState<Tab>('overview')
   const [imgError, setImgError] = useState(false)
+
+  // "The Bridge" — this app's actual differentiator: NFL + CFB on
+  // one roster. If this player's school matches a player of the
+  // OTHER league already on the viewer's own roster in this league,
+  // surface the connection. activeLeagueId comes straight from the
+  // global store rather than a prop, so every existing place this
+  // drawer gets opened from (PlayersView, TeamPage, GameDetailModal)
+  // needs zero changes to pass new context through.
+  const { activeLeagueId } = useAppStore()
+  const { data: myRoster = [] } = useMyRoster(activeLeagueId)
+  const bridgeMatch = useMemo(() => {
+    if (player.league === 'NFL' && player.college) {
+      return myRoster.find(r => r.player?.league === 'CFB' && r.player?.team === player.college)?.player ?? null
+    }
+    if (player.league === 'CFB') {
+      return myRoster.find(r => r.player?.league === 'NFL' && r.player?.college === player.team)?.player ?? null
+    }
+    return null
+  }, [player, myRoster])
 
   // Lock page scroll while the drawer is open, so the list behind
   // it can't keep scrolling underneath the overlay.
@@ -328,6 +349,20 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
           {/* Overview */}
           {!isLoading && tab === 'overview' && (
             <div className="p-5 space-y-5">
+
+              {bridgeMatch && (
+                <div className="flex items-center gap-3 rounded-xl px-4 py-3 bg-gold/[0.08] border border-gold/30">
+                  <div className="w-8 h-8 rounded-lg bg-gold/20 flex items-center justify-center shrink-0">
+                    <Link2 className="w-4 h-4 text-gold" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-cond font-bold text-[10px] tracking-[.15em] uppercase text-gold">The Bridge</div>
+                    <div className="text-sm text-white truncate">
+                      You also roster <span className="font-bold">{bridgeMatch.name}</span> from {player.league === 'NFL' ? player.college : player.team}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Fantasy cards */}
               <div>
