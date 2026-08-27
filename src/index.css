@@ -354,6 +354,15 @@
     60%  { opacity: 1; transform: scale(1) translateY(0); }
     to   { background-color: transparent; }
   }
+
+  /* Same reveal, reused for chat — a message that just arrived
+     (yours or someone else's, via realtime) gets the identical
+     scale+fade+gold-flash treatment as a fresh draft pick, instead
+     of just popping into the list. Kept as its own class name
+     rather than reusing .pick-reveal directly on chat markup, so
+     the two features stay independently readable/changeable even
+     though they share one keyframe. */
+  .message-reveal { animation: pick-reveal .5s cubic-bezier(.2,0,.2,1) both; }
   .page-hero-inner   { @apply relative p-5 sm:p-6; }
   .page-hero-title {
     @apply font-cond font-black uppercase text-white leading-none tracking-tight;
@@ -421,6 +430,7 @@
     .hover-lift:hover { transform: none !important; }
     .bye-ghost { animation: none !important; }
     .pick-reveal { animation: none !important; }
+    .message-reveal { animation: none !important; }
   }
 
   /* ── Modal ── */

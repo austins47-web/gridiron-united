@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
+import { useAnchoredPortal } from '@/hooks/useAnchoredPortal'
 import { Send, MessageSquare, Image as ImageIcon, Search, Loader2 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -94,13 +96,14 @@ function MessageText({ text, myUsername, onMentionClick }: {
 
 // ── Message bubble ────────────────────────────────────────────
 
-function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick }: {
+function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick, isNew }: {
   msg: ChatMessage
   isOwn: boolean
   showAvatar: boolean
   myUsername?: string
   myAvatarUrl?: string | null
   onMentionClick: (username: string) => void
+  isNew?: boolean
 }) {
   // Trade completed card
   if (msg.is_system && msg.message.startsWith('TRADE_COMPLETED:')) {
@@ -195,14 +198,19 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
         <div className={clsx(
           mediaUrl
             ? 'rounded-2xl overflow-hidden border max-w-[220px]'
-            : 'px-3 py-2 rounded-2xl text-sm leading-relaxed break-words',
+            : 'px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm',
           isOwn
-            ? clsx('chat-bubble-own border-gold/30', !mediaUrl && 'bg-gold/20 text-white rounded-br-sm')
-            : clsx('chat-bubble-other border-field-600', !mediaUrl && 'bg-field-700 text-field-100 rounded-bl-sm'),
+            ? clsx('chat-bubble-own border-gold/30', !mediaUrl && 'bg-gold/20 text-white rounded-br-md')
+            : clsx('chat-bubble-other border-field-600', !mediaUrl && 'bg-field-700 text-field-100 rounded-bl-md'),
+          isNew && 'message-reveal',
         )}>
           {mediaUrl ? (
+            // max-h caps user-uploaded photos, which — unlike GIPHY
+            // GIFs (always 200px tall at the source) — have no
+            // guaranteed aspect ratio. object-contain keeps the
+            // whole image visible rather than cropping it to fit.
             <img src={mediaUrl} alt={isGif ? 'GIF' : 'Shared image'}
-              className="block w-full h-auto" loading="lazy" />
+              className="block w-full max-h-[280px] object-contain bg-field-900" loading="lazy" />
           ) : (
             <MessageText text={msg.message} myUsername={myUsername} onMentionClick={onMentionClick} />
           )}
@@ -216,7 +224,11 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
 
 interface GifResult { id: string; title: string; url: string }
 
-function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onClose: () => void }) {
+function GifPicker({ onSelect, onClose, anchorRef }: {
+  onSelect: (url: string) => void
+  onClose: () => void
+  anchorRef: React.RefObject<HTMLElement>
+}) {
   const [query, setQuery] = useState('')
   const [gifs, setGifs] = useState<GifResult[]>([])
   const [loading, setLoading] = useState(true)
@@ -224,6 +236,16 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { searchRef.current?.focus() }, [])
+
+  // Portaled + position computed from real viewport coordinates —
+  // this is what actually fixes the top-row-clipped bug. The chat
+  // panel is a bounded, clipped container; a plain CSS `absolute`
+  // popover growing upward from the input gets visually cut off by
+  // that panel's own overflow boundary the moment it's taller than
+  // the room actually available above the input, regardless of the
+  // popover's own styling. Portaling to document.body with a
+  // computed position/max-height sidesteps that entirely.
+  const anchorStyle = useAnchoredPortal(anchorRef, true, { matchAnchorWidth: false })
 
   // Trending on open, debounced re-search as the person types —
   // not on every keystroke, to avoid hammering the proxy.
@@ -251,9 +273,14 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
     return () => clearTimeout(t)
   }, [query])
 
-  return (
-    <div className="absolute bottom-full left-0 mb-1 z-50 w-72 bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-field-700">
+  if (!anchorStyle) return null
+
+  return createPortal(
+    <div
+      style={{ position: 'fixed', left: anchorStyle.left, bottom: anchorStyle.bottom, maxHeight: anchorStyle.maxHeight }}
+      className="z-50 w-72 flex flex-col bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl"
+    >
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-field-700 shrink-0">
         <Search className="w-3.5 h-3.5 text-field-500 shrink-0" />
         <input
           ref={searchRef}
@@ -267,7 +294,7 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
           Close
         </button>
       </div>
-      <div className="max-h-72 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto p-2 min-h-0">
         {loading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-5 h-5 text-field-500 animate-spin" />
@@ -280,16 +307,13 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
           <p className="text-field-400 text-xs text-center py-6">No GIFs found</p>
         )}
         {!loading && !error && gifs.length > 0 && (
-          // Fixed w-72 popover / grid-cols-4 -> each tile is a
-          // small, predictable ~68px square regardless of how wide
-          // the chat panel itself happens to be. The previous
-          // version spanned the FULL chat width (left-0 right-0) —
-          // with only 3 columns dividing a wide panel, each tile
-          // became hundreds of pixels tall via aspect-square, and
-          // the max-h-64 scroll container then cropped the view
-          // down to just the top sliver of that oversized first
-          // row. That's what looked like broken/cropped GIFs; the
-          // images themselves were always fine.
+          // grid-cols-4 within a fixed w-72 popover -> small,
+          // predictable ~68px square tiles regardless of how wide
+          // the chat panel itself happens to be. The outer
+          // container's maxHeight (from useAnchoredPortal, clamped
+          // to real available viewport space) is what actually
+          // fixed the top-row-clipped bug — this flex-1 scroll area
+          // just fills whatever's left after the header.
           <div className="grid grid-cols-4 gap-1.5">
             {gifs.map(g => (
               <button key={g.id} onClick={() => onSelect(g.url)}
@@ -300,7 +324,8 @@ function GifPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onC
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -323,34 +348,58 @@ function MentionDropdown({ members, query, onSelect, anchorRef }: {
   if (filtered.length === 0) return null
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl">
-      <div className="px-3 py-1.5 text-xs text-field-500 font-bold uppercase tracking-wider border-b border-field-700">
+    <MentionDropdownInner anchorRef={anchorRef} filtered={filtered} onSelect={onSelect} />
+  )
+}
+
+function MentionDropdownInner({ anchorRef, filtered, onSelect }: {
+  anchorRef: React.RefObject<HTMLElement>
+  filtered: Member[]
+  onSelect: (m: Member) => void
+}) {
+  // Same latent clipping bug as the GIF picker had, just never
+  // reported — member lists usually short enough to fit by luck,
+  // not by correctness. matchAnchorWidth: true keeps this one
+  // spanning the input's full width, unlike the GIF picker's fixed
+  // w-72, since these are full-width text rows, not a thumbnail grid.
+  const anchorStyle = useAnchoredPortal(anchorRef, true, { matchAnchorWidth: true })
+  if (!anchorStyle) return null
+
+  return createPortal(
+    <div
+      style={{ position: 'fixed', left: anchorStyle.left, bottom: anchorStyle.bottom, width: anchorStyle.width, maxHeight: anchorStyle.maxHeight }}
+      className="z-50 flex flex-col bg-field-800 border border-field-600 rounded-xl overflow-hidden shadow-2xl"
+    >
+      <div className="px-3 py-1.5 text-xs text-field-500 font-bold uppercase tracking-wider border-b border-field-700 shrink-0">
         Mention a teammate
       </div>
-      {filtered.map(m => (
-        <button
-          key={m.user_id}
-          onMouseDown={e => { e.preventDefault(); onSelect(m) }}
-          className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-field-700 transition-colors text-left"
-        >
-          {m.avatar_url ? (
-            <img src={m.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
-          ) : (
-            <div className="w-6 h-6 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
-              <span className="text-[12px] font-black text-gold">
-                {(m.display_name || m.username).slice(0, 2).toUpperCase()}
-              </span>
+      <div className="overflow-y-auto min-h-0">
+        {filtered.map(m => (
+          <button
+            key={m.user_id}
+            onMouseDown={e => { e.preventDefault(); onSelect(m) }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-field-700 transition-colors text-left"
+          >
+            {m.avatar_url ? (
+              <img src={m.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
+                <span className="text-[12px] font-black text-gold">
+                  {(m.display_name || m.username).slice(0, 2).toUpperCase()}
+                </span>
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold text-white truncate">
+                {m.display_name || m.username}
+              </div>
+              <div className="text-xs text-field-400">@{m.username}</div>
             </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold text-white truncate">
-              {m.display_name || m.username}
-            </div>
-            <div className="text-xs text-field-400">@{m.username}</div>
-          </div>
-        </button>
-      ))}
-    </div>
+          </button>
+        ))}
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -412,6 +461,28 @@ export function LeagueChat() {
       return (data ?? []) as ChatMessage[]
     },
   })
+
+  // Message reveal — same isolated-tracking technique as the draft
+  // pick reveal (a completely separate feature, unrelated state):
+  // flag whichever message is newest, briefly, so it can play a
+  // one-time reveal instead of just popping into the list. Doesn't
+  // matter whether it arrived via realtime, was sent by this
+  // person, or (rare) a page reload's already-loaded batch — that
+  // last case is exactly why prevTopMsgId starts null and the very
+  // first effect run is treated as "not new": nobody wants the
+  // entire chat history animating in at once on load.
+  const [justArrivedMsgId, setJustArrivedMsgId] = useState<string | null>(null)
+  const prevTopMsgId = useRef<string | null>(null)
+  useEffect(() => {
+    const topId = messages.length > 0 ? messages[messages.length - 1].id : null
+    if (topId && prevTopMsgId.current !== null && topId !== prevTopMsgId.current) {
+      setJustArrivedMsgId(topId)
+      const t = setTimeout(() => setJustArrivedMsgId(null), 900)
+      prevTopMsgId.current = topId
+      return () => clearTimeout(t)
+    }
+    prevTopMsgId.current = topId
+  }, [messages])
 
   // ── Realtime subscription ───────────────────────────────────
   useEffect(() => {
@@ -659,6 +730,7 @@ export function LeagueChat() {
             myUsername={myUsername}
             myAvatarUrl={myAvatarUrl}
             onMentionClick={setProfileUsername}
+            isNew={msg.id === justArrivedMsgId}
           />
         ))}
         <div ref={bottomRef} />
@@ -667,7 +739,7 @@ export function LeagueChat() {
       {/* Scroll hint */}
       {!autoScroll && (
         <button onClick={() => { setAutoScroll(true); bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }}
-          className="chat-scroll-btn mx-4 mb-2 text-xs text-gold bg-gold/10 border border-gold/30 rounded-full px-3 py-1 font-bold hover:bg-gold/20 transition-colors">
+          className="chat-scroll-btn rise-in mx-4 mb-2 text-xs text-gold bg-gold/10 border border-gold/30 rounded-full px-3 py-1 font-bold hover:bg-gold/20 transition-colors">
           ↓ New messages
         </button>
       )}
@@ -689,7 +761,7 @@ export function LeagueChat() {
           {/* GIF picker — same floating position as the mention
               dropdown, just triggered by a button instead of typing */}
           {showGifPicker && (
-            <GifPicker onSelect={handleGifSelect} onClose={() => setShowGifPicker(false)} />
+            <GifPicker onSelect={handleGifSelect} onClose={() => setShowGifPicker(false)} anchorRef={inputWrapRef as any} />
           )}
 
           <div className="chat-input-wrap flex items-center gap-2 bg-field-700 border border-field-600 rounded-xl px-3 py-2 focus-within:border-gold/50 transition-colors">
