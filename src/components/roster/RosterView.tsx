@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useMyRoster, useDropPlayer, useMovePlayer, useRosterRealtime } from '@/hooks/useRoster'
 import { useAppStore } from '@/store/appStore'
+import { ModalPortal } from '@/components/ui/ModalPortal'
 import { buildSlotDefs, canFillSlot } from '@/types/database'
 import type { RosterEntryWithPlayer } from '@/hooks/useRoster'
 import type { SlotDef } from '@/types/database'
@@ -347,7 +348,7 @@ export function RosterView() {
 
       {/* Drop confirmation */}
       {confirmDrop && (
-        <div className="modal-overlay" onClick={() => setConfirmDrop(null)}>
+        <ModalPortal onClose={() => setConfirmDrop(null)}>
           <div className="modal-box max-w-sm" onClick={e => e.stopPropagation()}>
             <h3 className="section-title mb-2">Drop Player?</h3>
             <p className="text-field-300 mb-1">
@@ -367,7 +368,7 @@ export function RosterView() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
     </div>
   )

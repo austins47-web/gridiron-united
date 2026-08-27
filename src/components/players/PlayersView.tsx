@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { usePlayers, useTeamList, useProjStats, getDisplayProj, DEFAULT_FILTERS, type PlayerFilters } from '@/hooks/usePlayers'
 import { useRosteredPlayerIds, useAddPlayer, useMyRoster } from '@/hooks/useRoster'
 import { useAppStore } from '@/store/appStore'
+import { ModalPortal } from '@/components/ui/ModalPortal'
 import { buildSlotDefs } from '@/types/database'
 import type { Player, ScoringRules } from '@/types/database'
 import { PlayerProfileDrawer } from './PlayerProfileDrawer'
@@ -707,7 +708,7 @@ function SlotPickerModal({ player, slots, filledSlots, onPick, onClose }: {
   const isNflBlockedFromCfbOs = player.league === 'NFL' && slots.some(s => s.type === 'cfb_os')
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalPortal onClose={onClose}>
       <div className="modal-box w-full max-w-xs" onClick={e => e.stopPropagation()}>
         <h3 className="section-title mb-1">Add {player.name}</h3>
         <p className="text-field-400 text-sm mb-4">Choose an open roster slot</p>
@@ -745,6 +746,6 @@ function SlotPickerModal({ player, slots, filledSlots, onPick, onClose }: {
 
         <button className="btn-ghost w-full mt-3" onClick={onClose}>Cancel</button>
       </div>
-    </div>
+    </ModalPortal>
   )
 }

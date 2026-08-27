@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, Save, RotateCcw } from 'lucide-react'
+import { ModalPortal } from '@/components/ui/ModalPortal'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import type { League, ScoringRules, RosterSlotConfig } from '@/types/database'
@@ -121,8 +122,8 @@ export function LeagueSettingsModal({ league, onClose, onSaved }: Props) {
   ]
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal-box modal-lg !p-0">
+    <ModalPortal onClose={onClose}>
+      <div className="modal-box modal-lg !p-0" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <div>
@@ -343,7 +344,7 @@ export function LeagueSettingsModal({ league, onClose, onSaved }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 

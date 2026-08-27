@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
+import { ModalPortal } from '@/components/ui/ModalPortal'
 import {
   useLeagueTrades, useProposeTrade, useRespondTrade,
   useCommissionerTrade, useVoteTrade, useTradesRealtime, type TradeWithDetails
@@ -344,7 +345,7 @@ function ProposeModal({ leagueId, onClose }: { leagueId: string; onClose: () => 
     set(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalPortal onClose={onClose}>
       <div className="modal-box w-full max-w-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
 
         <div className="flex items-center justify-between mb-4 shrink-0">
@@ -465,7 +466,7 @@ function ProposeModal({ leagueId, onClose }: { leagueId: string; onClose: () => 
           </>
         )}
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 

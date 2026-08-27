@@ -101,6 +101,29 @@ export function DraftRoom() {
   const picksRef = useRef<DraftPickWithPlayer[]>([])
   const queueRef = useRef<string[]>([])
 
+  // Pick reveal animation — fully isolated from picksRef above
+  // (that one's for avoiding stale closures in the auto-draft timer
+  // logic, a different concern). This just flags whichever pick is
+  // the newest one, briefly, so the Recent Picks row it lands in can
+  // play a one-time reveal instead of just popping into the list.
+  // Doesn't care WHY picks changed — someone else's pick via
+  // realtime, my own pick, or auto-draft all trigger it the same way.
+  const [justArrivedPickId, setJustArrivedPickId] = useState<string | null>(null)
+  const prevTopPickId = useRef<string | null>(null)
+  useEffect(() => {
+    const topId = picks.length > 0 ? picks[picks.length - 1].id : null
+    // prevTopPickId starts null, so the very first run (whatever
+    // picks already existed on mount) is treated as "not new" and
+    // never animates — only picks that arrive after that point do.
+    if (topId && prevTopPickId.current !== null && topId !== prevTopPickId.current) {
+      setJustArrivedPickId(topId)
+      const t = setTimeout(() => setJustArrivedPickId(null), 900)
+      prevTopPickId.current = topId
+      return () => clearTimeout(t)
+    }
+    prevTopPickId.current = topId
+  }, [picks])
+
   // Keep refs in sync
   useEffect(() => { autoDraftRef.current = autoDraft }, [autoDraft])
   useEffect(() => { picksRef.current = picks }, [picks])
@@ -592,7 +615,11 @@ export function DraftRoom() {
                     {picks.slice(-12).reverse().map(pick => {
                       const picker = members.find((m: any) => m.user_id === pick.user_id)
                       return (
-                        <div key={pick.id} className="flex items-center gap-2 text-xs">
+                        <div key={pick.id}
+                          className={clsx(
+                            'flex items-center gap-2 text-xs rounded px-1 -mx-1',
+                            pick.id === justArrivedPickId && 'pick-reveal',
+                          )}>
                           <span className="text-field-500 shrink-0 w-6">#{pick.pick_number}</span>
                           <span className={`pos-badge pos-${pick.player?.pos} text-[12px]`}>{pick.player?.pos}</span>
                           <span className="text-white font-bold truncate">{pick.player?.name}</span>

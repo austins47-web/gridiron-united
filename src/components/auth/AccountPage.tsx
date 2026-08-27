@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
+import { ModalPortal } from '@/components/ui/ModalPortal'
 import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X, Sun, Moon, ImageIcon } from 'lucide-react'
 import { AVATAR_PRESETS, presetToDataUrl } from './AvatarPresets'
 import toast from 'react-hot-toast'
@@ -59,7 +60,7 @@ function DeleteProfileModal({ onClose, onConfirm, deleting }: {
   const confirmed = typed === 'DELETE'
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalPortal onClose={onClose}>
       <div className="modal-box modal-sm" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 text-red-400">
@@ -109,7 +110,7 @@ function DeleteProfileModal({ onClose, onConfirm, deleting }: {
           </button>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 
@@ -713,7 +714,7 @@ export function AccountPage() {
 
       {/* Avatar preset picker modal */}
       {showPresetPicker && (
-        <div className="modal-overlay" onClick={() => setShowPresetPicker(false)}>
+        <ModalPortal onClose={() => setShowPresetPicker(false)}>
           <div className="modal-box w-full max-w-lg" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-cond font-black text-lg uppercase tracking-wider text-white">
@@ -767,7 +768,7 @@ export function AccountPage() {
             </button>
             <p className="text-xs text-field-500 text-center mt-2">JPEG, PNG, GIF or WebP · Max 5MB</p>
           </div>
-        </div>
+        </ModalPortal>
       )}
     </div>
   )

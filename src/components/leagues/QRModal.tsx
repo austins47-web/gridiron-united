@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { X, Download, QrCode } from 'lucide-react'
+import { ModalPortal } from '@/components/ui/ModalPortal'
 
 interface Props {
   leagueName: string
@@ -35,7 +36,7 @@ export function QRModal({ leagueName, inviteCode, onClose }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalPortal onClose={onClose}>
       <div className="modal-box modal-sm text-center" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -71,6 +72,6 @@ export function QRModal({ leagueName, inviteCode, onClose }: Props) {
           <Download className="w-4 h-4" /> Download QR Code
         </button>
       </div>
-    </div>
+    </ModalPortal>
   )
 }

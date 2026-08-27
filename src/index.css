@@ -342,6 +342,18 @@
     0%, 100% { border-color: rgba(48,48,48,1); }
     50%      { border-color: rgba(74,74,74,1); }
   }
+
+  /* Draft pick reveal — a brief scale+fade-in with a gold flash for
+     whichever pick just landed at the top of Recent Picks. Fires
+     once per pick (see justArrivedPickId in DraftRoom), regardless
+     of whether it was this person's pick, someone else's via
+     realtime, or auto-draft. */
+  .pick-reveal { animation: pick-reveal .5s cubic-bezier(.2,0,.2,1) both; }
+  @keyframes pick-reveal {
+    from { opacity: 0; transform: scale(.94) translateY(-4px); background-color: rgba(206,123,69,.35); }
+    60%  { opacity: 1; transform: scale(1) translateY(0); }
+    to   { background-color: transparent; }
+  }
   .page-hero-inner   { @apply relative p-5 sm:p-6; }
   .page-hero-title {
     @apply font-cond font-black uppercase text-white leading-none tracking-tight;
@@ -408,6 +420,7 @@
     .jumbotron::after, .page-hero::after { animation: none !important; }
     .hover-lift:hover { transform: none !important; }
     .bye-ghost { animation: none !important; }
+    .pick-reveal { animation: none !important; }
   }
 
   /* ── Modal ── */

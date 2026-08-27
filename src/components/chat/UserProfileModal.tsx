@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
+import { ModalPortal } from '@/components/ui/ModalPortal'
 import { X, Trophy, Star, Users } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -124,7 +125,7 @@ export function UserProfileModal({ username, onClose }: {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalPortal onClose={onClose}>
       <div className="modal-box w-full max-w-md" onClick={e => e.stopPropagation()}>
 
         {/* Close */}
@@ -261,6 +262,6 @@ export function UserProfileModal({ username, onClose }: {
           </div>
         )}
       </div>
-    </div>
+    </ModalPortal>
   )
 }
