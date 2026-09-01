@@ -281,25 +281,30 @@ function BracketView({ query, league, onTeamClick }: {
   }
 
   const activeRounds = order.filter(r => (rounds[r]?.length ?? 0) > 0)
-  const firstRoundCount = rounds[activeRounds[0]]?.length ?? 1
-  // Card height (88px) + gap (10px) per game, so every column spans
-  // the same total height as the fullest round — the anchor every
-  // other column's justify-around centers against.
-  const columnHeight = firstRoundCount * 98
 
   return (
     <div className="overflow-x-auto pb-2">
       <div className="flex gap-4 items-start" style={{ minWidth: activeRounds.length * 200 }}>
         {activeRounds.map(roundName => (
-          <div key={roundName} className="flex flex-col shrink-0" style={{ width: 190 }}>
+          <div key={roundName} className="flex flex-col gap-3 shrink-0" style={{ width: 190 }}>
             <h3 className="font-cond font-bold text-xs uppercase tracking-wider text-gold mb-2 text-center">
               {roundName}
             </h3>
-            <div className="flex flex-col justify-around" style={{ height: columnHeight }}>
-              {rounds[roundName].map(g => (
-                <BracketGameCard key={g.id} game={g} league={league} onTeamClick={onTeamClick} />
-              ))}
-            </div>
+            {/* No explicit height, no justify-around — that
+                approach depended on knowing each card's real
+                rendered height in advance, which was a guessed
+                pixel value (88px) never actually measured, and
+                twice produced uneven/bunched spacing rather than
+                the intended centering. Each column now just stacks
+                its own games with a fixed, known gap, sized purely
+                by its own content — this class of bug can't happen
+                here since nothing depends on a guessed height
+                anymore. It gives up on later rounds visually
+                nesting between their earlier pairs, in exchange for
+                a layout that can't get that pixel math wrong. */}
+            {rounds[roundName].map(g => (
+              <BracketGameCard key={g.id} game={g} league={league} onTeamClick={onTeamClick} />
+            ))}
           </div>
         ))}
       </div>
