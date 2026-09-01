@@ -267,12 +267,21 @@ serve(async (req) => {
       }
 
     } else if (endpoint === 'nfl/standings') {
-      data = await espnFetch('https://site.api.espn.com/apis/v2/sports/football/nfl/standings')
+      // seasontype: 1=preseason, 2=regular, 3=postseason. Previously
+      // hardcoded with no param forwarding at all, so an explicit
+      // seasontype was silently ignored and this always hit ESPN's
+      // bare "current" default.
+      const seasontype = url.searchParams.get('seasontype')
+      const nflStandingsUrl = 'https://site.api.espn.com/apis/v2/sports/football/nfl/standings'
+        + (seasontype ? `?seasontype=${seasontype}` : '')
+      data = await espnFetch(nflStandingsUrl)
 
     } else if (endpoint === 'cfb/standings') {
       // groups=80 = FBS, same param already used for the CFB scoreboard
       // route above, kept consistent rather than fetching every division
-      data = await espnFetch('https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80')
+      const seasontype = url.searchParams.get('seasontype')
+      const stParam = seasontype ? `&seasontype=${seasontype}` : ''
+      data = await espnFetch(`https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80${stParam}`)
 
     } else if (endpoint.startsWith('game/summary/')) {
       // game/summary/{league}/{gameId}

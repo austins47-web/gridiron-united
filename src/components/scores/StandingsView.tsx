@@ -78,7 +78,9 @@ export function StandingsView() {
 }
 
 function StandingsList({ query }: { query: ReturnType<typeof useNflStandings> }) {
-  const { data: groups, isLoading, error } = query
+  const { data, isLoading, error } = query
+  const groups = data?.groups
+  const isPreseason = data?.isPreseason ?? false
 
   if (isLoading) {
     return (
@@ -97,7 +99,18 @@ function StandingsList({ query }: { query: ReturnType<typeof useNflStandings> })
   }
 
   return (
-    <div className="grid sm:grid-cols-2 gap-3">
+    <div className="space-y-3">
+      {/* Only ever shown for NFL before the regular season has
+          actually started playing games — automatically stops
+          appearing the moment a real regular-season result exists
+          anywhere in the league, see useNflStandings. */}
+      {isPreseason && (
+        <div className="flex items-center gap-2 text-xs bg-gold/10 border border-gold/30 rounded-lg px-3 py-2 w-fit">
+          <span className="font-cond font-bold uppercase tracking-wider text-gold">Preseason</span>
+          <span className="text-field-400">Regular season standings will appear once games are played.</span>
+        </div>
+      )}
+      <div className="grid sm:grid-cols-2 gap-3">
       {groups.map((g: StandingsGroup) => (
         <div key={g.name} className="bg-field-800 border border-field-700 rounded-xl overflow-hidden">
           <div className="px-3 py-2 border-b border-field-700 bg-field-900/60">
@@ -130,6 +143,7 @@ function StandingsList({ query }: { query: ReturnType<typeof useNflStandings> })
           </table>
         </div>
       ))}
+      </div>
     </div>
   )
 }

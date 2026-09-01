@@ -78,40 +78,60 @@ function toStandingsTeam(entry: any): StandingsTeam {
   }
 }
 
-// ── NFL standings — grouped into 8 divisions ──────────────────
+function groupNflByDivision(data: any): StandingsGroup[] {
+  const divisions = new Map<string, StandingsTeam[]>()
+  for (const conf of data.children ?? []) {
+    for (const entry of conf.standings?.entries ?? []) {
+      const div = NFL_DIVISIONS[entry.team?.abbreviation] ?? 'Other'
+      if (!divisions.has(div)) divisions.set(div, [])
+      divisions.get(div)!.push(toStandingsTeam(entry))
+    }
+  }
+  const order = ['AFC East', 'AFC North', 'AFC South', 'AFC West', 'NFC East', 'NFC North', 'NFC South', 'NFC West']
+  return order
+    .filter(d => divisions.has(d))
+    .map(name => ({ name, teams: divisions.get(name)!.sort((a, b) => b.pct - a.pct) }))
+}
+
+// ── NFL standings — grouped into 8 divisions ───────────────────
+//
+// Always requests regular season (seasontype=2) explicitly. If
+// every team comes back 0-0 — genuinely populated data, just no
+// games played yet, confirmed directly against ESPN rather than
+// assumed — the regular season hasn't actually started playing
+// games, so this falls back to preseason (seasontype=1) instead,
+// which DOES have real records right now. The moment any real
+// regular-season game gets reported anywhere in the league, this
+// automatically stops falling back — no hardcoded date, nothing
+// to update season to season. isPreseason tells the UI which one
+// it's actually looking at, so preseason records are always
+// clearly labeled rather than shown as if they were the real thing.
 export function useNflStandings() {
   return useQuery({
     queryKey: ['nfl-standings'],
     staleTime: 5 * 60_000,
-    queryFn: async (): Promise<StandingsGroup[]> => {
-      const data = await proxyFetch('nfl/standings')
-      const divisions = new Map<string, StandingsTeam[]>()
-      for (const conf of data.children ?? []) {
-        for (const entry of conf.standings?.entries ?? []) {
-          const div = NFL_DIVISIONS[entry.team?.abbreviation] ?? 'Other'
-          if (!divisions.has(div)) divisions.set(div, [])
-          divisions.get(div)!.push(toStandingsTeam(entry))
-        }
-      }
-      const order = ['AFC East', 'AFC North', 'AFC South', 'AFC West', 'NFC East', 'NFC North', 'NFC South', 'NFC West']
-      return order
-        .filter(d => divisions.has(d))
-        .map(name => ({
-          name,
-          teams: divisions.get(name)!.sort((a, b) => b.pct - a.pct),
-        }))
+    queryFn: async (): Promise<{ groups: StandingsGroup[]; isPreseason: boolean }> => {
+      const regular = groupNflByDivision(await proxyFetch('nfl/standings', { seasontype: '2' }))
+      const anyGamesPlayed = regular.some(g => g.teams.some(t => t.wins + t.losses + t.ties > 0))
+      if (anyGamesPlayed) return { groups: regular, isPreseason: false }
+
+      const pre = groupNflByDivision(await proxyFetch('nfl/standings', { seasontype: '1' }))
+      return { groups: pre, isPreseason: true }
     },
   })
 }
 
-// ── CFB standings — ESPN already groups by conference ─────────
+// ── CFB standings — ESPN already groups by conference. Same
+// return shape as useNflStandings ({ groups, isPreseason }) so both
+// can be consumed identically — CFB has no separate preseason phase
+// with its own games (unlike NFL), so isPreseason is always false.
 export function useCfbStandings() {
   return useQuery({
     queryKey: ['cfb-standings'],
     staleTime: 5 * 60_000,
-    queryFn: async (): Promise<StandingsGroup[]> => {
+    queryFn: async (): Promise<{ groups: StandingsGroup[]; isPreseason: boolean }> => {
       const data = await proxyFetch('cfb/standings')
-      return (data.children ?? [])
+      const groups = (data.children ?? [])
         .map((conf: any) => ({
           name: conf.name,
           teams: (conf.standings?.entries ?? [])
@@ -121,6 +141,7 @@ export function useCfbStandings() {
         // Skip conferences ESPN hasn't populated yet (seen empty
         // this early in preseason) rather than show a blank section
         .filter((g: StandingsGroup) => g.teams.length > 0)
+      return { groups, isPreseason: false }
     },
   })
 }
