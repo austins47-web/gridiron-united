@@ -22,8 +22,13 @@ export function useDraftReactions(leagueId: string | null) {
 
   useEffect(() => {
     if (!leagueId) return
+    // broadcast.self: true — without it, Supabase Realtime does NOT
+    // echo a broadcast back to whoever sent it, only to other
+    // connected clients. That meant clicking a reaction showed
+    // nothing on your own screen at all, correct for everyone else
+    // in the room but reading as broken for the person who clicked.
     const channel = supabase
-      .channel(`reactions:${leagueId}`)
+      .channel(`reactions:${leagueId}`, { config: { broadcast: { self: true } } })
       .on('broadcast', { event: 'reaction' }, ({ payload }) => {
         const id = `${Date.now()}-${Math.random()}`
         setReactions(prev => [...prev, { id, emoji: payload.emoji }])
