@@ -14,7 +14,8 @@ import { WeekRecap, WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
 import {
-  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp, Shuffle
+  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp, Shuffle,
+  TrendingDown, Home, Plane
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -452,6 +453,61 @@ export function PickEmView() {
     toast.success(`Randomly filled ${filled} pick${filled === 1 ? '' : 's'}`)
   }
 
+  // Exact inverse of handleFillFavorites — same odds lookup, same
+  // skip-when-no-odds handling, comparison flipped so it always
+  // resolves to the genuinely opposite side of whatever Favorites
+  // would pick. Verified in isolation before writing this: favorite
+  // and underdog can never land on the same team, including at a
+  // dead-even 50/50 split or an exact pick-em spread of 0.
+  function handleFillUnderdogs() {
+    let filled = 0, skipped = 0
+    const next = { ...pendingPicks }
+    for (const g of games) {
+      if (isGameLocked(g.game_date, weekDeadline, g.status)) continue
+      const odds = oddsMap?.get(`${g.away_team}@${g.home_team}`)
+      if (!odds) { skipped++; continue }
+      let underdog: string | null = null
+      if (odds.homeWinPct != null && odds.awayWinPct != null) {
+        underdog = odds.homeWinPct >= odds.awayWinPct ? g.away_team : g.home_team
+      } else if (odds.spread != null) {
+        underdog = odds.spread < 0 ? g.away_team : g.home_team
+      }
+      if (!underdog) { skipped++; continue }
+      next[g.id] = underdog
+      filled++
+    }
+    setPendingPicks(next)
+    if (filled === 0) toast.error("No odds available yet for this week's games")
+    else if (skipped > 0) toast.success(`Filled ${filled} underdog${filled === 1 ? '' : 's'} - ${skipped} game${skipped === 1 ? '' : 's'} had no odds yet`)
+    else toast.success(`Filled ${filled} underdog${filled === 1 ? '' : 's'}`)
+  }
+
+  // Home/away have no odds dependency at all — always available,
+  // unlike Favorites/Underdog which need the odds cache populated.
+  function handleFillHome() {
+    let filled = 0
+    const next = { ...pendingPicks }
+    for (const g of games) {
+      if (isGameLocked(g.game_date, weekDeadline, g.status)) continue
+      next[g.id] = g.home_team
+      filled++
+    }
+    setPendingPicks(next)
+    toast.success(`Filled ${filled} home team${filled === 1 ? '' : 's'}`)
+  }
+
+  function handleFillAway() {
+    let filled = 0
+    const next = { ...pendingPicks }
+    for (const g of games) {
+      if (isGameLocked(g.game_date, weekDeadline, g.status)) continue
+      next[g.id] = g.away_team
+      filled++
+    }
+    setPendingPicks(next)
+    toast.success(`Filled ${filled} away team${filled === 1 ? '' : 's'}`)
+  }
+
   const tiebreakerGame = games.find((g: any) => g.is_tiebreaker)
   const regularGames = games.filter((g: any) => !g.is_tiebreaker)
   const lockedCount = games.filter((g: any) => isGameLocked(g.game_date, weekDeadline, g.status)).length
@@ -672,11 +728,26 @@ export function PickEmView() {
           submits on its own. The existing Save/Submit button below
           is still the one real commit action either way. */}
       {anyUnlocked && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={handleFillFavorites}
             className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
             <TrendingUp className="w-3.5 h-3.5" />
             Fill Favorites
+          </button>
+          <button onClick={handleFillUnderdogs}
+            className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
+            <TrendingDown className="w-3.5 h-3.5" />
+            Underdogs
+          </button>
+          <button onClick={handleFillHome}
+            className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
+            <Home className="w-3.5 h-3.5" />
+            Home Teams
+          </button>
+          <button onClick={handleFillAway}
+            className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
+            <Plane className="w-3.5 h-3.5" />
+            Away Teams
           </button>
           <button onClick={handleRandomPicks}
             className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
