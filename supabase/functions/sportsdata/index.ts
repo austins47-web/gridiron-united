@@ -266,6 +266,14 @@ serve(async (req) => {
         data = await espnFetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${espnId}`)
       }
 
+    } else if (endpoint === 'nfl/standings') {
+      data = await espnFetch('https://site.api.espn.com/apis/v2/sports/football/nfl/standings')
+
+    } else if (endpoint === 'cfb/standings') {
+      // groups=80 = FBS, same param already used for the CFB scoreboard
+      // route above, kept consistent rather than fetching every division
+      data = await espnFetch('https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80')
+
     } else if (endpoint.startsWith('game/summary/')) {
       // game/summary/{league}/{gameId}
       const parts = endpoint.split('/')

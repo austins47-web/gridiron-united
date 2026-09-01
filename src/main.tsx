@@ -26,6 +26,7 @@ import { PickEmView } from '@/components/pickem/PickEmView'
 import { LeagueChat } from '@/components/chat/LeagueChat'
 import { TradeCenter } from '@/components/trades/TradeCenter'
 import { LiveScoresView } from '@/components/scores/LiveScoresView'
+import { StandingsView } from '@/components/scores/StandingsView'
 import { JoinPage } from '@/components/leagues/JoinPage'
 import { LeagueSettingsView } from '@/components/leagues/LeagueSettingsView'
 import { HomeView } from '@/components/home/HomeView'
@@ -156,6 +157,7 @@ function App() {
               {/* These routes don't need league isolation */}
               <Route path="leagues" element={<LeaguesView />} />
               <Route path="scores" element={<LiveScoresView />} />
+              <Route path="standings" element={<StandingsView />} />
               <Route path="news" element={<NewsView />} />
               <Route path="mock" element={<MockDraftHub />} />
               <Route path="social" element={<SocialHub />} />

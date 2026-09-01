@@ -22,6 +22,7 @@ export function AppShell() {
     { to: '/app/home',    label: 'Home',       emoji: '🏠' },
     { to: "/app/leagues", label: "My Leagues", emoji: "🏆" },
     { to: '/app/scores',  label: 'Live Scores', emoji: '📡' },
+    { to: '/app/standings', label: 'Standings', emoji: '🥇' },
     { to: '/app/news',    label: 'News',         emoji: '📰' },
     { to: '/app/mock',    label: 'Mock Draft',  emoji: '🧪' },
     { to: '/app/social',  label: 'Social',      emoji: '👥' },
