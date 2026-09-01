@@ -155,12 +155,36 @@ export function useNflStandings() {
 // ── CFB rankings — AP Top 25 specifically (ESPN also returns
 // Coaches Poll, FCS, and D-II polls in the same response; AP is
 // the one most people mean by "the rankings")
+//
+// Cross-references each ranked team's record from Standings rather
+// than using the rankings response's own recordSummary field —
+// confirmed that field reflects the record AT THE TIME THE POLL
+// WAS PUBLISHED (currently a preseason poll dated Aug 17, before
+// any games had been played), not the team's actual current
+// record. A team that's since played and won shows recordSummary
+// as a stale "0-0" indefinitely, until AP releases a new poll —
+// which won't happen until sometime after this week's games.
+// Standings' record is refetched independently and reflects
+// what's true right now, so it's the one source of truth for
+// "current record" anywhere in this app.
 export function useCfbRankings() {
   return useQuery({
     queryKey: ['cfb-rankings'],
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<RankedTeam[]> => {
-      const data = await proxyFetch('cfb/rankings')
+      const [data, standingsData] = await Promise.all([
+        proxyFetch('cfb/rankings'),
+        proxyFetch('cfb/standings'),
+      ])
+      const recordByTeamId = new Map<string, string>()
+      for (const conf of standingsData.children ?? []) {
+        for (const entry of conf.standings?.entries ?? []) {
+          const overall = (entry.stats ?? []).find((s: any) => s.name === 'overall')
+          const record = overall?.summary ?? overall?.displayValue
+          if (entry.team?.id && record) recordByTeamId.set(entry.team.id, record)
+        }
+      }
+
       const ap = (data.rankings ?? []).find((r: any) => r.name === 'AP Top 25')
       return (ap?.ranks ?? []).map((r: any) => ({
         rank: r.current,
@@ -168,7 +192,7 @@ export function useCfbRankings() {
         abbr: r.team?.abbreviation ?? '',
         name: r.team?.displayName ?? r.team?.location ?? '',
         logo: r.team?.logos?.[0]?.href ?? r.team?.logo ?? '',
-        record: r.recordSummary ?? '',
+        record: recordByTeamId.get(r.team?.id) ?? r.recordSummary ?? '',
         points: r.points ?? 0,
         firstPlaceVotes: r.firstPlaceVotes ?? 0,
         trend: r.trend ?? '-',
