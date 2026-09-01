@@ -22,6 +22,8 @@ export interface StandingsTeam {
   record: string   // "3-0" display string, straight from ESPN
   streak: string
   pct: number
+  teamId: string    // ESPN team id, for TeamPage navigation
+  rank?: number     // AP Top 25 rank, CFB only, when ranked
 }
 
 export interface StandingsGroup {
@@ -33,10 +35,22 @@ export interface BracketGame {
   id: string
   round: string     // "Wild Card", "First Round", etc.
   label: string      // full note text, e.g. "...at the Rose Bowl"
-  home: { abbr: string; name: string; logo: string; score: string } | null
-  away: { abbr: string; name: string; logo: string; score: string } | null
+  home: { abbr: string; name: string; logo: string; score: string; teamId: string } | null
+  away: { abbr: string; name: string; logo: string; score: string; teamId: string } | null
   isTbd: boolean
   status: 'pre' | 'in' | 'post'
+}
+
+export interface RankedTeam {
+  rank: number
+  teamId: string
+  abbr: string
+  name: string
+  logo: string
+  record: string
+  points: number
+  firstPlaceVotes: number
+  trend: string   // "-1", "+2", "-" (no change)
 }
 
 // ── NFL division map — ESPN's standings endpoint groups only by
@@ -69,6 +83,7 @@ function toStandingsTeam(entry: any): StandingsTeam {
     abbr: entry.team?.abbreviation ?? '',
     name: entry.team?.displayName ?? entry.team?.shortDisplayName ?? '',
     logo: entry.team?.logos?.[0]?.href ?? '',
+    teamId: entry.team?.id ?? '',
     wins: statVal(stats, 'wins'),
     losses: statVal(stats, 'losses'),
     ties: statVal(stats, 'ties'),
@@ -121,21 +136,59 @@ export function useNflStandings() {
   })
 }
 
+// ── CFB rankings — AP Top 25 specifically (ESPN also returns
+// Coaches Poll, FCS, and D-II polls in the same response; AP is
+// the one most people mean by "the rankings")
+export function useCfbRankings() {
+  return useQuery({
+    queryKey: ['cfb-rankings'],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<RankedTeam[]> => {
+      const data = await proxyFetch('cfb/rankings')
+      const ap = (data.rankings ?? []).find((r: any) => r.name === 'AP Top 25')
+      return (ap?.ranks ?? []).map((r: any) => ({
+        rank: r.current,
+        teamId: r.team?.id ?? '',
+        abbr: r.team?.abbreviation ?? '',
+        name: r.team?.displayName ?? r.team?.location ?? '',
+        logo: r.team?.logos?.[0]?.href ?? r.team?.logo ?? '',
+        record: r.recordSummary ?? '',
+        points: r.points ?? 0,
+        firstPlaceVotes: r.firstPlaceVotes ?? 0,
+        trend: r.trend ?? '-',
+      }))
+    },
+  })
+}
+
 // ── CFB standings — ESPN already groups by conference. Same
 // return shape as useNflStandings ({ groups, isPreseason }) so both
 // can be consumed identically — CFB has no separate preseason phase
 // with its own games (unlike NFL), so isPreseason is always false.
+// Also cross-references the AP Top 25 onto each team by teamId, so
+// a ranked team's number shows up directly in its standings row.
 export function useCfbStandings() {
   return useQuery({
     queryKey: ['cfb-standings'],
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<{ groups: StandingsGroup[]; isPreseason: boolean }> => {
-      const data = await proxyFetch('cfb/standings')
+      const [data, rankData] = await Promise.all([
+        proxyFetch('cfb/standings'),
+        proxyFetch('cfb/rankings'),
+      ])
+      const ap = (rankData.rankings ?? []).find((r: any) => r.name === 'AP Top 25')
+      const rankByTeamId = new Map<string, number>(
+        (ap?.ranks ?? []).map((r: any) => [r.team?.id, r.current])
+      )
       const groups = (data.children ?? [])
         .map((conf: any) => ({
           name: conf.name,
           teams: (conf.standings?.entries ?? [])
-            .map(toStandingsTeam)
+            .map((entry: any) => {
+              const team = toStandingsTeam(entry)
+              const rank = rankByTeamId.get(team.teamId)
+              return rank ? { ...team, rank } : team
+            })
             .sort((a: StandingsTeam, b: StandingsTeam) => b.pct - a.pct),
         }))
         // Skip conferences ESPN hasn't populated yet (seen empty
@@ -153,6 +206,7 @@ function toBracketTeam(competitor: any) {
     name: competitor.team?.displayName ?? 'TBD',
     logo: competitor.team?.logos?.[0]?.href ?? competitor.team?.logo ?? '',
     score: competitor.score ?? '',
+    teamId: competitor.team?.id ?? '',
   }
 }
 

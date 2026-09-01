@@ -283,6 +283,9 @@ serve(async (req) => {
       const stParam = seasontype ? `&seasontype=${seasontype}` : ''
       data = await espnFetch(`https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80${stParam}`)
 
+    } else if (endpoint === 'cfb/rankings') {
+      data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings')
+
     } else if (endpoint.startsWith('game/summary/')) {
       // game/summary/{league}/{gameId}
       const parts = endpoint.split('/')
