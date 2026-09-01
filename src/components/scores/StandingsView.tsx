@@ -289,13 +289,13 @@ function BracketView({ query, league, onTeamClick }: {
 
   return (
     <div className="overflow-x-auto pb-2">
-      <div className="flex gap-4" style={{ minWidth: activeRounds.length * 200 }}>
+      <div className="flex gap-4 items-start" style={{ minWidth: activeRounds.length * 200 }}>
         {activeRounds.map(roundName => (
           <div key={roundName} className="flex flex-col shrink-0" style={{ width: 190 }}>
             <h3 className="font-cond font-bold text-xs uppercase tracking-wider text-gold mb-2 text-center">
               {roundName}
             </h3>
-            <div className="flex flex-col justify-around flex-1" style={{ height: columnHeight }}>
+            <div className="flex flex-col justify-around" style={{ height: columnHeight }}>
               {rounds[roundName].map(g => (
                 <BracketGameCard key={g.id} game={g} league={league} onTeamClick={onTeamClick} />
               ))}
@@ -318,8 +318,8 @@ function BracketGameCard({ game, league, onTeamClick }: {
       game.isTbd ? 'border-field-700/50 opacity-60' : 'border-field-700',
     )}>
       <div className="flex-1 min-w-0 space-y-1">
-        <TeamRow team={game.away} league={league} onTeamClick={onTeamClick} />
-        <TeamRow team={game.home} league={league} onTeamClick={onTeamClick} />
+        <TeamRow team={game.away} league={league} status={game.status} onTeamClick={onTeamClick} />
+        <TeamRow team={game.home} league={league} status={game.status} onTeamClick={onTeamClick} />
       </div>
       {game.status === 'post' && (
         <Crown className="w-3.5 h-3.5 text-gold shrink-0" />
@@ -328,9 +328,10 @@ function BracketGameCard({ game, league, onTeamClick }: {
   )
 }
 
-function TeamRow({ team, league, onTeamClick }: {
+function TeamRow({ team, league, status, onTeamClick }: {
   team: BracketGame['away']
   league: League
+  status: BracketGame['status']
   onTeamClick: (teamId: string, league: League) => void
 }) {
   const clickable = team && team.abbr !== 'TBD' && team.teamId
@@ -343,7 +344,15 @@ function TeamRow({ team, league, onTeamClick }: {
       <span className={clsx('text-xs font-bold truncate', team?.abbr === 'TBD' ? 'text-field-500' : 'text-white')}>
         {team?.abbr ?? 'TBD'}
       </span>
-      {team?.score && <span className="text-[11px] text-field-400 ml-auto shrink-0">{team.score}</span>}
+      {/* Only once the game has actually started/finished — a TBD
+          placeholder's score is the literal string "0" (confirmed
+          against real ESPN data), which is truthy in JS, so a plain
+          `team.score &&` check rendered "0" next to every
+          undetermined matchup. status !== 'pre' is what genuinely
+          means there's a real score to show. */}
+      {status !== 'pre' && team?.score && (
+        <span className="text-[11px] text-field-400 ml-auto shrink-0">{team.score}</span>
+      )}
     </div>
   )
 }

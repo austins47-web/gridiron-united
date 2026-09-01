@@ -79,15 +79,31 @@ function statStr(stats: any[], type: string): string {
 function toStandingsTeam(entry: any): StandingsTeam {
   const stats = entry.stats ?? []
   const overall = stats.find((s: any) => s.name === 'overall')
+  const record = overall?.summary ?? overall?.displayValue ?? '0-0'
+
+  // Parse wins/losses/ties from the "W-L" or "W-L-T" record string
+  // rather than separate type:'wins'/type:'losses' stat entries —
+  // confirmed those aren't reliably present. A real CFB team (NC
+  // State, 0-1 after a real loss) had a type:'wins' stat but NO
+  // type:'losses' stat anywhere in its whole stats array, so losses
+  // silently defaulted to 0 for every CFB team regardless of their
+  // actual record. The "W-L" record string itself was correct the
+  // whole time; parsing it directly can't have this gap, since
+  // there's nothing league-specific about a dash-separated string.
+  const parts = record.split('-').map((n: string) => parseInt(n, 10))
+  const wins = Number.isFinite(parts[0]) ? parts[0] : statVal(stats, 'wins')
+  const losses = Number.isFinite(parts[1]) ? parts[1] : statVal(stats, 'losses')
+  const ties = Number.isFinite(parts[2]) ? parts[2] : statVal(stats, 'ties')
+
   return {
     abbr: entry.team?.abbreviation ?? '',
     name: entry.team?.displayName ?? entry.team?.shortDisplayName ?? '',
     logo: entry.team?.logos?.[0]?.href ?? '',
     teamId: entry.team?.id ?? '',
-    wins: statVal(stats, 'wins'),
-    losses: statVal(stats, 'losses'),
-    ties: statVal(stats, 'ties'),
-    record: overall?.summary ?? overall?.displayValue ?? '0-0',
+    wins,
+    losses,
+    ties,
+    record,
     streak: statStr(stats, 'streak'),
     pct: statVal(stats, 'winpercent'),
   }
