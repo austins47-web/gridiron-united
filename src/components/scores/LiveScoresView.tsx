@@ -160,10 +160,18 @@ function StatusBadge({ game, compact = false }: { game: LiveGame, compact?: bool
   if (game.status === 'pre') {
     return <span className={clsx('text-field-300', compact ? 'text-[12px]' : 'text-xs')}>{game.statusText}</span>
   }
+  // ESPN reports period the same way for both leagues — 1-4 are
+  // quarters, 5+ is overtime. There was previously a separate
+  // "halves" array here for CFB (['', '1st', '2nd', 'OT']) that
+  // modeled college football as if it had 2 halves instead of 4
+  // quarters — it doesn't; ESPN's own period field for CFB games
+  // reaches 4 before "Final", exactly like NFL. That wrong model
+  // meant a CFB game in its real 3rd quarter (period 3) indexed
+  // into halves[3], which is literally the string 'OT' — a game
+  // in the 3rd quarter would display as if it were in overtime.
   const quarters = ['', 'Q1', 'Q2', 'Q3', 'Q4', 'OT', '2OT']
-  const halves   = ['', '1st', '2nd', 'OT']
   const p = game.period ?? 1
-  const label = game.league === 'NFL' ? (quarters[p] ?? `P${p}`) : (halves[p] ?? `P${p}`)
+  const label = quarters[p] ?? `P${p}`
   return (
     <div className="flex items-center gap-1">
       <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
