@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { markChatRead } from '@/hooks/useUnreadChat'
 import { useAppStore } from '@/store/appStore'
 import { useAnchoredPortal } from '@/hooks/useAnchoredPortal'
 import { Send, MessageSquare, Image as ImageIcon, Search, Loader2 } from 'lucide-react'
@@ -411,6 +412,12 @@ function MentionDropdownInner({ anchorRef, filtered, onSelect }: {
 export function LeagueChat() {
   const { activeLeagueId, activeLeague, user, profile } = useAppStore()
   const qc = useQueryClient()
+
+  // Marks this league's chat as read the moment this page mounts —
+  // clears the unread badge on the Chat nav tab (see useUnreadChat).
+  useEffect(() => {
+    if (activeLeagueId) markChatRead(activeLeagueId)
+  }, [activeLeagueId])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)

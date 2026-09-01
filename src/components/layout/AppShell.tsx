@@ -3,6 +3,7 @@ import { Bell, User, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { LiveTickerStrip } from './LiveTickerStrip'
+import { useUnreadChat } from '@/hooks/useUnreadChat'
 import { NotificationsPanel } from '@/components/ui/NotificationsPanel'
 import { LeagueSelector } from '@/components/leagues/LeagueSelector'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -13,6 +14,7 @@ export function AppShell() {
   const location = useLocation()
   const [showNotifs, setShowNotifs] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const { hasUnread: hasUnreadChat } = useUnreadChat(activeLeagueId)
 
   const isCommissioner = myMembership?.is_commissioner
   const isPickEm = activeLeague?.league_type === 'pickem'
@@ -199,6 +201,9 @@ export function AppShell() {
               }
             >
               <span>{emoji}</span>{label}
+              {to === '/app/chat' && hasUnreadChat && (
+                <span className="w-1.5 h-1.5 rounded-full bg-gold shrink-0" />
+              )}
             </NavLink>
           ))}
         </nav>
