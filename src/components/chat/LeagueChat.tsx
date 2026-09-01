@@ -111,7 +111,10 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
       const data = JSON.parse(msg.message.replace('TRADE_COMPLETED:', ''))
       return (
         <div className="flex justify-center my-3 px-2">
-          <div className="trade-chat-card w-full max-w-sm rounded-2xl overflow-hidden border">
+          <div className={clsx(
+            'trade-chat-card w-full max-w-sm rounded-2xl overflow-hidden border',
+            isNew && 'trade-settle',
+          )}>
             <div className="trade-chat-header flex items-center gap-2 px-4 py-2.5 border-b">
               <span className="text-base">🤝</span>
               <span className="font-cond font-black text-base uppercase tracking-wider trade-chat-title">
@@ -120,7 +123,7 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
               <span className="ml-auto text-xs trade-chat-time">{formatTime(msg.created_at)}</span>
             </div>
             <div className="grid grid-cols-2 trade-chat-body">
-              <div className="px-3 py-3 border-r trade-chat-divider">
+              <div className={clsx('px-3 py-3 border-r trade-chat-divider', isNew && 'trade-slide-left')}>
                 <div className="text-xs font-bold uppercase tracking-wider trade-chat-label mb-2">
                   {data.proposerName} receives
                 </div>
@@ -130,7 +133,7 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
                     <div key={i} className="text-sm font-bold trade-chat-player leading-snug">{name}</div>
                   ))}
               </div>
-              <div className="px-3 py-3">
+              <div className={clsx('px-3 py-3', isNew && 'trade-slide-right')}>
                 <div className="text-xs font-bold uppercase tracking-wider trade-chat-label mb-2">
                   {data.receiverName} receives
                 </div>

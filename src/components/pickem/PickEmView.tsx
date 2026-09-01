@@ -909,6 +909,7 @@ export function PickEmView() {
               rows={weekRows}
               tiebreakerTotal={weekTbTotal}
               currentUserId={user?.id}
+              myStreak={standings.find((s: any) => s.userId === user?.id)?.streak}
             />
           ) : finishedCount > 0 ? (
             <WeekInProgress finished={finishedCount} total={games.length} />

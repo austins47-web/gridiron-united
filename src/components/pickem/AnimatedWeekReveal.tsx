@@ -15,12 +15,13 @@ import type { WeekRow } from './standings'
  * distance) so the animated sequence and the static card it settles
  * into never disagree about who actually won.
  */
-export function AnimatedWeekReveal({ leagueId, week, rows, tiebreakerTotal, currentUserId }: {
+export function AnimatedWeekReveal({ leagueId, week, rows, tiebreakerTotal, currentUserId, myStreak }: {
   leagueId: string
   week: number
   rows: WeekRow[]
   tiebreakerTotal: number | null
   currentUserId?: string
+  myStreak?: number
 }) {
   const storageKey = `reveal-seen-${leagueId}-${week}`
   const [phase, setPhase] = useState<'animate' | 'settled'>(() => {
@@ -99,6 +100,35 @@ export function AnimatedWeekReveal({ leagueId, week, rows, tiebreakerTotal, curr
               <div className="font-cond font-black text-lg text-white truncate">
                 {winner.name} — {winner.correct}-{winner.played - winner.correct < 0 ? 0 : winner.played - winner.correct}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Milestone celebration — myStreak already means "MY
+            consecutive weeks won as of right now", so >= 2 already
+            guarantees the current viewer won this week and the one
+            before it. No separate winner-identity check needed. */}
+        {myStreak != null && myStreak >= 2 && (
+          <div
+            className="wkreveal-winner relative text-center pt-2 opacity-0"
+            style={{ animationDelay: `${0.55 + ordered.length * 0.3 + 0.6}s` }}
+          >
+            {/* .wkreveal-spark existed in the CSS from the original
+                build but was never actually attached to real
+                elements — wiring it up here for real. Delays start
+                AFTER the parent's own .55s fade-in completes —
+                sparks animating while their parent is still at
+                opacity:0 would be invisible the whole time. */}
+            {[20, 35, 50, 65, 80].map((leftPct, i) => (
+              <span key={i} className="wkreveal-spark absolute top-2 text-sm"
+                style={{ left: `${leftPct}%`, animationDelay: `${0.55 + ordered.length * 0.3 + 0.6 + 0.55 + i * 0.08}s` }}>
+                {['🔥', '⭐', '🔥', '⭐', '🔥'][i]}
+              </span>
+            ))}
+            <div className="text-2xl mb-1">🔥</div>
+            <div className="font-cond font-black text-xl text-white uppercase">{myStreak} In A Row</div>
+            <div className="font-cond font-bold text-[10px] tracking-[.2em] uppercase text-gold mt-1">
+              Weekly Win Streak
             </div>
           </div>
         )}

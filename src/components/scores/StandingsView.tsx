@@ -2,6 +2,7 @@ import { useState } from 'react'
 import clsx from 'clsx'
 import { Trophy, Crown } from 'lucide-react'
 import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
+import { useFlipList } from '@/hooks/useFlipList'
 import { useFeedCut, FeedCutOverlay } from '@/components/ui/FeedCut'
 import { TeamPage } from '@/components/teams/TeamPage'
 import {
@@ -137,46 +138,62 @@ function StandingsList({ query, league, onTeamClick }: {
       )}
       <div className="grid sm:grid-cols-2 gap-3">
         {groups.map((g: StandingsGroup) => (
-          <div key={g.name} className="bg-field-800 border border-field-700 rounded-xl overflow-hidden">
-            <div className="px-3 py-2 border-b border-field-700 bg-field-900/60">
-              <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">{g.name}</span>
-            </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[10px] text-field-500 uppercase tracking-wider">
-                  <th className="text-left font-bold px-3 py-1.5">Team</th>
-                  <th className="text-right font-bold px-2 py-1.5">W</th>
-                  <th className="text-right font-bold px-2 py-1.5">L</th>
-                  <th className="text-right font-bold px-2 py-1.5">T</th>
-                  <th className="text-right font-bold px-3 py-1.5">Strk</th>
-                </tr>
-              </thead>
-              <tbody>
-                {g.teams.map((t: StandingsTeam) => (
-                  <tr
-                    key={t.abbr}
-                    onClick={() => onTeamClick(t.teamId, league)}
-                    className="border-t border-field-700/50 cursor-pointer hover:bg-field-700/40 transition-colors"
-                  >
-                    <td className="px-3 py-1.5 flex items-center gap-2">
-                      {/* AP Top 25 rank, CFB only, when this team is ranked */}
-                      {t.rank && (
-                        <span className="font-cond font-black text-[11px] text-gold w-4 text-right shrink-0">{t.rank}</span>
-                      )}
-                      {t.logo && <img src={t.logo} alt="" className="w-5 h-5 object-contain shrink-0" />}
-                      <span className="text-white font-bold truncate">{t.abbr}</span>
-                    </td>
-                    <td className="text-right px-2 py-1.5 text-field-300">{t.wins}</td>
-                    <td className="text-right px-2 py-1.5 text-field-300">{t.losses}</td>
-                    <td className="text-right px-2 py-1.5 text-field-300">{t.ties}</td>
-                    <td className="text-right px-3 py-1.5 text-field-400 text-xs">{t.streak || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <StandingsGroupTable key={g.name} group={g} league={league} onTeamClick={onTeamClick} />
         ))}
       </div>
+    </div>
+  )
+}
+
+// Own component per group (not inlined in the .map above) so each
+// gets its own useFlipList call — hooks can't run inside a loop,
+// and each division/conference's teams reorder independently of
+// the others when their win% changes.
+function StandingsGroupTable({ group, league, onTeamClick }: {
+  group: StandingsGroup
+  league: League
+  onTeamClick: (teamId: string, league: League) => void
+}) {
+  const flipRef = useFlipList(group.teams.map(t => t.teamId))
+  return (
+    <div className="bg-field-800 border border-field-700 rounded-xl overflow-hidden">
+      <div className="px-3 py-2 border-b border-field-700 bg-field-900/60">
+        <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">{group.name}</span>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[10px] text-field-500 uppercase tracking-wider">
+            <th className="text-left font-bold px-3 py-1.5">Team</th>
+            <th className="text-right font-bold px-2 py-1.5">W</th>
+            <th className="text-right font-bold px-2 py-1.5">L</th>
+            <th className="text-right font-bold px-2 py-1.5">T</th>
+            <th className="text-right font-bold px-3 py-1.5">Strk</th>
+          </tr>
+        </thead>
+        <tbody ref={flipRef as any}>
+          {group.teams.map((t: StandingsTeam) => (
+            <tr
+              key={t.abbr}
+              data-flip-key={t.teamId}
+              onClick={() => onTeamClick(t.teamId, league)}
+              className="border-t border-field-700/50 cursor-pointer hover:bg-field-700/40 transition-colors"
+            >
+              <td className="px-3 py-1.5 flex items-center gap-2">
+                {/* AP Top 25 rank, CFB only, when this team is ranked */}
+                {t.rank && (
+                  <span className="font-cond font-black text-[11px] text-gold w-4 text-right shrink-0">{t.rank}</span>
+                )}
+                {t.logo && <img src={t.logo} alt="" className="w-5 h-5 object-contain shrink-0" />}
+                <span className="text-white font-bold truncate">{t.abbr}</span>
+              </td>
+              <td className="text-right px-2 py-1.5 text-field-300">{t.wins}</td>
+              <td className="text-right px-2 py-1.5 text-field-300">{t.losses}</td>
+              <td className="text-right px-2 py-1.5 text-field-300">{t.ties}</td>
+              <td className="text-right px-3 py-1.5 text-field-400 text-xs">{t.streak || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -186,6 +203,10 @@ function RankingsList({ query, onTeamClick }: {
   onTeamClick: (teamId: string, league: League) => void
 }) {
   const { data: ranks, isLoading, error } = query
+  // Reorders rows into their new position instead of snapping when
+  // ranks shift week to week — same proven FLIP technique already
+  // used for Pick'Em standings, applied here to real AP rankings.
+  const flipRef = useFlipList((ranks ?? []).map(r => r.teamId))
 
   if (isLoading) {
     return (
@@ -208,10 +229,11 @@ function RankingsList({ query, onTeamClick }: {
       <div className="px-3 py-2 border-b border-field-700 bg-field-900/60">
         <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold">AP Top 25</span>
       </div>
-      <div className="divide-y divide-field-700/50">
+      <div ref={flipRef as any} className="divide-y divide-field-700/50">
         {ranks.map((r: RankedTeam) => (
           <div
             key={r.teamId}
+            data-flip-key={r.teamId}
             onClick={() => onTeamClick(r.teamId, 'cfb')}
             className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-field-700/40 transition-colors"
           >
