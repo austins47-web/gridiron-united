@@ -208,18 +208,23 @@ function StandingsPanel({ leagueId }: { leagueId: string | null }) {
       </div>
       <div className="space-y-1">
         {members.map((m: any, i: number) => (
-          <div key={m.id} className="flex items-center justify-between py-1.5 border-b border-field-700/50 last:border-0">
-            <div className="flex items-center gap-2">
-              <span className="text-field-400 text-xs w-4">{i + 1}</span>
+          <div key={m.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-field-700/50 last:border-0">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <span className="text-field-400 text-xs w-4 shrink-0">{i + 1}</span>
               <div className="w-6 h-6 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold overflow-hidden shrink-0">
                 {m.profile?.avatar_url
                   ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
                   : (m.profile?.display_name || m.profile?.username || '?')[0]?.toUpperCase()
                 }
               </div>
-              <span className="text-sm text-white">{m.team_name || m.profile?.display_name || m.profile?.username}</span>
+              <div className="min-w-0 flex flex-col leading-tight">
+                <span className="text-sm text-white truncate">{m.team_name || m.profile?.display_name || m.profile?.username}</span>
+                {m.profile?.username && (
+                  <span className="text-xs text-field-500 truncate">@{m.profile.username}</span>
+                )}
+              </div>
             </div>
-            <div className="text-xs text-right">
+            <div className="text-xs text-right shrink-0">
               <span className="text-white font-bold">{m.wins}-{m.losses}</span>
               <span className="text-field-400 ml-2">{m.points_for?.toFixed(1) ?? '0.0'}</span>
             </div>
