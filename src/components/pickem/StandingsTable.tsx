@@ -33,8 +33,11 @@ export function StandingsTable({
       {anyPlayed && leader.correct > 0 && (
         <div className="jumbotron">
           <div className="relative px-5 py-4 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-gold flex items-center justify-center shrink-0">
-              <Crown className="w-5 h-5 text-field-950" />
+            <div className="w-11 h-11 rounded-xl bg-gold flex items-center justify-center shrink-0 overflow-hidden">
+              {leader.avatarUrl
+                ? <img src={leader.avatarUrl} alt="" className="w-full h-full object-cover" />
+                : <Crown className="w-5 h-5 text-field-950" />
+              }
             </div>
             <div className="min-w-0 flex-1">
               <p className="font-cond font-bold text-[12px] uppercase tracking-[0.2em] text-gold">
@@ -43,6 +46,9 @@ export function StandingsTable({
               <p className="font-cond font-black text-white text-2xl leading-none truncate mt-0.5">
                 {leader.name}
               </p>
+              {leader.username && (
+                <p className="text-field-400 text-xs truncate mt-1">@{leader.username}</p>
+              )}
             </div>
             <div className="text-right shrink-0">
               <p className="readout-value">{leader.correct}</p>
@@ -102,26 +108,39 @@ export function StandingsTable({
                     </td>
 
                     <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className={clsx(
-                          'font-bold truncate',
-                          isYou ? 'text-gold' : 'text-white',
-                        )}>
-                          {r.name}
-                        </span>
-                        {isYou && (
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-gold shrink-0">
-                            you
-                          </span>
-                        )}
-                        {r.streak >= 2 && (
-                          <span
-                            title={`${r.streak} weekly wins in a row`}
-                            className="flex items-center gap-0.5 text-[11px] font-bold text-gold shrink-0"
-                          >
-                            <Flame className="w-3 h-3" />{r.streak}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-full bg-field-700 flex items-center justify-center text-[11px] font-bold text-gold overflow-hidden shrink-0">
+                          {r.avatarUrl
+                            ? <img src={r.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                            : r.name[0]?.toUpperCase()
+                          }
+                        </div>
+                        <div className="min-w-0 flex flex-col leading-tight">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={clsx(
+                              'font-bold truncate',
+                              isYou ? 'text-gold' : 'text-white',
+                            )}>
+                              {r.name}
+                            </span>
+                            {isYou && (
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-gold shrink-0">
+                                you
+                              </span>
+                            )}
+                            {r.streak >= 2 && (
+                              <span
+                                title={`${r.streak} weekly wins in a row`}
+                                className="flex items-center gap-0.5 text-[11px] font-bold text-gold shrink-0"
+                              >
+                                <Flame className="w-3 h-3" />{r.streak}
+                              </span>
+                            )}
+                          </div>
+                          {r.username && (
+                            <span className="text-[11px] text-field-500 truncate">@{r.username}</span>
+                          )}
+                        </div>
                       </div>
                     </td>
 

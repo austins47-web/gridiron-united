@@ -46,6 +46,8 @@ export interface WeekRow {
 export interface StandingRow {
   userId: string
   name: string
+  avatarUrl: string | null
+  username: string | null
   correct: number
   played: number
   pct: number
@@ -208,6 +210,8 @@ export function computeStandings(
     return {
       userId: m.user_id,
       name: nameOf(m),
+      avatarUrl: m.profile?.avatar_url ?? null,
+      username: m.profile?.username ?? null,
       correct: t.correct,
       played: t.played,
       pct: t.played > 0 ? t.correct / t.played : 0,
