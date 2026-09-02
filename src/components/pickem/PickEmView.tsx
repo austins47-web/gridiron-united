@@ -246,7 +246,7 @@ export function PickEmView() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('league_members')
-        .select('user_id, profile:profiles(username, display_name)')
+        .select('user_id, profile:profiles(username, display_name, avatar_url)')
         .eq('league_id', activeLeagueId!)
       if (error) throw error
       return data ?? []
@@ -915,7 +915,7 @@ export function PickEmView() {
             <WeekInProgress finished={finishedCount} total={games.length} />
           ) : null}
 
-          <StandingsTable rows={standings} currentUserId={user?.id} />
+          <StandingsTable rows={standings} currentUserId={user?.id} thisWeekRows={weekRows} />
         </div>
       )}
 

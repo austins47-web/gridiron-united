@@ -54,6 +54,8 @@ export interface StandingRow {
   weeksWon: number
   lastWeek: number | null   // correct count in the most recent completed week
   streak: number            // consecutive weeks finishing first
+  tiebreakerTotal: number   // season-long sum of |guess - actual|, lower is better
+  tiebreakerWeeksSubmitted: number  // how many weeks they actually guessed — 0 ranks worst, not best
 }
 
 const nameOf = (m: Member) =>
@@ -154,8 +156,8 @@ export function computeStandings(
 ): StandingRow[] {
   const weeks = [...new Set(games.map(g => g.week))].sort((a, b) => a - b)
 
-  const totals = new Map<string, { correct: number; played: number; weeksWon: number }>()
-  members.forEach(m => totals.set(m.user_id, { correct: 0, played: 0, weeksWon: 0 }))
+  const totals = new Map<string, { correct: number; played: number; weeksWon: number; tiebreakerTotal: number; tiebreakerWeeksSubmitted: number }>()
+  members.forEach(m => totals.set(m.user_id, { correct: 0, played: 0, weeksWon: 0, tiebreakerTotal: 0, tiebreakerWeeksSubmitted: 0 }))
 
   const weekWinners: { week: number; winners: string[] }[] = []
   let lastCompletedWeek: number | null = null
@@ -173,6 +175,14 @@ export function computeStandings(
       if (!t) continue
       t.correct += r.correct
       t.played  += r.played
+      // Only once the tiebreaker game itself is final (computeWeek
+      // already only sets a non-null diff in that case) — a week
+      // where the tiebreaker hasn't been decided yet contributes
+      // nothing, rather than counting as a perfect 0.
+      if (r.tiebreakerDiff != null) {
+        t.tiebreakerTotal += r.tiebreakerDiff
+        t.tiebreakerWeeksSubmitted++
+      }
     }
 
     if (isWeekComplete(wkGames)) {
@@ -206,7 +216,7 @@ export function computeStandings(
   }
 
   const rows: StandingRow[] = members.map(m => {
-    const t = totals.get(m.user_id) ?? { correct: 0, played: 0, weeksWon: 0 }
+    const t = totals.get(m.user_id) ?? { correct: 0, played: 0, weeksWon: 0, tiebreakerTotal: 0, tiebreakerWeeksSubmitted: 0 }
     return {
       userId: m.user_id,
       name: nameOf(m),
@@ -220,12 +230,22 @@ export function computeStandings(
         ? (lastWeekScore.get(m.user_id) ?? 0)
         : null,
       streak: streakOf(m.user_id),
+      tiebreakerTotal: t.tiebreakerTotal,
+      tiebreakerWeeksSubmitted: t.tiebreakerWeeksSubmitted,
     }
   })
+
+  // A person who's never submitted a tiebreaker guess ranks LAST on
+  // this metric, not first — their raw total is 0, same as someone
+  // with perfect guesses every week, which would otherwise rank
+  // them as if they'd been perfectly accurate rather than absent.
+  const tbRank = (r: StandingRow) => r.tiebreakerWeeksSubmitted === 0 ? Number.POSITIVE_INFINITY : r.tiebreakerTotal
 
   return rows.sort((a, b) => {
     if (b.correct !== a.correct) return b.correct - a.correct
     if (b.pct !== a.pct) return b.pct - a.pct
+    const ta = tbRank(a), tb = tbRank(b)
+    if (ta !== tb) return ta - tb  // lower total wins — closer guesses
     if (b.weeksWon !== a.weeksWon) return b.weeksWon - a.weeksWon
     return a.name.localeCompare(b.name)
   })
@@ -235,7 +255,9 @@ export function computeStandings(
 export function rankOf(rows: StandingRow[], index: number): number {
   if (index === 0) return 1
   const prev = rows[index - 1], cur = rows[index]
-  if (prev.correct === cur.correct && prev.pct === cur.pct) {
+  const prevTb = prev.tiebreakerWeeksSubmitted === 0 ? Number.POSITIVE_INFINITY : prev.tiebreakerTotal
+  const curTb  = cur.tiebreakerWeeksSubmitted === 0 ? Number.POSITIVE_INFINITY : cur.tiebreakerTotal
+  if (prev.correct === cur.correct && prev.pct === cur.pct && prevTb === curTb) {
     return rankOf(rows, index - 1)
   }
   return index + 1

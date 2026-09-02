@@ -1,13 +1,14 @@
 import { Crown, Flame, Minus } from 'lucide-react'
 import clsx from 'clsx'
-import { rankOf, type StandingRow } from './standings'
+import { rankOf, type StandingRow, type WeekRow } from './standings'
 import { useFlipList } from '@/hooks/useFlipList'
 
 export function StandingsTable({
-  rows, currentUserId,
+  rows, currentUserId, thisWeekRows,
 }: {
   rows: StandingRow[]
   currentUserId?: string
+  thisWeekRows: WeekRow[]
 }) {
   // Rows are already sorted by rank (rankOf/computeStandings does
   // that upstream) — this just animates the reorder whenever that
@@ -15,6 +16,7 @@ export function StandingsTable({
   // moves up. Hook is called unconditionally before the early
   // return below, since hooks can't follow a conditional return.
   const tbodyRef = useFlipList(rows.map(r => r.userId))
+  const thisWeekByUser = new Map(thisWeekRows.map(r => [r.userId, r]))
 
   if (rows.length === 0) {
     return (
@@ -71,9 +73,10 @@ export function StandingsTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-field-700">
-                {['#', 'Player', 'W-L', 'Correct', 'Pct', 'Wks', 'Last'].map((h, i) => (
+                {['#', 'Player', 'Overall', 'This Wk', 'Pct', 'Tiebreaker', 'Wks'].map((h, i) => (
                   <th
                     key={h}
+                    title={h === 'Tiebreaker' ? 'Season total of |guess − actual| across every completed week — lower is closer, used to break ties in the standings' : undefined}
                     className={clsx(
                       'px-3 py-2 font-cond font-bold text-[12px] uppercase tracking-[0.14em] text-field-500 whitespace-nowrap',
                       i === 1 ? 'text-left' : i === 0 ? 'text-left w-10' : 'text-center',
@@ -89,6 +92,8 @@ export function StandingsTable({
                 const rank = rankOf(rows, i)
                 const isYou = r.userId === currentUserId
                 const losses = r.played - r.correct
+                const wk = thisWeekByUser.get(r.userId)
+                const wkLosses = wk ? wk.played - wk.correct : 0
                 return (
                   <tr
                     key={r.userId}
@@ -144,16 +149,23 @@ export function StandingsTable({
                       </div>
                     </td>
 
-                    {/* Record — the headline number */}
+                    {/* Overall — season-long record, the headline number */}
                     <td className="px-3 py-2.5 text-center">
                       <span className="font-cond font-black text-white tabular-nums">
                         {r.correct}-{losses < 0 ? 0 : losses}
                       </span>
                     </td>
 
-                    <td className="px-3 py-2.5 text-center text-field-300 tabular-nums">
-                      {r.correct}
-                      <span className="text-field-600">/{r.played}</span>
+                    {/* This week — resets every week, live as that
+                        week's games go final */}
+                    <td className="px-3 py-2.5 text-center">
+                      {wk && wk.submitted ? (
+                        <span className="font-cond font-bold text-field-300 tabular-nums">
+                          {wk.correct}-{wkLosses < 0 ? 0 : wkLosses}
+                        </span>
+                      ) : (
+                        <Minus className="w-3 h-3 text-field-600 mx-auto" />
+                      )}
                     </td>
 
                     <td className="px-3 py-2.5 text-center">
@@ -167,6 +179,19 @@ export function StandingsTable({
                       </span>
                     </td>
 
+                    {/* Tiebreaker — season total of |guess - actual|,
+                        lower is better. Someone who's never submitted
+                        a guess shows a dash, not a misleading 0. */}
+                    <td className="px-3 py-2.5 text-center">
+                      {r.tiebreakerWeeksSubmitted > 0 ? (
+                        <span className="font-cond font-bold text-field-300 tabular-nums">
+                          {r.tiebreakerTotal}
+                        </span>
+                      ) : (
+                        <Minus className="w-3 h-3 text-field-600 mx-auto" />
+                      )}
+                    </td>
+
                     <td className="px-3 py-2.5 text-center">
                       {r.weeksWon > 0 ? (
                         <span className="font-cond font-black text-gold tabular-nums">
@@ -175,10 +200,6 @@ export function StandingsTable({
                       ) : (
                         <Minus className="w-3 h-3 text-field-600 mx-auto" />
                       )}
-                    </td>
-
-                    <td className="px-3 py-2.5 text-center text-field-400 tabular-nums">
-                      {r.lastWeek != null ? r.lastWeek : '—'}
                     </td>
                   </tr>
                 )
