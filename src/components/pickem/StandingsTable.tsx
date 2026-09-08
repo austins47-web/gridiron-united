@@ -1,4 +1,4 @@
-import { Crown, Flame, Minus } from 'lucide-react'
+import { Crown, Flame, Minus, Check, X } from 'lucide-react'
 import clsx from 'clsx'
 import { rankOf, type StandingRow, type WeekRow } from './standings'
 import { useFlipList } from '@/hooks/useFlipList'
@@ -140,6 +140,11 @@ export function StandingsTable({
                               >
                                 <Flame className="w-3 h-3" />{r.streak}
                               </span>
+                            )}
+                            {wk?.submitted ? (
+                              <Check className="w-3.5 h-3.5 text-gold shrink-0" aria-label="Picks submitted this week" />
+                            ) : (
+                              <X className="w-3.5 h-3.5 text-red-400 shrink-0" aria-label="No picks submitted this week" />
                             )}
                           </div>
                           {r.username && (

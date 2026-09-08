@@ -422,6 +422,16 @@
     100% { opacity: 0; transform: translateY(-140px) scale(1); }
   }
 
+  /* ── Close/late game urgency pulse — red, matching the app's
+     existing redzone convention, not gold (gold now specifically
+     means "live and leading" on the score itself; reusing it here
+     too would blur that signal instead of reinforcing it) ── */
+  .urgency-pulse { animation: urgency-glow 1.8s ease-in-out infinite; }
+  @keyframes urgency-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.35); }
+    50%      { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+  }
+
   /* ── Feed cut — broadcast-style transition for the NFL/CFB toggle ── */
   .feed-cut-overlay {
     position: absolute; inset: 0; z-index: 40; pointer-events: none;
@@ -519,6 +529,7 @@
     .ticker-live-dot, .ticker-scroll-track { animation: none !important; }
     .feed-cut-overlay, .feed-cut-scanline { animation: none !important; display: none !important; }
     .reaction-burst { animation: none !important; display: none !important; }
+    .urgency-pulse { animation: none !important; }
   }
 
   /* ── Modal ── */

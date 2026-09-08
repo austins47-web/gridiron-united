@@ -621,6 +621,12 @@ export function PlayersView() {
               slot,
               playerName: showSlotPicker.name,
             })
+            // Brief pause before closing, so the checkmark
+            // confirmation on the clicked slot button (see
+            // SlotPickerModal) is actually visible for a moment —
+            // it was previously invisible, since the modal closed
+            // the instant the mutation resolved.
+            await new Promise(r => setTimeout(r, 450))
             setShowSlotPicker(null)
           }}
           onClose={() => setShowSlotPicker(null)}
@@ -706,6 +712,7 @@ function SlotPickerModal({ player, slots, filledSlots, onPick, onClose }: {
 
   const hasNoCfbOs = !slots.some(s => s.type === 'cfb_os' || s.key.startsWith('CFB_OS'))
   const isNflBlockedFromCfbOs = player.league === 'NFL' && slots.some(s => s.type === 'cfb_os')
+  const [justPicked, setJustPicked] = useState<string | null>(null)
 
   return (
     <ModalPortal onClose={onClose}>
@@ -723,11 +730,21 @@ function SlotPickerModal({ player, slots, filledSlots, onPick, onClose }: {
             eligible.map(s => (
               <button
                 key={s.key}
-                className="w-full text-left btn-ghost flex items-center justify-between"
-                onClick={() => onPick(s.key)}
+                disabled={justPicked !== null}
+                className={clsx(
+                  'w-full text-left flex items-center justify-between transition-colors',
+                  justPicked === s.key ? 'bg-gold text-field-950 rounded-lg px-3 py-2' : 'btn-ghost',
+                )}
+                onClick={() => { setJustPicked(s.key); onPick(s.key) }}
               >
-                <span className="font-bold text-white">{s.label}</span>
-                <span className="text-field-400 text-xs">
+                {justPicked === s.key ? (
+                  <span className="font-bold flex items-center gap-1.5">
+                    <Check className="w-4 h-4" /> Added
+                  </span>
+                ) : (
+                  <span className="font-bold text-white">{s.label}</span>
+                )}
+                <span className={clsx('text-xs', justPicked === s.key ? 'text-field-950/70' : 'text-field-400')}>
                   {s.type === 'bench' || s.key.startsWith('BN') ? 'Bench' :
                    s.type === 'cfb_os' || s.key.startsWith('CFB_OS') ? 'CFB Offseason' :
                    s.pos.join(', ')}

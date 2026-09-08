@@ -213,6 +213,19 @@ function FavStar({ active, onClick }: { active: boolean; onClick: (e: React.Mous
   )
 }
 
+// A close, late game reads visually distinct from one already
+// decided — one-possession margin (8 pts) in the 4th quarter or
+// later (covers OT too, since period keeps counting past 4).
+// Deliberately excludes redzone games — that already has its own
+// distinct red treatment, and stacking two competing red signals
+// on the same card would be more confusing, not less.
+function isCloseAndLate(game: LiveGame, awayScore: number, homeScore: number): boolean {
+  return game.status === 'in'
+    && !game.redZone
+    && (game.period ?? 0) >= 4
+    && Math.abs(awayScore - homeScore) <= 8
+}
+
 // ── GRID CARD ────────────────────────────────────────────────
 
 function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
@@ -240,6 +253,7 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
         'bg-field-800 border rounded-xl flex flex-col gap-2 min-w-0 hover-lift cursor-pointer hover:border-field-500',
         scale.pad,
         isLive && game.redZone ? 'border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.12)]'
+        : isCloseAndLate(game, awayScore, homeScore) ? 'border-red-500/40 urgency-pulse'
         : isLive ? 'border-gold/30'
         : 'border-field-700',
       )}
@@ -455,6 +469,7 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
       className={clsx(
         'flex items-center gap-4 px-4 py-3.5 rounded-xl border hover-lift w-full cursor-pointer hover:border-field-500',
         isLive && game.redZone ? 'border-red-500/30 bg-red-500/[0.03]'
+        : isCloseAndLate(game, awayScore, homeScore) ? 'border-red-500/40 bg-field-800 urgency-pulse'
         : isLive ? 'border-gold/25 bg-field-800'
         : anyFav ? 'border-field-600 bg-field-800'
         : 'border-field-700 bg-field-800/60',
