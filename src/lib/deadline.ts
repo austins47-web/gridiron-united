@@ -167,9 +167,23 @@ export function weeklyDeadlineForWeek(
   if (!firstKickoff) return null
   const [h, m] = time.split(':').map(Number)
 
-  // Walk back up to 7 days from the first kickoff looking for the
-  // rule's weekday, and take the latest instant that still precedes it.
-  for (let back = 0; back <= 7; back++) {
+  // Walk back up to 6 days (not 7) from the first kickoff looking
+  // for the rule's weekday, taking the latest instant that still
+  // precedes it. Capping at 6 is deliberate: a genuine 7-day
+  // lookback only ever succeeds when the rule's weekday matches
+  // the kickoff's OWN weekday but its time-of-day landed after
+  // kickoff on that exact day (e.g. "Wednesdays 5pm" against a
+  // week whose first game — Wednesday night — actually kicks off
+  // at 4:20pm, which is genuinely this season's real Week 1).
+  // That's not "last week's deadline still applies" — it's "this
+  // rule doesn't sensibly apply to this week's games at all" —
+  // so this returns null instead, letting resolveWeekDeadline fall
+  // through to safe per-game kickoff locking. Without this cap, a
+  // commissioner's rule landing even a few minutes after a week's
+  // earliest kickoff would silently reuse an entirely different
+  // week's already-passed instant, locking every game that week
+  // before anyone could ever open the page to pick.
+  for (let back = 0; back <= 6; back++) {
     const probe = new Date(firstKickoff.getTime() - back * 86400_000)
     const pp = partsInZone(probe, tz)
     if (pp.weekday !== dayOfWeek) continue
