@@ -78,7 +78,10 @@ function parseGame(event: any, league: 'NFL' | 'CFB'): LiveGame {
       statusText: comp.status?.type?.shortDetail ?? '',
       clock: comp.status?.displayClock,
       period: comp.status?.period,
-      possession: situation.possession,
+      // ESPN returns this as the numeric team id (e.g. 52), not an
+      // abbreviation — normalized to a string here so it can be
+      // compared directly against GameTeam.id below.
+      possession: situation.possession != null ? String(situation.possession) : undefined,
       home: mapTeam(homeComp),
       away: mapTeam(awayComp),
       venue: comp.venue?.fullName,
@@ -279,7 +282,7 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
         { team: game.home, ahead: homeScore > awayScore, tick: homeTick },
       ].map(({ team, ahead, tick }) => {
         const isFav   = teamIsFav(favTeams, team)
-        const hasBall = isLive && game.possession === team.abbr
+        const hasBall = isLive && game.possession === team.id
         const winning = (isLive || isFinal) && ahead
         const losing  = (isLive || isFinal) && !ahead && awayScore !== homeScore
 
@@ -417,7 +420,7 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
 
   const TeamBlock = ({ team, ahead, reverse = false }: { team: GameTeam, ahead: boolean, reverse?: boolean }) => {
     const isFav   = teamIsFav(favTeams, team)
-    const hasBall = isLive && game.possession === team.abbr
+    const hasBall = isLive && game.possession === team.id
     const winning = (isLive || isFinal) && ahead
     const losing  = (isLive || isFinal) && !ahead && awayScore !== homeScore
 
