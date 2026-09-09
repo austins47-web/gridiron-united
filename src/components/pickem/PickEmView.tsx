@@ -1449,37 +1449,65 @@ function PicksChart({
               })}
             </div>
 
-            {/* Tiebreaker guesses */}
+            {/* Tiebreaker guesses — mirrors the per-user picks grid
+                right above it (same avatar+full-name row shape),
+                just showing a guessed number instead of a team logo
+                on the right. Was still the old 5-char-truncated
+                chip style even after the main grid was redesigned. */}
             {game.is_tiebreaker && (revealed || allPicks.some((p: any) => p.game_id === game.id && p.user_id === userId)) && (
-              <div className="flex flex-wrap items-center gap-1.5 border-t border-field-700/60 pt-1.5">
-                <span className="text-[11px] font-bold text-gold uppercase tracking-wider flex items-center gap-1">
-                  <Target className="w-2.5 h-2.5" /> TB:
-                </span>
-                {sortedMembers.map(m => {
-                  const pick = allPicks.find((p: any) => p.game_id === game.id && p.user_id === m.user_id)
-                  const isMe = m.user_id === userId
-                  const actual = isFinal ? (game.home_score ?? 0) + (game.away_score ?? 0) : null
-                  const guess = pick?.tiebreaker_score
-                  const canSee = isPickVisibleForUser(game, m.user_id)
-                  const name = isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?').slice(0, 5)
-                  return (
-                    <span key={m.user_id} className={clsx(
-                      'text-xs rounded px-1.5 py-0.5',
-                      isMe ? 'bg-gold/10 text-gold' : 'bg-field-800 text-field-400'
-                    )}>
-                      <span className="font-bold">{name}</span>
-                      {' '}<span className="font-black">{canSee ? (guess ?? '—') : '🔒'}</span>
-                      {isFinal && canSee && guess != null && actual != null && (
-                        <span className="text-field-600"> ±{Math.abs(guess - actual)}</span>
-                      )}
-                    </span>
-                  )
-                })}
-                {isFinal && (
-                  <span className="text-xs rounded px-1.5 py-0.5 bg-nfl/10 text-nfl font-bold">
-                    Actual: {(game.home_score ?? 0) + (game.away_score ?? 0)}
+              <div className="border-t border-field-700/60 pt-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-gold uppercase tracking-wider flex items-center gap-1">
+                    <Target className="w-2.5 h-2.5" /> Tiebreaker guesses
                   </span>
-                )}
+                  {isFinal && (
+                    <span className="text-[11px] font-bold text-nfl">
+                      Actual: {(game.home_score ?? 0) + (game.away_score ?? 0)}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {sortedMembers.map(m => {
+                    const pick = allPicks.find((p: any) => p.game_id === game.id && p.user_id === m.user_id)
+                    const isMe = m.user_id === userId
+                    const actual = isFinal ? (game.home_score ?? 0) + (game.away_score ?? 0) : null
+                    const guess = pick?.tiebreaker_score
+                    const canSee = isPickVisibleForUser(game, m.user_id)
+                    const displayName = isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?')
+
+                    return (
+                      <div
+                        key={m.user_id}
+                        className={clsx(
+                          'flex items-center gap-1.5 rounded-lg px-2 py-1.5 border min-w-0',
+                          isMe ? 'border-gold/40 bg-gold/[0.07]' : 'border-field-700 bg-field-800/60',
+                        )}
+                      >
+                        <div className="w-5 h-5 rounded-full bg-field-700 flex items-center justify-center text-[10px] font-bold text-gold overflow-hidden shrink-0">
+                          {m.profile?.avatar_url
+                            ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                            : displayName[0]?.toUpperCase()
+                          }
+                        </div>
+                        <span className={clsx('font-bold text-xs truncate flex-1 min-w-0', isMe ? 'text-gold' : 'text-field-300')}>
+                          {displayName}
+                        </span>
+                        {!canSee ? (
+                          <Lock className="w-3 h-3 text-field-600 shrink-0" />
+                        ) : guess == null ? (
+                          <span className="text-field-600 text-xs italic shrink-0">—</span>
+                        ) : (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="font-cond font-black text-xs text-white">{guess}</span>
+                            {isFinal && actual != null && (
+                              <span className="text-field-500 text-[11px]">±{Math.abs(guess - actual)}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>
