@@ -991,7 +991,10 @@ function GamePickCard({
         {odds && !isFinal && (
           <span className="flex items-center gap-1 text-xs text-field-500">
             <TrendingUp className="w-3 h-3 text-gold/50" />
-            <span className="text-gold/60">Live odds</span>
+            {odds.totalPoints != null
+              ? <span className="text-gold/70">O/U <span className="font-bold text-gold">{odds.totalPoints}</span></span>
+              : <span className="text-gold/60">Live odds</span>
+            }
           </span>
         )}
       </div>
