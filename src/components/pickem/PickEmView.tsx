@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
@@ -136,6 +136,16 @@ export function PickEmView() {
   const [pendingPicks, setPendingPicks] = useState<Record<string, string>>({})
   const [tiebreakerScore, setTiebreakerScore] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // Tracks the last snapshot of picks that's actually been saved (or
+  // freshly loaded from the DB) — the auto-save effect below only
+  // fires when the current state genuinely differs from this,
+  // not just whenever pendingPicks changes reference. Needed
+  // because savePicks() invalidates the myPicks query on success,
+  // which re-triggers the effect that resets pendingPicks from the
+  // server — without this guard, that reset would look like a new
+  // change and trigger another save, which invalidates again,
+  // looping forever.
+  const lastSavedRef = useRef<string | null>(null)
   const [showDeadlineEditor, setShowDeadlineEditor] = useState(false)
   const [deadlineInput, setDeadlineInput] = useState('')
   const [savingDeadline, setSavingDeadline] = useState(false)
@@ -313,7 +323,25 @@ export function PickEmView() {
     })
     setPendingPicks(existing)
     setTiebreakerScore(existingTb)
+    // This IS the current saved state (just loaded from — or just
+    // confirmed against — the DB), so it's the correct baseline for
+    // the auto-save effect to compare future changes against.
+    lastSavedRef.current = JSON.stringify({ existing, existingTb })
   }, [myPicks])
+
+  // Auto-saves picks/tiebreaker guesses shortly after the user stops
+  // making changes, instead of requiring an explicit Save button.
+  // Debounced so a run of quick clicks (or typing a multi-digit
+  // tiebreaker guess) doesn't fire a separate write per keystroke.
+  useEffect(() => {
+    const snapshot = JSON.stringify({ existing: pendingPicks, existingTb: tiebreakerScore })
+    if (snapshot === lastSavedRef.current) return  // nothing genuinely changed
+    if (Object.keys(pendingPicks).length === 0) return  // nothing to save yet
+
+    const t = setTimeout(() => { savePicks() }, 900)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPicks, tiebreakerScore])
 
   // Sync deadline input when editor opens
   useEffect(() => {
@@ -396,7 +424,10 @@ export function PickEmView() {
         .upsert(rows, { onConflict: 'league_id,user_id,game_id' })
       if (error) throw error
       qc.invalidateQueries({ queryKey: ['my-pickem-picks', activeLeagueId, week] })
-      toast.success('Picks saved!')
+      // No success toast — this now fires automatically, potentially
+      // several times as someone clicks through picks, and a popup
+      // every time would get old fast. The passive status indicator
+      // communicates "saved" continuously instead.
     } catch (e: any) {
       toast.error('Failed to save picks: ' + e.message)
     } finally {
@@ -724,10 +755,12 @@ export function PickEmView() {
         </div>
       )}
 
-      {/* Quick-fill — only fills open games into pendingPicks, never
-          submits on its own. The existing Save/Submit button below
-          is still the one real commit action either way. */}
-      {anyUnlocked && (
+      {/* Quick-fill — only fills open games into pendingPicks; the
+          auto-save effect above picks up the change and persists it
+          shortly after. Only makes sense while actively picking, so
+          gated to the Picks tab specifically — was previously
+          showing on Results and Standings too. */}
+      {tab === 'picks' && anyUnlocked && (
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={handleFillFavorites}
             className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
@@ -879,15 +912,19 @@ export function PickEmView() {
             </div>
           )}
 
-          {anyUnlocked && (
-            <div className="pt-1">
-              <button
-                className="btn-gold w-full py-3 text-base"
-                onClick={savePicks}
-                disabled={saving || pickedCount === 0}
-              >
-                {saving ? 'Saving…' : `Save Picks (${pickedCount}/${totalGames})`}
-              </button>
+          {/* Passive status only now — picks auto-save shortly
+              after each change (see the debounced effect near the
+              top of this component), no explicit button needed. */}
+          {pickedCount > 0 && (
+            <div className="pt-1 flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider">
+              {saving ? (
+                <span className="text-field-400">Saving…</span>
+              ) : (
+                <span className="text-field-500 flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5 text-nfl" />
+                  All picks saved · {pickedCount}/{totalGames}
+                </span>
+              )}
             </div>
           )}
         </div>
