@@ -583,7 +583,7 @@ export function PickEmView() {
       </div>
 
       {/* Week selector dropdown + tabs */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
 
         {/* Week dropdown */}
         <div className="relative">
@@ -675,14 +675,16 @@ export function PickEmView() {
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1">
+        {/* Tabs — full-width and evenly split once wrapped to their
+            own line on narrow screens, rather than left-aligned and
+            cramped alongside the week dropdown */}
+        <div className="flex gap-1 w-full sm:w-auto">
           {(['picks', 'standings', 'results'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={clsx(
-                'font-cond font-bold text-xs uppercase tracking-wider px-3 py-2 rounded-lg border transition-colors',
+                'flex-1 sm:flex-initial font-cond font-bold text-xs uppercase tracking-wider px-3 py-2 rounded-lg border transition-colors',
                 tab === t
                   ? 'border-gold/50 text-gold bg-gold/10'
                   : 'border-field-600 text-field-400 bg-field-800 hover:text-white',
