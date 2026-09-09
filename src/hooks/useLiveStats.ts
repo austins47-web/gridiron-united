@@ -7,6 +7,7 @@ import {
   getCFBScores,
   getCFBPlayerStats,
   getCurrentNFLWeek,
+  getCurrentCFBWeek,
   calculateFantasyPoints,
   normalizeTeam,
   teamAbbr,
@@ -23,6 +24,18 @@ export function useCurrentWeek() {
   return useQuery({
     queryKey: ['nfl-current-week'],
     queryFn: getCurrentNFLWeek,
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+// CFB's week numbering can genuinely diverge from NFL's (CFB has a
+// Week 0 slate NFL doesn't) — this app puts NFL and CFB players on
+// the same fantasy roster, so a single shared week number is wrong
+// for CFB starters the moment the two leagues' weeks differ.
+export function useCurrentCFBWeek() {
+  return useQuery({
+    queryKey: ['cfb-current-week'],
+    queryFn: getCurrentCFBWeek,
     staleTime: 60 * 60 * 1000,
   })
 }

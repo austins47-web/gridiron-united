@@ -146,6 +146,24 @@ serve(async (req) => {
     } else if (endpoint === 'nfl/injuries') {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')
 
+    } else if (endpoint === 'nfl/current-week' || endpoint === 'cfb/current-week') {
+      // Lets a server-side caller (detect-games) discover the real
+      // current week from ESPN directly, instead of computing it
+      // from a hardcoded season-start date — that approach drifted
+      // wrong (computed Week 2 while the real season was still in
+      // Week 1), meaning detect-games silently fetched an empty or
+      // wrong week's scoreboard and never found any real games to
+      // seed live_games with, which is why fantasy points had
+      // nothing downstream to ever calculate from.
+      const league = endpoint.startsWith('nfl') ? 'nfl' : 'college-football'
+      const groupParam = league === 'college-football' ? '&groups=80' : ''
+      const raw = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/scoreboard?limit=1${groupParam}`)
+      data = {
+        week: raw?.week?.number ?? null,
+        season: raw?.season?.year ?? null,
+        seasonType: raw?.season?.type ?? null,
+      }
+
     } else if (endpoint === 'cfb/news') {
       const articles = await fetchNewsPaged(
         'https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=50', 6

@@ -30,7 +30,12 @@ function parseBoxScore(summary: any): Map<number, Record<string, number>> {
 
   const get = (id: number) => { if (!stats.has(id)) stats.set(id, blank()); return stats.get(id)! }
 
-  for (const teamBlock of (summary.boxScore?.players ?? [])) {
+  // ESPN's real field is "boxscore", all lowercase — confirmed
+  // directly against a live response. "boxScore" (camelCase) never
+  // existed at all, so this always silently resolved to undefined
+  // and parsed zero athletes, no matter how much real stat data
+  // actually existed for the game.
+  for (const teamBlock of (summary.boxscore?.players ?? [])) {
     for (const statBlock of (teamBlock.statistics ?? [])) {
       const cat  = (statBlock.name ?? '').toLowerCase()
       const keys = (statBlock.keys ?? []) as string[]
@@ -80,7 +85,7 @@ function parseBoxScore(summary: any): Map<number, Record<string, number>> {
   }
 
   // DST points allowed per team
-  const teams = summary.boxScore?.teams ?? []
+  const teams = summary.boxscore?.teams ?? []
   for (let ti = 0; ti < teams.length; ti++) {
     const oppTeam = teams[1 - ti] // opponent
     const oppScore = parseInt(oppTeam?.homeAway === 'home'

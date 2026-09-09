@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
-import { useCurrentWeek } from '@/hooks/useLiveStats'
+import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
 import { calcFantasyPts, statusMultiplier } from '@/lib/scoring'
 import type { League, ScoringRules } from '@/types/database'
 import { Zap, Wifi, WifiOff } from 'lucide-react'
@@ -36,6 +36,7 @@ function scoringFromLeague(lg: League): ScoringRules {
 export function LiveScoringView() {
   const { activeLeagueId, user } = useAppStore()
   const { data: currentWeek = 1 } = useCurrentWeek()
+  const { data: cfbCurrentWeek = 1 } = useCurrentCFBWeek()
   const qc = useQueryClient()
   const [isLive, setIsLive] = useState(false)
 
@@ -71,16 +72,37 @@ export function LiveScoringView() {
     [starters]
   )
 
+  const nflAthleteIds = useMemo(
+    () => starters.filter((r: any) => r.player?.league === 'NFL').map((r: any) => r.player?.espn_athlete_id).filter(Boolean) as number[],
+    [starters]
+  )
+  const cfbAthleteIds = useMemo(
+    () => starters.filter((r: any) => r.player?.league === 'CFB').map((r: any) => r.player?.espn_athlete_id).filter(Boolean) as number[],
+    [starters]
+  )
+
+  // Split by league and each queried against its OWN league's real
+  // current week — NFL and CFB week numbers can genuinely diverge
+  // (CFB runs a Week 0 slate NFL doesn't have), and this app puts
+  // both leagues' players on the same fantasy roster. A single
+  // shared week number here would silently return zero stats for
+  // every CFB starter the moment the two leagues' weeks differ,
+  // even though the NFL side kept working — exactly the kind of gap
+  // that would look like "half of scoring is broken" rather than
+  // an obvious total failure.
   const { data: liveStats = [] } = useQuery({
-    queryKey: ['live-player-stats', currentWeek, athleteIds],
-    enabled: athleteIds.length > 0,
+    queryKey: ['live-player-stats', currentWeek, cfbCurrentWeek, nflAthleteIds, cfbAthleteIds],
+    enabled: nflAthleteIds.length > 0 || cfbAthleteIds.length > 0,
     queryFn: async () => {
-      const { data } = await supabase
-        .from('live_player_stats')
-        .select('*')
-        .in('espn_athlete_id', athleteIds)
-        .eq('week', currentWeek)
-      return data ?? []
+      const [nflRes, cfbRes] = await Promise.all([
+        nflAthleteIds.length > 0
+          ? supabase.from('live_player_stats').select('*').in('espn_athlete_id', nflAthleteIds).eq('league', 'NFL').eq('week', currentWeek)
+          : Promise.resolve({ data: [] }),
+        cfbAthleteIds.length > 0
+          ? supabase.from('live_player_stats').select('*').in('espn_athlete_id', cfbAthleteIds).eq('league', 'CFB').eq('week', cfbCurrentWeek)
+          : Promise.resolve({ data: [] }),
+      ])
+      return [...(nflRes.data ?? []), ...(cfbRes.data ?? [])]
     },
     staleTime: 30_000,
     refetchInterval: 90_000,
@@ -95,8 +117,12 @@ export function LiveScoringView() {
         (payload) => {
           const row = payload.new as any
           if (!athleteIds.includes(row?.espn_athlete_id)) return
+          // Must match the actual current query key shape exactly
+          // (see the split-by-league query above) or this silently
+          // writes to a cache entry nothing is reading from — the
+          // realtime update would arrive but never actually show up.
           qc.setQueryData(
-            ['live-player-stats', currentWeek, athleteIds],
+            ['live-player-stats', currentWeek, cfbCurrentWeek, nflAthleteIds, cfbAthleteIds],
             (old: any[] = []) => {
               const idx = old.findIndex(s =>
                 s.espn_athlete_id === row.espn_athlete_id && s.game_id === row.game_id

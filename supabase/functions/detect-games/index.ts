@@ -32,10 +32,21 @@ serve(async (req) => {
   const upserted: string[] = []
   const errors: string[] = []
 
-  // For CFB we need current week — derive from date
-  // CFB season: weeks 1-15 roughly, starts early Sep
-  const cfbWeek = Math.max(1, Math.ceil((now.getTime() - new Date('2026-08-28').getTime()) / (7 * 24 * 60 * 60 * 1000)))
-  const nflWeek = Math.max(1, Math.ceil((now.getTime() - new Date('2026-09-04').getTime()) / (7 * 24 * 60 * 60 * 1000)))
+  // Discover the real current week from ESPN directly, rather than
+  // computing it from a hardcoded season-start date. That approach
+  // (Math.ceil((now - '2026-08-28') / 7 days)) had already drifted
+  // wrong by the time this was checked — it computed Week 2 while
+  // the real season, and every actual live game, was still in Week
+  // 1. That meant this function was fetching the wrong week's
+  // scoreboard entirely, never finding any real games to seed
+  // live_games with — which is the actual reason fantasy points had
+  // nothing downstream to ever calculate from at all.
+  const [nflWeekData, cfbWeekData] = await Promise.all([
+    proxyFetch('nfl/current-week').catch(() => null),
+    proxyFetch('cfb/current-week').catch(() => null),
+  ])
+  const nflWeek = nflWeekData?.week ?? 1
+  const cfbWeek = cfbWeekData?.week ?? 1
 
   const scoreboardSources = [
     { league: 'NFL', endpoint: 'nfl/live-scores',              week: Math.min(nflWeek, 18) },

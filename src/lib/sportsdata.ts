@@ -109,7 +109,17 @@ export const getNFLScores        = (season: number, week: number) => sdio<SDIOSc
 export const getNFLPlayerStats   = (season: number, week: number) => sdio<SDIOPlayerGame[]>(`nfl/stats/${season}/${week}`)
 export const getNFLProjections   = (season: number, week: number) => sdio<SDIOProjection[]>(`nfl/projections/${season}/${week}`)
 export const getNFLPlayers       = ()                     => sdio<SDIOPlayer[]>('nfl/players')
-export const getCurrentNFLWeek   = ()                     => sdio<number>('nfl/week')
+// 'nfl/week' was never a real route on the proxy — confirmed
+// directly, it returns "Unknown endpoint: nfl/week". That meant
+// this always errored, silently falling back to a hardcoded 1
+// wherever it's consumed (see LiveScoringView's `data: currentWeek
+// = 1`), which only happened to look correct because the real
+// season genuinely is in Week 1 right now — it would have stayed
+// stuck there forever once the season actually advanced. Now uses
+// the real, working current-week route and extracts .week from its
+// object response.
+export const getCurrentNFLWeek   = async ()               => (await sdio<{ week: number }>('nfl/current-week')).week
+export const getCurrentCFBWeek   = async ()               => (await sdio<{ week: number }>('cfb/current-week')).week
 export const getCFBScores        = (season: number, week: number) => sdio<any[]>(`cfb/scores/${season}/${week}`)
 export const getCFBPlayerStats   = (season: number, week: number) => sdio<any[]>(`cfb/stats/${season}/${week}`)
 export const getCFBPlayers       = ()                     => sdio<any[]>('cfb/players')
