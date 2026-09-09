@@ -107,15 +107,38 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
   const now = new Date()
 
-  const { data: activeGames, error: gErr } = await supabase
-    .from('live_games').select('*').eq('status', 'in_progress')
+  // Always re-poll everything genuinely in progress, PLUS catch any
+  // recently-final game that was never actually polled even once —
+  // confirmed as a real, active problem: every Week 1 game except
+  // one had already finished in real life before detect-games was
+  // ever correctly detecting the right week, so this function had
+  // no chance to see them while they were live. Those games would
+  // otherwise never get scored at all. Scoped to the last 24 hours
+  // specifically so this doesn't turn into an ever-growing,
+  // unbounded re-check of every final game from the entire season.
+  const [{ data: activeGames, error: gErr }, { data: recentFinal }, { data: alreadyHave }] = await Promise.all([
+    supabase.from('live_games').select('*').eq('status', 'in_progress'),
+    supabase.from('live_games').select('*')
+      .eq('status', 'final')
+      .gte('updated_at', new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()),
+    supabase.from('live_player_stats').select('game_id'),
+  ])
+
+  const haveGameIds = new Set((alreadyHave ?? []).map((r: any) => r.game_id))
+  // Capped per run — the cron's own HTTP call times out at 30s, and
+  // a large one-time backlog (like today's ~97 missing games) could
+  // otherwise mean one oversized, timeout-prone invocation. The
+  // every-minute schedule naturally catches up on the remainder
+  // over the next few runs instead.
+  const missingFinal = (recentFinal ?? []).filter((g: any) => !haveGameIds.has(g.game_id)).slice(0, 30)
+  const gamesToProcess = [...(activeGames ?? []), ...missingFinal]
 
   if (gErr) return new Response(JSON.stringify({ error: gErr.message }), { headers: CORS, status: 500 })
-  if (!activeGames?.length) return new Response(JSON.stringify({ polled: 0, msg: 'No active games' }), { headers: CORS })
+  if (!gamesToProcess.length) return new Response(JSON.stringify({ polled: 0, msg: 'No active or newly-final games' }), { headers: CORS })
 
   const results: any[] = []
 
-  await Promise.all(activeGames.map(async (game: any) => {
+  await Promise.all(gamesToProcess.map(async (game: any) => {
     try {
       const summary = await proxyFetch(`game/summary/${game.league}/${game.game_id}`)
       const statsMap = parseBoxScore(summary)
@@ -155,5 +178,5 @@ serve(async (req) => {
     }
   }))
 
-  return new Response(JSON.stringify({ polled: activeGames.length, results }), { headers: CORS })
+  return new Response(JSON.stringify({ polled: gamesToProcess.length, backfilled: missingFinal.length, results }), { headers: CORS })
 })

@@ -47,10 +47,24 @@ serve(async (req) => {
   ])
   const nflWeek = nflWeekData?.week ?? 1
   const cfbWeek = cfbWeekData?.week ?? 1
+  // The previous week too — not just the current one. Confirmed
+  // this is a real, active problem: a late-running game from the
+  // prior week (this exact SMU/FSU game, scheduled for a Wednesday
+  // while the rest of its week played over the weekend) stayed
+  // stuck at 'in_progress' forever the moment ESPN's own current
+  // week advanced past it, because this function had stopped
+  // querying that week's scoreboard entirely — nothing ever checked
+  // its status again, even though it had genuinely gone final.
+  // Skipped when it would just duplicate the current week (Week 1
+  // has no real "previous" week to check).
+  const prevNflWeek = Math.max(1, nflWeek - 1)
+  const prevCfbWeek = Math.max(0, cfbWeek - 1)
 
   const scoreboardSources = [
-    { league: 'NFL', endpoint: 'nfl/live-scores',              week: Math.min(nflWeek, 18) },
-    { league: 'CFB', endpoint: `cfb/scores/${season}/${cfbWeek}`, week: Math.min(cfbWeek, 15) },
+    { league: 'NFL', endpoint: 'nfl/live-scores',                    week: Math.min(nflWeek, 18) },
+    { league: 'CFB', endpoint: `cfb/scores/${season}/${cfbWeek}`,     week: Math.min(cfbWeek, 15) },
+    ...(prevNflWeek !== nflWeek ? [{ league: 'NFL', endpoint: `nfl/scores/${season}/${prevNflWeek}`, week: prevNflWeek }] : []),
+    ...(prevCfbWeek !== cfbWeek ? [{ league: 'CFB', endpoint: `cfb/scores/${season}/${prevCfbWeek}`, week: prevCfbWeek }] : []),
   ]
 
   // Fetch both scoreboards in parallel — they don't depend on each other.
