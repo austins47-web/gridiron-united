@@ -15,11 +15,12 @@ import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
 import {
   Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp, Shuffle,
-  TrendingDown, Home, Plane
+  TrendingDown, Home, Plane, Award
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { useNflOdds } from '@/hooks/useNflOdds'
+import { useNflStandings } from '@/hooks/useTeamStandings'
 import { CURRENT_SEASON } from '@/lib/season'
 
 const TEAM_INFO: Record<string, { name: string }> = {
@@ -436,6 +437,7 @@ export function PickEmView() {
   }
 
   const { data: oddsMap } = useNflOdds()
+  const { data: standingsData } = useNflStandings()
 
   // Fills in the favored side of every still-open game, using the
   // same odds cache the pick cards already display. Games with no
@@ -511,6 +513,35 @@ export function PickEmView() {
     if (filled === 0) toast.error("No odds available yet for this week's games")
     else if (skipped > 0) toast.success(`Filled ${filled} underdog${filled === 1 ? '' : 's'} - ${skipped} game${skipped === 1 ? '' : 's'} had no odds yet`)
     else toast.success(`Filled ${filled} underdog${filled === 1 ? '' : 's'}`)
+  }
+
+  // A genuinely different signal from Favorites/Underdogs — real
+  // season record rather than Vegas odds. The two can disagree: a
+  // 5-0 team on the road against a 4-1 team can still be an
+  // underdog in the spread while having the better record, so this
+  // isn't just a redundant restatement of the odds-based buttons.
+  // Reuses the same real standings data the Standings tab shows,
+  // flattened into an abbr -> win% lookup.
+  function handleFillByRecord() {
+    const pctByAbbr = new Map<string, number>()
+    for (const group of standingsData?.groups ?? []) {
+      for (const team of group.teams) pctByAbbr.set(team.abbr, team.pct)
+    }
+
+    let filled = 0, skipped = 0
+    const next = { ...pendingPicks }
+    for (const g of games) {
+      if (isGameLocked(g.game_date, weekDeadline, g.status)) continue
+      const homePct = pctByAbbr.get(g.home_team)
+      const awayPct = pctByAbbr.get(g.away_team)
+      if (homePct == null || awayPct == null || homePct === awayPct) { skipped++; continue }
+      next[g.id] = homePct > awayPct ? g.home_team : g.away_team
+      filled++
+    }
+    setPendingPicks(next)
+    if (filled === 0) toast.error('No standings available yet for this week\'s games')
+    else if (skipped > 0) toast.success(`Filled ${filled} pick${filled === 1 ? '' : 's'} by record — ${skipped} game${skipped === 1 ? '' : 's'} skipped (tied or no record yet)`)
+    else toast.success(`Filled ${filled} pick${filled === 1 ? '' : 's'} by record`)
   }
 
   // Home/away have no odds dependency at all — always available,
@@ -767,7 +798,7 @@ export function PickEmView() {
           <button onClick={handleFillFavorites}
             className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
             <TrendingUp className="w-3.5 h-3.5" />
-            Fill Favorites
+            Favorites
           </button>
           <button onClick={handleFillUnderdogs}
             className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
@@ -783,6 +814,11 @@ export function PickEmView() {
             className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
             <Plane className="w-3.5 h-3.5" />
             Away Teams
+          </button>
+          <button onClick={handleFillByRecord}
+            className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
+            <Award className="w-3.5 h-3.5" />
+            By Record
           </button>
           <button onClick={handleRandomPicks}
             className="flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider text-field-300 bg-field-800 border border-field-700 hover:border-gold/50 hover:text-gold rounded-lg px-3 py-1.5 transition-colors">
