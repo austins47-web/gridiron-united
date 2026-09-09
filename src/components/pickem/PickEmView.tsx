@@ -1295,7 +1295,10 @@ function PicksChart({
             <Trophy className="w-3.5 h-3.5 text-gold" />
             <span className="font-cond font-bold text-xs text-white uppercase tracking-wider">Week {week}</span>
           </div>
-          <div className="flex divide-x divide-field-700 overflow-x-auto">
+          {/* Wraps to multiple rows instead of scrolling sideways —
+              with a full 15-person league this was a ~1400px-wide
+              strip of fixed columns, far past any phone width. */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-px bg-field-700">
             {sortedMembers.map((m) => {
               const score = userScores[m.user_id]
               const isMe = m.user_id === userId
@@ -1303,11 +1306,11 @@ function PicksChart({
               const name = isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?')
               return (
                 <div key={m.user_id} className={clsx(
-                  'flex flex-col items-center px-3 py-2 min-w-[92px]',
+                  'flex flex-col items-center px-2 py-2 bg-field-800',
                   isMe && 'bg-gold/[0.05]'
                 )}>
                   <span className={clsx(
-                    'font-bold text-xs uppercase tracking-wide truncate max-w-[86px]',
+                    'font-bold text-xs uppercase tracking-wide truncate max-w-full',
                     isMe ? 'text-gold' : 'text-field-400'
                   )}>
                     {name}
