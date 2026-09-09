@@ -116,6 +116,7 @@ interface Row {
   home_team: string
   away_team: string
   spread: number | null
+  total_points: number | null
   home_win_pct: number | null
   away_win_pct: number | null
   home_moneyline: number | null
@@ -135,6 +136,7 @@ function parseOddsGames(
     if (!homeKey || !awayKey) continue
 
     let spread: number | null = null
+    let totalPoints: number | null = null
     let homeML: number | null = null
     let awayML: number | null = null
 
@@ -144,14 +146,19 @@ function parseOddsGames(
           const o = market.outcomes?.find((o: any) => nameToKey(o.name) === homeKey)
           if (o) spread = o.point
         }
+        if (market.key === 'totals' && totalPoints === null) {
+          // Over and Under outcomes share the same line — either
+          // one gives the real total, no team-name matching needed.
+          totalPoints = market.outcomes?.[0]?.point ?? null
+        }
         if (market.key === 'h2h' && homeML === null) {
           const ho = market.outcomes?.find((o: any) => nameToKey(o.name) === homeKey)
           const ao = market.outcomes?.find((o: any) => nameToKey(o.name) === awayKey)
           if (ho && ao) { homeML = ho.price; awayML = ao.price }
         }
-        if (spread !== null && homeML !== null) break
+        if (spread !== null && totalPoints !== null && homeML !== null) break
       }
-      if (spread !== null && homeML !== null) break
+      if (spread !== null && totalPoints !== null && homeML !== null) break
     }
 
     let homeWinPct: number | null = null
@@ -167,6 +174,7 @@ function parseOddsGames(
       home_team: homeKey,
       away_team: awayKey,
       spread,
+      total_points: totalPoints,
       home_win_pct: homeWinPct,
       away_win_pct: awayWinPct,
       home_moneyline: homeML,
@@ -194,7 +202,7 @@ Deno.serve(async (req) => {
   )
 
   const base = 'https://api.the-odds-api.com/v4/sports'
-  const params = `?apiKey=${apiKey}&regions=us&markets=h2h,spreads&oddsFormat=american`
+  const params = `?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`
 
   const errors: string[] = []
   let rows: Row[] = []

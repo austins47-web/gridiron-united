@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/appStore'
 import { useFeedCut, FeedCutOverlay } from '@/components/ui/FeedCut'
-import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4 } from 'lucide-react'
+import { Star, RefreshCw, WifiOff, TrendingUp, LayoutGrid, List, Columns2, Columns3, Columns4, Target } from 'lucide-react'
 import clsx from 'clsx'
 import { useNflOdds, type GameOdds } from '@/hooks/useNflOdds'
 import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
@@ -364,6 +364,20 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
               </div>
             </div>
           )}
+          {/* Game total (over/under) — pre-kickoff only, unlike the
+              spread/win% above which stay useful through a live
+              game. Once real score exists, a pre-game total
+              projection is a lot less relevant than what's actually
+              happening on the field. */}
+          {odds.totalPoints !== null && game.status === 'pre' && (
+            <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-field-800/60 border border-field-700/50">
+              <div className="flex items-center gap-1">
+                <Target className="w-3 h-3 text-field-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-field-400">Total</span>
+              </div>
+              <span className="font-cond font-black text-sm text-field-200">{odds.totalPoints}</span>
+            </div>
+          )}
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-field-400 block mb-1">Win %</span>
@@ -531,6 +545,18 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
                   )
                 })}
               </div>
+            </div>
+          )}
+          {/* Game total (over/under) — pre-kickoff only, unlike the
+              spread/win% above which stay useful through a live
+              game. Once real score exists, a pre-game total
+              projection is a lot less relevant than what's actually
+              happening on the field. */}
+          {odds.totalPoints !== null && game.status === 'pre' && (
+            <div className="flex items-center gap-1.5">
+              <Target className="w-3 h-3 text-field-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-field-400">Total</span>
+              <span className="font-cond font-black text-sm text-field-200">{odds.totalPoints}</span>
             </div>
           )}
           {odds.awayWinPct !== null && odds.homeWinPct !== null && (

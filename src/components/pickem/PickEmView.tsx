@@ -942,7 +942,7 @@ function GamePickCard({
   pickedTeam: string | undefined
   onPick: (team: string) => void
   deadline: string | null
-  odds?: { spread: number | null; homeWinPct: number | null; awayWinPct: number | null; homeMoneyline: number | null; awayMoneyline: number | null } | null
+  odds?: { spread: number | null; totalPoints: number | null; homeWinPct: number | null; awayWinPct: number | null; homeMoneyline: number | null; awayMoneyline: number | null } | null
   isTiebreaker?: boolean
   tiebreakerScore?: string
   onTiebreakerScore?: (val: string) => void
@@ -1124,11 +1124,16 @@ function GamePickCard({
             <Target className="w-3.5 h-3.5 inline mr-1 text-gold" />
             Tiebreaker — combined total points scored
           </label>
+          {odds?.totalPoints != null && (
+            <p className="text-xs text-field-400">
+              Vegas projects <span className="font-bold text-field-200">{odds.totalPoints}</span> combined points
+            </p>
+          )}
           <input
             type="number"
             min={0}
             max={200}
-            placeholder="e.g. 47"
+            placeholder={odds?.totalPoints != null ? String(odds.totalPoints) : 'e.g. 47'}
             value={tiebreakerScore ?? ''}
             onChange={e => onTiebreakerScore(e.target.value)}
             disabled={locked}

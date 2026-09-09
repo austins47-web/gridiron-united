@@ -5,6 +5,7 @@ export interface GameOdds {
   homeTeam: string
   awayTeam: string
   spread: number | null
+  totalPoints: number | null
   homeWinPct: number | null
   awayWinPct: number | null
   homeMoneyline: number | null
@@ -42,6 +43,7 @@ export function useNflOdds() {
           homeTeam: row.home_team,
           awayTeam: row.away_team,
           spread: row.spread,
+          totalPoints: row.total_points,
           homeWinPct: row.home_win_pct,
           awayWinPct: row.away_win_pct,
           homeMoneyline: row.home_moneyline,
