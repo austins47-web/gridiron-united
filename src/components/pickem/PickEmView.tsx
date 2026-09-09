@@ -1266,14 +1266,14 @@ function PicksChart({
               const name = isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?')
               return (
                 <div key={m.user_id} className={clsx(
-                  'flex flex-col items-center px-3 py-2 min-w-[70px]',
+                  'flex flex-col items-center px-3 py-2 min-w-[92px]',
                   isMe && 'bg-gold/[0.05]'
                 )}>
                   <span className={clsx(
-                    'font-bold text-xs uppercase tracking-wide truncate max-w-[64px]',
+                    'font-bold text-xs uppercase tracking-wide truncate max-w-[86px]',
                     isMe ? 'text-gold' : 'text-field-400'
                   )}>
-                    {name.length > 7 ? name.slice(0, 7) + '…' : name}
+                    {name}
                   </span>
                   <span className="text-base font-black text-white leading-tight">
                     {score.correct}<span className="text-field-500 text-xs font-bold">/{score.total}</span>
@@ -1320,9 +1320,12 @@ function PicksChart({
 
             {/* Game header row */}
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0">
                 {/* Away */}
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  {teamLogoUrl({ abbr: game.away_team }, 'NFL') && (
+                    <img src={teamLogoUrl({ abbr: game.away_team }, 'NFL')!} alt="" className="w-6 h-6 object-contain shrink-0" />
+                  )}
                   <span className="font-cond font-black text-sm text-white">{game.away_team}</span>
                   {isFinal && (
                     <span className={clsx(
@@ -1333,7 +1336,10 @@ function PicksChart({
                 </div>
                 <span className="text-field-600 text-xs">@</span>
                 {/* Home */}
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  {teamLogoUrl({ abbr: game.home_team }, 'NFL') && (
+                    <img src={teamLogoUrl({ abbr: game.home_team }, 'NFL')!} alt="" className="w-6 h-6 object-contain shrink-0" />
+                  )}
                   <span className="font-cond font-black text-sm text-white">{game.home_team}</span>
                   {isFinal && (
                     <span className={clsx(
@@ -1390,46 +1396,53 @@ function PicksChart({
               </div>
             )}
 
-            {/* Per-user pick chips */}
-            <div className="flex flex-wrap gap-1">
+            {/* Per-user picks — a grid of rows instead of the old
+                cramped, truncated-to-5-characters chip list, so
+                full names actually fit. */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {sortedMembers.map((m) => {
                 const isMe = m.user_id === userId
                 const picked = pickMap[game.id]?.[m.user_id]
                 const displayName = isMe
                   ? 'You'
                   : (m.profile?.display_name || m.profile?.username || '?')
-                const short = displayName.length > 5 ? displayName.slice(0, 5) + '…' : displayName
                 const isCorrect = isFinal && picked === winner
                 const isWrong = isFinal && !!picked && picked !== winner
+                const pickedLogo = picked ? teamLogoUrl({ abbr: picked }, 'NFL') : null
 
                 return (
                   <div
                     key={m.user_id}
-                    title={displayName}
                     className={clsx(
-                      'flex items-center gap-0.5 rounded px-1.5 py-0.5 border text-xs',
-                      isMe
-                        ? 'border-gold/40 bg-gold/[0.07]'
-                        : 'border-field-700 bg-field-800/60',
+                      'flex items-center gap-1.5 rounded-lg px-2 py-1.5 border min-w-0',
+                      isMe ? 'border-gold/40 bg-gold/[0.07]' : 'border-field-700 bg-field-800/60',
                     )}
                   >
-                    <span className={clsx('font-bold', isMe ? 'text-gold' : 'text-field-400')}>
-                      {short}
+                    <div className="w-5 h-5 rounded-full bg-field-700 flex items-center justify-center text-[10px] font-bold text-gold overflow-hidden shrink-0">
+                      {m.profile?.avatar_url
+                        ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                        : displayName[0]?.toUpperCase()
+                      }
+                    </div>
+                    <span className={clsx('font-bold text-xs truncate flex-1 min-w-0', isMe ? 'text-gold' : 'text-field-300')}>
+                      {displayName}
                     </span>
-                    <span className="text-field-700 mx-0.5">·</span>
                     {!isPickVisibleForUser(game, m.user_id) ? (
-                      <span className="text-field-600 text-[11px]">🔒</span>
+                      <Lock className="w-3 h-3 text-field-600 shrink-0" />
                     ) : !picked ? (
-                      <span className="text-field-600 italic">—</span>
+                      <span className="text-field-600 text-xs italic shrink-0">—</span>
                     ) : (
-                      <span className={clsx(
-                        'font-cond font-black',
-                        isCorrect ? 'text-nfl' : isWrong ? 'text-red-400' : 'text-white'
-                      )}>
-                        {picked}
-                        {isCorrect && ' ✓'}
-                        {isWrong && ' ✗'}
-                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {pickedLogo && <img src={pickedLogo} alt="" className="w-4 h-4 object-contain" />}
+                        <span className={clsx(
+                          'font-cond font-black text-xs',
+                          isCorrect ? 'text-nfl' : isWrong ? 'text-red-400' : 'text-white'
+                        )}>
+                          {picked}
+                        </span>
+                        {isCorrect && <Check className="w-3 h-3 text-nfl" />}
+                        {isWrong && <X className="w-3 h-3 text-red-400" />}
+                      </div>
                     )}
                   </div>
                 )
