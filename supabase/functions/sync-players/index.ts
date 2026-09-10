@@ -30,6 +30,10 @@ async function espn(url: string) {
 const POS_MAP: Record<string, string> = {
   QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K',
   FB: 'RB', HB: 'RB',
+  // ESPN's roster endpoint labels kickers "PK" (place kicker), not
+  // "K" — every kicker on every team was silently dropped here since
+  // this map had no entry for it at all.
+  PK: 'K',
 }
 
 const NFL_CONF: Record<string, string> = {

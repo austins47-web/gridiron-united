@@ -6,20 +6,41 @@ const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!
 
-// Route through sportsdata proxy (handles ESPN UA/auth correctly)
-async function fetchStats(espnId: number): Promise<any | null> {
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// Route through sportsdata proxy (handles ESPN UA/auth correctly).
+// One retry after a short backoff — at the original concurrency
+// (30 parallel athlete lookups per batch, ~35 batches back to back)
+// the large majority of requests were failing (a solo request always
+// succeeded in isolation), which looks like transient rate-limiting/
+// timeouts under load rather than anything wrong with any specific
+// player's data.
+async function fetchStats(espnId: number, attempt = 0): Promise<any | null> {
   try {
     const url = `${SUPABASE_URL}/functions/v1/sportsdata?endpoint=${encodeURIComponent(`athlete/stats/NFL/${espnId}`)}`
     const r = await fetch(url, {
       headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
     })
-    if (!r.ok) return null
+    if (!r.ok) {
+      if (attempt === 0) { await sleep(400); return fetchStats(espnId, 1) }
+      return null
+    }
     return await r.json()
-  } catch { return null }
+  } catch {
+    if (attempt === 0) { await sleep(400); return fetchStats(espnId, 1) }
+    return null
+  }
 }
 
-// Parse ESPN career stats response into 2025 season raw stats
-function parse2025Stats(data: any): Record<string, number> | null {
+// Parse ESPN career stats response into that player's most recent
+// completed season. Was hardcoded to require a literal season.year
+// === 2025 row - most players' career-stats payload simply doesn't
+// have one (ESPN's coverage lags per player: some already show 2025,
+// plenty still cap out at 2024, backups even earlier), so this was
+// silently treating almost every player as statless. Taking whatever
+// season is actually most recent for each player fixes that without
+// needing to know in advance which year ESPN has for them.
+function parseLatestSeasonStats(data: any): Record<string, number> | null {
   if (!data?.categories) return null
 
   const result: Record<string, number> = {
@@ -34,12 +55,13 @@ function parse2025Stats(data: any): Record<string, number> | null {
   for (const cat of data.categories) {
     const catName = cat.name?.toLowerCase()
 
-    // Find the 2025 season row
-    const row2025 = cat.statistics?.find((s: any) => s.season?.year === 2025)
-    if (!row2025?.stats) continue
+    // Most recent season this category actually has a row for
+    const rows: any[] = (cat.statistics ?? []).filter((s: any) => s.season?.year && s.stats)
+    if (rows.length === 0) continue
+    const latest = rows.reduce((a, b) => (b.season.year > a.season.year ? b : a))
 
     const names: string[] = cat.names ?? []
-    const vals: string[]  = row2025.stats ?? []
+    const vals: string[]  = latest.stats ?? []
     const n = (key: string) => {
       const i = names.indexOf(key)
       if (i < 0) return 0
@@ -81,12 +103,32 @@ function parse2025Stats(data: any): Record<string, number> | null {
     }
   }
 
-  // Must have played at least 1 game and had some meaningful stats
+  // Must have played at least 1 game and had some meaningful stats.
+  // Checks every scoring category a kicker can rack up points in —
+  // this previously missed fg_40_49/fg_50_plus entirely, so a kicker
+  // who'd only made long field goals (no 0-39s, no PATs recorded)
+  // looked statless and got skipped.
   const hasStats = result.games_played > 0 && (
-    result.pass_yards > 0 || result.rush_yards > 0 ||
-    result.rec_yards > 0  || result.fg_0_39 > 0 || result.pat_made > 0
+    result.pass_yards > 0 || result.rush_yards > 0 || result.rec_yards > 0 ||
+    result.fg_0_39 > 0 || result.fg_40_49 > 0 || result.fg_50_plus > 0 || result.pat_made > 0
   )
   return hasStats ? result : null
+}
+
+// ── Fantasy points from raw season stats ─────────────────────
+// A simplified standard/half-PPR-ish formula (no 300/100-yard bonus
+// tiers — those need per-game splits, not a season total) used only
+// to produce a reasonable proj_pts/ADP for every player, independent
+// of any third-party projections feed. Doesn't need to match a real
+// league's actual scoring rules exactly - just needs to rank players
+// sensibly and not show 0 for everyone.
+function fantasyPoints(s: Record<string, number>): number {
+  return (
+    s.pass_yards * 0.04 + s.pass_tds * 4 + s.pass_ints * -2 +
+    s.rush_yards * 0.1  + s.rush_tds * 6 +
+    s.rec_yards  * 0.1  + s.rec_tds  * 6 + s.receptions * 0.5 +
+    s.fg_0_39 * 3 + s.fg_40_49 * 4 + s.fg_50_plus * 5 + s.pat_made * 1 + s.fg_miss * -1
+  )
 }
 
 serve(async (req) => {
@@ -95,25 +137,55 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
   const params   = new URL(req.url).searchParams
   const pos      = params.get('pos')  // optional: QB, RB, WR, TE, K — or all if omitted
-  const batchSize = 30                // parallel ESPN calls per batch
+  const batchSize = 10                // parallel ESPN calls per batch — was 30, which
+                                       // saw the large majority of requests fail under load
+  // ESPN/the sportsdata proxy only reliably answers roughly the
+  // first ~50-60 requests of any given invocation before the rest
+  // start failing outright (observed directly: re-running the same
+  // position repeatedly re-covers the exact same leading slice of
+  // players every time, never reaching further ones) — a fresh
+  // invocation gets a fresh allowance, so ?chunkOffset lets repeated
+  // calls page through the full list instead of only ever retrying
+  // the same first chunk.
+  const chunkOffset = Number(params.get('chunkOffset') ?? 0)
+  const chunkSize   = Number(params.get('chunkSize') ?? 60)
 
-  // Fetch NFL players from DB (exclude DST — no individual stats)
-  let q = supabase
-    .from('players')
-    .select('id, name, espn_athlete_id, pos')
-    .eq('league', 'NFL')
-    .neq('pos', 'DST')
+  // Fetch NFL players from DB (exclude DST — no individual stats).
+  // Paginated — a single unbounded select() silently caps at 1000
+  // rows, and this table has 1033+ NFL non-DST rows (current rosters
+  // plus old entries from past syncs that were never cleaned up), so
+  // an un-paginated fetch was arbitrarily excluding roughly 3% of
+  // players from every run - real, current stars included, since
+  // there's no ordering guaranteeing "current roster" sorts first.
+  const allPlayers: any[] = []
+  for (let offset = 0; ; offset += 1000) {
+    let q = supabase
+      .from('players')
+      .select('id, name, espn_athlete_id, pos')
+      .eq('league', 'NFL')
+      .neq('pos', 'DST')
+      .order('id', { ascending: true })
+      .range(offset, offset + 999)
+    if (pos) q = (q as any).eq('pos', pos)
+    const { data: page, error } = await q
+    if (error) return new Response(JSON.stringify({ error: error.message }), { headers: CORS, status: 500 })
+    if (!page?.length) break
+    allPlayers.push(...page)
+    if (page.length < 1000) break
+  }
+  const players = allPlayers.slice(chunkOffset, chunkOffset + chunkSize)
+  if (!players.length) {
+    return new Response(JSON.stringify({ skipped: 0, totalForPos: allPlayers.length, msg: `Nothing at chunkOffset=${chunkOffset}` }), { headers: CORS })
+  }
 
-  if (pos) q = (q as any).eq('pos', pos)
-
-  const { data: players, error } = await q
-  if (error) return new Response(JSON.stringify({ error: error.message }), { headers: CORS, status: 500 })
-  if (!players?.length) return new Response(JSON.stringify({ skipped: 0, msg: `No players for pos=${pos}` }), { headers: CORS })
-
-  console.log(`Processing ${players.length} NFL players (pos=${pos ?? 'all'})`)
+  console.log(`Processing ${players.length} of ${allPlayers.length} NFL players (pos=${pos ?? 'all'}, chunkOffset=${chunkOffset})`)
 
   const now = new Date().toISOString()
   const projRows: any[] = []
+  // playerId -> per-game fantasy point average, used below to rank
+  // everyone processed in this run into an ADP. Kept separate from
+  // projRows since that's shaped for player_proj_stats, not players.
+  const avgPtsByPlayerId = new Map<number, number>()
   let fetched = 0
 
   // Process in parallel batches
@@ -126,7 +198,7 @@ serve(async (req) => {
         const espnId = p.espn_athlete_id ?? (p.id - 1_000_000)
         if (espnId <= 0) return { player: p, espnId, stats: null }
         const data = await fetchStats(espnId)
-        const stats = data ? parse2025Stats(data) : null
+        const stats = data ? parseLatestSeasonStats(data) : null
         return { player: p, espnId, stats }
       })
     )
@@ -161,9 +233,12 @@ serve(async (req) => {
         source:             'espn',
         updated_at:         now,
       })
+      const total = fantasyPoints(stats)
+      avgPtsByPlayerId.set(player.id, total / Math.max(1, stats.games_played))
     }
 
-    console.log(`Batch ${Math.floor(i/batchSize)+1}: ${results.filter(r => r.stats).length}/${batch.length} had 2025 stats`)
+    console.log(`Batch ${Math.floor(i/batchSize)+1}: ${results.filter(r => r.stats).length}/${batch.length} had stats`)
+    await sleep(150)
   }
 
   // Upsert to player_proj_stats
@@ -178,12 +253,56 @@ serve(async (req) => {
     else upserted += batch.length
   }
 
+  // ── Turn those averages into proj_pts/avg_pts/adp on players ──
+  // ADP here is a derived "best player available" ranking (highest
+  // projected average first), not a real market-consensus ADP - but
+  // every player who has any 2025 stats gets a real, non-zero number
+  // instead of the fallback 999, which is what actually matters for
+  // "doesn't have to be perfect but has to work for everyone".
+  // Only ranks within whatever this run processed - if called with
+  // ?pos=, the ranking is position-scoped, not global.
+  const ranked = [...avgPtsByPlayerId.entries()].sort((a, b) => b[1] - a[1])
+  const playerUpdateRows = ranked.map(([playerId, avgPts], idx) => ({
+    id:        playerId,
+    proj_pts:  Math.round(avgPts * 10) / 10,
+    avg_pts:   Math.round(avgPts * 10) / 10,
+    adp:       idx + 1,
+  }))
+
+  // Plain per-row updates, not upsert — every id here came straight
+  // out of the players table moments ago, so there's nothing to
+  // insert. upsert() still builds an INSERT ... ON CONFLICT under
+  // the hood though, and that INSERT path requires satisfying every
+  // NOT NULL column (name, team, pos, league) even when every row is
+  // actually going to hit the UPDATE branch — one row that doesn't
+  // cleanly conflict-match for any reason takes the whole batch's
+  // "insert" down with a not-null violation on name, at which point
+  // *none* of that batch's real updates land either.
+  let playersUpdated = 0
+  const updateBatchSize = 25
+  for (let i = 0; i < playerUpdateRows.length; i += updateBatchSize) {
+    const batch = playerUpdateRows.slice(i, i + updateBatchSize)
+    const results = await Promise.all(batch.map(row =>
+      supabase.from('players')
+        .update({ proj_pts: row.proj_pts, avg_pts: row.avg_pts, adp: row.adp, updated_at: now })
+        .eq('id', row.id)
+    ))
+    for (const { error: pErr } of results) {
+      if (pErr) errors.push(pErr.message)
+      else playersUpdated++
+    }
+  }
+
   return new Response(JSON.stringify({
     success: errors.length === 0,
     pos: pos ?? 'all',
     processed: players.length,
+    totalForPos: allPlayers.length,
+    chunkOffset,
+    nextChunkOffset: chunkOffset + players.length < allPlayers.length ? chunkOffset + players.length : null,
     fetched,
     upserted,
+    playersUpdated,
     errors,
     syncedAt: now,
   }), { headers: CORS })

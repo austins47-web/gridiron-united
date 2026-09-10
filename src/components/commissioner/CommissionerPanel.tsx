@@ -694,7 +694,7 @@ function PlayerScoreEditor() {
   const [editing, setEditing] = useState<Player | null>(null)
   const [avgPts, setAvgPts] = useState('')
   const [syncing, setSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState<{ players: number; withProjections: number } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ rosterTotal: number; projectionsUpdated: number } | null>(null)
   const qc = useQueryClient()
 
   const syncPlayers = async () => {
@@ -703,17 +703,21 @@ function PlayerScoreEditor() {
     try {
       const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
       const URL  = import.meta.env.VITE_SUPABASE_URL
-      const res = await fetch(
-        `${URL}/functions/v1/sync-players?season=2026&week=1`,
-        {
-          method: 'POST',
-          headers: { apikey: ANON, Authorization: `Bearer ${ANON}` },
-        }
-      )
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Sync failed')
-      setSyncResult({ players: data.players, withProjections: data.withProjections })
-      toast.success(`Synced ${data.players} players (${data.withProjections} with projections)`)
+      const headers = { apikey: ANON, Authorization: `Bearer ${ANON}` }
+
+      // Rosters first, then projections/ADP - the projections step
+      // needs that week's roster (and each player's id) to already
+      // exist before it can match stats to a player and upsert.
+      const rosterRes = await fetch(`${URL}/functions/v1/sync-players`, { method: 'POST', headers })
+      const rosterData = await rosterRes.json()
+      if (!rosterRes.ok || rosterData.error) throw new Error(rosterData.error ?? 'Roster sync failed')
+
+      const projRes = await fetch(`${URL}/functions/v1/sync-nfl-projections`, { method: 'POST', headers })
+      const projData = await projRes.json()
+      if (!projRes.ok || projData.error) throw new Error(projData.error ?? 'Projections sync failed')
+
+      setSyncResult({ rosterTotal: rosterData.total, projectionsUpdated: projData.playersUpdated })
+      toast.success(`Synced ${rosterData.total} players, updated projections for ${projData.playersUpdated}`)
       qc.invalidateQueries({ queryKey: ['players'] })
     } catch (e: any) {
       toast.error(e.message ?? 'Sync failed')
@@ -781,12 +785,12 @@ function PlayerScoreEditor() {
               <span className="font-bold text-white text-sm">Player Data — Auto Sync</span>
             </div>
             <p className="text-field-400 text-xs">
-              Players and projections sync automatically every Tuesday at 3am UTC from SportsDataIO.
+              Rosters and projections sync automatically every Tuesday at 3am UTC from ESPN's free API.
               Covers all active NFL players, all 32 D/ST units, and FBS college football players.
             </p>
             {syncResult && (
               <p className="text-nfl text-xs mt-1 font-bold">
-                ✓ Last sync: {syncResult.players} total players ({syncResult.withProjections} NFL with projections)
+                ✓ Last sync: {syncResult.rosterTotal} players synced, projections updated for {syncResult.projectionsUpdated}
               </p>
             )}
           </div>
