@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import type { League, LeagueMember } from '@/types/database'
 import toast from 'react-hot-toast'
+import { computeStandings } from '@/components/pickem/standings'
+import { CURRENT_SEASON } from '@/lib/season'
 
 // Build the default team name from the user's profile
 function defaultTeamName(profile: { username?: string | null; display_name?: string | null } | null): string {
@@ -64,6 +66,73 @@ export function useStandings(leagueId: string | null) {
       return data
     },
   })
+}
+
+// Pick'Em's real standings — derived live from actual picks joined
+// to game results, exactly the same way PickEmView's own Standings
+// tab computes them. useStandings above reads wins/losses as
+// STORED columns on league_members, which is correct for real
+// fantasy leagues (a separate scoring pipeline maintains those) but
+// was never the source of truth for Pick'Em at all — nothing ever
+// writes to those columns for a Pick'Em league, which is exactly
+// why the League Hub's standings panel showed 0-0 for every member
+// even after real games had gone final and real picks existed.
+export function usePickemStandings(leagueId: string | null) {
+  const { data: games = [] } = useQuery({
+    queryKey: ['pickem-standings-games', CURRENT_SEASON],
+    enabled: !!leagueId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('nfl_games')
+        .select('id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker')
+        .eq('season', CURRENT_SEASON)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+
+  const { data: picks = [] } = useQuery({
+    queryKey: ['pickem-standings-picks', leagueId],
+    enabled: !!leagueId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pickem_picks')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score')
+        .eq('league_id', leagueId!)
+        .eq('season', CURRENT_SEASON)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+
+  const { data: members = [] } = useQuery({
+    queryKey: ['pickem-standings-members', leagueId],
+    enabled: !!leagueId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('league_members')
+        .select('user_id, team_name, profile:profiles(username, display_name, avatar_url)')
+        .eq('league_id', leagueId!)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+
+  const rows = computeStandings(games as any, picks as any, members as any)
+  // Merge team_name back in — computeStandings only knows about
+  // Member.profile, not the league-specific team_name members can
+  // set, but the panel wants to show it the same way it does for
+  // fantasy leagues.
+  const teamNameByUser = new Map(members.map((m: any) => [m.user_id, m.team_name]))
+  return {
+    data: rows.map(r => ({
+      ...r,
+      team_name: teamNameByUser.get(r.userId) ?? null,
+      user_id: r.userId,
+    })),
+  }
 }
 
 // Create a new league

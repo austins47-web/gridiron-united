@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
-import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
+import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, usePickemStandings, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
 import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
 import { ModalPortal } from '@/components/ui/ModalPortal'
@@ -197,8 +197,14 @@ export function LeaguesView() {
   )
 }
 
-function StandingsPanel({ leagueId }: { leagueId: string | null }) {
-  const { data: members = [] } = useStandings(leagueId)
+function StandingsPanel({ leagueId, isPickem }: { leagueId: string | null; isPickem: boolean }) {
+  // Pick'Em's real record lives in the picks/games themselves, not
+  // as stored columns on league_members — useStandings reads those
+  // stored columns, which are correct for real fantasy leagues but
+  // were never actually updated for Pick'Em at all.
+  const { data: pickemMembers } = usePickemStandings(isPickem ? leagueId : null)
+  const { data: fantasyMembers = [] } = useStandings(isPickem ? null : leagueId)
+  const members = isPickem ? (pickemMembers ?? []) : fantasyMembers
 
   return (
     <div className="panel">
@@ -208,7 +214,7 @@ function StandingsPanel({ leagueId }: { leagueId: string | null }) {
       </div>
       <div className="space-y-1">
         {members.map((m: any, i: number) => (
-          <div key={m.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-field-700/50 last:border-0">
+          <div key={m.user_id} className="flex items-center justify-between gap-2 py-1.5 border-b border-field-700/50 last:border-0">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <span className="text-field-400 text-xs w-4 shrink-0">{i + 1}</span>
               <div className="w-6 h-6 rounded-full bg-field-700 flex items-center justify-center text-xs font-bold text-gold overflow-hidden shrink-0">
@@ -225,8 +231,17 @@ function StandingsPanel({ leagueId }: { leagueId: string | null }) {
               </div>
             </div>
             <div className="text-xs text-right shrink-0">
-              <span className="text-white font-bold">{m.wins}-{m.losses}</span>
-              <span className="text-field-400 ml-2">{m.points_for?.toFixed(1) ?? '0.0'}</span>
+              {isPickem ? (
+                <>
+                  <span className="text-white font-bold">{m.correct}-{m.played - m.correct}</span>
+                  <span className="text-field-400 ml-2">{m.played > 0 ? `${Math.round(m.pct * 100)}%` : '0%'}</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-white font-bold">{m.wins}-{m.losses}</span>
+                  <span className="text-field-400 ml-2">{m.points_for?.toFixed(1) ?? '0.0'}</span>
+                </>
+              )}
             </div>
           </div>
         ))}
@@ -685,7 +700,7 @@ function LeagueHub({
 
       {/* Standings + info */}
       <div className="grid md:grid-cols-2 gap-4">
-        <StandingsPanel leagueId={league.id} />
+        <StandingsPanel leagueId={league.id} isPickem={isPickem} />
         <LeagueInfoPanel
           league={league}
           membership={membership}

@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { useMyLeagues } from './useLeague'
-import type { League, LeagueMember } from '@/types/database'
+import type { LeagueMember } from '@/types/database'
 import { CURRENT_SEASON } from '@/lib/season'
+import { computeStandings } from '@/components/pickem/standings'
 
 export type ActionKind =
   | 'on_the_clock' | 'draft_live' | 'draft_soon'
@@ -55,7 +56,7 @@ export function useHomeData() {
     enabled: !!user && leagueIds.length > 0,
     staleTime: 60_000,
     queryFn: async () => {
-      const [tradesRes, draftsRes, matchupsRes, membersRes, rostersRes, picksRes] =
+      const [tradesRes, draftsRes, matchupsRes, membersRes, rostersRes, picksRes, gamesRes] =
         await Promise.all([
           // Pending trade offers addressed to me
           supabase
@@ -95,9 +96,18 @@ export function useHomeData() {
           // My pickem picks this season
           supabase
             .from('pickem_picks')
-            .select('league_id, week')
+            .select('league_id, week, game_id, user_id, picked_team, tiebreaker_score')
             .in('league_id', leagueIds)
             .eq('user_id', user!.id)
+            .eq('season', CURRENT_SEASON),
+
+          // Games, to score those picks — same source of truth the
+          // pick'em standings tab and league hub standings panel use.
+          // league_members.wins/losses is never written for pick'em
+          // leagues, so it can't be read here either.
+          supabase
+            .from('nfl_games')
+            .select('id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker')
             .eq('season', CURRENT_SEASON),
         ])
 
@@ -108,6 +118,7 @@ export function useHomeData() {
         members:  membersRes.data ?? [],
         rosters:  rostersRes.data ?? [],
         picks:    picksRes.data ?? [],
+        games:    gamesRes.data ?? [],
       }
     },
   })
@@ -118,6 +129,17 @@ export function useHomeData() {
   const teams: TeamRow[] = myLeagues.map(({ league, ...m }) => {
     const membership = m as unknown as LeagueMember
     const memberCount = d?.members.filter(x => x.league_id === league.id).length ?? 0
+    const isPickem = league.league_type === 'pickem'
+
+    // Pick'Em's real correct-pick count lives in picks joined to game
+    // results, not in the stored league_members.wins column — nothing
+    // ever writes that column for a pick'em league.
+    let pickemCorrect = 0
+    if (isPickem && user) {
+      const leaguePicks = (d?.picks ?? []).filter(p => p.league_id === league.id)
+      const rows = computeStandings((d?.games ?? []) as any, leaguePicks as any, [{ user_id: user.id }])
+      pickemCorrect = rows.find(r => r.userId === user.id)?.correct ?? 0
+    }
 
     // Current-week matchup
     let matchup: TeamRow['matchup'] = null
@@ -141,7 +163,7 @@ export function useHomeData() {
       leagueName: league.name,
       leagueType: league.league_type,
       teamName: membership.team_name,
-      wins: membership.wins ?? 0,
+      wins: isPickem ? pickemCorrect : (membership.wins ?? 0),
       losses: membership.losses ?? 0,
       ties: membership.ties ?? 0,
       pointsFor: membership.points_for ?? 0,
