@@ -261,7 +261,14 @@ serve(async (req) => {
   // "doesn't have to be perfect but has to work for everyone".
   // Only ranks within whatever this run processed - if called with
   // ?pos=, the ranking is position-scoped, not global.
-  const ranked = [...avgPtsByPlayerId.entries()].sort((a, b) => b[1] - a[1])
+  // Excludes avgPts <= 0 - real stats but a net-zero or negative
+  // fantasy total (token usage, or a couple of categories that
+  // happen to cancel out) shouldn't come back as, say, "ADP #4"
+  // just because everyone else in this particular chunk had no
+  // stats at all - that's not a rankable player.
+  const ranked = [...avgPtsByPlayerId.entries()]
+    .filter(([, avgPts]) => avgPts > 0)
+    .sort((a, b) => b[1] - a[1])
   const playerUpdateRows = ranked.map(([playerId, avgPts], idx) => ({
     id:        playerId,
     proj_pts:  Math.round(avgPts * 10) / 10,
