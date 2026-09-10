@@ -53,19 +53,16 @@ valued as (
   from target t
   join replacement r on r.league = t.league and r.pos = t.pos
 ),
--- CFB's raw stat totals run systematically higher than NFL's (more
--- plays per game, far more lopsided competition), so CFB's VBD
--- values were inflated by scale alone, not real value - flattening
--- each league to its own 0-1 range (1.0 = that league's own best
--- player) before combining keeps each league's internal positional-
--- scarcity shape while removing the cross-league scale mismatch.
-scaled as (
-  select id, vbd / nullif(max(vbd) over (partition by league), 0) as vbd_scaled
-  from valued
-),
+-- Previously flattened each league to its own 0-1 range before
+-- combining, to offset CFB's systematically higher raw stat totals.
+-- Removed on explicit instruction: "If CFB needs to dominate let
+-- them, I need real stats and real projections." Real VBD values now
+-- compared directly across leagues, no artificial scale correction -
+-- if CFB's real production supports CFB players ranking above NFL
+-- players, that's what shows.
 ranked as (
-  select id, row_number() over (order by vbd_scaled desc) as rnk
-  from scaled
+  select id, row_number() over (order by vbd desc) as rnk
+  from valued
 )
 update players p
 set adp = ranked.rnk

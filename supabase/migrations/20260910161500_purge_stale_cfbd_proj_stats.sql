@@ -1,0 +1,12 @@
+-- Purges leftover rows from the old CollegeFootballData-based CFB
+-- projections sync, replaced earlier this session by an ESPN-based
+-- rewrite of sync-cfb-projections. These rows (source = 'cfbd') use
+-- CFBD's own numeric player-ID scheme, a completely different
+-- namespace from ESPN's - they were already permanently unjoinable
+-- to the players table by design, but their raw integer IDs can
+-- still numerically collide with a real ESPN athlete's derived id,
+-- which was silently corrupting that unrelated player's baseline in
+-- the new live-stats blend (20260910160000). Confirmed: 4,464 stale
+-- cfbd rows vs 2,474 real espn rows. Safe to delete outright - none
+-- of this data has been reachable through the app since the rewrite.
+delete from player_proj_stats where source = 'cfbd';

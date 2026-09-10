@@ -49,7 +49,7 @@ function parseLatestSeasonStats(data: any): Record<string, number> | null {
     rec_yards: 0, rec_tds: 0, receptions: 0, targets: 0,
     fumbles_lost: 0, two_pt_convs: 0,
     fg_0_39: 0, fg_40_49: 0, fg_50_plus: 0, pat_made: 0, fg_miss: 0,
-    games_played: 0,
+    games_played: 0, season_year: 0,
   }
 
   for (const cat of data.categories) {
@@ -59,6 +59,7 @@ function parseLatestSeasonStats(data: any): Record<string, number> | null {
     const rows: any[] = (cat.statistics ?? []).filter((s: any) => s.season?.year && s.stats)
     if (rows.length === 0) continue
     const latest = rows.reduce((a, b) => (b.season.year > a.season.year ? b : a))
+    result.season_year = Math.max(result.season_year, latest.season.year)
 
     const names: string[] = cat.names ?? []
     const vals: string[]  = latest.stats ?? []
@@ -209,7 +210,7 @@ serve(async (req) => {
       projRows.push({
         espn_athlete_id:    espnId,
         player_id:          player.id,
-        season:             2025,
+        season:             stats.season_year || new Date().getFullYear() - 1,
         games_played:       stats.games_played,
         proj_pass_yards:    stats.pass_yards,
         proj_pass_tds:      stats.pass_tds,
