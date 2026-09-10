@@ -288,12 +288,24 @@ export function AccountPage() {
     if (!user) return
     setDeleting(true)
     try {
-      // Delete profile row (cascades to league_members, picks, etc. via FK)
-      const { error: profileErr } = await supabase
+      // Delete profile row — cascades to league_members, picks, and
+      // most other tables via a real, confirmed ON DELETE CASCADE
+      // foreign key. But Supabase returns error: null even when RLS
+      // silently blocks a delete and zero rows are actually
+      // affected — the exact same shape as the league_members
+      // leave-league bug from earlier. Checking the returned rows
+      // directly instead of trusting a null error is what actually
+      // confirms this succeeded, rather than reporting "Account
+      // deleted" for something that silently did nothing.
+      const { data: deletedRows, error: profileErr } = await supabase
         .from('profiles')
         .delete()
         .eq('id', user.id)
+        .select('id')
       if (profileErr) throw profileErr
+      if (!deletedRows || deletedRows.length === 0) {
+        throw new Error('Account deletion was blocked and nothing was removed. Please contact support.')
+      }
 
       // Delete avatar from storage if it exists.
       // Split on the LAST '/avatars/' — the public URL contains it
