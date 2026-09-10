@@ -32,6 +32,35 @@ async function proxyFetch(endpoint: string) {
   return res.json()
 }
 
+// ESPN's real shape for /athletes/{id}/stats is category.names[] (raw
+// keys) + category.displayNames[] (human labels, same order) +
+// category.statistics[] (one row per season, each with its own
+// .stats[] of raw values in that same order) - there is no flat
+// category.stats list of {displayValue, displayName} objects the way
+// this used to assume, so every category's stats always silently
+// came back empty regardless of whether ESPN actually had data.
+// Picks whichever season is actually most recent for that category,
+// same as the backend projections sync does for the same endpoint.
+function extractSeasonStats(data: any): Array<{ label: string; value: string }> {
+  if (!data?.categories) return []
+  const out: Array<{ label: string; value: string }> = []
+  for (const cat of data.categories) {
+    const rows: any[] = (cat.statistics ?? []).filter((s: any) => s.season?.year && s.stats)
+    if (!rows.length) continue
+    const latest = rows.reduce((a, b) => (b.season.year > a.season.year ? b : a))
+    const names: string[] = cat.names ?? []
+    const displayNames: string[] = cat.displayNames ?? names
+    const vals: string[] = latest.stats ?? []
+    names.forEach((key, i) => {
+      if (key === 'gamesPlayed') return
+      const val = vals[i]
+      if (val == null || val === '0' || val === '0.0' || val === '--') return
+      out.push({ label: displayNames[i] ?? key, value: String(val) })
+    })
+  }
+  return out
+}
+
 // ── Types ─────────────────────────────────────────────────────
 interface AthleteProfile {
   displayName: string
@@ -65,11 +94,7 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
       fetch(`${BASE}/stats`).then(async r => {
         if (!r.ok) return
         const sd = await r.json()
-        const cats = sd.splits?.categories ?? sd.categories ?? []
-        for (const cat of cats)
-          for (const s of (cat.stats ?? []))
-            if (s.displayValue && s.displayValue !== '0' && s.displayValue !== '--')
-              stats.push({ label: s.displayName ?? s.name, value: s.displayValue })
+        stats.push(...extractSeasonStats(sd))
       }),
       fetch(BASE).then(async r => {
         if (!r.ok) return
@@ -92,14 +117,7 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
   const stats: Array<{ label: string; value: string }> = []
   try {
     const sd = await proxyFetch(`athlete/stats/NFL/${espnId}`)
-    const cats = sd.splits?.categories ?? sd.categories ?? []
-    for (const cat of cats) {
-      for (const s of (cat.stats ?? [])) {
-        if (s.displayValue && s.displayValue !== '0' && s.displayValue !== '--') {
-          stats.push({ label: s.displayName ?? s.name, value: s.displayValue })
-        }
-      }
-    }
+    stats.push(...extractSeasonStats(sd))
   } catch { /* pre-season */ }
 
   const bp = a.birthPlace
