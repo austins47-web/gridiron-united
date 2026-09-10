@@ -13,6 +13,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { AuthPage } from '@/components/auth/AuthPage'
 import { LandingPage } from '@/components/landing/LandingPage'
 import { RosterView } from '@/components/roster/RosterView'
+import { MatchupView } from '@/components/matchup/MatchupView'
 import { PlayersView } from '@/components/players/PlayersView'
 import { LeaguesView } from '@/components/leagues/LeaguesView'
 import { DraftRoom } from '@/components/draft/DraftRoom'
@@ -165,6 +166,7 @@ function App() {
               <Route path="pickem" element={<PickEmView />} />
               {/* League-specific routes */}
               <Route path="roster" element={<LeagueWrapper><RosterView /></LeagueWrapper>} />
+              <Route path="matchup" element={<LeagueWrapper><MatchupView /></LeagueWrapper>} />
               <Route path="players" element={<LeagueWrapper><PlayersView /></LeagueWrapper>} />
               <Route path="draft" element={<LeagueWrapper><DraftRoom /></LeagueWrapper>} />
               <Route path="scoring" element={<LeagueWrapper><ScoringView /></LeagueWrapper>} />

@@ -293,7 +293,7 @@ export function LeagueSettingsModal({ league, onClose, onSaved }: Props) {
                     onChange={e => setMeta(m => ({ ...m, num_teams: parseInt(e.target.value) }))}
                     disabled={!isCommissioner || league.draft_status !== 'pre_draft'}
                     style={{ appearance: 'none' }}>
-                    {[8,10,12,14,16].map(n => <option key={n} value={n}>{n} teams</option>)}
+                    {[8,10,12,14,16,18,20,24,28,32].map(n => <option key={n} value={n}>{n} teams</option>)}
                   </select>
                 </div>
                 <div>

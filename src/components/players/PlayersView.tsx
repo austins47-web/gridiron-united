@@ -9,7 +9,7 @@ import { PlayerProfileDrawer } from './PlayerProfileDrawer'
 import { lazy, Suspense } from 'react'
 const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
 import { getTeamId } from '@/components/teams/teamIds'
-import { Search, ChevronLeft, ChevronRight, Plus, Check, X, ChevronDown } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Plus, Check, X, ChevronDown, Lock } from 'lucide-react'
 import clsx from 'clsx'
 
 const POS_OPTS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const
@@ -53,6 +53,12 @@ export function PlayersView() {
     score_dst_pts_21_27: activeLeague.score_dst_pts_21_27, score_dst_pts_28_34: activeLeague.score_dst_pts_28_34,
     score_dst_pts_35_plus: activeLeague.score_dst_pts_35_plus,
   } : null
+
+  // Roster spots before the draft belong to the draft, not free agency —
+  // adding here would let someone pre-fill a roster before anyone's
+  // even picked, defeating the draft entirely. Anything short of
+  // 'completed' (pre_draft, scheduled, in_progress, paused) blocks it.
+  const draftNotDone = activeLeague ? activeLeague.draft_status !== 'completed' : false
 
   const { data, isFetching } = usePlayers(filters, scoring)
   const { data: teamList = [] } = useTeamList(filters.league)
@@ -531,6 +537,10 @@ export function PlayersView() {
                           <span title="On a roster" className="text-field-500">
                             <Check className="w-4 h-4 mx-auto" />
                           </span>
+                        ) : draftNotDone ? (
+                          <span title="Players can't be added until the draft is complete" className="text-field-600 inline-flex">
+                            <Lock className="w-3.5 h-3.5 mx-auto" />
+                          </span>
                         ) : (
                           <button
                             className="btn-ghost !py-1 !px-2"
@@ -616,6 +626,7 @@ export function PlayersView() {
           slots={slots}
           filledSlots={new Set(myRoster.map(r => r.slot))}
           onPick={async (slot) => {
+            if (draftNotDone) { setShowSlotPicker(null); return }
             await addPlayer.mutateAsync({
               playerId: showSlotPicker.id,
               slot,

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import type { DraftState, DraftPick, Player } from '@/types/database'
+import { generateRegularSeasonSchedule } from '@/lib/scheduling'
 import toast from 'react-hot-toast'
 
 export type DraftPickWithPlayer = DraftPick & { player: Player }
@@ -391,6 +392,43 @@ export function useMakePick() {
         } catch (e) {
           console.error('Auto-slot assignment failed:', e)
         }
+
+        // Generate the regular-season round-robin schedule now that
+        // every team's final roster is set. Guarded on no existing
+        // matchups for this league so a duplicate draft-completion
+        // event (or a retried mutation) can't double-schedule.
+        try {
+          const { count: existingCount } = await supabase
+            .from('matchups')
+            .select('id', { count: 'exact', head: true })
+            .eq('league_id', activeLeagueId)
+          if (!existingCount) {
+            const { data: scheduleMembers } = await supabase
+              .from('league_members')
+              .select('user_id')
+              .eq('league_id', activeLeagueId)
+            const userIds = (scheduleMembers ?? []).map((m: any) => m.user_id)
+            if (userIds.length >= 2) {
+              const schedule = generateRegularSeasonSchedule(userIds)
+              const rows = schedule.map(m => ({
+                league_id: activeLeagueId,
+                week: m.week,
+                home_user_id: m.home_user_id,
+                away_user_id: m.away_user_id,
+                home_score: 0,
+                away_score: 0,
+                is_complete: false,
+                is_playoff: false,
+              }))
+              for (let i = 0; i < rows.length; i += 200) {
+                await supabase.from('matchups').insert(rows.slice(i, i + 200))
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Schedule generation failed:', e)
+        }
+
         toast.success('Draft complete! 🏆 Rosters set.')
       }
     },

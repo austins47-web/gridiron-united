@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useMyRoster, useDropPlayer, useMovePlayer, useRosterRealtime } from '@/hooks/useRoster'
+import { useActualPoints } from '@/hooks/useActualPoints'
 import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { buildSlotDefs, canFillSlot } from '@/types/database'
@@ -22,6 +23,7 @@ export function RosterView() {
   const [loadingAI, setLoadingAI] = useState(false)
 
   useRosterRealtime(activeLeagueId)
+  const { pointsByRosterId, startersTotal: totalActual } = useActualPoints(roster, activeLeague)
 
   if (!activeLeagueId) {
     return (
@@ -140,6 +142,10 @@ export function RosterView() {
           <p className="text-field-400 text-sm mt-1">{activeLeague?.name}</p>
         </div>
         <div className="flex gap-3">
+          <div className="bg-field-800 border border-field-700 rounded-lg px-4 py-2 text-center">
+            <div className="text-xs text-field-400">Actual</div>
+            <div className="text-nfl font-black text-xl">{totalActual.toFixed(1)}</div>
+          </div>
           <div className="bg-field-800 border border-field-700 rounded-lg px-4 py-2 text-center">
             <div className="text-xs text-field-400">Projected</div>
             <div className="text-gold font-black text-xl">{totalProj.toFixed(1)}</div>
@@ -261,6 +267,7 @@ export function RosterView() {
                 key={slot.key}
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
+                actualPoints={pointsByRosterId}
                 moving={moving}
                 locked={rosterLocked}
                 onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -282,6 +289,7 @@ export function RosterView() {
                 key={slot.key}
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
+                actualPoints={pointsByRosterId}
                 moving={moving}
                 locked={rosterLocked}
                 onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -303,6 +311,7 @@ export function RosterView() {
                 key={slot.key}
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
+                actualPoints={pointsByRosterId}
                 moving={moving}
                 locked={rosterLocked}
                 onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -327,6 +336,7 @@ export function RosterView() {
                 key={slot.key}
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
+                actualPoints={pointsByRosterId}
                 moving={moving}
                 locked={rosterLocked}
                 onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -375,10 +385,11 @@ export function RosterView() {
 }
 
 function RosterSlotRow({
-  slot, entry, moving, locked, onMove, onDropToSlot, onDrop,
+  slot, entry, actualPoints, moving, locked, onMove, onDropToSlot, onDrop,
 }: {
   slot: SlotDef
   entry: RosterEntryWithPlayer | undefined
+  actualPoints: Map<string, { points: number | null; stats: any | null }>
   moving: RosterEntryWithPlayer | null
   locked: boolean
   onMove: (e: RosterEntryWithPlayer) => void
@@ -475,12 +486,23 @@ function RosterSlotRow({
       )}
 
       {/* Points */}
-      {player && !moving && (
-        <div className="text-right shrink-0 hidden sm:block">
-          <div className="text-sm font-bold text-white">{player.proj_pts?.toFixed(1) ?? '—'}</div>
-          <div className="text-xs text-field-400">proj</div>
-        </div>
-      )}
+      {player && !moving && (() => {
+        const actual = entry ? actualPoints.get(entry.id)?.points ?? null : null
+        return (
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="text-right hidden sm:block">
+              <div className={clsx('text-sm font-bold', actual !== null ? 'text-nfl' : 'text-field-600')}>
+                {actual !== null ? actual.toFixed(1) : '—'}
+              </div>
+              <div className="text-xs text-field-400">actual</div>
+            </div>
+            <div className="text-right hidden sm:block">
+              <div className="text-sm font-bold text-white">{player.proj_pts?.toFixed(1) ?? '—'}</div>
+              <div className="text-xs text-field-400">proj</div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Actions — only shown when NOT in move mode */}
       {entry && !moving && (

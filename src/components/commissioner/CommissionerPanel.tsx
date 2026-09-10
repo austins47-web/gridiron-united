@@ -10,7 +10,7 @@ import type { League, Player, PlayerStatus, RosterSlotConfig } from '@/types/dat
 import {
   Shield, Users, Zap, TrendingUp, Trash2, Search,
   Save, AlertCircle, ChevronDown, ChevronUp,
-  Edit3, Check, X, Crown, Clock, Loader2
+  Edit3, Check, X, Crown, Clock, Loader2, Lock
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -493,7 +493,14 @@ function RosterEditor({ leagueId, league }: { leagueId: string; league: League }
     qc.invalidateQueries({ queryKey: ['rostered-ids', leagueId] })
   }
 
+  // Same reasoning as the free-agent Add button in PlayersView: roster
+  // spots before the draft belong to the draft, not any add flow -
+  // applies here too, commissioner override or not, since pre-filling
+  // a roster before anyone's picked defeats the draft for everyone.
+  const draftNotDone = league.draft_status !== 'completed'
+
   const addPlayer = async (player: Player) => {
+    if (draftNotDone) return toast.error("Players can't be added until the draft is complete")
     if (!addSlot) return toast.error('Select a slot first')
     if (!selectedUserId) return
     const { error } = await supabase.from('rosters').insert({
@@ -642,6 +649,13 @@ function RosterEditor({ leagueId, league }: { leagueId: string; league: League }
           {/* Add player */}
           <div className="border-t border-field-700 pt-4">
             <h4 className="text-sm font-bold text-white mb-2">Add Player</h4>
+            {draftNotDone ? (
+              <div className="flex items-center gap-2 text-field-500 text-xs bg-field-800/50 rounded-lg px-3 py-2.5">
+                <Lock className="w-3.5 h-3.5 shrink-0" />
+                Players can't be added until the draft is complete — roster spots belong to the draft until then.
+              </div>
+            ) : (
+            <>
             <div className="flex gap-2 mb-2">
               <div className="relative flex-1">
                 {searchLoading
@@ -679,6 +693,8 @@ function RosterEditor({ leagueId, league }: { leagueId: string; league: League }
                   </button>
                 ))}
               </div>
+            )}
+            </>
             )}
           </div>
         </div>

@@ -599,7 +599,7 @@ function CreateLeagueModal({ onClose }: { onClose: () => void }) {
             <div>
               <label className="label">Teams</label>
               <select className="input" value={form.num_teams} onChange={e => setForm(f => ({ ...f, num_teams: +e.target.value }))}>
-                {[8, 10, 12, 14].map(n => <option key={n} value={n}>{n} teams</option>)}
+                {[8, 10, 12, 14, 16, 18, 20, 24, 28, 32].map(n => <option key={n} value={n}>{n} teams</option>)}
               </select>
             </div>
             <div>

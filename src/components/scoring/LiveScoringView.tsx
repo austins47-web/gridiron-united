@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
-import { calcFantasyPts, statusMultiplier } from '@/lib/scoring'
-import type { League, ScoringRules } from '@/types/database'
+import { calcFantasyPts, statusMultiplier, scoringFromLeague } from '@/lib/scoring'
+import type { League } from '@/types/database'
 import { Zap, Wifi, WifiOff } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -16,21 +16,6 @@ const POS_COLOR: Record<string, string> = {
   K:   'bg-purple-500/20 text-purple-300 border-purple-500/30',
   DST: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
   FLEX:'bg-field-500/30 text-field-200 border-field-500/30',
-}
-
-function scoringFromLeague(lg: League): ScoringRules {
-  const keys: (keyof ScoringRules)[] = [
-    'score_pass_td','score_pass_yd','score_pass_bonus_300','score_pass_int',
-    'score_rush_td','score_rush_yd','score_rush_bonus_100',
-    'score_rec_td','score_rec_yd','score_rec_bonus_100','score_reception',
-    'score_fumble_lost','score_2pt_conv',
-    'score_fg_0_39','score_fg_40_49','score_fg_50_plus','score_pat','score_fg_miss',
-    'score_dst_sack','score_dst_int','score_dst_fumble_rec','score_dst_td',
-    'score_dst_safety','score_dst_blocked',
-    'score_dst_pts_0','score_dst_pts_1_6','score_dst_pts_7_13','score_dst_pts_14_20',
-    'score_dst_pts_21_27','score_dst_pts_28_34','score_dst_pts_35_plus',
-  ]
-  return Object.fromEntries(keys.map(k => [k, lg[k] ?? 0])) as ScoringRules
 }
 
 export function LiveScoringView() {
@@ -50,8 +35,15 @@ export function LiveScoringView() {
     staleTime: 5 * 60_000,
   })
 
+  // Rosters aren't versioned per week — every insert/move anywhere in
+  // the app (draft, free agency, trades, slot moves) always writes
+  // week: 0, there's no separate "set your lineup for week N" table.
+  // This previously filtered on week: currentWeek (a real week number,
+  // never 0), which can never match a real row — this view has been
+  // silently showing "No starters set" for every league regardless of
+  // actual roster state.
   const { data: starters = [] } = useQuery({
-    queryKey: ['live-starters', activeLeagueId, user?.id, currentWeek],
+    queryKey: ['live-starters', activeLeagueId, user?.id],
     enabled: !!activeLeagueId && !!user?.id,
     queryFn: async () => {
       const { data } = await supabase
@@ -59,7 +51,7 @@ export function LiveScoringView() {
         .select('slot, player:players(id, name, team, pos, league, espn_athlete_id, status)')
         .eq('league_id', activeLeagueId!)
         .eq('user_id', user!.id)
-        .eq('week', currentWeek)
+        .eq('week', 0)
         .not('slot', 'like', 'BN%')
         .not('slot', 'like', 'IR%')
         .not('slot', 'like', 'CFB_OS%')

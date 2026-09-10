@@ -1,7 +1,26 @@
 // Shared fantasy point calculation — mirrors SQL calc_fantasy_pts() exactly.
 // Used by PlayersView (proj display), LiveScoringView, PlayerProfileDrawer, RosterView.
 
-import type { ScoringRules } from '@/types/database'
+import type { ScoringRules, League } from '@/types/database'
+
+// Pulls just the scoring-rule columns off a full League row — used
+// anywhere actual/live points need to be computed with a league's
+// real custom scoring (not the flat generic formula the ADP/
+// projection pipeline uses, which is deliberately league-agnostic).
+export function scoringFromLeague(lg: League): ScoringRules {
+  const keys: (keyof ScoringRules)[] = [
+    'score_pass_td','score_pass_yd','score_pass_bonus_300','score_pass_int',
+    'score_rush_td','score_rush_yd','score_rush_bonus_100',
+    'score_rec_td','score_rec_yd','score_rec_bonus_100','score_reception',
+    'score_fumble_lost','score_2pt_conv',
+    'score_fg_0_39','score_fg_40_49','score_fg_50_plus','score_pat','score_fg_miss',
+    'score_dst_sack','score_dst_int','score_dst_fumble_rec','score_dst_td',
+    'score_dst_safety','score_dst_blocked',
+    'score_dst_pts_0','score_dst_pts_1_6','score_dst_pts_7_13','score_dst_pts_14_20',
+    'score_dst_pts_21_27','score_dst_pts_28_34','score_dst_pts_35_plus',
+  ]
+  return Object.fromEntries(keys.map(k => [k, lg[k] ?? 0])) as ScoringRules
+}
 
 export interface RawStats {
   pass_yards?: number; pass_tds?: number; pass_ints?: number
