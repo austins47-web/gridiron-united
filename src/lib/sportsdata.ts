@@ -222,3 +222,18 @@ export function teamAbbr(fullName: string): string {
   }
   return map[fullName] ?? fullName.substring(0, 3).toUpperCase()
 }
+
+// CFB has ~130 FBS schools with no algorithmic name->abbreviation
+// rule (e.g. "Ole Miss" -> "MISS", "Ball State" -> "BALL",
+// "Charlotte" -> "CLT") - unlike the 32-team NFL map above, this
+// isn't hand-maintainable, so it's fetched from ESPN's own team list
+// instead. shortDisplayName is the same string sync-players already
+// stores as players.team, so it's a direct key match.
+export async function getCfbTeamAbbrMap(): Promise<Map<string, string>> {
+  const json = await sdio<{ teams: Array<{ shortDisplayName?: string; abbreviation?: string }> }>('cfb/teams-list')
+  const map = new Map<string, string>()
+  for (const t of json.teams ?? []) {
+    if (t.shortDisplayName && t.abbreviation) map.set(t.shortDisplayName, t.abbreviation)
+  }
+  return map
+}

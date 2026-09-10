@@ -7,7 +7,7 @@ import { useWeekLineup } from '@/hooks/useWeekLineup'
 import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
 import { REGULAR_SEASON_WEEKS } from '@/lib/scheduling'
 import { CURRENT_SEASON } from '@/lib/season'
-import { teamAbbr } from '@/lib/sportsdata'
+import { teamAbbr, getCfbTeamAbbrMap } from '@/lib/sportsdata'
 import { byeWeeksForTeam, type WeekGame } from '@/lib/byeWeeks'
 import { headshotUrl } from '@/lib/playerIdentity'
 import { useAppStore } from '@/store/appStore'
@@ -75,10 +75,7 @@ export function RosterView() {
 
   // Full NFL season schedule, fetched once and shared by every row —
   // drives each player's "vs/@ OPP · day/time" line and bye week
-  // number. Real ESPN-synced data (supabase/functions/sync-nfl-schedule),
-  // not fetched per-team. No CFB equivalent here (hundreds of teams,
-  // no existing name->abbreviation map for them), so CFB rows just
-  // don't show a game line.
+  // number. Real ESPN-synced data (supabase/functions/sync-nfl-schedule).
   const { data: seasonGames = [] } = useQuery({
     queryKey: ['nfl-games-season', CURRENT_SEASON],
     queryFn: async () => {
@@ -90,6 +87,37 @@ export function RosterView() {
       return (data ?? []) as (WeekGame & { game_date: string | null; status: string | null })[]
     },
     staleTime: 15 * 60_000,
+  })
+
+  // CFB equivalent, from live_games instead of a full pre-synced
+  // season table — poll-live-stats/detect-games only populate CFB
+  // games a short time ahead of each week, so unlike NFL this can be
+  // incomplete for weeks further out. That's fine for "this week's
+  // game", not reliable enough to also claim "bye" from an absence
+  // (missing could just mean not-loaded-yet), so byes are only ever
+  // shown for NFL.
+  const { data: cfbSeasonGames = [] } = useQuery({
+    queryKey: ['cfb-games-season', CURRENT_SEASON],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('live_games')
+        .select('week, home_team, away_team, start_time, status')
+        .eq('league', 'CFB')
+        .eq('season', CURRENT_SEASON)
+      if (error) throw error
+      return (data ?? []) as { week: number; home_team: string; away_team: string; start_time: string | null; status: string | null }[]
+    },
+    staleTime: 15 * 60_000,
+  })
+
+  // CFB team name -> real ESPN abbreviation (e.g. "Ole Miss" -> "MISS")
+  // - not derivable algorithmically, so fetched once from ESPN's own
+  // team list (see getCfbTeamAbbrMap) rather than hand-maintained.
+  const { data: cfbTeamAbbrs } = useQuery({
+    queryKey: ['cfb-team-abbrs'],
+    queryFn: getCfbTeamAbbrMap,
+    staleTime: 24 * 60 * 60_000,
+    gcTime: 24 * 60 * 60_000,
   })
 
   // Real platform-wide ownership: what fraction of THIS app's fantasy
@@ -482,6 +510,8 @@ export function RosterView() {
                 league={activeLeague ?? null}
                 week={week}
                 seasonGames={seasonGames}
+                cfbSeasonGames={cfbSeasonGames}
+                cfbTeamAbbrs={cfbTeamAbbrs}
                 ownership={ownership}
                     moving={moving}
                     locked={rosterLocked}
@@ -508,6 +538,8 @@ export function RosterView() {
                 league={activeLeague ?? null}
                 week={week}
                 seasonGames={seasonGames}
+                cfbSeasonGames={cfbSeasonGames}
+                cfbTeamAbbrs={cfbTeamAbbrs}
                 ownership={ownership}
                     moving={moving}
                     locked={rosterLocked}
@@ -552,6 +584,8 @@ export function RosterView() {
                 league={activeLeague ?? null}
                 week={week}
                 seasonGames={seasonGames}
+                cfbSeasonGames={cfbSeasonGames}
+                cfbTeamAbbrs={cfbTeamAbbrs}
                 ownership={ownership}
                       moving={weekMoving}
                       locked={false}
@@ -584,6 +618,8 @@ export function RosterView() {
                 league={activeLeague ?? null}
                 week={week}
                 seasonGames={seasonGames}
+                cfbSeasonGames={cfbSeasonGames}
+                cfbTeamAbbrs={cfbTeamAbbrs}
                 ownership={ownership}
                       moving={weekMoving}
                       locked={false}
@@ -614,6 +650,8 @@ export function RosterView() {
                 league={activeLeague ?? null}
                 week={week}
                 seasonGames={seasonGames}
+                cfbSeasonGames={cfbSeasonGames}
+                cfbTeamAbbrs={cfbTeamAbbrs}
                 ownership={ownership}
                 moving={moving}
                 locked={rosterLocked}
@@ -643,6 +681,8 @@ export function RosterView() {
                 league={activeLeague ?? null}
                 week={week}
                 seasonGames={seasonGames}
+                cfbSeasonGames={cfbSeasonGames}
+                cfbTeamAbbrs={cfbTeamAbbrs}
                 ownership={ownership}
                 moving={moving}
                 locked={rosterLocked}
@@ -749,7 +789,7 @@ function WeekPicker({
 }
 
 function RosterSlotRow({
-  slot, entry, actualPoints, league, week, seasonGames, ownership, moving, locked, readOnly, blockTargeting, onMove, onDropToSlot, onDrop, dropLabel,
+  slot, entry, actualPoints, league, week, seasonGames, cfbSeasonGames, cfbTeamAbbrs, ownership, moving, locked, readOnly, blockTargeting, onMove, onDropToSlot, onDrop, dropLabel,
 }: {
   slot: SlotDef
   entry: RosterEntryWithPlayer | undefined
@@ -757,6 +797,8 @@ function RosterSlotRow({
   league: League | null
   week: number
   seasonGames: (WeekGame & { game_date: string | null; status: string | null })[]
+  cfbSeasonGames: { week: number; home_team: string; away_team: string; start_time: string | null; status: string | null }[]
+  cfbTeamAbbrs?: Map<string, string>
   ownership?: { totalTeams: number; rostered: Map<number, number>; started: Map<number, number> }
   moving: RosterEntryWithPlayer | null
   locked: boolean
@@ -777,24 +819,43 @@ function RosterSlotRow({
   const [expanded, setExpanded] = useState(false)
   const [imgError, setImgError] = useState(false)
 
-  // "Wed 8:15 PM vs KC (10)" style line — NFL only (see the
-  // seasonGames query comment for why CFB doesn't get one). Bye week
-  // number comes from the same season schedule, not a separate table.
+  // "Wed 8:15 PM vs KC (10)" style line. NFL uses the full pre-synced
+  // season schedule, so an absent game confidently means "bye" (with
+  // a real bye-week number). CFB uses live_games instead, which only
+  // gets populated a short time ahead of each week (see the
+  // cfbSeasonGames query comment) - an absent CFB game just means
+  // "no data for that week yet", not a confirmed bye, so CFB never
+  // claims a bye week, only ever shows a real game when one exists.
   const gameInfo = useMemo(() => {
-    // Guard against the schedule query's brief pre-load window - with
-    // zero games loaded yet, byeWeeksForTeam would otherwise call
-    // every team on bye every week (no games = no weeks playing).
-    if (!player || player.league !== 'NFL' || !player.team || seasonGames.length === 0) return null
-    const abbr = teamAbbr(player.team)
-    const byeWeek = byeWeeksForTeam(seasonGames, abbr)[0] ?? null
-    const thisWeekGame = seasonGames.find(g => g.week === week && (g.home_team === abbr || g.away_team === abbr))
-    if (!thisWeekGame) return { abbr, byeWeek, isBye: true as const, dateLabel: '', matchup: byeWeek ? `Bye Week ${byeWeek}` : 'Bye' }
-    const opp = thisWeekGame.home_team === abbr ? thisWeekGame.away_team : thisWeekGame.home_team
-    const prefix = thisWeekGame.home_team === abbr ? 'vs' : '@'
-    const dt = thisWeekGame.game_date ? new Date(thisWeekGame.game_date) : null
+    if (!player || !player.team) return null
+
+    if (player.league === 'NFL') {
+      // Guard against the schedule query's brief pre-load window -
+      // with zero games loaded yet, byeWeeksForTeam would otherwise
+      // call every team on bye every week (no games = no weeks playing).
+      if (seasonGames.length === 0) return null
+      const abbr = teamAbbr(player.team)
+      const byeWeek = byeWeeksForTeam(seasonGames, abbr)[0] ?? null
+      const g = seasonGames.find(g => g.week === week && (g.home_team === abbr || g.away_team === abbr))
+      if (!g) return { abbr, byeWeek, isBye: true as const, dateLabel: '', matchup: byeWeek ? `Bye Week ${byeWeek}` : 'Bye' }
+      const opp = g.home_team === abbr ? g.away_team : g.home_team
+      const prefix = g.home_team === abbr ? 'vs' : '@'
+      const dt = g.game_date ? new Date(g.game_date) : null
+      const dateLabel = dt ? dt.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : ''
+      return { abbr, byeWeek, isBye: false as const, dateLabel, matchup: `${prefix} ${opp}` }
+    }
+
+    // CFB
+    const abbr = cfbTeamAbbrs?.get(player.team)
+    if (!abbr) return null
+    const g = cfbSeasonGames.find(g => g.week === week && (g.home_team === abbr || g.away_team === abbr))
+    if (!g) return null
+    const opp = g.home_team === abbr ? g.away_team : g.home_team
+    const prefix = g.home_team === abbr ? 'vs' : '@'
+    const dt = g.start_time ? new Date(g.start_time) : null
     const dateLabel = dt ? dt.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : ''
-    return { abbr, byeWeek, isBye: false as const, dateLabel, matchup: `${prefix} ${opp}` }
-  }, [player, seasonGames, week])
+    return { abbr, byeWeek: null, isBye: false as const, dateLabel, matchup: `${prefix} ${opp}` }
+  }, [player, seasonGames, cfbSeasonGames, cfbTeamAbbrs, week])
 
   const rosteredPct = player && ownership?.totalTeams
     ? Math.round(((ownership.rostered.get(player.id) ?? 0) / ownership.totalTeams) * 100)

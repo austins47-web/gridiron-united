@@ -186,6 +186,22 @@ serve(async (req) => {
       const teamId = endpoint.split('/')[3]
       data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=${teamId}&limit=25`)
 
+    } else if (endpoint === 'cfb/teams-list') {
+      // Full FBS team list (id, names, real ESPN abbreviation) in one
+      // call — used to map a CFB player's stored team name (their
+      // shortDisplayName, e.g. "Ole Miss") to the actual abbreviation
+      // ESPN's live scoreboard/game data uses (e.g. "MISS"), since
+      // that abbreviation isn't derivable from the name algorithmically
+      // and nothing else in this app stores it for CFB.
+      const json = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?groups=80&limit=300')
+      const teams = (json?.sports?.[0]?.leagues?.[0]?.teams ?? []).map((t: any) => ({
+        id: t.team?.id,
+        location: t.team?.location,
+        shortDisplayName: t.team?.shortDisplayName,
+        abbreviation: t.team?.abbreviation,
+      }))
+      data = { teams }
+
     } else if (endpoint.startsWith('cfb/teams/') && endpoint.endsWith('/roster')) {
       const teamId = endpoint.split('/')[2]
       data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${teamId}/roster`)
