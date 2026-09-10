@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
-import { X, Newspaper, BarChart2, User, ExternalLink, AlertTriangle, Link2 } from 'lucide-react'
+import { X, Newspaper, BarChart2, User, ExternalLink, AlertTriangle, Link2, TrendingUp } from 'lucide-react'
 import clsx from 'clsx'
 import type { Player } from '@/types/database'
 import { useAppStore } from '@/store/appStore'
 import { useMyRoster } from '@/hooks/useRoster'
+import { supabase } from '@/lib/supabase'
 
 // ── Helpers ───────────────────────────────────────────────────
 function toEspnId(player: Player): number {
@@ -67,6 +68,67 @@ function extractSeasonStats(data: any): { stats: Array<{ label: string; value: s
     })
   }
   return { stats: out, season }
+}
+
+// Same scoring formula the backend projection/blend pipeline uses
+// (supabase/functions/sync-nfl-projections, sync-cfb-projections,
+// the blend-and-rank-projections cron) - kept in sync deliberately so
+// a game's fantasy point total here always matches what that game
+// actually contributed to the player's rolling avg_pts.
+function gameFantasyPoints(s: Record<string, number | null>): number {
+  const n = (v: number | null | undefined) => v ?? 0
+  return (
+    n(s.pass_yards) * 0.04 + n(s.pass_tds) * 4 + n(s.pass_ints) * -2 +
+    n(s.rush_yards) * 0.1  + n(s.rush_tds) * 6 +
+    n(s.rec_yards)  * 0.1  + n(s.rec_tds)  * 6 + n(s.receptions) * 0.5 +
+    n(s.fg_0_39) * 3 + n(s.fg_40_49) * 4 + n(s.fg_50_plus) * 5 + n(s.pat_made) * 1 + n(s.fg_miss) * -1
+  )
+}
+
+interface GameLog {
+  week: number
+  status: string | null
+  startTime: string | null
+  points: number
+  statLine: string
+}
+
+async function fetchGameLog(player: Player): Promise<GameLog[]> {
+  const espnId = toEspnId(player)
+  const season = new Date().getFullYear()
+  const { data, error } = await supabase
+    .from('live_player_stats')
+    .select('week, pass_yards, pass_tds, pass_ints, pass_attempts, pass_completions, rush_yards, rush_tds, rush_attempts, rec_yards, rec_tds, receptions, targets, fg_0_39, fg_40_49, fg_50_plus, fg_miss, pat_made, live_games(status, start_time)')
+    .eq('espn_athlete_id', espnId)
+    .eq('league', player.league)
+    .eq('season', season)
+    .order('week', { ascending: true })
+
+  if (error || !data) return []
+
+  return data.map((row: any) => {
+    const points = gameFantasyPoints(row)
+    let statLine = ''
+    if (player.pos === 'QB') {
+      statLine = `${row.pass_completions ?? 0}/${row.pass_attempts ?? 0}, ${row.pass_yards ?? 0} YDS, ${row.pass_tds ?? 0} TD, ${row.pass_ints ?? 0} INT`
+      if (row.rush_yards) statLine += ` · ${row.rush_yards} RUSH YDS`
+    } else if (player.pos === 'RB') {
+      statLine = `${row.rush_attempts ?? 0} CAR, ${row.rush_yards ?? 0} YDS, ${row.rush_tds ?? 0} TD`
+      if (row.receptions) statLine += ` · ${row.receptions} REC, ${row.rec_yards ?? 0} YDS`
+    } else if (player.pos === 'WR' || player.pos === 'TE') {
+      statLine = `${row.receptions ?? 0} REC (${row.targets ?? 0} TGT), ${row.rec_yards ?? 0} YDS, ${row.rec_tds ?? 0} TD`
+    } else if (player.pos === 'K') {
+      const fgMade = (row.fg_0_39 ?? 0) + (row.fg_40_49 ?? 0) + (row.fg_50_plus ?? 0)
+      statLine = `${fgMade}/${fgMade + (row.fg_miss ?? 0)} FG, ${row.pat_made ?? 0} XP`
+    }
+    return {
+      week: row.week,
+      status: row.live_games?.status ?? null,
+      startTime: row.live_games?.start_time ?? null,
+      points,
+      statLine,
+    }
+  })
 }
 
 // ── Types ─────────────────────────────────────────────────────
@@ -175,7 +237,7 @@ const CLASS_SHORT: Record<string, string> = {
 }
 
 // ── Component ─────────────────────────────────────────────────
-type Tab = 'overview' | 'stats' | 'news'
+type Tab = 'overview' | 'fantasy' | 'stats' | 'news'
 
 export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: Player; onClose: () => void; onTeamClick?: () => void }) {
   const [tab, setTab]       = useState<Tab>('overview')
@@ -213,6 +275,13 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
     queryFn:  () => fetchProfile(player),
     staleTime: 5 * 60_000,
     retry: 1,
+  })
+
+  const { data: gameLog = [], isLoading: gameLogLoading } = useQuery({
+    queryKey: ['player-game-log', player.id],
+    queryFn:  () => fetchGameLog(player),
+    staleTime: 2 * 60_000,
+    enabled: tab === 'fantasy',
   })
 
   // Pull player news from already-cached global feeds — no extra API call
@@ -357,6 +426,7 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
         <div className="flex border-b border-field-700 shrink-0">
           {([
             { id: 'overview', label: 'Overview', icon: User },
+            { id: 'fantasy',  label: 'Fantasy',  icon: TrendingUp },
             { id: 'stats',    label: 'Stats',    icon: BarChart2 },
             { id: 'news',     label: 'News',     icon: Newspaper },
           ] as { id: Tab; label: string; icon: any }[]).map(({ id, label, icon: Icon }) => (
@@ -445,6 +515,67 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* Fantasy — per-game points this season */}
+          {tab === 'fantasy' && (
+            <div className="p-5">
+              {gameLogLoading ? dots : gameLog.length === 0 ? (
+                <div className="text-center py-16 text-field-400">
+                  <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">No games played yet this season.</p>
+                </div>
+              ) : (
+                <div>
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="bg-field-800 rounded-xl p-3 text-center border border-field-700">
+                      <div className="font-cond font-black text-2xl text-white">
+                        {(gameLog.reduce((sum, g) => sum + g.points, 0) / gameLog.length).toFixed(1)}
+                      </div>
+                      <div className="text-[12px] text-field-400 font-bold uppercase tracking-wider mt-0.5">Avg / Game</div>
+                    </div>
+                    <div className="bg-field-800 rounded-xl p-3 text-center border border-field-700">
+                      <div className="font-cond font-black text-2xl text-white">
+                        {gameLog.reduce((sum, g) => sum + g.points, 0).toFixed(1)}
+                      </div>
+                      <div className="text-[12px] text-field-400 font-bold uppercase tracking-wider mt-0.5">Total Pts</div>
+                    </div>
+                  </div>
+
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-field-400 mb-3">Game Log</h3>
+                  <div className="bg-field-800 rounded-xl border border-field-700 divide-y divide-field-700/60">
+                    {gameLog.map((g) => (
+                      <div key={g.week} className="flex items-center justify-between px-4 py-3 gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-white">Week {g.week}</span>
+                            {g.status && g.status !== 'final' && (
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-gold bg-gold/10 px-1.5 py-0.5 rounded">
+                                {g.status === 'in' ? 'Live' : g.status}
+                              </span>
+                            )}
+                            {g.startTime && (
+                              <span className="text-[12px] text-field-500">
+                                {new Date(g.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+                          {g.statLine && (
+                            <div className="text-xs text-field-400 mt-0.5 truncate">{g.statLine}</div>
+                          )}
+                        </div>
+                        <div className={clsx(
+                          'font-cond font-black text-xl shrink-0',
+                          g.points > 0 ? 'text-white' : 'text-field-500',
+                        )}>
+                          {g.points.toFixed(1)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
