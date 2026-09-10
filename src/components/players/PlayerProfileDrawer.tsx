@@ -40,14 +40,22 @@ async function proxyFetch(endpoint: string) {
 // this used to assume, so every category's stats always silently
 // came back empty regardless of whether ESPN actually had data.
 // Picks whichever season is actually most recent for that category,
-// same as the backend projections sync does for the same endpoint.
-function extractSeasonStats(data: any): Array<{ label: string; value: string }> {
-  if (!data?.categories) return []
+// same as the backend projections sync does for the same endpoint -
+// ESPN's data here lags behind the real calendar (a season barely
+// underway has no meaningful stats yet, so "most recent" is often
+// last season's completed numbers), so the actual year picked is
+// returned too rather than assumed, to label the section honestly
+// instead of a hardcoded "this year" that was quietly showing last
+// season's full totals under the wrong label.
+function extractSeasonStats(data: any): { stats: Array<{ label: string; value: string }>; season: number | null } {
+  if (!data?.categories) return { stats: [], season: null }
   const out: Array<{ label: string; value: string }> = []
+  let season: number | null = null
   for (const cat of data.categories) {
     const rows: any[] = (cat.statistics ?? []).filter((s: any) => s.season?.year && s.stats)
     if (!rows.length) continue
     const latest = rows.reduce((a, b) => (b.season.year > a.season.year ? b : a))
+    if (season === null || latest.season.year > season) season = latest.season.year
     const names: string[] = cat.names ?? []
     const displayNames: string[] = cat.displayNames ?? names
     const vals: string[] = latest.stats ?? []
@@ -58,7 +66,7 @@ function extractSeasonStats(data: any): Array<{ label: string; value: string }> 
       out.push({ label: displayNames[i] ?? key, value: String(val) })
     })
   }
-  return out
+  return { stats: out, season }
 }
 
 // ── Types ─────────────────────────────────────────────────────
@@ -74,6 +82,7 @@ interface AthleteProfile {
   birthPlace?: string
   college?: string
   stats: Array<{ label: string; value: string }>
+  statsSeason: number | null
 }
 
 interface NewsItem { title: string; url: string; published: string; desc: string }
@@ -85,7 +94,8 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
     const espnId = toEspnId(player)
     const BASE = `https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/athletes/${espnId}`
 
-    const stats: Array<{ label: string; value: string }> = []
+    let stats: Array<{ label: string; value: string }> = []
+    let statsSeason: number | null = null
     let jersey: string | undefined, age: number | undefined
     let height: string | undefined, weight: string | undefined
     let birthPlace: string | undefined, college: string | undefined
@@ -94,7 +104,9 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
       fetch(`${BASE}/stats`).then(async r => {
         if (!r.ok) return
         const sd = await r.json()
-        stats.push(...extractSeasonStats(sd))
+        const extracted = extractSeasonStats(sd)
+        stats = extracted.stats
+        statsSeason = extracted.season
       }),
       fetch(BASE).then(async r => {
         if (!r.ok) return
@@ -107,17 +119,20 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
       }),
     ])
 
-    return { displayName: player.name, jersey, position: player.pos, team: player.team, age, height, weight, birthPlace, college, stats }
+    return { displayName: player.name, jersey, position: player.pos, team: player.team, age, height, weight, birthPlace, college, stats, statsSeason }
   }
 
   const espnId = toEspnId(player)
   const data = await proxyFetch(`athlete/NFL/${espnId}`)
   const a = data.athlete ?? data
 
-  const stats: Array<{ label: string; value: string }> = []
+  let stats: Array<{ label: string; value: string }> = []
+  let statsSeason: number | null = null
   try {
     const sd = await proxyFetch(`athlete/stats/NFL/${espnId}`)
-    stats.push(...extractSeasonStats(sd))
+    const extracted = extractSeasonStats(sd)
+    stats = extracted.stats
+    statsSeason = extracted.season
   } catch { /* pre-season */ }
 
   const bp = a.birthPlace
@@ -134,6 +149,7 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
     birthPlace:  bp?.city ? `${bp.city}${bp.state ? ', ' + bp.state : bp.country ? ', ' + bp.country : ''}` : undefined,
     college:     typeof a.college === 'string' ? a.college : a.college?.name ?? a.college?.displayName,
     stats,
+    statsSeason,
   }
 }
 
@@ -446,7 +462,9 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
                 </div>
               ) : (
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-field-400 mb-3">2026 Season Stats</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-field-400 mb-3">
+                    {profile?.statsSeason ? `${profile.statsSeason} Season Stats` : 'Season Stats'}
+                  </h3>
                   <div className="bg-field-800 rounded-xl border border-field-700 divide-y divide-field-700/60">
                     {profile.stats.map(({ label, value }) => (
                       <div key={label} className="flex items-center justify-between px-4 py-2.5">
