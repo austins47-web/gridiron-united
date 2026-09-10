@@ -14,7 +14,7 @@ import { WeekRecap, WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
 import {
-  Trophy, ChevronDown, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp, Shuffle,
+  Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp, Shuffle,
   TrendingDown, Home, Plane, Award
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -1038,6 +1038,8 @@ export function PickEmView() {
           weekRows={weekRows}
           userId={user?.id}
           deadline={weekDeadline}
+          week={week}
+          onWeekChange={setWeek}
         />
       )}
     </div>
@@ -1651,7 +1653,7 @@ function PicksChart({
 // pinned while the game columns scroll horizontally.
 
 function PicksBoard({
-  games, allPicks, leagueMembers, weekRows, userId, deadline,
+  games, allPicks, leagueMembers, weekRows, userId, deadline, week, onWeekChange,
 }: {
   games: any[]
   allPicks: any[]
@@ -1659,15 +1661,9 @@ function PicksBoard({
   weekRows: { userId: string; correct: number; played: number }[]
   userId: string | undefined
   deadline: string | null
+  week: number
+  onWeekChange: (week: number) => void
 }) {
-  if (games.length === 0) {
-    return (
-      <div className="panel text-center py-8">
-        <p className="text-field-400">No games scheduled this week</p>
-      </div>
-    )
-  }
-
   const now = new Date()
   const sortedGames = [...games].sort(
     (a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime()
@@ -1687,13 +1683,45 @@ function PicksBoard({
   const isPickVisible = (game: any, memberId: string) =>
     memberId === userId || isGameRevealed(game)
 
-  const sortedMembers = [...leagueMembers].sort((a, b) => {
-    if (a.user_id === userId) return -1
-    if (b.user_id === userId) return 1
-    const nameA = a.team_name || a.profile?.display_name || a.profile?.username || ''
-    const nameB = b.team_name || b.profile?.display_name || b.profile?.username || ''
-    return nameA.localeCompare(nameB)
-  })
+  // Ranked most-correct to least, ties broken by closest tiebreaker
+  // guess — weekRows already comes out of computeWeek in exactly
+  // that order, so members just need to be reordered to match it
+  // rather than re-deriving the same tie-break rules here.
+  const memberByUserId = new Map(leagueMembers.map((m: any) => [m.user_id, m]))
+  const sortedMembers = weekRows
+    .map(r => memberByUserId.get(r.userId))
+    .filter(Boolean) as any[]
+
+  const weekNav = (
+    <div className="flex items-center justify-between px-3 py-2 border-b border-field-700 bg-field-800/60">
+      <button
+        onClick={() => onWeekChange(Math.max(1, week - 1))}
+        disabled={week <= 1}
+        className="text-field-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </button>
+      <span className="font-cond font-black text-sm text-white uppercase tracking-wider">
+        {week === 19 ? 'Wild Card' : week === 20 ? 'Divisional' : week === 21 ? 'Conf. Champ.' : week === 22 ? 'Super Bowl' : `Week ${week}`}
+      </span>
+      <button
+        onClick={() => onWeekChange(Math.min(22, week + 1))}
+        disabled={week >= 22}
+        className="text-field-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        <ChevronRight className="w-4 h-4" />
+      </button>
+    </div>
+  )
+
+  if (games.length === 0) {
+    return (
+      <div className="panel p-0 overflow-hidden text-center">
+        {weekNav}
+        <p className="text-field-400 py-8">No games scheduled this week</p>
+      </div>
+    )
+  }
 
   const pickMap: Record<string, Record<string, string>> = {}
   allPicks.forEach((p: any) => {
@@ -1711,7 +1739,9 @@ function PicksBoard({
   }
 
   return (
-    <div className="panel p-0 overflow-x-auto">
+    <div className="panel p-0 overflow-hidden">
+      {weekNav}
+      <div className="overflow-x-auto">
       <table className="border-collapse text-xs w-full">
         <thead>
           <tr className="border-b border-field-700">
@@ -1750,7 +1780,7 @@ function PicksBoard({
           </tr>
         </thead>
         <tbody>
-          {sortedMembers.map(m => {
+          {sortedMembers.map((m, i) => {
             const isMe = m.user_id === userId
             const displayName = isMe ? 'You' : (m.team_name || m.profile?.display_name || m.profile?.username || '?')
             const pts = ptsByUser.get(m.user_id)
@@ -1762,6 +1792,7 @@ function PicksBoard({
                   isMe && 'border-l-2 border-gold',
                 )}>
                   <div className="flex items-center gap-2">
+                    <span className="text-field-500 text-[11px] w-3 shrink-0">{i + 1}</span>
                     <div className="w-6 h-6 rounded-full bg-field-700 flex items-center justify-center text-[10px] font-bold text-gold overflow-hidden shrink-0">
                       {m.profile?.avatar_url
                         ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
@@ -1817,6 +1848,7 @@ function PicksBoard({
           )}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
