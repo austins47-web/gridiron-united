@@ -10,8 +10,9 @@ import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { buildSlotDefs, canFillSlot } from '@/types/database'
 import type { RosterEntryWithPlayer } from '@/hooks/useRoster'
-import type { SlotDef } from '@/types/database'
-import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronLeft, ChevronRight, RotateCcw, Lock } from 'lucide-react'
+import type { SlotDef, League, Player } from '@/types/database'
+import { usePlayerWeeklyLog } from '@/hooks/usePlayerWeeklyLog'
+import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronLeft, ChevronRight, RotateCcw, Lock, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -441,6 +442,7 @@ export function RosterView() {
                     slot={slot}
                     entry={rosterBySlot.get(slot.key)}
                     actualPoints={pointsByRosterId}
+                league={activeLeague ?? null}
                     moving={moving}
                     locked={rosterLocked}
                     onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -463,6 +465,7 @@ export function RosterView() {
                     slot={slot}
                     entry={rosterBySlot.get(slot.key)}
                     actualPoints={pointsByRosterId}
+                league={activeLeague ?? null}
                     moving={moving}
                     locked={rosterLocked}
                     onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -493,6 +496,7 @@ export function RosterView() {
                       slot={slot}
                       entry={entry}
                       actualPoints={pointsByRosterId}
+                league={activeLeague ?? null}
                       moving={weekMoving}
                       locked={false}
                       readOnly={isPastWeek}
@@ -521,6 +525,7 @@ export function RosterView() {
                       slot={slot}
                       entry={entry}
                       actualPoints={pointsByRosterId}
+                league={activeLeague ?? null}
                       moving={weekMoving}
                       locked={false}
                       readOnly={isPastWeek}
@@ -547,6 +552,7 @@ export function RosterView() {
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
                 actualPoints={pointsByRosterId}
+                league={activeLeague ?? null}
                 moving={moving}
                 locked={rosterLocked}
                 onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -572,6 +578,7 @@ export function RosterView() {
                 slot={slot}
                 entry={rosterBySlot.get(slot.key)}
                 actualPoints={pointsByRosterId}
+                league={activeLeague ?? null}
                 moving={moving}
                 locked={rosterLocked}
                 onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -620,11 +627,12 @@ export function RosterView() {
 }
 
 function RosterSlotRow({
-  slot, entry, actualPoints, moving, locked, readOnly, blockTargeting, onMove, onDropToSlot, onDrop, dropLabel,
+  slot, entry, actualPoints, league, moving, locked, readOnly, blockTargeting, onMove, onDropToSlot, onDrop, dropLabel,
 }: {
   slot: SlotDef
   entry: RosterEntryWithPlayer | undefined
   actualPoints: Map<string, { points: number | null; stats: any | null }>
+  league: League | null
   moving: RosterEntryWithPlayer | null
   locked: boolean
   readOnly?: boolean
@@ -641,6 +649,7 @@ function RosterSlotRow({
   dropLabel?: string
 }) {
   const player = entry?.player
+  const [expanded, setExpanded] = useState(false)
 
   // Is this a valid target for the player being moved?
   const isValidTarget = !blockTargeting && moving && canFillSlot(slot, moving.player?.pos as any, moving.player?.league as any)
@@ -664,6 +673,7 @@ function RosterSlotRow({
   }
 
   return (
+    <>
     <div
       onClick={handleClick}
       className={clsx(
@@ -748,6 +758,17 @@ function RosterSlotRow({
         )
       })()}
 
+      {/* Week-by-week breakdown toggle */}
+      {player && !moving && (
+        <button
+          className="btn-ghost !py-1 !px-1.5 text-field-500 hover:text-white shrink-0"
+          onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
+          title={expanded ? 'Hide week-by-week' : 'Show week-by-week'}
+        >
+          <ChevronDown className={clsx('w-3.5 h-3.5 transition-transform', expanded && 'rotate-180')} />
+        </button>
+      )}
+
       {/* Actions — only shown when NOT in move mode */}
       {entry && !moving && !readOnly && (
         <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -771,6 +792,61 @@ function RosterSlotRow({
           )}
         </div>
       )}
+    </div>
+
+    {expanded && player && <WeeklyBreakdown player={player} league={league} />}
+    </>
+  )
+}
+
+// Full-season, week-by-week Proj/Actual for one player, shown inline
+// when a roster row is expanded — the top-of-page totals are only a
+// sum for whichever single week is selected, this is every week at
+// once. Proj is the same flat per-game number every week (there's no
+// week-varying projection model), Actual is real and pulled from
+// live_player_stats via usePlayerWeeklyLog, using the league's own
+// scoring rules so it always matches what the row above shows for
+// the currently selected week.
+function WeeklyBreakdown({ player, league }: { player: Player; league: League | null }) {
+  const { data: byWeek, isLoading } = usePlayerWeeklyLog(player, league, true)
+  const weeks = Array.from({ length: REGULAR_SEASON_WEEKS }, (_, i) => i + 1)
+
+  return (
+    <div className="mx-2 mb-2 -mt-1 bg-field-900/70 border border-field-700/60 rounded-lg overflow-x-auto">
+      <table className="text-xs w-full border-collapse">
+        <thead>
+          <tr>
+            <th className="text-left text-field-500 font-bold uppercase px-2 py-1.5 sticky left-0 bg-field-900/70">Week</th>
+            {weeks.map(w => (
+              <th key={w} className="text-center text-field-500 font-bold px-1.5 py-1.5 min-w-[34px]">{w}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t border-field-700/40">
+            <td className="text-field-400 font-bold px-2 py-1.5 sticky left-0 bg-field-900/70">Proj</td>
+            {weeks.map(w => (
+              <td key={w} className="text-center text-white px-1.5 py-1.5 tabular-nums">
+                {player.proj_pts ? player.proj_pts.toFixed(1) : '—'}
+              </td>
+            ))}
+          </tr>
+          <tr className="border-t border-field-700/40">
+            <td className="text-field-400 font-bold px-2 py-1.5 sticky left-0 bg-field-900/70">Actual</td>
+            {weeks.map(w => {
+              const pts = byWeek?.get(w) ?? null
+              return (
+                <td key={w} className={clsx(
+                  'text-center px-1.5 py-1.5 tabular-nums font-bold',
+                  pts !== null ? 'text-nfl' : 'text-field-600',
+                )}>
+                  {isLoading ? '…' : pts !== null ? pts.toFixed(1) : '—'}
+                </td>
+              )
+            })}
+          </tr>
+        </tbody>
+      </table>
     </div>
   )
 }
