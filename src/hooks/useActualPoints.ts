@@ -13,13 +13,25 @@ import type { RosterEntryWithPlayer } from './useRoster'
 // any roster, e.g. an opponent's, for the Matchup tab, and to a full
 // roster including bench for RosterView).
 //
-// NFL and CFB weeks are queried separately since they can genuinely
-// diverge (CFB runs a Week 0 slate NFL doesn't) — a single shared
-// week number would silently return zero stats for every CFB player
-// the moment the two leagues' weeks differ.
-export function useActualPoints(roster: RosterEntryWithPlayer[], league: League | null) {
-  const { data: nflWeek = 1 } = useCurrentWeek()
-  const { data: cfbWeek = 1 } = useCurrentCFBWeek()
+// `week` is the single fantasy-week number (from the round-robin
+// schedule / the Roster week selector) — used for BOTH leagues' stat
+// lookups. NFL and CFB don't share one real-world week clock (CFB
+// runs a Week 0 slate NFL doesn't, and CFB's season is shorter, so it
+// stops advancing while NFL's keeps going), but there's no bespoke
+// week-conversion table between them either, so week N in the
+// fantasy schedule is treated as week N in each league's own
+// live_player_stats/live_games directly — the same assumption the
+// Matchup schedule itself is built on. A CFB player with no game that
+// week (season over, bye) simply has no stat row, which already
+// resolves to points: null ("—") rather than a wrong number.
+//
+// Omit `week` to default to "right now": NFL's live week normally,
+// or CFB's if the league is CFB-only — matches how the Matchup tab
+// picks its own default week.
+export function useActualPoints(roster: RosterEntryWithPlayer[], league: League | null, week?: number) {
+  const { data: liveNflWeek = 1 } = useCurrentWeek()
+  const { data: liveCfbWeek = 1 } = useCurrentCFBWeek()
+  const effectiveWeek = week ?? (league?.player_pool === 'cfb' ? liveCfbWeek : liveNflWeek)
 
   const nflAthleteIds = useMemo(
     () => roster.filter(r => r.player?.league === 'NFL').map(r => r.player?.espn_athlete_id).filter((id): id is number => !!id),
@@ -31,15 +43,15 @@ export function useActualPoints(roster: RosterEntryWithPlayer[], league: League 
   )
 
   const { data: liveStats = [] } = useQuery({
-    queryKey: ['actual-points-stats', nflWeek, cfbWeek, nflAthleteIds, cfbAthleteIds],
+    queryKey: ['actual-points-stats', effectiveWeek, nflAthleteIds, cfbAthleteIds],
     enabled: nflAthleteIds.length > 0 || cfbAthleteIds.length > 0,
     queryFn: async () => {
       const [nflRes, cfbRes] = await Promise.all([
         nflAthleteIds.length > 0
-          ? supabase.from('live_player_stats').select('*').in('espn_athlete_id', nflAthleteIds).eq('league', 'NFL').eq('week', nflWeek)
+          ? supabase.from('live_player_stats').select('*').in('espn_athlete_id', nflAthleteIds).eq('league', 'NFL').eq('week', effectiveWeek)
           : Promise.resolve({ data: [] }),
         cfbAthleteIds.length > 0
-          ? supabase.from('live_player_stats').select('*').in('espn_athlete_id', cfbAthleteIds).eq('league', 'CFB').eq('week', cfbWeek)
+          ? supabase.from('live_player_stats').select('*').in('espn_athlete_id', cfbAthleteIds).eq('league', 'CFB').eq('week', effectiveWeek)
           : Promise.resolve({ data: [] }),
       ])
       return [...(nflRes.data ?? []), ...(cfbRes.data ?? [])]
@@ -89,5 +101,5 @@ export function useActualPoints(roster: RosterEntryWithPlayer[], league: League 
       .reduce((sum, r) => sum + (pointsByRosterId.get(r.id)?.points ?? 0), 0)
   }, [roster, pointsByRosterId])
 
-  return { pointsByRosterId, startersTotal, nflWeek, cfbWeek }
+  return { pointsByRosterId, startersTotal, week: effectiveWeek }
 }

@@ -1,29 +1,71 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useMyRoster, useDropPlayer, useMovePlayer, useRosterRealtime } from '@/hooks/useRoster'
 import { useActualPoints } from '@/hooks/useActualPoints'
+import { useWeekLineup } from '@/hooks/useWeekLineup'
+import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
+import { REGULAR_SEASON_WEEKS } from '@/lib/scheduling'
 import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { buildSlotDefs, canFillSlot } from '@/types/database'
 import type { RosterEntryWithPlayer } from '@/hooks/useRoster'
 import type { SlotDef } from '@/types/database'
-import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X } from 'lucide-react'
+import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronLeft, ChevronRight, RotateCcw, Lock } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
 export function RosterView() {
-  const { activeLeagueId, activeLeague, myMembership } = useAppStore()
+  const { activeLeagueId, activeLeague, myMembership, user } = useAppStore()
   const { data: roster = [], isLoading } = useMyRoster(activeLeagueId)
   const dropPlayer = useDropPlayer(activeLeagueId)
   const movePlayer = useMovePlayer(activeLeagueId)
+  const qc = useQueryClient()
 
   const [confirmDrop, setConfirmDrop] = useState<RosterEntryWithPlayer | null>(null)
   const [moving, setMoving] = useState<RosterEntryWithPlayer | null>(null)
+  const [weekMoving, setWeekMoving] = useState<RosterEntryWithPlayer | null>(null)
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
   const [loadingAI, setLoadingAI] = useState(false)
 
   useRosterRealtime(activeLeagueId)
-  const { pointsByRosterId, startersTotal: totalActual } = useActualPoints(roster, activeLeague)
+
+  // The single fantasy-week number this league is currently on — NFL's
+  // live week normally, CFB's if the league is CFB-only. Matches the
+  // Matchup tab's own default-week logic exactly, since both features
+  // need to agree on what "this week" means. CFB's season is shorter
+  // than NFL's, so late in the year CFB simply stops advancing/has no
+  // games for a given week - that's handled downstream (a CFB player
+  // with no game that week just shows "—" for actual points), not by
+  // any special-casing here.
+  const { data: liveNflWeek = 1 } = useCurrentWeek()
+  const { data: liveCfbWeek = 1 } = useCurrentCFBWeek()
+  const currentWeek = Math.min(Math.max(activeLeague?.player_pool === 'cfb' ? liveCfbWeek : liveNflWeek, 1), REGULAR_SEASON_WEEKS)
+
+  const [week, setWeek] = useState(currentWeek)
+  useEffect(() => { setWeek(currentWeek) }, [currentWeek])
+  const isCurrentWeek = week === currentWeek
+  const isPastWeek = week < currentWeek
+
+  // Viewing/editing a week other than "now": starters + bench are
+  // resolved per-week (see useWeekLineup) instead of the permanent
+  // roster's slot arrangement. IR/CFB Offseason and drop/add stay
+  // permanent-roster-only regardless of which week is selected (see
+  // the section below) - those aren't things you'd ever want "just
+  // for one week".
+  const weekLineup = useWeekLineup(activeLeagueId, user?.id ?? null, week, activeLeague ?? null, roster)
+
+  const displayStarters = isCurrentWeek
+    ? roster.filter(r => !r.slot.startsWith('BN') && !r.slot.startsWith('IR') && !r.slot.startsWith('CFB_OS'))
+    : weekLineup.starters
+
+  // Points are computed for the whole roster (starters + bench), not
+  // just displayStarters, so bench rows can show actual/proj too —
+  // only the team TOTAL is restricted to whoever's actually starting
+  // this specific week.
+  const pointsRoster = isCurrentWeek ? roster : [...weekLineup.starters, ...weekLineup.bench]
+  const { pointsByRosterId } = useActualPoints(pointsRoster, activeLeague, week)
+  const totalActual = displayStarters.reduce((sum, r) => sum + (pointsByRosterId.get(r.id)?.points ?? 0), 0)
 
   if (!activeLeagueId) {
     return (
@@ -42,12 +84,8 @@ export function RosterView() {
   const slots = activeLeague ? buildSlotDefs(activeLeague) : []
   const rosterBySlot = new Map(roster.map(r => [r.slot, r]))
 
-  const totalProj = roster
-    .filter(r => !r.slot.startsWith('BN') && !r.slot.startsWith('IR'))
-    .reduce((sum, r) => sum + (r.player?.proj_pts ?? 0), 0)
-  const totalAvg = roster
-    .filter(r => !r.slot.startsWith('BN') && !r.slot.startsWith('IR'))
-    .reduce((sum, r) => sum + (r.player?.avg_pts ?? 0), 0)
+  const totalProj = displayStarters.reduce((sum, r) => sum + (r.player?.proj_pts ?? 0), 0)
+  const totalAvg = displayStarters.reduce((sum, r) => sum + (r.player?.avg_pts ?? 0), 0)
 
   const handleGetAI = async () => {
     if (!roster.length) return
@@ -105,6 +143,98 @@ export function RosterView() {
     toast.success('Roster updated')
   }
 
+  // ── Weekly lineup handlers (only used while week !== currentWeek) ──
+  const invalidateWeek = () => {
+    qc.invalidateQueries({ queryKey: ['roster-week', activeLeagueId, user?.id, week] })
+  }
+
+  // Copies the currently-resolved starter arrangement into real week-N
+  // rows, the first time a given week is ever edited — everything
+  // after that point modifies those rows directly. A no-op if the
+  // week already has its own rows.
+  const materializeWeek = async () => {
+    if (weekLineup.isMaterialized || !activeLeagueId || !user) return
+    const rows = weekLineup.starters.map(r => ({
+      league_id: activeLeagueId,
+      user_id: user.id,
+      player_id: r.player_id,
+      slot: r.slot,
+      week,
+      acquired_type: 'draft' as const,
+    }))
+    if (rows.length) await supabase.from('rosters').insert(rows)
+  }
+
+  const handleWeekMoveToSlot = async (targetSlot: SlotDef) => {
+    if (!weekMoving || !activeLeagueId || !user) return
+    const movingEntry = weekMoving
+    setWeekMoving(null)
+
+    const pos = movingEntry.player?.pos
+    const lg = movingEntry.player?.league
+    if (!pos || !canFillSlot(targetSlot, pos as any, lg as any)) {
+      toast.error(`${pos} can't play in ${targetSlot.label} slot`)
+      return
+    }
+
+    const existingInTarget = weekLineup.starters.find(s => s.slot === targetSlot.key)
+    const movingIsCurrentStarter = weekLineup.starters.some(s => s.player_id === movingEntry.player_id)
+    if (existingInTarget?.player_id === movingEntry.player_id) return // no-op, already there
+
+    await materializeWeek()
+
+    const deleteSlot = (slot: string) =>
+      supabase.from('rosters').delete()
+        .eq('league_id', activeLeagueId).eq('user_id', user.id).eq('week', week).eq('slot', slot)
+    const insertSlots = (rows: Array<{ player_id: number; slot: string }>) =>
+      supabase.from('rosters').insert(rows.map(r => ({
+        league_id: activeLeagueId, user_id: user.id, player_id: r.player_id, slot: r.slot, week, acquired_type: 'draft' as const,
+      })))
+    const updateSlot = (fromSlot: string, toSlot: string) =>
+      supabase.from('rosters').update({ slot: toSlot })
+        .eq('league_id', activeLeagueId).eq('user_id', user.id).eq('week', week).eq('slot', fromSlot)
+
+    if (movingIsCurrentStarter) {
+      if (existingInTarget) {
+        // Swap two starter slots this week
+        await deleteSlot(movingEntry.slot)
+        await deleteSlot(targetSlot.key)
+        await insertSlots([
+          { player_id: existingInTarget.player_id, slot: movingEntry.slot },
+          { player_id: movingEntry.player_id, slot: targetSlot.key },
+        ])
+      } else {
+        await updateSlot(movingEntry.slot, targetSlot.key)
+      }
+    } else {
+      // Bench player starting this week — bench whoever's currently
+      // in the target slot first (delete their week-N row), then
+      // place the mover there.
+      if (existingInTarget) await deleteSlot(targetSlot.key)
+      await insertSlots([{ player_id: movingEntry.player_id, slot: targetSlot.key }])
+    }
+
+    invalidateWeek()
+    toast.success(`Lineup set for Week ${week}`)
+  }
+
+  const handleBenchThisWeek = async (entry: RosterEntryWithPlayer) => {
+    if (!activeLeagueId || !user) return
+    await materializeWeek()
+    await supabase.from('rosters').delete()
+      .eq('league_id', activeLeagueId).eq('user_id', user.id).eq('week', week).eq('slot', entry.slot)
+    invalidateWeek()
+    toast.success(`Benched for Week ${week}`)
+  }
+
+  const handleResetWeek = async () => {
+    if (!activeLeagueId || !user) return
+    await supabase.from('rosters').delete()
+      .eq('league_id', activeLeagueId).eq('user_id', user.id).eq('week', week)
+    invalidateWeek()
+    toast.success(`Week ${week} reverted to your default lineup`)
+  }
+
   // Sections
   const starterSlots = slots.filter(s => s.type === 'starter' || s.type === 'flex')
   const benchSlots   = slots.filter(s => s.type === 'bench')
@@ -156,6 +286,47 @@ export function RosterView() {
           </div>
         </div>
       </div>
+
+      {/* Week selector */}
+      <div className="flex items-center justify-between gap-3 bg-field-800 border border-field-700 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2">
+          <button className="btn-ghost !py-1 !px-2" disabled={week <= 1} onClick={() => setWeek(w => Math.max(1, w - 1))}>
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm font-bold text-white w-24 text-center">
+            Week {week}{isCurrentWeek && <span className="text-nfl"> · Now</span>}
+          </span>
+          <button className="btn-ghost !py-1 !px-2" disabled={week >= REGULAR_SEASON_WEEKS} onClick={() => setWeek(w => Math.min(REGULAR_SEASON_WEEKS, w + 1))}>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+        {!isCurrentWeek && isPastWeek && (
+          <span className="flex items-center gap-1.5 text-xs text-field-500">
+            <Lock className="w-3 h-3" /> Past week — view only
+          </span>
+        )}
+        {!isCurrentWeek && !isPastWeek && weekLineup.isMaterialized && (
+          <button className="btn-ghost !py-1 !px-2 text-xs text-field-400 hover:text-white flex items-center gap-1.5" onClick={handleResetWeek}>
+            <RotateCcw className="w-3.5 h-3.5" /> Reset to default
+          </button>
+        )}
+      </div>
+
+      {/* Weekly lineup move mode banner */}
+      {weekMoving && (
+        <div className="bg-gold/10 border border-gold/40 rounded-lg px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ArrowLeftRight className="w-4 h-4 text-gold" />
+            <span className="text-gold font-bold text-sm">
+              Moving <span className="text-white">{weekMoving.player?.name}</span>
+              {' '}for Week {week} — click a highlighted slot to place, or cancel
+            </span>
+          </div>
+          <button className="btn-ghost !py-1 !px-2 text-field-400" onClick={() => setWeekMoving(null)}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Move mode banner */}
       {moving && (
@@ -257,48 +428,112 @@ export function RosterView() {
         }
       </div>
 
-      {/* Starters */}
-      {starterSlots.length > 0 && (
-        <div>
-          <div className="text-xs font-bold text-field-400 uppercase tracking-wider mb-2">Starters</div>
-          <div className="grid gap-1">
-            {starterSlots.map(slot => (
-              <RosterSlotRow
-                key={slot.key}
-                slot={slot}
-                entry={rosterBySlot.get(slot.key)}
-                actualPoints={pointsByRosterId}
-                moving={moving}
-                locked={rosterLocked}
-                onMove={(e) => { if (!rosterLocked) setMoving(e) }}
-                onDropToSlot={handleMoveToSlot}
-                onDrop={setConfirmDrop}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {isCurrentWeek ? (
+        <>
+          {/* Starters */}
+          {starterSlots.length > 0 && (
+            <div>
+              <div className="text-xs font-bold text-field-400 uppercase tracking-wider mb-2">Starters</div>
+              <div className="grid gap-1">
+                {starterSlots.map(slot => (
+                  <RosterSlotRow
+                    key={slot.key}
+                    slot={slot}
+                    entry={rosterBySlot.get(slot.key)}
+                    actualPoints={pointsByRosterId}
+                    moving={moving}
+                    locked={rosterLocked}
+                    onMove={(e) => { if (!rosterLocked) setMoving(e) }}
+                    onDropToSlot={handleMoveToSlot}
+                    onDrop={setConfirmDrop}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
-      {/* Bench */}
-      {benchSlots.length > 0 && (
-        <div>
-          <div className="text-xs font-bold text-field-400 uppercase tracking-wider mb-2">Bench</div>
-          <div className="grid gap-1">
-            {benchSlots.map(slot => (
-              <RosterSlotRow
-                key={slot.key}
-                slot={slot}
-                entry={rosterBySlot.get(slot.key)}
-                actualPoints={pointsByRosterId}
-                moving={moving}
-                locked={rosterLocked}
-                onMove={(e) => { if (!rosterLocked) setMoving(e) }}
-                onDropToSlot={handleMoveToSlot}
-                onDrop={setConfirmDrop}
-              />
-            ))}
-          </div>
-        </div>
+          {/* Bench */}
+          {benchSlots.length > 0 && (
+            <div>
+              <div className="text-xs font-bold text-field-400 uppercase tracking-wider mb-2">Bench</div>
+              <div className="grid gap-1">
+                {benchSlots.map(slot => (
+                  <RosterSlotRow
+                    key={slot.key}
+                    slot={slot}
+                    entry={rosterBySlot.get(slot.key)}
+                    actualPoints={pointsByRosterId}
+                    moving={moving}
+                    locked={rosterLocked}
+                    onMove={(e) => { if (!rosterLocked) setMoving(e) }}
+                    onDropToSlot={handleMoveToSlot}
+                    onDrop={setConfirmDrop}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Starters for the selected week — swap-only, no drop; benching
+              here just un-starts a player for this week, it doesn't touch
+              your permanent roster */}
+          {starterSlots.length > 0 && (
+            <div>
+              <div className="text-xs font-bold text-field-400 uppercase tracking-wider mb-2">
+                Starters — Week {week}
+              </div>
+              <div className="grid gap-1">
+                {starterSlots.map(slot => {
+                  const entry = weekLineup.starters.find(s => s.slot === slot.key)
+                  return (
+                    <RosterSlotRow
+                      key={slot.key}
+                      slot={slot}
+                      entry={entry}
+                      actualPoints={pointsByRosterId}
+                      moving={weekMoving}
+                      locked={false}
+                      readOnly={isPastWeek}
+                      onMove={setWeekMoving}
+                      onDropToSlot={handleWeekMoveToSlot}
+                      onDrop={isPastWeek ? undefined : (e) => handleBenchThisWeek(e)}
+                      dropLabel="Bench this week"
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Bench for the selected week — derived, not stored: anyone
+              owned and active who isn't starting this week */}
+          {benchSlots.length > 0 && (
+            <div>
+              <div className="text-xs font-bold text-field-400 uppercase tracking-wider mb-2">Bench</div>
+              <div className="grid gap-1">
+                {benchSlots.map((slot, i) => {
+                  const entry = weekLineup.bench[i]
+                  return (
+                    <RosterSlotRow
+                      key={slot.key}
+                      slot={slot}
+                      entry={entry}
+                      actualPoints={pointsByRosterId}
+                      moving={weekMoving}
+                      locked={false}
+                      readOnly={isPastWeek}
+                      blockTargeting
+                      onMove={setWeekMoving}
+                      onDropToSlot={handleWeekMoveToSlot}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* IR */}
@@ -385,21 +620,30 @@ export function RosterView() {
 }
 
 function RosterSlotRow({
-  slot, entry, actualPoints, moving, locked, onMove, onDropToSlot, onDrop,
+  slot, entry, actualPoints, moving, locked, readOnly, blockTargeting, onMove, onDropToSlot, onDrop, dropLabel,
 }: {
   slot: SlotDef
   entry: RosterEntryWithPlayer | undefined
   actualPoints: Map<string, { points: number | null; stats: any | null }>
   moving: RosterEntryWithPlayer | null
   locked: boolean
+  readOnly?: boolean
+  // Week-view bench rows: clickable to START a move, but never a
+  // valid drop TARGET — week rows only ever represent starter-slot
+  // overrides, so accepting a drop here would write a bench-slot-keyed
+  // row into the week table, breaking that invariant. "Benching" a
+  // starter for the week goes through the dedicated action button
+  // instead (onDrop/dropLabel), not slot-click targeting.
+  blockTargeting?: boolean
   onMove: (e: RosterEntryWithPlayer) => void
   onDropToSlot: (slot: SlotDef) => void
-  onDrop: (e: RosterEntryWithPlayer) => void
+  onDrop?: (e: RosterEntryWithPlayer) => void
+  dropLabel?: string
 }) {
   const player = entry?.player
 
   // Is this a valid target for the player being moved?
-  const isValidTarget = moving && canFillSlot(slot, moving.player?.pos as any, moving.player?.league as any)
+  const isValidTarget = !blockTargeting && moving && canFillSlot(slot, moving.player?.pos as any, moving.player?.league as any)
   // Is this the slot the moving player is currently in? (source)
   const isSource = moving && entry?.id === moving.id
   // Is this an occupied slot we could swap with?
@@ -407,7 +651,7 @@ function RosterSlotRow({
 
   // IR and CFB_OS slots are always moveable even when over roster limit
   const isExemptSlot = slot.type === 'ir' || slot.type === 'cfb_os'
-  const effectiveLocked = locked && !isExemptSlot && !moving
+  const effectiveLocked = (locked && !isExemptSlot && !moving) || !!readOnly
 
   const handleClick = () => {
     if (effectiveLocked) return
@@ -479,7 +723,7 @@ function RosterSlotRow({
       )}
 
       {/* Locked indicator */}
-      {effectiveLocked && entry && (
+      {effectiveLocked && entry && !readOnly && (
         <div className="shrink-0 text-red-400/60 text-xs font-bold px-1" title="Drop a player to unlock moves">
           🔒
         </div>
@@ -505,7 +749,7 @@ function RosterSlotRow({
       })()}
 
       {/* Actions — only shown when NOT in move mode */}
-      {entry && !moving && (
+      {entry && !moving && !readOnly && (
         <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {!effectiveLocked && (
             <button
@@ -516,13 +760,15 @@ function RosterSlotRow({
               <ArrowLeftRight className="w-3.5 h-3.5" />
             </button>
           )}
-          <button
-            className="btn-ghost !py-1 !px-2 text-red-400 hover:text-red-300"
-            onClick={e => { e.stopPropagation(); onDrop(entry) }}
-            title="Drop player"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {onDrop && (
+            <button
+              className="btn-ghost !py-1 !px-2 text-red-400 hover:text-red-300"
+              onClick={e => { e.stopPropagation(); onDrop(entry) }}
+              title={dropLabel ?? 'Drop player'}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       )}
     </div>

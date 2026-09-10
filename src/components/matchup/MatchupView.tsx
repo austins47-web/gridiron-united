@@ -3,6 +3,7 @@ import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
 import { useMyRoster, useRoster } from '@/hooks/useRoster'
 import { useActualPoints } from '@/hooks/useActualPoints'
+import { useWeekLineup } from '@/hooks/useWeekLineup'
 import { useMyMatchups, useLeagueMemberLabels, useMatchupsRealtime } from '@/hooks/useMatchup'
 import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
 import { REGULAR_SEASON_WEEKS } from '@/lib/scheduling'
@@ -37,8 +38,15 @@ export function MatchupView() {
   const { data: myRoster = [] } = useMyRoster(activeLeagueId)
   const { data: oppRoster = [] } = useRoster(activeLeagueId, opponentId)
 
-  const { pointsByRosterId: myPoints, startersTotal: myTotal } = useActualPoints(myRoster, activeLeague ?? null)
-  const { pointsByRosterId: oppPoints, startersTotal: oppTotal } = useActualPoints(oppRoster, activeLeague ?? null)
+  // Starters resolved for the SPECIFIC week being viewed (see
+  // useWeekLineup) - a matchup should score whatever lineup each side
+  // actually set for that week, not just their permanent roster's
+  // current default.
+  const myWeek = useWeekLineup(activeLeagueId, user?.id ?? null, week, activeLeague ?? null, myRoster)
+  const oppWeek = useWeekLineup(activeLeagueId, opponentId, week, activeLeague ?? null, oppRoster)
+
+  const { pointsByRosterId: myPoints, startersTotal: myTotal } = useActualPoints(myWeek.starters, activeLeague ?? null, week)
+  const { pointsByRosterId: oppPoints, startersTotal: oppTotal } = useActualPoints(oppWeek.starters, activeLeague ?? null, week)
 
   // Opportunistically write the freshly computed score back onto the
   // matchup row for the live week only (not while browsing past/future
@@ -62,8 +70,8 @@ export function MatchupView() {
     () => activeLeague ? buildSlotDefs(activeLeague).filter(s => s.type === 'starter' || s.type === 'flex') : [],
     [activeLeague]
   )
-  const myBySlot = useMemo(() => new Map(myRoster.map(r => [r.slot, r])), [myRoster])
-  const oppBySlot = useMemo(() => new Map(oppRoster.map(r => [r.slot, r])), [oppRoster])
+  const myBySlot = useMemo(() => new Map(myWeek.starters.map(r => [r.slot, r])), [myWeek.starters])
+  const oppBySlot = useMemo(() => new Map(oppWeek.starters.map(r => [r.slot, r])), [oppWeek.starters])
 
   const weeksWithGames = useMemo(() => new Set(myMatchups.map(m => m.week)), [myMatchups])
 
