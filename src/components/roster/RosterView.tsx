@@ -1,18 +1,22 @@
-import { useState, useEffect } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect, useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useMyRoster, useDropPlayer, useMovePlayer, useRosterRealtime } from '@/hooks/useRoster'
 import { useActualPoints } from '@/hooks/useActualPoints'
 import { useWeekLineup } from '@/hooks/useWeekLineup'
 import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
 import { REGULAR_SEASON_WEEKS } from '@/lib/scheduling'
+import { CURRENT_SEASON } from '@/lib/season'
+import { teamAbbr } from '@/lib/sportsdata'
+import { byeWeeksForTeam, type WeekGame } from '@/lib/byeWeeks'
+import { headshotUrl } from '@/lib/playerIdentity'
 import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { buildSlotDefs, canFillSlot } from '@/types/database'
 import type { RosterEntryWithPlayer } from '@/hooks/useRoster'
 import type { SlotDef, League, Player } from '@/types/database'
 import { usePlayerWeeklyLog } from '@/hooks/usePlayerWeeklyLog'
-import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronLeft, ChevronRight, RotateCcw, Lock, ChevronDown } from 'lucide-react'
+import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronRight, RotateCcw, ChevronDown, User } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
@@ -26,6 +30,7 @@ export function RosterView() {
   const [confirmDrop, setConfirmDrop] = useState<RosterEntryWithPlayer | null>(null)
   const [moving, setMoving] = useState<RosterEntryWithPlayer | null>(null)
   const [weekMoving, setWeekMoving] = useState<RosterEntryWithPlayer | null>(null)
+  const [weekPickerOpen, setWeekPickerOpen] = useState(false)
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
   const [loadingAI, setLoadingAI] = useState(false)
 
@@ -67,6 +72,53 @@ export function RosterView() {
   const pointsRoster = isCurrentWeek ? roster : [...weekLineup.starters, ...weekLineup.bench]
   const { pointsByRosterId } = useActualPoints(pointsRoster, activeLeague, week)
   const totalActual = displayStarters.reduce((sum, r) => sum + (pointsByRosterId.get(r.id)?.points ?? 0), 0)
+
+  // Full NFL season schedule, fetched once and shared by every row —
+  // drives each player's "vs/@ OPP · day/time" line and bye week
+  // number. Real ESPN-synced data (supabase/functions/sync-nfl-schedule),
+  // not fetched per-team. No CFB equivalent here (hundreds of teams,
+  // no existing name->abbreviation map for them), so CFB rows just
+  // don't show a game line.
+  const { data: seasonGames = [] } = useQuery({
+    queryKey: ['nfl-games-season', CURRENT_SEASON],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('nfl_games')
+        .select('week, home_team, away_team, game_date, status')
+        .eq('season', CURRENT_SEASON)
+      if (error) throw error
+      return (data ?? []) as (WeekGame & { game_date: string | null; status: string | null })[]
+    },
+    staleTime: 15 * 60_000,
+  })
+
+  // Real platform-wide ownership: what fraction of THIS app's fantasy
+  // teams roster / start each player right now. Not an industry
+  // number (no external data source for that) - genuinely computed
+  // from this app's own rosters table, so it'll read low/zero until
+  // there's real league activity, same as any other real metric would.
+  const allPlayerIds = useMemo(() => roster.map(r => r.player_id), [roster])
+  const { data: ownership } = useQuery({
+    queryKey: ['ownership-stats', allPlayerIds],
+    enabled: allPlayerIds.length > 0,
+    queryFn: async () => {
+      const [{ count: totalTeams }, { data: rows }] = await Promise.all([
+        supabase.from('league_members').select('id', { count: 'exact', head: true }),
+        supabase.from('rosters').select('player_id, slot').eq('week', 0).in('player_id', allPlayerIds),
+      ])
+      const rostered = new Map<number, number>()
+      const started = new Map<number, number>()
+      for (const r of (rows ?? [])) {
+        if (r.player_id == null) continue
+        rostered.set(r.player_id, (rostered.get(r.player_id) ?? 0) + 1)
+        if (!r.slot.startsWith('BN') && !r.slot.startsWith('IR') && !r.slot.startsWith('CFB_OS')) {
+          started.set(r.player_id, (started.get(r.player_id) ?? 0) + 1)
+        }
+      }
+      return { totalTeams: totalTeams ?? 0, rostered, started }
+    },
+    staleTime: 5 * 60_000,
+  })
 
   if (!activeLeagueId) {
     return (
@@ -288,31 +340,6 @@ export function RosterView() {
         </div>
       </div>
 
-      {/* Week selector */}
-      <div className="flex items-center justify-between gap-3 bg-field-800 border border-field-700 rounded-lg px-3 py-2">
-        <div className="flex items-center gap-2">
-          <button className="btn-ghost !py-1 !px-2" disabled={week <= 1} onClick={() => setWeek(w => Math.max(1, w - 1))}>
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-bold text-white w-24 text-center">
-            Week {week}{isCurrentWeek && <span className="text-nfl"> · Now</span>}
-          </span>
-          <button className="btn-ghost !py-1 !px-2" disabled={week >= REGULAR_SEASON_WEEKS} onClick={() => setWeek(w => Math.min(REGULAR_SEASON_WEEKS, w + 1))}>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-        {!isCurrentWeek && isPastWeek && (
-          <span className="flex items-center gap-1.5 text-xs text-field-500">
-            <Lock className="w-3 h-3" /> Past week — view only
-          </span>
-        )}
-        {!isCurrentWeek && !isPastWeek && weekLineup.isMaterialized && (
-          <button className="btn-ghost !py-1 !px-2 text-xs text-field-400 hover:text-white flex items-center gap-1.5" onClick={handleResetWeek}>
-            <RotateCcw className="w-3.5 h-3.5" /> Reset to default
-          </button>
-        )}
-      </div>
-
       {/* Weekly lineup move mode banner */}
       {weekMoving && (
         <div className="bg-gold/10 border border-gold/40 rounded-lg px-4 py-3 flex items-center justify-between">
@@ -434,7 +461,17 @@ export function RosterView() {
           {/* Starters */}
           {starterSlots.length > 0 && (
             <div>
-              <div className="text-xs font-bold text-field-400 uppercase tracking-wider mb-2">Starters</div>
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <div className="text-xs font-bold text-field-400 uppercase tracking-wider">Starters</div>
+                  <div className="text-[11px] text-field-500">Tap a player to update your lineup</div>
+                </div>
+                <WeekPicker
+                  week={week} setWeek={setWeek} isOpen={weekPickerOpen} setIsOpen={setWeekPickerOpen}
+                  currentWeek={currentWeek} isPastWeek={isPastWeek}
+                  isMaterialized={weekLineup.isMaterialized} onReset={handleResetWeek}
+                />
+              </div>
               <div className="grid gap-1">
                 {starterSlots.map(slot => (
                   <RosterSlotRow
@@ -443,6 +480,9 @@ export function RosterView() {
                     entry={rosterBySlot.get(slot.key)}
                     actualPoints={pointsByRosterId}
                 league={activeLeague ?? null}
+                week={week}
+                seasonGames={seasonGames}
+                ownership={ownership}
                     moving={moving}
                     locked={rosterLocked}
                     onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -466,6 +506,9 @@ export function RosterView() {
                     entry={rosterBySlot.get(slot.key)}
                     actualPoints={pointsByRosterId}
                 league={activeLeague ?? null}
+                week={week}
+                seasonGames={seasonGames}
+                ownership={ownership}
                     moving={moving}
                     locked={rosterLocked}
                     onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -484,8 +527,18 @@ export function RosterView() {
               your permanent roster */}
           {starterSlots.length > 0 && (
             <div>
-              <div className="text-xs font-bold text-field-400 uppercase tracking-wider mb-2">
-                Starters — Week {week}
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <div className="text-xs font-bold text-field-400 uppercase tracking-wider">Starters</div>
+                  <div className="text-[11px] text-field-500">
+                    {isPastWeek ? 'Past week — view only' : 'Tap a player to update this week\'s lineup'}
+                  </div>
+                </div>
+                <WeekPicker
+                  week={week} setWeek={setWeek} isOpen={weekPickerOpen} setIsOpen={setWeekPickerOpen}
+                  currentWeek={currentWeek} isPastWeek={isPastWeek}
+                  isMaterialized={weekLineup.isMaterialized} onReset={handleResetWeek}
+                />
               </div>
               <div className="grid gap-1">
                 {starterSlots.map(slot => {
@@ -497,6 +550,9 @@ export function RosterView() {
                       entry={entry}
                       actualPoints={pointsByRosterId}
                 league={activeLeague ?? null}
+                week={week}
+                seasonGames={seasonGames}
+                ownership={ownership}
                       moving={weekMoving}
                       locked={false}
                       readOnly={isPastWeek}
@@ -526,6 +582,9 @@ export function RosterView() {
                       entry={entry}
                       actualPoints={pointsByRosterId}
                 league={activeLeague ?? null}
+                week={week}
+                seasonGames={seasonGames}
+                ownership={ownership}
                       moving={weekMoving}
                       locked={false}
                       readOnly={isPastWeek}
@@ -553,6 +612,9 @@ export function RosterView() {
                 entry={rosterBySlot.get(slot.key)}
                 actualPoints={pointsByRosterId}
                 league={activeLeague ?? null}
+                week={week}
+                seasonGames={seasonGames}
+                ownership={ownership}
                 moving={moving}
                 locked={rosterLocked}
                 onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -579,6 +641,9 @@ export function RosterView() {
                 entry={rosterBySlot.get(slot.key)}
                 actualPoints={pointsByRosterId}
                 league={activeLeague ?? null}
+                week={week}
+                seasonGames={seasonGames}
+                ownership={ownership}
                 moving={moving}
                 locked={rosterLocked}
                 onMove={(e) => { if (!rosterLocked) setMoving(e) }}
@@ -626,13 +691,73 @@ export function RosterView() {
   )
 }
 
+// Compact "Week 1 ›" control — tap to open a dropdown of every
+// regular-season week instead of stepping one at a time.
+function WeekPicker({
+  week, setWeek, isOpen, setIsOpen, currentWeek, isPastWeek, isMaterialized, onReset,
+}: {
+  week: number
+  setWeek: (updater: (w: number) => number) => void
+  isOpen: boolean
+  setIsOpen: (v: boolean) => void
+  currentWeek: number
+  isPastWeek: boolean
+  isMaterialized: boolean
+  onReset: () => void
+}) {
+  const weeks = Array.from({ length: REGULAR_SEASON_WEEKS }, (_, i) => i + 1)
+  return (
+    <div className="relative shrink-0">
+      <button
+        className="flex items-center gap-0.5 text-sm font-bold text-nfl"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        Week {week}
+        <ChevronRight className={clsx('w-3.5 h-3.5 transition-transform', isOpen && 'rotate-90')} />
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-20 bg-field-800 border border-field-700 rounded-lg shadow-2xl w-40 max-h-64 overflow-y-auto py-1">
+            {!isPastWeek && isMaterialized && (
+              <button
+                className="w-full text-left px-3 py-1.5 text-xs text-field-400 hover:bg-field-700 hover:text-white flex items-center gap-1.5 border-b border-field-700/60"
+                onClick={() => { onReset(); setIsOpen(false) }}
+              >
+                <RotateCcw className="w-3 h-3" /> Reset to default
+              </button>
+            )}
+            {weeks.map(w => (
+              <button
+                key={w}
+                className={clsx(
+                  'w-full text-left px-3 py-1.5 text-sm flex items-center justify-between',
+                  w === week ? 'text-nfl font-bold bg-nfl/10' : 'text-white hover:bg-field-700',
+                )}
+                onClick={() => { setWeek(() => w); setIsOpen(false) }}
+              >
+                Week {w}
+                {w === currentWeek && <span className="text-[10px] text-field-500 font-bold uppercase">Now</span>}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function RosterSlotRow({
-  slot, entry, actualPoints, league, moving, locked, readOnly, blockTargeting, onMove, onDropToSlot, onDrop, dropLabel,
+  slot, entry, actualPoints, league, week, seasonGames, ownership, moving, locked, readOnly, blockTargeting, onMove, onDropToSlot, onDrop, dropLabel,
 }: {
   slot: SlotDef
   entry: RosterEntryWithPlayer | undefined
   actualPoints: Map<string, { points: number | null; stats: any | null }>
   league: League | null
+  week: number
+  seasonGames: (WeekGame & { game_date: string | null; status: string | null })[]
+  ownership?: { totalTeams: number; rostered: Map<number, number>; started: Map<number, number> }
   moving: RosterEntryWithPlayer | null
   locked: boolean
   readOnly?: boolean
@@ -650,6 +775,33 @@ function RosterSlotRow({
 }) {
   const player = entry?.player
   const [expanded, setExpanded] = useState(false)
+  const [imgError, setImgError] = useState(false)
+
+  // "Wed 8:15 PM vs KC (10)" style line — NFL only (see the
+  // seasonGames query comment for why CFB doesn't get one). Bye week
+  // number comes from the same season schedule, not a separate table.
+  const gameInfo = useMemo(() => {
+    // Guard against the schedule query's brief pre-load window - with
+    // zero games loaded yet, byeWeeksForTeam would otherwise call
+    // every team on bye every week (no games = no weeks playing).
+    if (!player || player.league !== 'NFL' || !player.team || seasonGames.length === 0) return null
+    const abbr = teamAbbr(player.team)
+    const byeWeek = byeWeeksForTeam(seasonGames, abbr)[0] ?? null
+    const thisWeekGame = seasonGames.find(g => g.week === week && (g.home_team === abbr || g.away_team === abbr))
+    if (!thisWeekGame) return { abbr, byeWeek, isBye: true as const, dateLabel: '', matchup: byeWeek ? `Bye Week ${byeWeek}` : 'Bye' }
+    const opp = thisWeekGame.home_team === abbr ? thisWeekGame.away_team : thisWeekGame.home_team
+    const prefix = thisWeekGame.home_team === abbr ? 'vs' : '@'
+    const dt = thisWeekGame.game_date ? new Date(thisWeekGame.game_date) : null
+    const dateLabel = dt ? dt.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : ''
+    return { abbr, byeWeek, isBye: false as const, dateLabel, matchup: `${prefix} ${opp}` }
+  }, [player, seasonGames, week])
+
+  const rosteredPct = player && ownership?.totalTeams
+    ? Math.round(((ownership.rostered.get(player.id) ?? 0) / ownership.totalTeams) * 100)
+    : null
+  const startPct = player && ownership?.totalTeams
+    ? Math.round(((ownership.started.get(player.id) ?? 0) / ownership.totalTeams) * 100)
+    : null
 
   // Is this a valid target for the player being moved?
   const isValidTarget = !blockTargeting && moving && canFillSlot(slot, moving.player?.pos as any, moving.player?.league as any)
@@ -702,21 +854,53 @@ function RosterSlotRow({
       {/* Player info or move hint */}
       <div className="flex-1 min-w-0">
         {player ? (
-          <div className="flex items-center gap-2">
-            <span className={clsx('pos-badge text-xs', `pos-${player.pos}`)}>{player.pos}</span>
+          <div className="flex items-center gap-2.5">
+            {/* Headshot */}
+            <div className="w-9 h-9 rounded-full bg-field-700 border border-field-600 overflow-hidden shrink-0 flex items-center justify-center">
+              {!imgError ? (
+                <img
+                  src={headshotUrl(player)}
+                  alt=""
+                  className="w-full h-full object-cover object-top"
+                  onError={() => setImgError(true)}
+                />
+              ) : (
+                <User className="w-4 h-4 text-field-500" />
+              )}
+            </div>
+
             <div className="min-w-0">
-              <div className="text-sm font-bold text-white truncate">{player.name}</div>
-              <div className="text-xs text-field-400">
-                {player.team}
-                {' · '}
-                <span className={player.league === 'NFL' ? 'text-nfl' : 'text-cfb'}>{player.league}</span>
+              <div className="text-sm font-bold text-white truncate leading-tight">
+                {player.name}
+                <span className="font-normal text-field-400">
+                  {' '}<span className={player.league === 'NFL' ? 'text-nfl' : 'text-cfb'}>{player.pos}</span>
+                  {' - '}{gameInfo?.abbr ?? player.team}
+                  {gameInfo?.byeWeek ? ` (${gameInfo.byeWeek})` : ''}
+                </span>
                 {player.status !== 'active' && (
-                  <span className={clsx('ml-1 font-bold uppercase',
+                  <span className={clsx('ml-1 font-bold uppercase text-[11px]',
                     player.status === 'questionable' ? 'text-gold' : 'text-red-400')}>
-                    {player.status === 'questionable' ? ' Q' : ` ${player.status.toUpperCase()}`}
+                    {player.status === 'questionable' ? 'Q' : player.status.toUpperCase()}
                   </span>
                 )}
               </div>
+
+              {rosteredPct !== null && (
+                <div className="text-[12px] text-field-400 leading-tight mt-0.5">
+                  <span className="font-bold text-white">{rosteredPct}%</span> Rostered · <span className="font-bold text-white">{startPct}%</span> Start
+                </div>
+              )}
+
+              {gameInfo && (
+                <div className={clsx('text-[12px] leading-tight mt-0.5', gameInfo.isBye ? 'text-field-500' : 'text-field-400')}>
+                  {gameInfo.isBye ? gameInfo.matchup : (
+                    <>
+                      {gameInfo.dateLabel}{' '}
+                      <span className="text-field-300">{gameInfo.matchup}</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -739,21 +923,15 @@ function RosterSlotRow({
         </div>
       )}
 
-      {/* Points */}
+      {/* Points — actual on top (dash until the game's played), projection below */}
       {player && !moving && (() => {
         const actual = entry ? actualPoints.get(entry.id)?.points ?? null : null
         return (
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="text-right hidden sm:block">
-              <div className={clsx('text-sm font-bold', actual !== null ? 'text-nfl' : 'text-field-600')}>
-                {actual !== null ? actual.toFixed(1) : '—'}
-              </div>
-              <div className="text-xs text-field-400">actual</div>
+          <div className="text-right shrink-0 leading-tight">
+            <div className={clsx('text-sm', actual !== null ? 'text-white font-bold' : 'text-field-500')}>
+              {actual !== null ? actual.toFixed(1) : '—'}
             </div>
-            <div className="text-right hidden sm:block">
-              <div className="text-sm font-bold text-white">{player.proj_pts?.toFixed(1) ?? '—'}</div>
-              <div className="text-xs text-field-400">proj</div>
-            </div>
+            <div className="text-sm font-bold text-field-300">{player.proj_pts?.toFixed(1) ?? '—'}</div>
           </div>
         )
       })()}

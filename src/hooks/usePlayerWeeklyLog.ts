@@ -1,13 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { calcFantasyPts, scoringFromLeague } from '@/lib/scoring'
+import { toEspnId } from '@/lib/playerIdentity'
 import type { League, Player } from '@/types/database'
-
-function toEspnId(player: Player): number {
-  // NFL: DB id = espnId + 1_000_000. CFB: espn_athlete_id stored directly.
-  if (player.league === 'NFL') return player.id - 1_000_000
-  return player.espn_athlete_id ?? (player.id - 50_000_000)
-}
 
 // Real, per-week points for one player across the whole season, using
 // the LEAGUE'S OWN scoring rules — same formula/inputs as

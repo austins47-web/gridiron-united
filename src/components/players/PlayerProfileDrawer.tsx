@@ -7,22 +7,9 @@ import type { Player } from '@/types/database'
 import { useAppStore } from '@/store/appStore'
 import { useMyRoster } from '@/hooks/useRoster'
 import { supabase } from '@/lib/supabase'
+import { toEspnId, headshotUrl } from '@/lib/playerIdentity'
 
 // ── Helpers ───────────────────────────────────────────────────
-function toEspnId(player: Player): number {
-  // NFL: DB id = espnId + 1_000_000
-  // CFB: use espn_athlete_id if available (populated post-resync)
-  //      fallback: DB id - 50_000_000 (correct after resync since IDs are now 50000000 + athleteId)
-  if (player.league === 'NFL') return player.id - 1_000_000
-  return player.espn_athlete_id ?? (player.id - 50_000_000)
-}
-
-function headshotUrl(player: Player): string {
-  const espnId = toEspnId(player)
-  const sport = player.league === 'NFL' ? 'nfl' : 'college-football'
-  return `https://a.espncdn.com/i/headshots/${sport}/players/full/${espnId}.png`
-}
-
 async function proxyFetch(endpoint: string) {
   const PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sportsdata`
   const ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
