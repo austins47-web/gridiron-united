@@ -121,15 +121,18 @@ export function usePickemStandings(leagueId: string | null) {
   })
 
   const rows = computeStandings(games as any, picks as any, members as any)
-  // Merge team_name back in — computeStandings only knows about
-  // Member.profile, not the league-specific team_name members can
-  // set, but the panel wants to show it the same way it does for
-  // fantasy leagues.
-  const teamNameByUser = new Map(members.map((m: any) => [m.user_id, m.team_name]))
+  // Merge team_name and profile back in — computeStandings flattens
+  // Member.profile into its own avatarUrl/username fields and drops
+  // display_name entirely, but StandingsPanel's JSX (shared with the
+  // fantasy-league path) reads m.profile?.avatar_url / display_name /
+  // username directly, so without this every pick'em row rendered
+  // with no avatar and no @handle even though the numbers were right.
+  const memberByUser = new Map(members.map((m: any) => [m.user_id, m]))
   return {
     data: rows.map(r => ({
       ...r,
-      team_name: teamNameByUser.get(r.userId) ?? null,
+      team_name: memberByUser.get(r.userId)?.team_name ?? null,
+      profile: memberByUser.get(r.userId)?.profile ?? null,
       user_id: r.userId,
     })),
   }
