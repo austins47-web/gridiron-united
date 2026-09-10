@@ -438,6 +438,17 @@ export function PickEmView() {
 
   const { data: oddsMap } = useNflOdds()
   const { data: standingsData } = useNflStandings()
+  // Flattened once here rather than inside every GamePickCard render
+  // — reuses the exact same real standings data the By Record
+  // button and Standings tab already show, just keyed by abbr for a
+  // simple lookup.
+  const recordsByAbbr = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const group of standingsData?.groups ?? []) {
+      for (const team of group.teams) map.set(team.abbr, team.record)
+    }
+    return map
+  }, [standingsData])
 
   // Fills in the favored side of every still-open game, using the
   // same odds cache the pick cards already display. Games with no
@@ -919,6 +930,7 @@ export function PickEmView() {
               pickedTeam={pendingPicks[game.id]}
               deadline={weekDeadline}
               odds={oddsMap?.get(`${game.away_team}@${game.home_team}`) ?? null}
+              recordsByAbbr={recordsByAbbr}
               onPick={(team) => {
                 if (isGameLocked(game.game_date, weekDeadline, game.status)) return
                 setPendingPicks(p => ({ ...p, [game.id]: team }))
@@ -939,6 +951,7 @@ export function PickEmView() {
                 pickedTeam={pendingPicks[tiebreakerGame.id]}
                 deadline={weekDeadline}
                 odds={oddsMap?.get(`${tiebreakerGame.away_team}@${tiebreakerGame.home_team}`) ?? null}
+                recordsByAbbr={recordsByAbbr}
                 onPick={(team) => {
                   if (isGameLocked(tiebreakerGame.game_date, weekDeadline, tiebreakerGame.status)) return
                   setPendingPicks(p => ({ ...p, [tiebreakerGame.id]: team }))
@@ -1011,13 +1024,14 @@ export function PickEmView() {
 }
 
 function GamePickCard({
-  game, pickedTeam, onPick, deadline, odds, isTiebreaker, tiebreakerScore, onTiebreakerScore
+  game, pickedTeam, onPick, deadline, odds, recordsByAbbr, isTiebreaker, tiebreakerScore, onTiebreakerScore
 }: {
   game: any
   pickedTeam: string | undefined
   onPick: (team: string) => void
   deadline: string | null
   odds?: { spread: number | null; totalPoints: number | null; homeWinPct: number | null; awayWinPct: number | null; homeMoneyline: number | null; awayMoneyline: number | null } | null
+  recordsByAbbr?: Map<string, string>
   isTiebreaker?: boolean
   tiebreakerScore?: string
   onTiebreakerScore?: (val: string) => void
@@ -1131,6 +1145,11 @@ function GamePickCard({
               <span className="text-xs text-field-400 truncate max-w-full">
                 {info.name.split(' ').slice(-1)[0]}
               </span>
+              {recordsByAbbr?.get(team) && (
+                <span className="text-[11px] text-field-500 font-bold tabular-nums">
+                  {recordsByAbbr.get(team)}
+                </span>
+              )}
 
               {/* Odds info — spread + win % */}
               {odds && !isFinal && (
@@ -1152,16 +1171,24 @@ function GamePickCard({
                     <div className="w-full">
                       <div className="flex justify-between text-[11px] text-field-500 mb-0.5">
                         <span>Win%</span>
-                        <span className={clsx(
-                          'font-black',
-                          winPct >= 60 ? 'text-nfl' : winPct <= 40 ? 'text-field-400' : 'text-white'
-                        )}>{winPct}%</span>
+                        {/* Fixed per-side, not a percentage threshold
+                            — the old version colored each bar based
+                            on its own number crossing 60%/40%, so a
+                            lopsided 64/36 game showed two different
+                            colors while a close 52/48 game showed
+                            the same color twice, which read as
+                            genuinely inconsistent between games.
+                            Matches the same fixed away/home colors
+                            Live Scores already uses. */}
+                        <span className={clsx('font-black', label === 'Away' ? 'text-field-300' : 'text-gold')}>
+                          {winPct}%
+                        </span>
                       </div>
                       <div className="w-full h-1 bg-field-700 rounded-full overflow-hidden">
                         <div
                           className={clsx(
                             'h-full rounded-full transition-all',
-                            winPct >= 60 ? 'bg-nfl' : winPct <= 40 ? 'bg-field-500' : 'bg-gold'
+                            label === 'Away' ? 'bg-field-500' : 'bg-gold'
                           )}
                           style={{ width: `${winPct}%` }}
                         />
