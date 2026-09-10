@@ -95,7 +95,7 @@ export function useAddPlayer(leagueId: string | null) {
   const user = useAppStore(s => s.user)
 
   return useMutation({
-    mutationFn: async ({ playerId, slot, playerName }: { playerId: string; slot: string; playerName: string }) => {
+    mutationFn: async ({ playerId, slot, playerName }: { playerId: number; slot: string; playerName: string }) => {
       if (!leagueId) throw new Error('No league selected')
       const { error } = await supabase
         .from('rosters')
@@ -184,7 +184,7 @@ export function useAssignDraftSlots(leagueId: string | null) {
       // Get league slot config
       const { data: league, error: le } = await supabase
         .from('leagues')
-        .select('slots_qb,slots_rb,slots_wr,slots_te,slots_flex,slots_dst,slots_k,slots_bench,slots_ir')
+        .select('slots_qb,slots_rb,slots_wr,slots_te,slots_flex,slots_dst,slots_k,slots_bench,slots_ir,slots_cfb_os')
         .eq('id', leagueId)
         .single()
       if (le) throw le
@@ -225,7 +225,7 @@ export function useAssignDraftSlots(leagueId: string | null) {
 
       return assignments.length
     },
-    onSuccess: (count, userId) => {
+    onSuccess: (_count, userId) => {
       qc.invalidateQueries({ queryKey: ['my-roster', leagueId, userId] })
       qc.invalidateQueries({ queryKey: ['roster', leagueId, userId] })
     },

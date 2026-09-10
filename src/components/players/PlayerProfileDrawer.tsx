@@ -56,7 +56,7 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
     const espnId = toEspnId(player)
     const BASE = `https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/athletes/${espnId}`
 
-    let stats: Array<{ label: string; value: string }> = []
+    const stats: Array<{ label: string; value: string }> = []
     let jersey: string | undefined, age: number | undefined
     let height: string | undefined, weight: string | undefined
     let birthPlace: string | undefined, college: string | undefined
@@ -89,7 +89,7 @@ async function fetchProfile(player: Player): Promise<AthleteProfile> {
   const data = await proxyFetch(`athlete/NFL/${espnId}`)
   const a = data.athlete ?? data
 
-  let stats: Array<{ label: string; value: string }> = []
+  const stats: Array<{ label: string; value: string }> = []
   try {
     const sd = await proxyFetch(`athlete/stats/NFL/${espnId}`)
     const cats = sd.splits?.categories ?? sd.categories ?? []

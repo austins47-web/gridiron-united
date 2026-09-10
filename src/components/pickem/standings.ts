@@ -30,7 +30,7 @@ export interface Pick {
 
 export interface Member {
   user_id: string
-  profile?: { username?: string | null; display_name?: string | null } | null
+  profile?: { username?: string | null; display_name?: string | null; avatar_url?: string | null } | null
 }
 
 export interface WeekRow {

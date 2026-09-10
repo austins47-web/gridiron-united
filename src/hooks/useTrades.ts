@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
-import type { Trade, Profile, Player } from '@/types/database'
+import type { Trade, Profile, Player, Json } from '@/types/database'
 import toast from 'react-hot-toast'
 
 export type TradeWithDetails = Trade & {
@@ -31,7 +31,7 @@ async function sendNotification(params: {
   type: string
   title: string
   body: string
-  data?: Record<string, unknown>
+  data?: { [key: string]: Json }
 }) {
   await supabase.from('notifications').insert({
     user_id: params.userId,
@@ -102,7 +102,7 @@ async function executeTradeSwap(trade: Trade, leagueId: string) {
       .select('id')
       .eq('league_id', leagueId)
       .eq('player_id', playerId)
-      .eq('user_id', trade.proposer_id)
+      .eq('user_id', trade.proposer_id!)
       .eq('week', 0)
       .single()
     if (!entry) continue
@@ -112,7 +112,7 @@ async function executeTradeSwap(trade: Trade, leagueId: string) {
     receiverTaken.add(slot)
 
     await supabase.from('rosters').update({
-      user_id: trade.receiver_id,
+      user_id: trade.receiver_id!,
       slot,
       acquired_type: 'trade',
     }).eq('id', entry.id)
@@ -125,7 +125,7 @@ async function executeTradeSwap(trade: Trade, leagueId: string) {
       .select('id')
       .eq('league_id', leagueId)
       .eq('player_id', playerId)
-      .eq('user_id', trade.receiver_id)
+      .eq('user_id', trade.receiver_id!)
       .eq('week', 0)
       .single()
     if (!entry) continue
@@ -135,7 +135,7 @@ async function executeTradeSwap(trade: Trade, leagueId: string) {
     proposerTaken.add(slot)
 
     await supabase.from('rosters').update({
-      user_id: trade.proposer_id,
+      user_id: trade.proposer_id!,
       slot,
       acquired_type: 'trade',
     }).eq('id', entry.id)
@@ -315,7 +315,7 @@ export function useRespondTrade(leagueId: string | null) {
         await supabase.from('trades').update({ status: 'rejected' }).eq('id', tradeId)
 
         // Create counter trade
-        const { data: counter } = await supabase.from('trades').insert({
+        const { data: counter, error: ce } = await supabase.from('trades').insert({
           league_id: leagueId,
           proposer_id: user.id,
           receiver_id: propId,
@@ -324,6 +324,7 @@ export function useRespondTrade(leagueId: string | null) {
           status: 'pending',
           expires_at: new Date(Date.now() + 48 * 3600000).toISOString(),
         }).select().single()
+        if (ce) throw ce
 
         // Fetch counter player names
         const cAllIds = [...counterProposerIds, ...counterReceiverIds]
@@ -339,7 +340,7 @@ export function useRespondTrade(leagueId: string | null) {
           type: 'trade_offer',
           title: '🔄 Counter offer received',
           body: `${recName} countered: offers ${cGive} for ${cGet}`,
-          data: { trade_id: counter?.id },
+          data: { trade_id: counter.id },
         })
 
       } else if (action === 'accepted') {
@@ -469,8 +470,6 @@ export function useCommissionerTrade(leagueId: string | null) {
 
       const propName = (trade.proposer as any)?.display_name || (trade.proposer as any)?.username || 'Team A'
       const recName  = (trade.receiver as any)?.display_name || (trade.receiver as any)?.username || 'Team B'
-      const givePart = (trade.proposer_player_ids ?? []).map((id: number) => pMap[id]).filter(Boolean).join(', ') || 'nothing'
-      const getPart  = (trade.receiver_player_ids ?? []).map((id: number) => pMap[id]).filter(Boolean).join(', ') || 'nothing'
 
       if (decision === 'approve') {
         await executeTradeSwap(trade, leagueId!)
@@ -551,7 +550,7 @@ export function useVoteTrade(leagueId: string | null) {
       const vetoCount = (votes ?? []).filter(v => v.vote === 'veto').length
 
       if (vote === 'veto' && vetoCount >= required) {
-        const { data: trade } = await supabase
+        const { data: trade, error: te } = await supabase
           .from('trades')
           .select(`
             proposer_id, receiver_id,
@@ -559,21 +558,22 @@ export function useVoteTrade(leagueId: string | null) {
             receiver:profiles!trades_receiver_id_fkey(display_name, username)
           `)
           .eq('id', tradeId).single()
+        if (te) throw te
 
         await supabase.from('trades').update({ status: 'rejected' }).eq('id', tradeId)
 
-        const propName = (trade?.proposer as any)?.display_name || 'Team A'
-        const recName  = (trade?.receiver as any)?.display_name || 'Team B'
+        const propName = (trade.proposer as any)?.display_name || 'Team A'
+        const recName  = (trade.receiver as any)?.display_name || 'Team B'
 
         await sendNotification({
-          userId: trade?.proposer_id!, leagueId: leagueId!,
+          userId: trade.proposer_id!, leagueId: leagueId!,
           type: 'trade_rejected',
           title: '🚫 Trade vetoed by league vote',
           body: `Your trade with ${recName} was blocked by ${vetoCount} veto votes.`,
           data: { trade_id: tradeId },
         })
         await sendNotification({
-          userId: trade?.receiver_id!, leagueId: leagueId!,
+          userId: trade.receiver_id!, leagueId: leagueId!,
           type: 'trade_rejected',
           title: '🚫 Trade vetoed by league vote',
           body: `Your trade with ${propName} was blocked by ${vetoCount} veto votes.`,

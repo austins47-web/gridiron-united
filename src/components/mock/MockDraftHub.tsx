@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/appStore'
 import { usePlayers, DEFAULT_FILTERS } from '@/hooks/usePlayers'
 import {
   Play, Pause, Plus, Users, Clock, Settings, Copy, Search,
-  Zap, ChevronDown, ChevronUp, ArrowLeft, CheckCircle,
+  Zap, ArrowLeft,
   Bot, User, X, Trophy, RefreshCw, Share2
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -39,7 +39,7 @@ interface MockSlot {
   user_id: string | null
   team_name: string
   is_host: boolean
-  profile?: { username: string; display_name: string | null }
+  profile?: { username: string; display_name: string | null; avatar_url: string | null }
 }
 
 interface MockPick {

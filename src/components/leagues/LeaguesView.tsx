@@ -5,7 +5,7 @@ import { LeagueSettingsModal } from './LeagueSettingsModal'
 import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { FranchiseCard } from '@/components/ui/FranchiseCard'
-import { Trophy, Plus, LogIn, Users, Settings, Copy, Calendar, Shield, ChevronUp, ChevronDown, QrCode, LogOut, Share2 } from 'lucide-react'
+import { Trophy, Plus, LogIn, Users, Settings, Copy, Shield, ChevronUp, ChevronDown, QrCode, LogOut, Share2 } from 'lucide-react'
 import { QRModal } from './QRModal'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -167,7 +167,7 @@ export function LeaguesView() {
               onOpenSettings={() => setShowSettings(true)}
               onShowQR={() => setQrLeague({ name: activeLeague.name, code: activeLeague.invite_code })}
               onLeave={() => setLeaveTarget({ id: activeLeague.id, name: activeLeague.name })}
-              onMove={(dir) => moveLeague(activeLeague.id, dir)}
+              onMove={(dir: -1 | 1) => moveLeague(activeLeague.id, dir)}
             />
           )}
         </>

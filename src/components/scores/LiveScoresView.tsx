@@ -99,16 +99,6 @@ function parseGame(event: any, league: 'NFL' | 'CFB'): LiveGame {
   }
 }
 
-async function fetchLeague(league: 'NFL' | 'CFB'): Promise<LiveGame[]> {
-  const url = league === 'NFL'
-    ? 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard'
-    : 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=50'
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`ESPN ${league} fetch failed: ${res.status}`)
-  const data = await res.json()
-  return (data.events ?? []).map((e: any) => parseGame(e, league))
-}
-
 // ── Favorites ────────────────────────────────────────────────
 
 const FAV_KEY = 'gu_fav_teams_v2'

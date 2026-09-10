@@ -143,13 +143,12 @@ export function TeamPage({ teamId, league, onBack }: TeamPageProps) {
   const altColor = team?.alternateColor ? `#${team.alternateColor}` : '#1f2937'
   const displayName = team?.displayName ?? '—'
   const location    = team?.location ?? ''
-  const confGroup   = team?.groups
   const record      = team?.record?.items?.find((r: any) => r.type === 'total')?.summary
                    ?? team?.recordSummary ?? '—'
   const standing    = team?.standingSummary ?? ''
   const franchise   = team?.franchise
 
-  const games = useMemo(() =>
+  const games = useMemo<ReturnType<typeof parseEvent>[]>(() =>
     (schedule?.events ?? []).map((ev: any) => parseEvent(ev, teamId, league)),
     [schedule, teamId, league]
   )

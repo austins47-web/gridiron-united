@@ -146,8 +146,9 @@ export function LiveScoringView() {
       const existing = m.get(s.espn_athlete_id)
       if (existing) {
         for (const k of Object.keys(s)) {
-          if (typeof s[k] === 'number' && k !== 'week' && k !== 'season') {
-            existing[k] = (existing[k] ?? 0) + s[k]
+          const sAny = s as Record<string, any>
+          if (typeof sAny[k] === 'number' && k !== 'week' && k !== 'season') {
+            existing[k] = (existing[k] ?? 0) + sAny[k]
           }
         }
       } else {

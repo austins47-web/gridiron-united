@@ -98,11 +98,11 @@ export function DraftRoom() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const autoDraftRef = useRef(false)
   const autoPickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const locallyPickedIds = useRef<Set<string>>(new Set())
+  const locallyPickedIds = useRef<Set<number>>(new Set())
   const submittingRef = useRef(false)
   const availableRef = useRef<Player[]>([])
   const picksRef = useRef<DraftPickWithPlayer[]>([])
-  const queueRef = useRef<string[]>([])
+  const queueRef = useRef<number[]>([])
 
   // Pick reveal animation — fully isolated from picksRef above
   // (that one's for avoiding stale closures in the auto-draft timer
@@ -135,10 +135,10 @@ export function DraftRoom() {
 
   // ── Draft queue (localStorage-persisted) ───────────────────────────
   const queueKey = `draft-queue-${activeLeagueId}`
-  const [queue, setQueueRaw] = useState<string[]>(() => {
+  const [queue, setQueueRaw] = useState<number[]>(() => {
     try { return JSON.parse(localStorage.getItem(queueKey) ?? '[]') } catch { return [] }
   })
-  const setQueue = (up: string[] | ((p: string[]) => string[])) => {
+  const setQueue = (up: number[] | ((p: number[]) => number[])) => {
     setQueueRaw(prev => {
       const next = typeof up === 'function' ? up(prev) : up
       try { localStorage.setItem(queueKey, JSON.stringify(next)) } catch {}
@@ -153,7 +153,7 @@ export function DraftRoom() {
   const poolLeague = activeLeague?.player_pool === 'nfl' ? 'NFL'
     : activeLeague?.player_pool === 'cfb' ? 'CFB' : 'ALL'
 
-  const storedTeams = (draftState as any)?.num_teams
+  const storedTeams = draftState?.num_teams
   const totalTeams = (storedTeams != null && storedTeams > 0)
     ? storedTeams
     : members.length > 0 ? members.length : (activeLeague?.num_teams ?? 10)
@@ -164,7 +164,7 @@ export function DraftRoom() {
 
   // Read from draftState so realtime propagates mid-draft timer changes to everyone.
   // Falls back to league setting if pick_timer hasn't been written to draft_state yet.
-  const storedTimer = (draftState as any)?.pick_timer
+  const storedTimer = draftState?.pick_timer
   const pickLimit = (storedTimer != null && storedTimer >= 0)
     ? storedTimer
     : (activeLeague?.draft_pick_timer ?? 0)
@@ -204,7 +204,7 @@ export function DraftRoom() {
   const myPicks = picks.filter(p => p.user_id === user?.id)
 
   // ── Pick submission ────────────────────────────────────────────────
-  const handlePick = useCallback(async (playerId: string) => {
+  const handlePick = useCallback(async (playerId: number) => {
     if (!draftState || !user || !activeLeagueId) return
     if (draftState.current_user_id !== user.id) return
     if (locallyPickedIds.current.has(playerId)) return
@@ -333,8 +333,8 @@ export function DraftRoom() {
   }
 
   // ── Queue helpers ──────────────────────────────────────────────────
-  const addToQueue = (id: string) => { setQueue(prev => prev.includes(id) ? prev : [...prev, id]); toast.success('Added to queue') }
-  const removeFromQueue = (id: string) => setQueue(prev => prev.filter(x => x !== id))
+  const addToQueue = (id: number) => { setQueue(prev => prev.includes(id) ? prev : [...prev, id]); toast.success('Added to queue') }
+  const removeFromQueue = (id: number) => setQueue(prev => prev.filter(x => x !== id))
   const moveQueueItem = (idx: number, dir: -1 | 1) => {
     setQueue(prev => {
       const next = [...prev]; const target = idx + dir
@@ -357,7 +357,7 @@ export function DraftRoom() {
     <div className="flex items-center justify-center h-64"><div className="ai-dot" /></div>
   )
 
-  if (!draftState || draftState.status === 'pre_draft' || draftState.status === 'scheduled') return (
+  if (!draftState || draftState.status === 'scheduled') return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <PreDraftLobby league={activeLeague} members={members} isCommissioner={!!isCommissioner} draftState={draftState} />
     </div>
@@ -365,7 +365,7 @@ export function DraftRoom() {
 
   if (draftState.status === 'completed') return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <CompletedDraft picks={picks} members={members} totalTeams={totalTeams} numRounds={numRounds} />
+      <CompletedDraft picks={picks} members={members} numRounds={numRounds} />
     </div>
   )
 
@@ -741,11 +741,6 @@ function DraftBoard({ picks, members, totalTeams, numRounds, currentPick }: {
   picks: DraftPickWithPlayer[]; members: any[]; totalTeams: number; numRounds: number; currentPick: number
 }) {
   const rounds = Array.from({ length: numRounds }, (_, i) => i + 1)
-  function getPickerIndex(pick: number): number {
-    const pickInRound = (pick - 1) % totalTeams
-    const round = Math.ceil(pick / totalTeams)
-    return (round % 2 === 0) ? totalTeams - 1 - pickInRound : pickInRound
-  }
   return (
     <div className="panel !p-0 overflow-hidden">
       <div className="px-3 py-2 border-b border-field-700 flex items-center justify-between">
@@ -950,8 +945,8 @@ function PreDraftLobby({ league, members, isCommissioner, draftState }: any) {
 }
 
 // ── Completed Draft ────────────────────────────────────────────────────
-function CompletedDraft({ picks, members, totalTeams, numRounds }: {
-  picks: DraftPickWithPlayer[]; members: any[]; totalTeams: number; numRounds: number
+function CompletedDraft({ picks, members, numRounds }: {
+  picks: DraftPickWithPlayer[]; members: any[]; numRounds: number
 }) {
   return (
     <div className="space-y-4">

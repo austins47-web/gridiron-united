@@ -32,7 +32,7 @@ export const DEFAULT_FILTERS: PlayerFilters = {
   pageSize: 100,
 }
 
-export function usePlayers(filters: PlayerFilters, scoring: ScoringRules | null) {
+export function usePlayers(filters: PlayerFilters, scoring: ScoringRules | null = null) {
   return useQuery({
     queryKey: ['players', filters, scoring?.score_reception, scoring?.score_pass_td],
     queryFn: async () => {
@@ -210,7 +210,7 @@ export function useTeamList(league: PlayerLeague | 'ALL') {
 }
 
 // Single player detail
-export function usePlayer(playerId: string | null) {
+export function usePlayer(playerId: number | null) {
   return useQuery({
     queryKey: ['player', playerId],
     enabled: !!playerId,

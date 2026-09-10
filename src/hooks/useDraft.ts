@@ -54,21 +54,24 @@ export function useStartDraft() {
       // This ensures every player drafted gets a proper slot.
       const { data: league, error: le } = await supabase
         .from('leagues')
-        .select('num_rounds,slots_qb,slots_rb,slots_wr,slots_te,slots_flex,slots_dst,slots_k,slots_bench')
+        .select('num_rounds,slots_qb,slots_rb,slots_wr,slots_te,slots_flex,slots_dst,slots_k,slots_bench,slots_cfb_os')
         .eq('id', activeLeagueId)
         .single()
       if (le) throw le
 
-      const numRounds = league
-        ? (league.slots_qb ?? 1) +
-          (league.slots_rb ?? 2) +
-          (league.slots_wr ?? 2) +
-          (league.slots_te ?? 1) +
-          (league.slots_flex ?? 2) +
-          (league.slots_dst ?? 1) +
-          (league.slots_k ?? 1) +
-          (league.slots_bench ?? 6)
-        : (league?.num_rounds ?? 15)
+      // league is guaranteed non-null here — the error check above
+      // already throws otherwise, so the fallback this ternary used
+      // to have for a null league was unreachable dead code.
+      const numRounds =
+        (league.slots_qb ?? 1) +
+        (league.slots_rb ?? 2) +
+        (league.slots_wr ?? 2) +
+        (league.slots_te ?? 1) +
+        (league.slots_flex ?? 2) +
+        (league.slots_dst ?? 1) +
+        (league.slots_k ?? 1) +
+        (league.slots_bench ?? 6) +
+        (league.slots_cfb_os ?? 0)
 
       // Get ACTUAL members who joined — this is the real team count
       const { data: members, error: me } = await supabase
@@ -209,7 +212,7 @@ export function useMakePick() {
       playerId,
       draftState,
     }: {
-      playerId: string
+      playerId: number
       draftState: DraftState
       // totalTeams kept for API compat but ignored — use draftState.num_teams
       totalTeams?: number
@@ -224,7 +227,7 @@ export function useMakePick() {
       // num_teams is the actual member count written when the draft started.
       // Guard against 0 and null — both mean "not set yet", fall back to
       // fetching live member count so pick_in_round is never null.
-      const storedTeams = (draftState as any).num_teams
+      const storedTeams = draftState.num_teams
       let actualTeams: number
       if (storedTeams != null && storedTeams > 0) {
         actualTeams = storedTeams
@@ -336,7 +339,7 @@ export function useMakePick() {
             const { buildSlotDefs } = await import('@/types/database')
             const { data: league } = await supabase
               .from('leagues')
-              .select('slots_qb,slots_rb,slots_wr,slots_te,slots_flex,slots_dst,slots_k,slots_bench,slots_ir')
+              .select('slots_qb,slots_rb,slots_wr,slots_te,slots_flex,slots_dst,slots_k,slots_bench,slots_ir,slots_cfb_os')
               .eq('id', activeLeagueId)
               .single()
 

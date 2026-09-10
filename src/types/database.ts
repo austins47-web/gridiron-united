@@ -1462,7 +1462,7 @@ export type LeagueMember = {
   ties: number
   points_for: number
   points_against: number
-  waiver_priority: number
+  waiver_priority: number | null
   faab_budget: number
   faab_spent: number
   is_commissioner: boolean
@@ -1493,6 +1493,8 @@ export type DraftState = {
   current_user_id: string | null
   pick_started_at: string | null
   num_rounds: number
+  num_teams: number | null
+  pick_timer: number | null
   updated_at: string
 }
 

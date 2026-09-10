@@ -26,7 +26,7 @@ const DEFAULT_SCORING: ScoringRules = {
 
 const DEFAULT_SLOTS: RosterSlotConfig = {
   slots_qb: 1, slots_rb: 2, slots_wr: 2, slots_te: 1,
-  slots_flex: 2, slots_dst: 1, slots_k: 1, slots_bench: 6, slots_ir: 1,
+  slots_flex: 2, slots_dst: 1, slots_k: 1, slots_bench: 6, slots_ir: 1, slots_cfb_os: 0,
 }
 
 type Tab = 'roster' | 'scoring' | 'meta'
@@ -41,6 +41,7 @@ export function LeagueSettingsModal({ league, onClose, onSaved }: Props) {
     slots_qb: league.slots_qb, slots_rb: league.slots_rb, slots_wr: league.slots_wr,
     slots_te: league.slots_te, slots_flex: league.slots_flex, slots_dst: league.slots_dst,
     slots_k: league.slots_k, slots_bench: league.slots_bench, slots_ir: league.slots_ir,
+    slots_cfb_os: league.slots_cfb_os ?? 0,
   })
 
   // Scoring
@@ -180,6 +181,7 @@ export function LeagueSettingsModal({ league, onClose, onSaved }: Props) {
                   ['slots_k', 'Kicker', '0-2'],
                   ['slots_bench', 'Bench', '3-10'],
                   ['slots_ir', 'IR', '0-3'],
+                  ['slots_cfb_os', 'CFB Offseason', '0-10'],
                 ] as [keyof RosterSlotConfig, string, string][]).map(([key, label, range]) => (
                   <div key={key}>
                     <label className="label">{label} <span className="text-gray-600 normal-case font-normal tracking-normal">(range: {range})</span></label>

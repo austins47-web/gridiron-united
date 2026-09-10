@@ -459,13 +459,6 @@ function TeamCard({ team, index }: { team: TeamRow; index: number }) {
             </div>
             <div className="readout-label mt-1">Members</div>
           </>
-        ) : false ? (
-          <>
-            <div className="font-cond font-black text-lg text-white tabular-nums leading-none">
-              {team.wins}
-            </div>
-            <div className="readout-label mt-1">Correct</div>
-          </>
         ) : (
           <>
             <div className="font-cond font-black text-lg text-white tabular-nums leading-none">

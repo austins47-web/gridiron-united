@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { useAppStore } from '@/store/appStore'
 import type { CfpTeam, BowlGame } from '@/types/database'
 import { Trophy, Plus, Check, X, Edit2, Trash2, Star, GraduationCap, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
@@ -11,7 +10,6 @@ import { CURRENT_SEASON } from '@/lib/season'
 // season comes from @/lib/season
 
 const CFP_ROUNDS = ['quarterfinal', 'semifinal', 'championship'] as const
-const BOWL_ROUNDS = ['quarterfinal', 'semifinal', 'championship'] as const
 
 // Common CFB teams for quick-add
 const CFB_TEAM_LIST = [

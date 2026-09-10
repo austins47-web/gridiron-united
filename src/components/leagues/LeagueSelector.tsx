@@ -166,7 +166,7 @@ export function LeagueSelector() {
                     </div>
 
                     {membership.is_commissioner && (
-                      <Shield size={13} className="text-gold shrink-0" title="Commissioner" />
+                      <span title="Commissioner"><Shield size={13} className="text-gold shrink-0" /></span>
                     )}
                   </button>
                 )

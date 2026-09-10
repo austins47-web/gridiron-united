@@ -62,7 +62,7 @@ type SocialView = 'friends' | 'requests' | 'messages' | 'profile' | 'conversatio
 
 // ── Main Component ─────────────────────────────────────────────────────
 export function SocialHub() {
-  const { user, profile } = useAppStore()
+  const { user } = useAppStore()
   const [view, setView] = useState<SocialView>('friends')
   const [selectedFriend, setSelectedFriend] = useState<Profile | null>(null)
   const [selectedConversation, setSelectedConversation] = useState<Profile | null>(null)
@@ -249,7 +249,6 @@ function FriendsTab({ friends, outgoingRequests, unreadCounts, onViewProfile, on
 }) {
   const { user } = useAppStore()
   const qc = useQueryClient()
-  const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Profile[]>([])
   const [searching, setSearching] = useState(false)
 
@@ -308,7 +307,7 @@ function FriendsTab({ friends, outgoingRequests, unreadCounts, onViewProfile, on
           <input
             className="input pl-9"
             placeholder="Search by username or display name…"
-            onChange={e => { setSearchQuery(e.target.value); searchUsers(e.target.value) }}
+            onChange={e => searchUsers(e.target.value)}
           />
         </div>
 
@@ -764,7 +763,6 @@ function FriendProfile({ friend, onBack, onMessage }: {
   onMessage: () => void
 }) {
   const { user } = useAppStore()
-  const [rosterLeagueId, setRosterLeagueId] = useState<string | null>(null)
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null)
 
   // Friend's leagues
@@ -806,7 +804,7 @@ function FriendProfile({ friend, onBack, onMessage }: {
   })
 
   // Shared leagues (leagues both users are in)
-  const { data: myLeagues = [] } = useQuery({
+  const { data: myLeagues = new Set<string>() } = useQuery({
     queryKey: ['my-league-ids', user?.id],
     queryFn: async () => {
       const { data } = await supabase
@@ -900,7 +898,9 @@ function FriendProfile({ friend, onBack, onMessage }: {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-white font-bold text-sm truncate">{league.name}</span>
-                        {league.is_commissioner && <Shield className="w-3.5 h-3.5 text-gold shrink-0" title="Commissioner" />}
+                        {league.is_commissioner && (
+                          <span title="Commissioner"><Shield className="w-3.5 h-3.5 text-gold shrink-0" /></span>
+                        )}
                       </div>
                       <div className="text-field-400 text-xs flex gap-2 mt-0.5">
                         <span>{league.team_name}</span>

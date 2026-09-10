@@ -10,11 +10,11 @@ import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal,
 } from './standings'
-import { WeekRecap, WeekInProgress } from './WeekRecap'
+import { WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
 import {
-  Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Users, Eye, EyeOff, TrendingUp, Shuffle,
+  Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
   TrendingDown, Home, Plane, Award
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -1021,7 +1021,6 @@ export function PickEmView() {
         <PicksChart
           games={games}
           allPicks={allPicks}
-          myPicks={myPicks}
           leagueMembers={leagueMembers}
           userId={user?.id}
           deadline={weekDeadline}
@@ -1282,11 +1281,10 @@ function GamePickCard({
 // Other users' picks are hidden (🔒) until that game's kickoff.
 
 function PicksChart({
-  games, allPicks, myPicks, leagueMembers, userId, deadline, week
+  games, allPicks, leagueMembers, userId, deadline, week
 }: {
   games: any[]
   allPicks: any[]
-  myPicks: any[]
   leagueMembers: any[]
   userId: string | undefined
   deadline: string | null

@@ -710,7 +710,6 @@ function SlotPickerModal({ player, slots, filledSlots, onPick, onClose }: {
     return s.pos.includes(player.pos)
   })
 
-  const hasNoCfbOs = !slots.some(s => s.type === 'cfb_os' || s.key.startsWith('CFB_OS'))
   const isNflBlockedFromCfbOs = player.league === 'NFL' && slots.some(s => s.type === 'cfb_os')
   const [justPicked, setJustPicked] = useState<string | null>(null)
 

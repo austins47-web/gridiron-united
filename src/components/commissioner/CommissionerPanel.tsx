@@ -1,16 +1,16 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
 import { useDeleteLeague } from '@/hooks/useLeague'
 import { buildSlotDefs } from '@/types/database'
 import { CfbPostseasonManager } from './CfbPostseasonManager'
 import { PickDeadlineSettings } from './PickDeadlineSettings'
-import type { League, Player, RosterSlotConfig } from '@/types/database'
+import type { League, Player, PlayerStatus, RosterSlotConfig } from '@/types/database'
 import {
-  Shield, Users, Zap, TrendingUp, Trash2, Plus, Search,
-  Save, RotateCcw, AlertCircle, ChevronDown, ChevronUp,
-  Edit3, Check, X, Crown, ArrowLeftRight, Clock
+  Shield, Users, Zap, TrendingUp, Trash2, Search,
+  Save, AlertCircle, ChevronDown, ChevronUp,
+  Edit3, Check, X, Crown, Clock, Loader2
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -306,7 +306,7 @@ function ScoringEditor({ league, onSaved }: { league: League; onSaved: (l: Leagu
     try {
       const { data, error } = await supabase
         .from('leagues')
-        .update(scores)
+        .update(scores as Partial<League>)
         .eq('id', league.id)
         .select()
         .single()
@@ -644,7 +644,10 @@ function RosterEditor({ leagueId, league }: { leagueId: string; league: League }
             <h4 className="text-sm font-bold text-white mb-2">Add Player</h4>
             <div className="flex gap-2 mb-2">
               <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-field-400" />
+                {searchLoading
+                  ? <Loader2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-field-400 animate-spin" />
+                  : <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-field-400" />
+                }
                 <input
                   className="input !py-1.5 pl-8 text-sm"
                   placeholder="Search players..."
@@ -720,7 +723,7 @@ function PlayerScoreEditor() {
   }
   const [projPts, setProjPts] = useState('')
   const [adp, setAdp] = useState('')
-  const [status, setStatus] = useState('active')
+  const [status, setStatus] = useState<PlayerStatus>('active')
   const [saving, setSaving] = useState(false)
 
   const searchPlayers = async (q: string) => {
@@ -886,7 +889,7 @@ function PlayerScoreEditor() {
             </div>
             <div>
               <label className="label">Status</label>
-              <select className="input" value={status} onChange={e => setStatus(e.target.value)}>
+              <select className="input" value={status} onChange={e => setStatus(e.target.value as PlayerStatus)}>
                 <option value="active">Active</option>
                 <option value="questionable">Questionable</option>
                 <option value="out">Out</option>
