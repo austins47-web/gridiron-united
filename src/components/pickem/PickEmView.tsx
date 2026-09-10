@@ -1155,10 +1155,9 @@ function GamePickCard({
               <span className="text-xs text-field-400 truncate max-w-full">
                 {info.name.split(' ').slice(-1)[0]}
               </span>
-              {recordsByAbbr?.get(team) && (
+              {!recordsArePreseason && recordsByAbbr?.get(team) && (
                 <span className="text-[11px] text-field-500 font-bold tabular-nums">
                   {recordsByAbbr.get(team)}
-                  {recordsArePreseason && <span className="text-field-600"> (pre)</span>}
                 </span>
               )}
 
