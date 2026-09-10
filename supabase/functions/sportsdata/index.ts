@@ -227,6 +227,14 @@ serve(async (req) => {
       const teamId = endpoint.split('/')[2]
       data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/roster`)
 
+    } else if (endpoint.startsWith('nfl/teams/') && endpoint.endsWith('/depthchart')) {
+      const teamId = endpoint.split('/')[2]
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/depthcharts`)
+
+    } else if (endpoint.startsWith('cfb/teams/') && endpoint.endsWith('/depthchart')) {
+      const teamId = endpoint.split('/')[2]
+      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${teamId}/depthcharts`)
+
     } else if (endpoint.startsWith('athlete/')) {
       const parts = endpoint.split('/')
       if (parts[1] === 'stats') {

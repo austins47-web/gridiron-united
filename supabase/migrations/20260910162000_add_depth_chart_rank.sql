@@ -1,0 +1,12 @@
+-- NFL-only depth chart rank (1 = starter, 2 = primary backup, ...),
+-- populated by the new sync-depth-charts function from ESPN's real
+-- NFL depth charts. Null = no data (CFB players - ESPN doesn't
+-- publish CFB depth charts at all - or an NFL player not found on
+-- any team's chart, e.g. practice squad).
+--
+-- Deliberately a new column rather than reusing the existing
+-- depth_pos column: depth_pos already holds something different
+-- (class year - Freshman/Sophomore/... - populated for CFB players
+-- by sync-players) and repurposing it would silently break whatever
+-- currently reads it for that.
+alter table players add column if not exists depth_chart_rank smallint;
