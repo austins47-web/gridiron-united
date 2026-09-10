@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useMyRoster, useDropPlayer, useMovePlayer, useRosterRealtime } from '@/hooks/useRoster'
@@ -12,6 +12,8 @@ import { byeWeeksForTeam, type WeekGame } from '@/lib/byeWeeks'
 import { headshotUrl } from '@/lib/playerIdentity'
 import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
+import { PlayerProfileDrawer } from '@/components/players/PlayerProfileDrawer'
+import { getTeamId } from '@/components/teams/teamIds'
 import { buildSlotDefs, canFillSlot } from '@/types/database'
 import type { RosterEntryWithPlayer } from '@/hooks/useRoster'
 import type { SlotDef, League, Player } from '@/types/database'
@@ -19,6 +21,7 @@ import { usePlayerWeeklyLog } from '@/hooks/usePlayerWeeklyLog'
 import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronRight, RotateCcw, ChevronDown, User } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
+const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
 
 export function RosterView() {
   const { activeLeagueId, activeLeague, myMembership, user } = useAppStore()
@@ -31,6 +34,8 @@ export function RosterView() {
   const [moving, setMoving] = useState<RosterEntryWithPlayer | null>(null)
   const [weekMoving, setWeekMoving] = useState<RosterEntryWithPlayer | null>(null)
   const [weekPickerOpen, setWeekPickerOpen] = useState(false)
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
+  const [teamPage, setTeamPage] = useState<{ id: string; league: 'NFL' | 'CFB' } | null>(null)
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
   const [loadingAI, setLoadingAI] = useState(false)
 
@@ -147,6 +152,14 @@ export function RosterView() {
     },
     staleTime: 5 * 60_000,
   })
+
+  if (teamPage) {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" /></div>}>
+        <TeamPage teamId={teamPage.id} league={teamPage.league} onBack={() => setTeamPage(null)} />
+      </Suspense>
+    )
+  }
 
   if (!activeLeagueId) {
     return (
@@ -512,6 +525,7 @@ export function RosterView() {
                 seasonGames={seasonGames}
                 cfbSeasonGames={cfbSeasonGames}
                 cfbTeamAbbrs={cfbTeamAbbrs}
+                onPlayerClick={setSelectedPlayer}
                 ownership={ownership}
                     moving={moving}
                     locked={rosterLocked}
@@ -540,6 +554,7 @@ export function RosterView() {
                 seasonGames={seasonGames}
                 cfbSeasonGames={cfbSeasonGames}
                 cfbTeamAbbrs={cfbTeamAbbrs}
+                onPlayerClick={setSelectedPlayer}
                 ownership={ownership}
                     moving={moving}
                     locked={rosterLocked}
@@ -586,6 +601,7 @@ export function RosterView() {
                 seasonGames={seasonGames}
                 cfbSeasonGames={cfbSeasonGames}
                 cfbTeamAbbrs={cfbTeamAbbrs}
+                onPlayerClick={setSelectedPlayer}
                 ownership={ownership}
                       moving={weekMoving}
                       locked={false}
@@ -620,6 +636,7 @@ export function RosterView() {
                 seasonGames={seasonGames}
                 cfbSeasonGames={cfbSeasonGames}
                 cfbTeamAbbrs={cfbTeamAbbrs}
+                onPlayerClick={setSelectedPlayer}
                 ownership={ownership}
                       moving={weekMoving}
                       locked={false}
@@ -652,6 +669,7 @@ export function RosterView() {
                 seasonGames={seasonGames}
                 cfbSeasonGames={cfbSeasonGames}
                 cfbTeamAbbrs={cfbTeamAbbrs}
+                onPlayerClick={setSelectedPlayer}
                 ownership={ownership}
                 moving={moving}
                 locked={rosterLocked}
@@ -683,6 +701,7 @@ export function RosterView() {
                 seasonGames={seasonGames}
                 cfbSeasonGames={cfbSeasonGames}
                 cfbTeamAbbrs={cfbTeamAbbrs}
+                onPlayerClick={setSelectedPlayer}
                 ownership={ownership}
                 moving={moving}
                 locked={rosterLocked}
@@ -726,6 +745,18 @@ export function RosterView() {
             </div>
           </div>
         </ModalPortal>
+      )}
+
+      {/* Player profile drawer */}
+      {selectedPlayer && (
+        <PlayerProfileDrawer
+          player={selectedPlayer}
+          onClose={() => setSelectedPlayer(null)}
+          onTeamClick={() => {
+            const tid = getTeamId(selectedPlayer.team, selectedPlayer.league)
+            if (tid) { setSelectedPlayer(null); setTeamPage({ id: tid, league: selectedPlayer.league }) }
+          }}
+        />
       )}
     </div>
   )
@@ -789,7 +820,7 @@ function WeekPicker({
 }
 
 function RosterSlotRow({
-  slot, entry, actualPoints, league, week, seasonGames, cfbSeasonGames, cfbTeamAbbrs, ownership, moving, locked, readOnly, blockTargeting, onMove, onDropToSlot, onDrop, dropLabel,
+  slot, entry, actualPoints, league, week, seasonGames, cfbSeasonGames, cfbTeamAbbrs, ownership, moving, locked, readOnly, blockTargeting, onMove, onDropToSlot, onDrop, dropLabel, onPlayerClick,
 }: {
   slot: SlotDef
   entry: RosterEntryWithPlayer | undefined
@@ -814,6 +845,7 @@ function RosterSlotRow({
   onDropToSlot: (slot: SlotDef) => void
   onDrop?: (e: RosterEntryWithPlayer) => void
   dropLabel?: string
+  onPlayerClick: (p: Player) => void
 }) {
   const player = entry?.player
   const [expanded, setExpanded] = useState(false)
@@ -932,7 +964,12 @@ function RosterSlotRow({
 
             <div className="min-w-0">
               <div className="text-sm font-bold text-white truncate leading-tight">
-                {player.name}
+                <button
+                  className="hover:text-gold hover:underline underline-offset-2 transition-colors"
+                  onClick={e => { e.stopPropagation(); onPlayerClick(player) }}
+                >
+                  {player.name}
+                </button>
                 <span className="font-normal text-field-400">
                   {' '}<span className={player.league === 'NFL' ? 'text-nfl' : 'text-cfb'}>{player.pos}</span>
                   {' - '}{gameInfo?.abbr ?? player.team}
