@@ -10,6 +10,7 @@ import { useRosteredPlayerIds } from '@/hooks/useRoster'
 import { useAppStore } from '@/store/appStore'
 import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
 import { useDraftReactions } from '@/hooks/useDraftReactions'
+import { playPickLock } from '@/lib/sound'
 import { supabase } from '@/lib/supabase'
 import type { Player } from '@/types/database'
 import {
@@ -214,6 +215,7 @@ export function DraftRoom() {
     setQueue(prev => prev.filter(id => id !== playerId))
     try {
       await makePick.mutateAsync({ playerId, draftState, totalTeams })
+      playPickLock()
     } catch {
       locallyPickedIds.current.delete(playerId)
     } finally {

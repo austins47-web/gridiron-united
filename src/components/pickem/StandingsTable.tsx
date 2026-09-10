@@ -1,14 +1,17 @@
-import { Crown, Flame, Minus, Check, X } from 'lucide-react'
+import { Crown, Flame, Minus, Check, X, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 import { rankOf, type StandingRow, type WeekRow } from './standings'
 import { useFlipList } from '@/hooks/useFlipList'
+import { tierLabel, isFoundingMember } from '@/lib/prestige'
 
 export function StandingsTable({
-  rows, currentUserId, thisWeekRows,
+  rows, currentUserId, thisWeekRows, leagueCreatedAt, joinedAtByUser,
 }: {
   rows: StandingRow[]
   currentUserId?: string
   thisWeekRows: WeekRow[]
+  leagueCreatedAt?: string | null
+  joinedAtByUser?: Map<string, string | null>
 }) {
   // Rows are already sorted by rank (rankOf/computeStandings does
   // that upstream) — this just animates the reorder whenever that
@@ -82,6 +85,12 @@ export function StandingsTable({
             const isYou = r.userId === currentUserId
             const losses = r.played - r.correct
             const wk = thisWeekByUser.get(r.userId)
+            // Rank 1 already gets the crown/leader treatment above —
+            // a tier badge there would be redundant. Only meaningful
+            // once results exist and the league's big enough that
+            // "top 25%" isn't just "everyone but one person".
+            const tier = rank > 1 && r.played > 0 && rows.length >= 5 ? tierLabel(rank, rows.length) : null
+            const founding = isFoundingMember(leagueCreatedAt, joinedAtByUser?.get(r.userId))
             const wkLosses = wk ? wk.played - wk.correct : 0
             return (
               <div
@@ -116,15 +125,30 @@ export function StandingsTable({
                           <Flame className="w-3 h-3" />{r.streak}
                         </span>
                       )}
+                      {tier && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-gold/80 bg-gold/10 border border-gold/25 rounded px-1 py-0.5 shrink-0">
+                          {tier}
+                        </span>
+                      )}
                       {wk?.submitted ? (
                         <Check className="w-3.5 h-3.5 text-gold shrink-0" aria-label="Picks submitted this week" />
                       ) : (
                         <X className="w-3.5 h-3.5 text-red-400 shrink-0" aria-label="No picks submitted this week" />
                       )}
                     </div>
-                    {r.username && (
-                      <span className="text-[11px] text-field-500 truncate">@{r.username}</span>
-                    )}
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {r.username && (
+                        <span className="text-[11px] text-field-500 truncate">@{r.username}</span>
+                      )}
+                      {founding && (
+                        <span
+                          title="Founding member — joined the week this league was created"
+                          className="flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider text-gold/80 shrink-0"
+                        >
+                          <Sparkles className="w-2.5 h-2.5" />Founder
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <span className="font-cond font-black text-white tabular-nums shrink-0">
                     {r.correct}-{losses < 0 ? 0 : losses}

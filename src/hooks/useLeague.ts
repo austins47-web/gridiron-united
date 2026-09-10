@@ -78,7 +78,7 @@ export function useStandings(leagueId: string | null) {
 // why the League Hub's standings panel showed 0-0 for every member
 // even after real games had gone final and real picks existed.
 export function usePickemStandings(leagueId: string | null) {
-  const { data: games = [] } = useQuery({
+  const { data: games = [], isLoading: gamesLoading } = useQuery({
     queryKey: ['pickem-standings-games', CURRENT_SEASON],
     enabled: !!leagueId,
     staleTime: 60_000,
@@ -92,7 +92,7 @@ export function usePickemStandings(leagueId: string | null) {
     },
   })
 
-  const { data: picks = [] } = useQuery({
+  const { data: picks = [], isLoading: picksLoading } = useQuery({
     queryKey: ['pickem-standings-picks', leagueId],
     enabled: !!leagueId,
     staleTime: 30_000,
@@ -107,7 +107,7 @@ export function usePickemStandings(leagueId: string | null) {
     },
   })
 
-  const { data: members = [] } = useQuery({
+  const { data: members = [], isLoading: membersLoading } = useQuery({
     queryKey: ['pickem-standings-members', leagueId],
     enabled: !!leagueId,
     queryFn: async () => {
@@ -135,6 +135,7 @@ export function usePickemStandings(leagueId: string | null) {
       profile: memberByUser.get(r.userId)?.profile ?? null,
       user_id: r.userId,
     })),
+    isLoading: gamesLoading || picksLoading || membersLoading,
   }
 }
 

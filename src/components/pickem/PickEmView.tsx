@@ -22,6 +22,7 @@ import toast from 'react-hot-toast'
 import { useNflOdds } from '@/hooks/useNflOdds'
 import { useNflStandings } from '@/hooks/useTeamStandings'
 import { CURRENT_SEASON } from '@/lib/season'
+import { playPickLock } from '@/lib/sound'
 
 const TEAM_INFO: Record<string, { name: string }> = {
   ARI: { name: 'Arizona Cardinals' },
@@ -257,12 +258,16 @@ export function PickEmView() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('league_members')
-        .select('user_id, team_name, profile:profiles(username, display_name, avatar_url)')
+        .select('user_id, team_name, joined_at, profile:profiles(username, display_name, avatar_url)')
         .eq('league_id', activeLeagueId!)
       if (error) throw error
       return data ?? []
     },
   })
+  const joinedAtByUser = useMemo(
+    () => new Map(leagueMembers.map((m: any) => [m.user_id, m.joined_at as string | null])),
+    [leagueMembers],
+  )
 
   // ── Season-wide data for derived standings ──────────────────
   // Standings are computed from picks joined to game results rather
@@ -428,7 +433,9 @@ export function PickEmView() {
       // No success toast — this now fires automatically, potentially
       // several times as someone clicks through picks, and a popup
       // every time would get old fast. The passive status indicator
-      // communicates "saved" continuously instead.
+      // communicates "saved" continuously instead; a quiet chime
+      // replaces the toast as the actual save confirmation.
+      playPickLock()
     } catch (e: any) {
       toast.error('Failed to save picks: ' + e.message)
     } finally {
@@ -1012,7 +1019,13 @@ export function PickEmView() {
             <WeekInProgress finished={finishedCount} total={games.length} />
           ) : null}
 
-          <StandingsTable rows={standings} currentUserId={user?.id} thisWeekRows={weekRows} />
+          <StandingsTable
+            rows={standings}
+            currentUserId={user?.id}
+            thisWeekRows={weekRows}
+            leagueCreatedAt={activeLeague?.created_at ?? null}
+            joinedAtByUser={joinedAtByUser}
+          />
         </div>
       )}
 

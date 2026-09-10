@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
 import { ModalPortal } from '@/components/ui/ModalPortal'
-import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X, Sun, Moon, ImageIcon } from 'lucide-react'
+import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X, Sun, Moon, ImageIcon, Volume2, VolumeX } from 'lucide-react'
 import { AVATAR_PRESETS, presetToDataUrl } from './AvatarPresets'
+import { isSoundMuted, setSoundMuted, playPickLock } from '@/lib/sound'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -125,6 +126,7 @@ export function AccountPage() {
     favorite_nfl_team: profile?.favorite_nfl_team ?? '',
     favorite_cfb_team: profile?.favorite_cfb_team ?? '',
   })
+  const [soundOn, setSoundOnState]    = useState(() => !isSoundMuted())
   const [saving, setSaving]           = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPw, setConfirmPw]     = useState('')
@@ -687,6 +689,38 @@ export function AccountPage() {
                 <div className="w-1.5 h-1.5 rounded-full bg-field-950" />
               </div>
             )}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Sound ── */}
+      <div className="panel">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {soundOn ? <Volume2 className="w-4 h-4 text-gold" /> : <VolumeX className="w-4 h-4 text-field-500" />}
+            <div>
+              <div className="font-cond font-black text-sm uppercase tracking-wider text-white">Sound Effects</div>
+              <div className="text-field-400 text-xs mt-0.5">A quiet chime on picks locking in and week reveals</div>
+            </div>
+          </div>
+          <button
+            role="switch"
+            aria-checked={soundOn}
+            onClick={() => {
+              const next = !soundOn
+              setSoundOnState(next)
+              setSoundMuted(!next)
+              if (next) playPickLock()
+            }}
+            className={clsx(
+              'relative w-11 h-6 rounded-full shrink-0 transition-colors',
+              soundOn ? 'bg-gold' : 'bg-field-700',
+            )}
+          >
+            <div className={clsx(
+              'absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all',
+              soundOn ? 'left-[22px]' : 'left-0.5',
+            )} />
           </button>
         </div>
       </div>

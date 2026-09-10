@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { WeekRecap } from './WeekRecap'
 import type { WeekRow } from './standings'
+import { playWinReveal } from '@/lib/sound'
 
 /**
  * The animated version of "who won the week" — plays exactly once
@@ -36,6 +37,7 @@ export function AnimatedWeekReveal({ leagueId, week, rows, tiebreakerTotal, curr
 
   useEffect(() => {
     if (phase !== 'animate' || played.length === 0) return
+    playWinReveal()
     // Runs the whole sequence once, then marks seen and settles
     // into the same WeekRecap this would have shown anyway.
     const totalMs = 900 + played.length * 300 + 800

@@ -1,11 +1,16 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, usePickemStandings, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
+import { computeWeek, isFinal } from '@/components/pickem/standings'
+import { CURRENT_SEASON } from '@/lib/season'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
 import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { FranchiseCard } from '@/components/ui/FranchiseCard'
-import { Trophy, Plus, LogIn, Users, Settings, Copy, Shield, ChevronUp, ChevronDown, QrCode, LogOut, Share2 } from 'lucide-react'
+import { StandingsSkeleton } from '@/components/ui/Skeleton'
+import { Trophy, Plus, LogIn, Users, Settings, Copy, Shield, ChevronUp, ChevronDown, QrCode, LogOut, Share2, Award, Flame, Zap } from 'lucide-react'
 import { QRModal } from './QRModal'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -202,9 +207,10 @@ function StandingsPanel({ leagueId, isPickem }: { leagueId: string | null; isPic
   // as stored columns on league_members — useStandings reads those
   // stored columns, which are correct for real fantasy leagues but
   // were never actually updated for Pick'Em at all.
-  const { data: pickemMembers } = usePickemStandings(isPickem ? leagueId : null)
-  const { data: fantasyMembers = [] } = useStandings(isPickem ? null : leagueId)
+  const { data: pickemMembers, isLoading: pickemLoading } = usePickemStandings(isPickem ? leagueId : null)
+  const { data: fantasyMembers = [], isLoading: fantasyLoading } = useStandings(isPickem ? null : leagueId)
   const members = isPickem ? (pickemMembers ?? []) : fantasyMembers
+  const loading = isPickem ? pickemLoading : fantasyLoading
 
   return (
     <div className="panel">
@@ -212,6 +218,7 @@ function StandingsPanel({ leagueId, isPickem }: { leagueId: string | null; isPic
         <Trophy className="w-4 h-4 text-gold" />
         <span className="section-title text-sm">Standings</span>
       </div>
+      {loading ? <StandingsSkeleton rows={4} /> : (
       <div className="space-y-1">
         {members.map((m: any, i: number) => (
           <div key={m.user_id} className="flex items-center justify-between gap-2 py-1.5 border-b border-field-700/50 last:border-0">
@@ -249,6 +256,162 @@ function StandingsPanel({ leagueId, isPickem }: { leagueId: string | null; isPic
           <p className="text-field-400 text-sm text-center py-4">No standings yet</p>
         )}
       </div>
+      )}
+    </div>
+  )
+}
+
+// ── Hall of Fame — in-season records, not cross-season history ──
+// A true "past champions" hall of fame needs a completed season to
+// point at, and this app doesn't have one yet (every league here is
+// in its first season). Rather than build a page that's permanently
+// empty until January, this surfaces the records that already exist
+// *this* season and updates live as weeks complete — it'll extend
+// naturally into cross-season history once a season actually ends.
+function HallOfFamePanel({ league, isPickem }: { league: any; isPickem: boolean }) {
+  return (
+    <div className="panel">
+      <div className="flex items-center gap-2 mb-3">
+        <Award className="w-4 h-4 text-gold" />
+        <span className="section-title text-sm">Hall of Fame</span>
+      </div>
+      {isPickem ? <PickemRecords leagueId={league.id} /> : <FantasyRecords leagueId={league.id} />}
+    </div>
+  )
+}
+
+function PickemRecords({ leagueId }: { leagueId: string }) {
+  const { data: games = [], isLoading: gLoading } = useQuery({
+    queryKey: ['hof-pickem-games', CURRENT_SEASON],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('nfl_games')
+        .select('id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker')
+        .eq('season', CURRENT_SEASON)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+  const { data: picks = [], isLoading: pLoading } = useQuery({
+    queryKey: ['hof-pickem-picks', leagueId],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pickem_picks')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score')
+        .eq('league_id', leagueId)
+        .eq('season', CURRENT_SEASON)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+  const { data: members = [], isLoading: mLoading } = useQuery({
+    queryKey: ['hof-pickem-members', leagueId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('league_members')
+        .select('user_id, profile:profiles(username, display_name)')
+        .eq('league_id', leagueId)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+
+  const loading = gLoading || pLoading || mLoading
+  if (loading) return <StandingsSkeleton rows={2} />
+
+  const weeks = [...new Set(games.map((g: any) => g.week))].sort((a, b) => a - b)
+  let best: { name: string; correct: number; played: number; week: number } | null = null
+  for (const wk of weeks) {
+    const wkGames = games.filter((g: any) => g.week === wk)
+    if (!wkGames.some((g: any) => isFinal(g))) continue
+    const wkPicks = picks.filter((p: any) => p.week === wk)
+    const rows = computeWeek(wkGames as any, wkPicks as any, members as any)
+    for (const r of rows) {
+      if (r.played === 0) continue
+      if (!best || r.correct > best.correct) best = { name: r.name, correct: r.correct, played: r.played, week: wk }
+    }
+  }
+
+  if (!best) {
+    return <p className="text-field-400 text-sm text-center py-4">No completed weeks yet — check back after Week 1</p>
+  }
+
+  return (
+    <div className="flex items-center gap-3 bg-gold/[0.06] border border-gold/20 rounded-xl px-3 py-3">
+      <Flame className="w-8 h-8 text-gold shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-gold/80">Best Week Ever</p>
+        <p className="text-white font-bold truncate">{best.name}</p>
+        <p className="text-field-400 text-xs">{best.correct}/{best.played} correct · Week {best.week}</p>
+      </div>
+    </div>
+  )
+}
+
+function FantasyRecords({ leagueId }: { leagueId: string }) {
+  const { data: matchups = [], isLoading } = useQuery({
+    queryKey: ['hof-fantasy-matchups', leagueId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('matchups')
+        .select(`
+          week, home_score, away_score, is_complete,
+          home:profiles!matchups_home_user_id_fkey(username, display_name),
+          away:profiles!matchups_away_user_id_fkey(username, display_name)
+        `)
+        .eq('league_id', leagueId)
+        .eq('is_complete', true)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+
+  if (isLoading) return <StandingsSkeleton rows={2} />
+  if (matchups.length === 0) {
+    return <p className="text-field-400 text-sm text-center py-4">No completed matchups yet — check back after Week 1</p>
+  }
+
+  const nameOf = (p: any) => p?.display_name || p?.username || 'Unknown'
+
+  let bestWeek: { name: string; score: number; week: number } | null = null
+  let blowout: { winner: string; loser: string; margin: number; week: number } | null = null
+
+  for (const m of matchups as any[]) {
+    if (m.home_score > (bestWeek?.score ?? -1)) bestWeek = { name: nameOf(m.home), score: m.home_score, week: m.week }
+    if (m.away_score > (bestWeek?.score ?? -1)) bestWeek = { name: nameOf(m.away), score: m.away_score, week: m.week }
+
+    const margin = Math.abs(m.home_score - m.away_score)
+    if (!blowout || margin > blowout.margin) {
+      const winner = m.home_score >= m.away_score ? m.home : m.away
+      const loser  = m.home_score >= m.away_score ? m.away : m.home
+      blowout = { winner: nameOf(winner), loser: nameOf(loser), margin, week: m.week }
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {bestWeek && (
+        <div className="flex items-center gap-3 bg-gold/[0.06] border border-gold/20 rounded-xl px-3 py-3">
+          <Flame className="w-8 h-8 text-gold shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-gold/80">Highest Single-Week Score</p>
+            <p className="text-white font-bold truncate">{bestWeek.name}</p>
+            <p className="text-field-400 text-xs">{bestWeek.score.toFixed(1)} pts · Week {bestWeek.week}</p>
+          </div>
+        </div>
+      )}
+      {blowout && blowout.margin > 0 && (
+        <div className="flex items-center gap-3 bg-field-800 border border-field-700 rounded-xl px-3 py-3">
+          <Zap className="w-8 h-8 text-field-400 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-field-500">Biggest Blowout</p>
+            <p className="text-white font-bold truncate">{blowout.winner} <span className="text-field-500 font-normal">over</span> {blowout.loser}</p>
+            <p className="text-field-400 text-xs">By {blowout.margin.toFixed(1)} · Week {blowout.week}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -707,6 +870,8 @@ function LeagueHub({
           isCommissioner={isCommissioner}
         />
       </div>
+
+      <HallOfFamePanel league={league} isPickem={isPickem} />
 
       {showFranchiseCard && (
         <FranchiseCard league={league} membership={membership} onClose={() => setShowFranchiseCard(false)} />
