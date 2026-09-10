@@ -981,8 +981,23 @@ function MembersManager({ leagueId, league }: { leagueId: string; league: League
     if (!confirm(`Remove ${m.profile?.display_name || m.profile?.username} from the league?`)) return
     // Drop all their players first
     await supabase.from('rosters').delete().eq('league_id', leagueId).eq('user_id', m.user_id)
-    const { error } = await supabase.from('league_members').delete().eq('id', m.id)
+    // The existing league_members RLS delete policy was built for
+    // the self-service "leave league" feature specifically
+    // (user_id = auth.uid()) — it was never designed to let a
+    // commissioner remove someone else's row, and this call has no
+    // .select() to notice that. Supabase returns error: null even
+    // when RLS silently blocks a delete with zero rows affected —
+    // checking what actually came back is what catches that,
+    // instead of reporting "Member removed" for a no-op.
+    const { data: removedRows, error } = await supabase
+      .from('league_members')
+      .delete()
+      .eq('id', m.id)
+      .select('id')
     if (error) return toast.error(error.message)
+    if (!removedRows || removedRows.length === 0) {
+      return toast.error('Removal was blocked — the commissioner permission for this may not be set up yet.')
+    }
     toast.success('Member removed')
     refetch()
     qc.invalidateQueries({ queryKey: ['league-members', leagueId] })
