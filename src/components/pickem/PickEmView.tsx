@@ -449,6 +449,13 @@ export function PickEmView() {
     }
     return map
   }, [standingsData])
+  // Kept separate from the record itself rather than baked into the
+  // string — the regular season hasn't actually started yet (every
+  // team is genuinely 0-0 there right now), so what's shown is a
+  // real preseason record, not a stale or wrong one. Labeling it
+  // explicitly keeps that clear instead of a bare number that reads
+  // the same regardless of which one it actually is.
+  const recordsArePreseason = standingsData?.isPreseason ?? false
 
   // Fills in the favored side of every still-open game, using the
   // same odds cache the pick cards already display. Games with no
@@ -931,6 +938,7 @@ export function PickEmView() {
               deadline={weekDeadline}
               odds={oddsMap?.get(`${game.away_team}@${game.home_team}`) ?? null}
               recordsByAbbr={recordsByAbbr}
+              recordsArePreseason={recordsArePreseason}
               onPick={(team) => {
                 if (isGameLocked(game.game_date, weekDeadline, game.status)) return
                 setPendingPicks(p => ({ ...p, [game.id]: team }))
@@ -952,6 +960,7 @@ export function PickEmView() {
                 deadline={weekDeadline}
                 odds={oddsMap?.get(`${tiebreakerGame.away_team}@${tiebreakerGame.home_team}`) ?? null}
                 recordsByAbbr={recordsByAbbr}
+                recordsArePreseason={recordsArePreseason}
                 onPick={(team) => {
                   if (isGameLocked(tiebreakerGame.game_date, weekDeadline, tiebreakerGame.status)) return
                   setPendingPicks(p => ({ ...p, [tiebreakerGame.id]: team }))
@@ -1024,7 +1033,7 @@ export function PickEmView() {
 }
 
 function GamePickCard({
-  game, pickedTeam, onPick, deadline, odds, recordsByAbbr, isTiebreaker, tiebreakerScore, onTiebreakerScore
+  game, pickedTeam, onPick, deadline, odds, recordsByAbbr, recordsArePreseason, isTiebreaker, tiebreakerScore, onTiebreakerScore
 }: {
   game: any
   pickedTeam: string | undefined
@@ -1032,6 +1041,7 @@ function GamePickCard({
   deadline: string | null
   odds?: { spread: number | null; totalPoints: number | null; homeWinPct: number | null; awayWinPct: number | null; homeMoneyline: number | null; awayMoneyline: number | null } | null
   recordsByAbbr?: Map<string, string>
+  recordsArePreseason?: boolean
   isTiebreaker?: boolean
   tiebreakerScore?: string
   onTiebreakerScore?: (val: string) => void
@@ -1148,6 +1158,7 @@ function GamePickCard({
               {recordsByAbbr?.get(team) && (
                 <span className="text-[11px] text-field-500 font-bold tabular-nums">
                   {recordsByAbbr.get(team)}
+                  {recordsArePreseason && <span className="text-field-600"> (pre)</span>}
                 </span>
               )}
 
