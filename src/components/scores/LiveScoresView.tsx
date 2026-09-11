@@ -666,7 +666,13 @@ function GameGroup({ games, viewMode, cols, favTeams, onToggleFav, oddsMap, onSe
   }
 
   return (
-    <div className={clsx('grid gap-3', GRID_COLS[cols])}>
+    // items-start — grid's default is align-items: stretch, which
+    // forces every card in a row to match the row's tallest card
+    // (a pre-game card with spread/total/win% is much taller than a
+    // final score with nothing else to show), leaving a big empty
+    // gap at the bottom of the shorter ones. items-start lets each
+    // card size to its own content instead.
+    <div className={clsx('grid gap-3 items-start', GRID_COLS[cols])}>
       {games.map(g => <GridCard key={g.id} game={g} cols={cols} favTeams={favTeams} onToggleFav={onToggleFav} odds={getOdds(g)} onSelect={onSelect} onTeamClick={onTeamClick} />)}
     </div>
   )
