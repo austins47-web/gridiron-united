@@ -3,21 +3,18 @@ import { Bell, User, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { LiveTickerStrip } from './LiveTickerStrip'
-import { useUnreadChat } from '@/hooks/useUnreadChat'
+import { LeagueBottomBar } from './LeagueBottomBar'
 import { NotificationsPanel } from '@/components/ui/NotificationsPanel'
 import { LeagueSelector } from '@/components/leagues/LeagueSelector'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import clsx from 'clsx'
 
 export function AppShell() {
-  const { profile, unreadCount, signOut, activeLeague, activeLeagueId, myMembership } = useAppStore()
+  const { profile, unreadCount, signOut, activeLeague, activeLeagueId } = useAppStore()
   const navigate = useNavigate()
   const location = useLocation()
   const [showNotifs, setShowNotifs] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const { hasUnread: hasUnreadChat } = useUnreadChat(activeLeagueId)
-
-  const isCommissioner = myMembership?.is_commissioner
-  const isPickEm = activeLeague?.league_type === 'pickem'
 
   // ── Global tabs — always visible ──────────────────────────
   const globalTabs = [
@@ -30,22 +27,10 @@ export function AppShell() {
     { to: '/app/social',  label: 'Social',      emoji: '👥' },
   ]
 
-  // ── League tabs — only when a league is selected ──────────
-  const leagueTabs = activeLeagueId ? [
-    ...(!isPickEm ? [
-      { to: '/app/roster',  label: 'Roster',    emoji: '📋' },
-      { to: '/app/matchup', label: 'Matchup',   emoji: '⚔️' },
-      { to: '/app/players', label: 'Players',   emoji: '🔍' },
-      { to: '/app/draft',   label: 'Draft Room', emoji: '🎯' },
-      { to: '/app/scoring', label: 'Scoring',   emoji: '📊' },
-    ] : [
-      { to: '/app/pickem',  label: "Pick'Em",   emoji: '🏈' },
-    ]),
-    ...(!isPickEm ? [{ to: '/app/trades', label: 'Trades', emoji: '🔄' }] : []),
-    { to: '/app/chat', label: 'Chat', emoji: '💬' },
-    ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commissioner', emoji: '⚙️' }] : []),
-    { to: '/app/settings', label: 'Settings', emoji: '🛠️' },
-  ] : []
+  // League-specific destinations now live in the fixed LeagueBottomBar
+  // instead of a horizontally-scrolling top row (see that component
+  // for why - too many destinations for one row without burying
+  // Chat/Commissioner/Settings off the edge of a phone screen).
 
   // Detect if we're on a league-specific route
   const leagueRoutes = ['/app/roster', '/app/matchup', '/app/players', '/app/draft', '/app/scoring', '/app/commissioner', '/app/pickem', '/app/chat', '/app/trades', '/app/settings']
@@ -193,42 +178,13 @@ export function AppShell() {
 
       <LiveTickerStrip />
 
-      {/* ── League sub-nav — only when a league is selected ── */}
-      {activeLeagueId && leagueTabs.length > 0 && (
-        <nav className="app-shell-sub-nav bg-field-800 border-b border-field-700 flex overflow-x-auto shrink-0">
-          {/* League name pill */}
-          <div className="flex items-center px-3 border-r border-field-700 shrink-0">
-            <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold/70 truncate max-w-[120px]">
-              {activeLeague?.name ?? 'League'}
-            </span>
-          </div>
-
-          {leagueTabs.map(({ to, label, emoji }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `font-cond font-bold text-xs uppercase tracking-wider px-4 py-2.5
-                 border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5
-                 ${isActive
-                   ? 'text-gold border-b-gold bg-field-700/40'
-                   : 'text-field-400 border-transparent hover:text-white hover:bg-field-700/30'
-                 }`
-              }
-            >
-              <span>{emoji}</span>{label}
-              {to === '/app/chat' && hasUnreadChat && (
-                <span className="w-1.5 h-1.5 rounded-full bg-gold shrink-0" />
-              )}
-            </NavLink>
-          ))}
-        </nav>
-      )}
-
       </div>
 
       {/* ── Main content ── */}
-      <main className="flex-1 flex flex-col min-h-0 bg-field-900">
+      {/* pb-14 reserves room for the fixed LeagueBottomBar below so
+          it never overlaps page content - only needed once a league
+          is active, since that's the only time the bar renders. */}
+      <main className={clsx('flex-1 flex flex-col min-h-0 bg-field-900', activeLeagueId && 'pb-14')}>
         {/* No league selected + on a league route → prompt */}
         {!activeLeagueId && isOnLeagueRoute ? (
           <div className="max-w-md mx-auto text-center py-20 px-6">
@@ -266,6 +222,8 @@ export function AppShell() {
           </div>
         )}
       </main>
+
+      <LeagueBottomBar />
 
     </div>
   )
