@@ -49,15 +49,18 @@ export function MatchupView() {
   const { pointsByRosterId: oppPoints, startersTotal: oppTotal } = useActualPoints(oppWeek.starters, activeLeague ?? null, week)
 
   // Opportunistically write the freshly computed score back onto the
-  // matchup row for the live week only (not while browsing past/future
-  // weeks) - matchups.home_score/away_score has never had a writer
-  // anywhere in the app, so the Home dashboard's matchup widget and
-  // the League Hall of Fame view (both already read these columns)
-  // have only ever shown 0. Skipped entirely if either side's total
-  // is still 0/0 with no roster data, so an empty roster doesn't
-  // stomp real numbers written by the opponent's own client.
+  // matchup row for the current week AND any already-played past week
+  // (never a future one - those are legitimately 0-0 and there's no
+  // point persisting that repeatedly) - matchups.home_score/away_score
+  // has never had a writer anywhere in the app, so the Home
+  // dashboard's matchup widget and the League Hall of Fame view (both
+  // already read these columns) have only ever shown 0, including for
+  // weeks that already finished before this was fixed. Skipped
+  // entirely if either side's total is still 0/0 with no roster data,
+  // so an empty roster doesn't stomp real numbers written by the
+  // opponent's own client.
   useEffect(() => {
-    if (!matchup || !opponentId || week !== defaultWeek) return
+    if (!matchup || !opponentId || week > defaultWeek) return
     if (myRoster.length === 0 || oppRoster.length === 0) return
     const homeScore = isHome ? myTotal : oppTotal
     const awayScore = isHome ? oppTotal : myTotal
