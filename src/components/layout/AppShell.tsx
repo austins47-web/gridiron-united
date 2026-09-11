@@ -180,7 +180,7 @@ export function AppShell() {
 
       {/* ── League sub-nav — only when a league is selected ── */}
       {activeLeagueId && leagueTabs.length > 0 && (
-        <nav className="app-shell-sub-nav sticky top-[calc(3.5rem+41px)] z-20 bg-field-800 border-b border-field-700 flex overflow-x-auto shrink-0">
+        <nav className="app-shell-sub-nav sticky top-[calc(3.5rem+41px+2rem)] z-20 bg-field-800 border-b border-field-700 flex overflow-x-auto shrink-0">
           {/* League name pill */}
           <div className="flex items-center px-3 border-r border-field-700 shrink-0">
             <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold/70 truncate max-w-[120px]">

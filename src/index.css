@@ -412,7 +412,10 @@
   .ticker-live-dot { animation: ticker-pulse 1.6s ease-in-out infinite; }
   @keyframes ticker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
   .ticker-scroll-track { animation: ticker-scroll 32s linear infinite; }
-  @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  /* --ticker-end is set per-render (-100%/repeat count) so the loop
+     always travels exactly one copy's width regardless of how many
+     copies were needed to fill the lane - see LiveTickerStrip.tsx. */
+  @keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(var(--ticker-end, -50%)); } }
 
   /* ── Draft reaction burst — floating emoji for useDraftReactions ── */
   .reaction-burst { animation: reaction-rise 2.2s ease-out forwards; }

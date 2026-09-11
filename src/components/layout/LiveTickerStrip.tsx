@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTickerGames } from '@/hooks/useHome'
 import { useAppStore } from '@/store/appStore'
@@ -17,6 +18,12 @@ type TickerItem =
  * positioned with a hardcoded sticky offset tied to this strip's
  * height, so a second row would need that recalculated everywhere
  * it's used; safer to interleave than to risk that layout breaking.
+ *
+ * Sticky itself (top: header height + global nav height, see
+ * AppShell.tsx's top-14 nav right above this) so it stays in view
+ * while scrolling instead of disappearing with the rest of the page -
+ * the league sub-nav that follows it in AppShell is stacked directly
+ * below at this strip's sticky offset + its own h-8 height.
  *
  * No collapse toggle — it used to swap the scrolling row for a
  * same-height "N updates — collapsed" placeholder, which never
@@ -49,23 +56,54 @@ export function LiveTickerStrip() {
 
   if (items.length === 0) return null
 
-  // Duplicate the list once so the scrolling loop can translate by
-  // exactly 50% and land back on an identical frame - each item
-  // carries its OWN trailing spacing (mr-7) rather than a flex `gap`
-  // between children, so both halves are truly identical copies
-  // (gap included) and the seam lines up exactly regardless of how
-  // few items there are. A flex `gap` only sits BETWEEN children, so
-  // with a flex `gap` the boundary between the two copies gets one
-  // gap while the split point of "50% of total width" expects a full
-  // item+gap there - off by half a gap, invisible with dozens of
-  // items, very visible with only one or two (confirmed directly:
-  // exactly the single-game gap glitch reported).
-  const doubled = [...items, ...items]
+  return <TickerScroller items={items} live={live.length > 0} />
+}
+
+// Split into its own component so hooks can run unconditionally
+// regardless of the parent's early return above.
+function TickerScroller({ items, live }: { items: TickerItem[]; live: boolean }) {
+  const laneRef = useRef<HTMLDivElement>(null)
+  const measureRef = useRef<HTMLDivElement>(null)
+  const [repeat, setRepeat] = useState(2)
+
+  // How many copies of `items` are needed so the repeated track is
+  // always wider than the visible lane (times 2, so there's always a
+  // full lane's worth of content still queued up after the visible
+  // portion, however few items there are) - measured directly rather
+  // than assumed, since a fixed "duplicate twice" only has enough
+  // content when the item list is already wide on its own. With one
+  // short game, two copies together were still narrower than the
+  // lane, leaving visible dead space before the loop could wrap
+  // (confirmed directly - the reported gap). Re-measures on resize
+  // and whenever the item count changes (a proxy for content change,
+  // cheap and avoids diffing rendered text on every score tick).
+  useLayoutEffect(() => {
+    function recompute() {
+      const laneWidth = laneRef.current?.offsetWidth ?? 0
+      const oneCopyWidth = measureRef.current?.scrollWidth ?? 0
+      if (!laneWidth || !oneCopyWidth) return
+      setRepeat(Math.max(2, Math.ceil((laneWidth * 2) / oneCopyWidth)))
+    }
+    recompute()
+    const ro = new ResizeObserver(recompute)
+    if (laneRef.current) ro.observe(laneRef.current)
+    return () => ro.disconnect()
+  }, [items.length])
+
+  // Every copy is byte-for-byte identical (each item carries its own
+  // trailing mr-7 instead of a shared flex `gap`, so there's no
+  // asymmetric half-gap at the seam the way a flex `gap` would leave
+  // between the last item of one copy and the first of the next) -
+  // translating by exactly 1/repeat of the total width always lands
+  // back on an identical frame, and the fixed 32s animation duration
+  // means the actual scroll SPEED (one copy's width per 32s) stays
+  // constant no matter how many copies repeat had to add.
+  const repeated = Array.from({ length: repeat }, () => items).flat()
 
   return (
-    <div className="flex items-center h-8 bg-field-900 border-b border-field-800 overflow-hidden shrink-0">
+    <div className="app-shell-ticker sticky top-[calc(3.5rem+41px)] z-[25] flex items-center h-8 bg-field-900 border-b border-field-800 overflow-hidden shrink-0">
       <div className="flex items-center gap-1.5 px-3 h-full bg-field-800 shrink-0">
-        {live.length > 0 ? (
+        {live ? (
           <>
             <div className="ticker-live-dot w-1.5 h-1.5 rounded-full bg-red-500" />
             <span className="font-cond font-black text-[10px] tracking-[0.15em] text-red-400">LIVE</span>
@@ -75,9 +113,20 @@ export function LiveTickerStrip() {
         )}
       </div>
 
-      <div className="flex-1 overflow-hidden relative h-full">
-        <div className="ticker-scroll-track flex items-center absolute whitespace-nowrap h-full">
-          {doubled.map((item, i) => (
+      <div ref={laneRef} className="flex-1 overflow-hidden relative h-full">
+        {/* Invisible, unrepeated copy used only to measure one item
+            set's natural width - not part of the visible layout. */}
+        <div ref={measureRef} className="invisible absolute flex items-center whitespace-nowrap h-full pointer-events-none" aria-hidden>
+          {items.map((item, i) => (
+            <span key={`measure-${item.key}-${i}`} className="font-cond font-bold text-xs shrink-0 mr-7">{item.text}</span>
+          ))}
+        </div>
+
+        <div
+          className="ticker-scroll-track flex items-center absolute whitespace-nowrap h-full"
+          style={{ '--ticker-end': `-${100 / repeat}%` } as React.CSSProperties}
+        >
+          {repeated.map((item, i) => (
             <button
               key={`${item.key}-${i}`}
               onClick={item.onClick}
