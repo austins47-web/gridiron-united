@@ -1,5 +1,8 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { Bell, User, ChevronDown, ChevronRight } from 'lucide-react'
+import {
+  Bell, User, ChevronDown, ChevronRight,
+  Home, Trophy, Radio, Award, Newspaper, FlaskConical, Users,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { LiveTickerStrip } from './LiveTickerStrip'
@@ -18,13 +21,13 @@ export function AppShell() {
 
   // ── Global tabs — always visible ──────────────────────────
   const globalTabs = [
-    { to: '/app/home',    label: 'Home',       emoji: '🏠' },
-    { to: "/app/leagues", label: "My Leagues", emoji: "🏆" },
-    { to: '/app/scores',  label: 'Live Scores', emoji: '📡' },
-    { to: '/app/standings', label: 'Standings', emoji: '🥇' },
-    { to: '/app/news',    label: 'News',         emoji: '📰' },
-    { to: '/app/mock',    label: 'Mock Draft',  emoji: '🧪' },
-    { to: '/app/social',  label: 'Social',      emoji: '👥' },
+    { to: '/app/home',    label: 'Home',       icon: Home },
+    { to: "/app/leagues", label: "My Leagues", icon: Trophy },
+    { to: '/app/scores',  label: 'Live Scores', icon: Radio },
+    { to: '/app/standings', label: 'Standings', icon: Award },
+    { to: '/app/news',    label: 'News',         icon: Newspaper },
+    { to: '/app/mock',    label: 'Mock Draft',  icon: FlaskConical },
+    { to: '/app/social',  label: 'Social',      icon: Users },
   ]
 
   // League-specific destinations now live in the fixed LeagueBottomBar
@@ -165,13 +168,13 @@ export function AppShell() {
 
       {/* ── Global nav ── */}
       <nav className="app-shell-sub-nav bg-field-900 border-b border-field-700 flex overflow-x-auto shrink-0">
-        {globalTabs.map(({ to, label, emoji }) => (
+        {globalTabs.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
-            className={({ isActive }) => `nav-tab ${isActive ? 'active' : ''}`}
+            className={({ isActive }) => `nav-tab inline-flex items-center gap-2 ${isActive ? 'active' : ''}`}
           >
-            <span className="mr-1.5">{emoji}</span>{label}
+            <Icon className="w-4 h-4 shrink-0" strokeWidth={2.25} />{label}
           </NavLink>
         ))}
       </nav>
@@ -188,7 +191,7 @@ export function AppShell() {
         {/* No league selected + on a league route → prompt */}
         {!activeLeagueId && isOnLeagueRoute ? (
           <div className="max-w-md mx-auto text-center py-20 px-6">
-            <div className="text-5xl mb-4">🏆</div>
+            <Trophy className="w-12 h-12 text-gold/40 mx-auto mb-4" strokeWidth={1.5} />
             <h2 className="font-cond font-black text-2xl text-white uppercase tracking-wider mb-2">
               Select a League
             </h2>

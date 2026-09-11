@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import {
+  ClipboardList, Swords, Search, Target, BarChart3, ArrowLeftRight,
+  MessageCircle, Shield, Settings, Goal, MoreHorizontal, X,
+  type LucideIcon,
+} from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useUnreadChat } from '@/hooks/useUnreadChat'
 import clsx from 'clsx'
 
-interface Tab { to: string; label: string; emoji: string; badge?: boolean }
+interface Tab { to: string; label: string; icon: LucideIcon; badge?: boolean }
 
 /**
  * Replaces the old horizontally-scrolling league sub-nav (Roster,
@@ -35,24 +40,24 @@ export function LeagueBottomBar() {
 
   const primary: Tab[] = isPickEm
     ? [
-        { to: '/app/pickem',   label: "Pick'Em",  emoji: '🏈' },
-        { to: '/app/chat',     label: 'Chat',      emoji: '💬', badge: hasUnreadChat },
-        ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commish', emoji: '⚙️' }] : []),
-        { to: '/app/settings', label: 'Settings', emoji: '🛠️' },
+        { to: '/app/pickem',   label: "Pick'Em",  icon: Goal },
+        { to: '/app/chat',     label: 'Chat',      icon: MessageCircle, badge: hasUnreadChat },
+        ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commish', icon: Shield }] : []),
+        { to: '/app/settings', label: 'Settings', icon: Settings },
       ]
     : [
-        { to: '/app/roster',  label: 'Roster',  emoji: '📋' },
-        { to: '/app/matchup', label: 'Matchup', emoji: '⚔️' },
-        { to: '/app/players', label: 'Players', emoji: '🔍' },
+        { to: '/app/roster',  label: 'Roster',  icon: ClipboardList },
+        { to: '/app/matchup', label: 'Matchup', icon: Swords },
+        { to: '/app/players', label: 'Players', icon: Search },
       ]
 
   const more: Tab[] = isPickEm ? [] : [
-    { to: '/app/draft',   label: 'Draft Room', emoji: '🎯' },
-    { to: '/app/scoring', label: 'Scoring',    emoji: '📊' },
-    { to: '/app/trades',  label: 'Trades',     emoji: '🔄' },
-    { to: '/app/chat',    label: 'Chat',       emoji: '💬', badge: hasUnreadChat },
-    ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commissioner', emoji: '⚙️' }] : []),
-    { to: '/app/settings', label: 'Settings',  emoji: '🛠️' },
+    { to: '/app/draft',   label: 'Draft Room', icon: Target },
+    { to: '/app/scoring', label: 'Scoring',    icon: BarChart3 },
+    { to: '/app/trades',  label: 'Trades',     icon: ArrowLeftRight },
+    { to: '/app/chat',    label: 'Chat',       icon: MessageCircle, badge: hasUnreadChat },
+    ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commissioner', icon: Shield }] : []),
+    { to: '/app/settings', label: 'Settings',  icon: Settings },
   ]
 
   const moreActive = more.some(m => location.pathname.startsWith(m.to))
@@ -78,7 +83,7 @@ export function LeagueBottomBar() {
                   )}
                 >
                   {m.badge && <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-gold" />}
-                  <span className="text-lg leading-none">{m.emoji}</span>
+                  <m.icon className="w-5 h-5" strokeWidth={2} />
                   {m.label}
                 </button>
               ))}
@@ -99,7 +104,7 @@ export function LeagueBottomBar() {
             )}
           >
             {t.badge && <span className="absolute top-1 right-[calc(50%-15px)] w-1.5 h-1.5 rounded-full bg-gold" />}
-            <span className="text-lg leading-none">{t.emoji}</span>
+            <t.icon className="w-5 h-5" strokeWidth={2.25} />
             {t.label}
           </NavLink>
         ))}
@@ -112,7 +117,7 @@ export function LeagueBottomBar() {
             )}
           >
             {moreHasBadge && !moreOpen && <span className="absolute top-1 right-[calc(50%-15px)] w-1.5 h-1.5 rounded-full bg-gold" />}
-            <span className="text-lg leading-none">{moreOpen ? '✕' : '⋯'}</span>
+            {moreOpen ? <X className="w-5 h-5" strokeWidth={2.25} /> : <MoreHorizontal className="w-5 h-5" strokeWidth={2.25} />}
             More
           </button>
         )}
