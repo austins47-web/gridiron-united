@@ -14,16 +14,13 @@ type TickerItem =
  * (useTickerGames, already built for Home's jumbotron ticker) and
  * this user's own recent activity (notifications, already fetched
  * and subscribed globally via the app store — no new data source).
- * Kept to one row on purpose — the sub-nav directly below this is
- * positioned with a hardcoded sticky offset tied to this strip's
- * height, so a second row would need that recalculated everywhere
- * it's used; safer to interleave than to risk that layout breaking.
- *
- * Sticky itself (top: header height + global nav height, see
- * AppShell.tsx's top-14 nav right above this) so it stays in view
- * while scrolling instead of disappearing with the rest of the page -
- * the league sub-nav that follows it in AppShell is stacked directly
- * below at this strip's sticky offset + its own h-8 height.
+ * Kept to one row on purpose — this, the header, the global nav, and
+ * the league sub-nav are all rendered inside one shared sticky
+ * wrapper in AppShell (not each individually sticky with its own
+ * hand-calculated top offset - that broke twice from the "nav
+ * height" guess baked into the math never quite matching the real
+ * rendered height). Not sticky on its own; AppShell's wrapper is what
+ * keeps it pinned in view while scrolling.
  *
  * No collapse toggle — it used to swap the scrolling row for a
  * same-height "N updates — collapsed" placeholder, which never
@@ -101,7 +98,7 @@ function TickerScroller({ items, live }: { items: TickerItem[]; live: boolean })
   const repeated = Array.from({ length: repeat }, () => items).flat()
 
   return (
-    <div className="app-shell-ticker sticky top-[calc(3.5rem+41px)] z-[25] flex items-center h-8 bg-field-900 border-b border-field-800 overflow-hidden shrink-0">
+    <div className="app-shell-ticker flex items-center h-8 bg-field-900 border-b border-field-800 overflow-hidden shrink-0">
       <div className="flex items-center gap-1.5 px-3 h-full bg-field-800 shrink-0">
         {live ? (
           <>

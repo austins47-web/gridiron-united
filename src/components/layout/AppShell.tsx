@@ -55,8 +55,23 @@ export function AppShell() {
   return (
     <div className="min-h-screen flex flex-col">
 
+      {/*
+        Header + global nav + live ticker + league sub-nav are one
+        sticky unit, not four independently-sticky elements each with
+        their own hand-calculated `top` offset (header height, header
+        + nav height, header + nav + ticker height...). That approach
+        broke twice already — the "nav height" figure baked into those
+        offsets was never actually precise (nav-tab's real rendered
+        height doesn't match the guess), so the pieces drifted out of
+        alignment and the sub-nav ended up sliding partly behind the
+        ticker on scroll. Stacking them normally inside one sticky
+        wrapper needs no height math at all - whatever they actually
+        render at, the whole group moves and locks together.
+      */}
+      <div className="sticky top-0 z-40 flex flex-col shrink-0 bg-field-950">
+
       {/* ── Header ── */}
-      <header className="app-shell-top-nav sticky top-0 z-40 bg-field-950 border-b border-field-700 flex items-center justify-between px-4 h-14 shrink-0">
+      <header className="app-shell-top-nav bg-field-950 border-b border-field-700 flex items-center justify-between px-4 h-14 shrink-0">
         {/* Logo */}
         <button
           onClick={() => navigate('/app/home')}
@@ -164,7 +179,7 @@ export function AppShell() {
       </div>
 
       {/* ── Global nav ── */}
-      <nav className="app-shell-sub-nav sticky top-14 z-30 bg-field-900 border-b border-field-700 flex overflow-x-auto shrink-0">
+      <nav className="app-shell-sub-nav bg-field-900 border-b border-field-700 flex overflow-x-auto shrink-0">
         {globalTabs.map(({ to, label, emoji }) => (
           <NavLink
             key={to}
@@ -180,7 +195,7 @@ export function AppShell() {
 
       {/* ── League sub-nav — only when a league is selected ── */}
       {activeLeagueId && leagueTabs.length > 0 && (
-        <nav className="app-shell-sub-nav sticky top-[calc(3.5rem+41px+2rem)] z-20 bg-field-800 border-b border-field-700 flex overflow-x-auto shrink-0">
+        <nav className="app-shell-sub-nav bg-field-800 border-b border-field-700 flex overflow-x-auto shrink-0">
           {/* League name pill */}
           <div className="flex items-center px-3 border-r border-field-700 shrink-0">
             <span className="font-cond font-bold text-xs uppercase tracking-wider text-gold/70 truncate max-w-[120px]">
@@ -209,6 +224,8 @@ export function AppShell() {
           ))}
         </nav>
       )}
+
+      </div>
 
       {/* ── Main content ── */}
       <main className="flex-1 flex flex-col min-h-0 bg-field-900">
