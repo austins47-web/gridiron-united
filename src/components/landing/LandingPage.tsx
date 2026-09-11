@@ -1,5 +1,10 @@
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import {
+  Goal, Landmark, Star, Trophy, Target, FlaskConical, Radio,
+  BarChart3, Users, Settings, Bot, RefreshCw, Lock, Crown,
+  type LucideIcon,
+} from 'lucide-react'
 
 // ── Animated field lines background ─────────────────────────
 function FieldLines() {
@@ -61,10 +66,12 @@ function Ticker({ teams, reverse = false, speed = 40 }: { teams: string[], rever
 }
 
 // ── Feature card ─────────────────────────────────────────────
-function FeatureCard({ icon, title, desc }: { icon: string, title: string, desc: string }) {
+function FeatureCard({ icon: Icon, title, desc }: { icon: LucideIcon, title: string, desc: string }) {
   return (
     <div className="group bg-field-800/60 border border-field-700 rounded-2xl p-6 hover:border-gold/30 hover:bg-field-800 transition-all duration-300 hover:-translate-y-1">
-      <div className="text-4xl mb-4">{icon}</div>
+      <div className="w-10 h-10 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center text-gold mb-4">
+        <Icon className="w-5 h-5" strokeWidth={1.75} />
+      </div>
       <h3 className="font-cond font-black text-lg uppercase tracking-wider text-white mb-2">{title}</h3>
       <p className="text-field-400 text-sm leading-relaxed">{desc}</p>
     </div>
@@ -148,11 +155,11 @@ export function LandingPage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] rounded-full blur-[150px] pointer-events-none"
           style={{ background: 'radial-gradient(ellipse, rgba(206, 123, 69,0.07) 0%, transparent 70%)' }}
         />
-        {/* floating emojis */}
-        <div className="absolute top-[22%] left-[7%]  text-5xl opacity-[0.18] float-a">🏈</div>
-        <div className="absolute top-[30%] right-[7%] text-4xl opacity-[0.14] float-b" style={{ animationDelay: '1.2s' }}>🏟</div>
-        <div className="absolute bottom-[28%] left-[11%] text-3xl opacity-[0.10] float-a" style={{ animationDelay: '2.1s' }}>🏆</div>
-        <div className="absolute bottom-[22%] right-[10%] text-4xl opacity-[0.13] float-b" style={{ animationDelay: '0.6s' }}>⭐</div>
+        {/* floating icons */}
+        <Goal className="absolute top-[22%] left-[7%] w-12 h-12 opacity-[0.18] float-a text-gold" strokeWidth={1.5} />
+        <Landmark className="absolute top-[30%] right-[7%] w-10 h-10 opacity-[0.14] float-b text-gold" style={{ animationDelay: '1.2s' }} strokeWidth={1.5} />
+        <Trophy className="absolute bottom-[28%] left-[11%] w-9 h-9 opacity-[0.10] float-a text-gold" style={{ animationDelay: '2.1s' }} strokeWidth={1.5} />
+        <Star className="absolute bottom-[22%] right-[10%] w-10 h-10 opacity-[0.13] float-b text-gold" style={{ animationDelay: '0.6s' }} strokeWidth={1.5} />
 
         <div className={`relative z-10 text-center max-w-5xl mx-auto transition-opacity duration-300 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
           {/* League badges */}
@@ -259,23 +266,23 @@ export function LandingPage() {
             </h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <FeatureCard icon="🏈" title="NFL + CFB Players"
+            <FeatureCard icon={Goal} title="NFL + CFB Players"
               desc="Draft from a unified pool of NFL pros and college football players. Set your league to NFL only, CFB only, or a full combined player pool." />
-            <FeatureCard icon="🏆" title="4 League Formats"
+            <FeatureCard icon={Trophy} title="4 League Formats"
               desc="Redraft for classic annual leagues. Keeper to retain your stars. Dynasty for long-term roster building. Pick'Em for weekly game predictions." />
-            <FeatureCard icon="🎯" title="Live Draft Room"
+            <FeatureCard icon={Target} title="Live Draft Room"
               desc="Real-time drafting with live countdown clock, auto-draft, player queue, pick board, and AI-powered recommendations for every pick." />
-            <FeatureCard icon="🧪" title="Mock Draft Hub"
+            <FeatureCard icon={FlaskConical} title="Mock Draft Hub"
               desc="Practice your draft strategy against AI opponents before the real thing. Test different approaches and enter draft day prepared." />
-            <FeatureCard icon="📡" title="Live Scores"
+            <FeatureCard icon={Radio} title="Live Scores"
               desc="Real-time NFL and CFB scores with quarter-by-quarter updates, possession tracking, red zone alerts, and betting spreads." />
-            <FeatureCard icon="📊" title="Pick'Em Mode"
+            <FeatureCard icon={BarChart3} title="Pick'Em Mode"
               desc="Pick every NFL game weekly with live spread and win probability data. Compete on a leaderboard with a combined-score tiebreaker." />
-            <FeatureCard icon="👥" title="Social Features"
+            <FeatureCard icon={Users} title="Social Features"
               desc="Add friends, send direct messages, and track rivals across leagues. Your network, your competition." />
-            <FeatureCard icon="⚙️" title="Commissioner Tools"
+            <FeatureCard icon={Settings} title="Commissioner Tools"
               desc="Full control over scoring, roster settings, draft scheduling, pick deadlines, and trade management. Run your league your way." />
-            <FeatureCard icon="🤖" title="AI Roster Analysis"
+            <FeatureCard icon={Bot} title="AI Roster Analysis"
               desc="Get AI-powered weekly roster advice — who to start, trade, or drop — based on your specific scoring settings and matchups." />
           </div>
         </div>
@@ -292,18 +299,20 @@ export function LandingPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {[
-              { emoji: '🔄', title: 'Redraft', tag: 'Classic', tagCls: 'bg-nfl/20 text-nfl',
+              { icon: RefreshCw, title: 'Redraft', tag: 'Classic', tagCls: 'bg-nfl/20 text-nfl',
                 desc: 'Everyone starts fresh every season. Pure strategy, no carryover. Draft your team, manage your roster, win the championship.' },
-              { emoji: '🔒', title: 'Keeper', tag: 'Strategic', tagCls: 'bg-gold/20 text-gold',
+              { icon: Lock, title: 'Keeper', tag: 'Strategic', tagCls: 'bg-gold/20 text-gold',
                 desc: 'Keep 1–3 of your best players from the prior season. Balances annual draft excitement with smart long-term roster planning.' },
-              { emoji: '👑', title: 'Dynasty', tag: 'Long-Term', tagCls: 'bg-cfb/20 text-cfb',
+              { icon: Crown, title: 'Dynasty', tag: 'Long-Term', tagCls: 'bg-cfb/20 text-cfb',
                 desc: 'Keep your entire roster forever. College rookies become NFL stars on your team. Build a dynasty that spans years — or decades.' },
-              { emoji: '🎯', title: "Pick'Em", tag: 'Predictions', tagCls: 'bg-nfl/20 text-nfl',
+              { icon: Target, title: "Pick'Em", tag: 'Predictions', tagCls: 'bg-nfl/20 text-nfl',
                 desc: "Pick the winner of every NFL game each week. Live odds and win probabilities guide your picks. Tiebreaker: predict the combined final score." },
-            ].map(({ emoji, title, tag, tagCls, desc }) => (
+            ].map(({ icon: FormatIcon, title, tag, tagCls, desc }) => (
               <div key={title} className="bg-field-800 border border-field-700 rounded-2xl p-6 hover:border-field-500 transition-all">
                 <div className="flex items-start gap-4">
-                  <div className="text-4xl shrink-0 mt-0.5">{emoji}</div>
+                  <div className="w-11 h-11 rounded-xl bg-field-700 flex items-center justify-center text-white shrink-0 mt-0.5">
+                    <FormatIcon className="w-5 h-5" strokeWidth={1.75} />
+                  </div>
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-cond font-black text-xl uppercase tracking-wider text-white">{title}</h3>
@@ -325,7 +334,7 @@ export function LandingPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-field-900/30 to-transparent" />
         <div className="relative max-w-3xl mx-auto text-center">
-          <div className="text-7xl mb-6 float-a" style={{ display: 'inline-block' }}>🏈</div>
+          <Goal className="w-16 h-16 mb-6 float-a text-gold mx-auto" style={{ display: 'inline-block' }} strokeWidth={1.5} />
           <h2 className="font-cond font-black text-5xl md:text-7xl uppercase tracking-tight text-white mb-4 leading-none">
             Ready to draft?
           </h2>

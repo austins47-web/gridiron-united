@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { markChatRead } from '@/hooks/useUnreadChat'
 import { useAppStore } from '@/store/appStore'
 import { useAnchoredPortal } from '@/hooks/useAnchoredPortal'
-import { Send, MessageSquare, Image as ImageIcon, Search, Loader2 } from 'lucide-react'
+import { Send, MessageSquare, Image as ImageIcon, Search, Loader2, ArrowLeftRight } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { UserProfileModal } from './UserProfileModal'
@@ -117,7 +117,7 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
             isNew && 'trade-settle',
           )}>
             <div className="trade-chat-header flex items-center gap-2 px-4 py-2.5 border-b">
-              <span className="text-base">🤝</span>
+              <ArrowLeftRight className="w-4 h-4" strokeWidth={2.25} />
               <span className="font-cond font-black text-base uppercase tracking-wider trade-chat-title">
                 Trade Completed
               </span>
@@ -616,7 +616,7 @@ export function LeagueChat() {
             user_id: m.user_id,
             league_id: activeLeagueId,
             type: 'mention',
-            title: `💬 ${senderName} mentioned you`,
+            title: `${senderName} mentioned you`,
             body: trimmed.length > 60 ? trimmed.slice(0, 57) + '…' : trimmed,
             is_read: false,
             data: { league_id: activeLeagueId },

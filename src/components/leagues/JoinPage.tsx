@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { useJoinLeague } from '@/hooks/useLeague'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
-import { Trophy } from 'lucide-react'
+import { Trophy, XCircle, PartyPopper } from 'lucide-react'
 
 export function JoinPage() {
   const { code } = useParams<{ code: string }>()
@@ -65,13 +65,13 @@ export function JoinPage() {
 
         {error ? (
           <>
-            <div className="text-4xl">❌</div>
+            <XCircle className="w-10 h-10 text-red-400 mx-auto" strokeWidth={1.5} />
             <p className="text-red-400 font-bold">{error}</p>
             <button onClick={() => navigate('/')} className="btn-outline w-full">Go Home</button>
           </>
         ) : joined ? (
           <>
-            <div className="text-4xl">🎉</div>
+            <PartyPopper className="w-10 h-10 text-gold mx-auto" strokeWidth={1.5} />
             <p className="text-white font-bold text-lg">You joined <span className="text-gold">{league?.name}</span>!</p>
             <p className="text-field-400 text-sm">Taking you to your leagues…</p>
           </>

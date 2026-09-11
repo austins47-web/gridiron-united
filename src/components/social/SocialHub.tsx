@@ -6,7 +6,7 @@ import type { Profile } from '@/types/database'
 import {
   Users, MessageCircle, Search, UserPlus, UserCheck, UserX,
   Send, ChevronRight, ChevronUp, Shield, Trophy, ArrowLeft, Clock,
-  CheckCheck
+  CheckCheck, GraduationCap
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -842,13 +842,13 @@ function FriendProfile({ friend, onBack, onMessage }: {
             {friend.bio && <p className="text-field-300 text-sm mt-1">{friend.bio}</p>}
             <div className="flex gap-3 mt-2 flex-wrap">
               {friend.favorite_nfl_team && (
-                <span className="text-xs bg-nfl/10 text-nfl px-2 py-0.5 rounded font-bold">
-                  🏈 {friend.favorite_nfl_team}
+                <span className="text-xs bg-nfl/10 text-nfl px-2 py-0.5 rounded font-bold inline-flex items-center gap-1">
+                  <Shield className="w-3 h-3" strokeWidth={2.5} /> {friend.favorite_nfl_team}
                 </span>
               )}
               {friend.favorite_cfb_team && (
-                <span className="text-xs bg-cfb/10 text-cfb px-2 py-0.5 rounded font-bold">
-                  🎓 {friend.favorite_cfb_team}
+                <span className="text-xs bg-cfb/10 text-cfb px-2 py-0.5 rounded font-bold inline-flex items-center gap-1">
+                  <GraduationCap className="w-3 h-3" strokeWidth={2.5} /> {friend.favorite_cfb_team}
                 </span>
               )}
             </div>

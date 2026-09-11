@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Crown, Flame, Star } from 'lucide-react'
 import { WeekRecap } from './WeekRecap'
 import type { WeekRow } from './standings'
 import { playWinReveal } from '@/lib/sound'
@@ -94,8 +95,8 @@ export function AnimatedWeekReveal({ leagueId, week, rows, tiebreakerTotal, curr
             className="wkreveal-winner flex items-center gap-3 px-4 py-3.5 rounded-xl bg-gold/[0.08] border border-gold/35 opacity-0"
             style={{ animationDelay: `${0.55 + ordered.length * 0.3 + 0.3}s` }}
           >
-            <div className="w-10 h-10 rounded-lg bg-gold flex items-center justify-center shrink-0 text-field-950 text-lg">
-              👑
+            <div className="w-10 h-10 rounded-lg bg-gold flex items-center justify-center shrink-0 text-field-950">
+              <Crown className="w-5 h-5" strokeWidth={2} />
             </div>
             <div className="min-w-0">
               <div className="font-cond font-bold text-[10px] tracking-[.2em] uppercase text-gold">Week winner</div>
@@ -121,13 +122,16 @@ export function AnimatedWeekReveal({ leagueId, week, rows, tiebreakerTotal, curr
                 AFTER the parent's own .55s fade-in completes —
                 sparks animating while their parent is still at
                 opacity:0 would be invisible the whole time. */}
-            {[20, 35, 50, 65, 80].map((leftPct, i) => (
-              <span key={i} className="wkreveal-spark absolute top-2 text-sm"
-                style={{ left: `${leftPct}%`, animationDelay: `${0.55 + ordered.length * 0.3 + 0.6 + 0.55 + i * 0.08}s` }}>
-                {['🔥', '⭐', '🔥', '⭐', '🔥'][i]}
-              </span>
-            ))}
-            <div className="text-2xl mb-1">🔥</div>
+            {[20, 35, 50, 65, 80].map((leftPct, i) => {
+              const SparkIcon = i % 2 === 0 ? Flame : Star
+              return (
+                <span key={i} className="wkreveal-spark absolute top-2 text-gold"
+                  style={{ left: `${leftPct}%`, animationDelay: `${0.55 + ordered.length * 0.3 + 0.6 + 0.55 + i * 0.08}s` }}>
+                  <SparkIcon className="w-4 h-4 fill-current" />
+                </span>
+              )
+            })}
+            <Flame className="w-6 h-6 mx-auto mb-1 text-gold" strokeWidth={2} />
             <div className="font-cond font-black text-xl text-white uppercase">{myStreak} In A Row</div>
             <div className="font-cond font-bold text-[10px] tracking-[.2em] uppercase text-gold mt-1">
               Weekly Win Streak

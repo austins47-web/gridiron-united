@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
-export interface LiveReaction { id: string; emoji: string }
+// 'kind' rather than a raw emoji character — DraftRoom renders each
+// kind as a lucide icon (Flame/AlertCircle/DollarSign/Eye) instead of
+// broadcasting/rendering literal emoji.
+export type ReactionKind = 'fire' | 'shock' | 'money' | 'eyes'
+export interface LiveReaction { id: string; kind: ReactionKind }
 
 /**
- * Ephemeral emoji reactions for the draft room — everyone watching
+ * Ephemeral reactions for the draft room — everyone watching
  * sees a brief burst when someone reacts to a pick landing. Uses
  * Supabase Realtime's broadcast primitive (not postgres_changes),
  * since reactions don't need to persist anywhere — no new table,
@@ -31,7 +35,7 @@ export function useDraftReactions(leagueId: string | null) {
       .channel(`reactions:${leagueId}`, { config: { broadcast: { self: true } } })
       .on('broadcast', { event: 'reaction' }, ({ payload }) => {
         const id = `${Date.now()}-${Math.random()}`
-        setReactions(prev => [...prev, { id, emoji: payload.emoji }])
+        setReactions(prev => [...prev, { id, kind: payload.kind }])
         setTimeout(() => setReactions(prev => prev.filter(r => r.id !== id)), 2200)
       })
       .subscribe()
@@ -39,8 +43,8 @@ export function useDraftReactions(leagueId: string | null) {
     return () => { supabase.removeChannel(channel) }
   }, [leagueId])
 
-  const sendReaction = useCallback((emoji: string) => {
-    channelRef.current?.send({ type: 'broadcast', event: 'reaction', payload: { emoji } })
+  const sendReaction = useCallback((kind: ReactionKind) => {
+    channelRef.current?.send({ type: 'broadcast', event: 'reaction', payload: { kind } })
   }, [])
 
   return { reactions, sendReaction }

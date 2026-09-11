@@ -9,7 +9,7 @@ import { PlayerProfileDrawer } from './PlayerProfileDrawer'
 import { lazy, Suspense } from 'react'
 const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
 import { getTeamId } from '@/components/teams/teamIds'
-import { Search, ChevronLeft, ChevronRight, Plus, Check, X, ChevronDown, Lock } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Plus, Check, X, ChevronDown, Lock, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 
 const POS_OPTS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const
@@ -214,9 +214,9 @@ export function PlayersView() {
         {/* Rookies only toggle */}
         <button
           onClick={() => setFilters(f => ({ ...f, rookiesOnly: !f.rookiesOnly, team: 'ALL', page: 0 }))}
-          className={clsx('filter-chip', filters.rookiesOnly && 'active !bg-gold/20 !border-gold !text-gold')}
+          className={clsx('filter-chip inline-flex items-center gap-1.5', filters.rookiesOnly && 'active !bg-gold/20 !border-gold !text-gold')}
         >
-          🏈 Rookies
+          <Sparkles className="w-3.5 h-3.5" strokeWidth={2.25} /> Rookies
         </button>
       </div>
 
@@ -386,7 +386,7 @@ export function PlayersView() {
           )}
           {filters.rookiesOnly && (
             <ActiveFilterChip
-              label="🏈 Rookies Only"
+              label="Rookies Only"
               onRemove={() => setFilter('rookiesOnly', false)}
             />
           )}

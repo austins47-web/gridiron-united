@@ -429,7 +429,7 @@ export function useMakePick() {
           console.error('Schedule generation failed:', e)
         }
 
-        toast.success('Draft complete! 🏆 Rosters set.')
+        toast.success('Draft complete! Rosters set.')
       }
     },
     onError: (e: any) => toast.error(e.message),

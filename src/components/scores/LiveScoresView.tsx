@@ -982,7 +982,7 @@ export function LiveScoresView() {
 
       {!query.isFetching && !query.isError && allGames.length === 0 && (
         <div className="panel text-center py-14 space-y-2">
-          <div className="text-4xl">🏈</div>
+          <Target className="w-10 h-10 text-field-600 mx-auto" strokeWidth={1.5} />
           <p className="text-white font-bold text-lg">No {tab} games — {weekOpt.label}</p>
           <p className="text-field-300 text-sm">Try a different week or check back on game days</p>
         </div>
@@ -1012,7 +1012,7 @@ export function LiveScoresView() {
                   <span className="font-cond font-bold text-xs uppercase tracking-wider text-field-300">
                     All {tab} Games · {weekOpt.label}
                   </span>
-                  <span className="text-xs text-field-400">tap ⭐ to favorite</span>
+                  <span className="text-xs text-field-400 inline-flex items-center gap-1">tap <Star className="w-3 h-3 inline" /> to favorite</span>
                 </div>
               )}
               <GameGroup games={otherGames} {...sharedProps} onTeamClick={handleTeamClick} />

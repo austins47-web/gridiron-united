@@ -1,15 +1,31 @@
 import { useEffect, useRef } from 'react'
-import { X, Bell, CheckCheck, Trash2 } from 'lucide-react'
+import {
+  X, Bell, CheckCheck, Trash2,
+  ArrowLeftRight, XCircle, CheckCircle2, Clock, ShieldAlert, Vote,
+  MessageCircle, Target, ClipboardList, Trophy, Mail, Megaphone,
+  type LucideIcon,
+} from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatDistanceToNow } from 'date-fns'
 
-const TYPE_ICONS: Record<string, string> = {
-  trade_offer: '🤝',
-  draft_pick: '🎯',
-  waiver_result: '📋',
-  matchup_result: '🏆',
-  league_invite: '📨',
-  system: '📣',
+// Every real notification `type` this app actually creates (see
+// useTrades.ts, LeagueChat.tsx) - trade_rejected/accepted/pending/
+// review/vote and mention were all silently falling through to the
+// generic "system" icon before, since this map only ever covered
+// trade_offer out of the six real trade-notification types in use.
+const TYPE_ICONS: Record<string, LucideIcon> = {
+  trade_offer: ArrowLeftRight,
+  trade_rejected: XCircle,
+  trade_accepted: CheckCircle2,
+  trade_pending: Clock,
+  trade_review: ShieldAlert,
+  trade_vote: Vote,
+  mention: MessageCircle,
+  draft_pick: Target,
+  waiver_result: ClipboardList,
+  matchup_result: Trophy,
+  league_invite: Mail,
+  system: Megaphone,
 }
 
 interface Props {
@@ -73,12 +89,14 @@ export function NotificationsPanel({ onClose }: Props) {
             No notifications yet
           </div>
         ) : (
-          notifications.map(n => (
+          notifications.map(n => {
+            const TypeIcon = TYPE_ICONS[n.type] ?? Megaphone
+            return (
             <div key={n.id}
               className={`flex gap-3 px-4 py-3 border-b border-white/[0.05] transition-colors hover:bg-white/[0.03]
                 ${!n.is_read ? 'bg-gold/[0.03]' : ''}`}>
-              <div className="text-lg leading-none pt-0.5 shrink-0">
-                {TYPE_ICONS[n.type] ?? '📣'}
+              <div className="pt-0.5 shrink-0 text-gold/80">
+                <TypeIcon className="w-[18px] h-[18px]" strokeWidth={2} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="font-cond font-bold text-sm text-gray-200 leading-tight">
@@ -95,7 +113,8 @@ export function NotificationsPanel({ onClose }: Props) {
                 </div>
               </div>
             </div>
-          ))
+            )
+          })
         )}
       </div>
 

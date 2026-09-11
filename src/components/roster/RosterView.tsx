@@ -18,7 +18,7 @@ import { buildSlotDefs, canFillSlot } from '@/types/database'
 import type { RosterEntryWithPlayer } from '@/hooks/useRoster'
 import type { SlotDef, League, Player } from '@/types/database'
 import { usePlayerWeeklyLog } from '@/hooks/usePlayerWeeklyLog'
-import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronRight, RotateCcw, ChevronDown, User } from 'lucide-react'
+import { Zap, Trash2, TrendingUp, AlertCircle, AlertTriangle, ArrowLeftRight, X, ChevronRight, RotateCcw, ChevronDown, User, GraduationCap, Lock } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
@@ -686,7 +686,9 @@ export function RosterView() {
       {cfbOsSlots.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold text-cfb uppercase tracking-wider">🎓 CFB Offseason</span>
+            <span className="text-xs font-bold text-cfb uppercase tracking-wider flex items-center gap-1.5">
+              <GraduationCap className="w-3.5 h-3.5" strokeWidth={2.25} /> CFB Offseason
+            </span>
             <span className="text-xs text-field-500">— players held here don't score but don't count vs active roster</span>
           </div>
           <div className="grid gap-1">
@@ -1016,8 +1018,8 @@ function RosterSlotRow({
 
       {/* Locked indicator */}
       {effectiveLocked && entry && !readOnly && (
-        <div className="shrink-0 text-red-400/60 text-xs font-bold px-1" title="Drop a player to unlock moves">
-          🔒
+        <div className="shrink-0 text-red-400/60 px-1" title="Drop a player to unlock moves">
+          <Lock className="w-3.5 h-3.5" strokeWidth={2.25} />
         </div>
       )}
 

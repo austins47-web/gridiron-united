@@ -6,7 +6,7 @@ import { usePlayers, DEFAULT_FILTERS } from '@/hooks/usePlayers'
 import {
   Play, Pause, Plus, Users, Clock, Settings, Copy, Search,
   Zap, ArrowLeft,
-  Bot, User, X, Trophy, RefreshCw, Share2
+  Bot, User, X, Trophy, RefreshCw, Share2, Star, ClipboardList,
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -540,7 +540,7 @@ function CreateMockDraft({ onCreated, onBack }: {
           <div>
             <label className="label">My Draft Position</label>
             <select className="input" value={myPosition} onChange={e => setMyPosition(e.target.value === 'random' ? 'random' : +e.target.value)}>
-              <option value="random">🎲 Random</option>
+              <option value="random">Random</option>
               {Array.from({ length: numTeams }, (_, i) => (
                 <option key={i + 1} value={i + 1}>Pick #{i + 1}</option>
               ))}
@@ -636,7 +636,7 @@ function CreateMockDraft({ onCreated, onBack }: {
                     : 'border-field-700 bg-field-800 text-field-500 hover:border-field-600',
                 )}
               >
-                <span className="text-base mb-1">{isMe ? '👤' : isHuman ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}</span>
+                <span className="mb-1">{isMe || isHuman ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}</span>
                 <span>#{slot}</span>
                 <span className="font-normal text-xs mt-0.5">
                   {isMe ? 'You' : isHuman ? 'Open' : 'AI'}
@@ -1369,7 +1369,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                 ? <span className="text-gold">Paused — resume to continue</span>
                 : aiThinking
                 ? <span className="flex items-center gap-2"><Bot className="w-4 h-4 animate-pulse" /> {autoDraft ? 'Autodrafting…' : 'AI is picking…'}</span>
-                : amOnClock ? '🏈 YOUR PICK!' : `On the clock: ${currentPickerName}`}
+                : amOnClock ? <span className="flex items-center gap-2"><Zap className="w-4 h-4" /> YOUR PICK!</span> : `On the clock: ${currentPickerName}`}
             </div>
           </div>
         </div>
@@ -1477,7 +1477,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                                   className="text-xs bg-gold/20 text-gold border border-gold/30 px-2 py-1 rounded font-bold hover:bg-red-500/20 hover:text-red-400 hover:border-red-400/30 transition-colors"
                                   onClick={() => removeFromQueue(p.id)}
                                   title="Remove from queue"
-                                >#{queuePos} ✕</button>
+                                >#{queuePos} <X className="w-3 h-3 inline" strokeWidth={2.5} /></button>
                               ) : (
                                 <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => addToQueue(p.id)} title="Add to queue">
                                   + Queue
@@ -1560,7 +1560,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                       <div className="flex gap-0.5 shrink-0">
                         <button className="w-5 h-5 flex items-center justify-center btn-ghost !p-0 text-xs disabled:opacity-20" disabled={idx === 0} onClick={() => moveQueueItem(idx, -1)}>↑</button>
                         <button className="w-5 h-5 flex items-center justify-center btn-ghost !p-0 text-xs disabled:opacity-20" disabled={idx === queuedPlayers.length - 1} onClick={() => moveQueueItem(idx, 1)}>↓</button>
-                        <button className="w-5 h-5 flex items-center justify-center btn-ghost !p-0 text-xs text-red-400" onClick={() => removeFromQueue(p.id)}>✕</button>
+                        <button className="w-5 h-5 flex items-center justify-center btn-ghost !p-0 text-red-400" onClick={() => removeFromQueue(p.id)}><X className="w-3 h-3" strokeWidth={2.5} /></button>
                       </div>
                     </div>
                   ))}
@@ -1617,7 +1617,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
           {/* Board tab — scroll down to the full-width board below */}
           {sidebarTab === 'board' && (
             <div className="panel text-center py-6 space-y-3">
-              <div className="text-gold text-2xl">📋</div>
+              <ClipboardList className="w-7 h-7 text-gold mx-auto" strokeWidth={1.75} />
               <p className="text-white font-bold text-sm">Draft Board</p>
               <p className="text-field-400 text-xs">The full draft board is shown below the player list — scroll down to see every pick with full names, positions, and teams.</p>
               <button
@@ -1650,9 +1650,9 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
                         <div className="flex items-center gap-1.5">
                           <span className="text-field-500 w-3">{s.slot_number}</span>
                           {isAi ? <Bot className="w-3 h-3 text-field-500" /> : <User className="w-3 h-3 text-field-400" />}
-                          <span className={clsx('font-bold truncate max-w-[90px]', isOnClock ? 'text-gold' : isMe ? 'text-white' : 'text-field-300')}>
+                          <span className={clsx('font-bold truncate max-w-[90px] inline-flex items-center gap-1', isOnClock ? 'text-gold' : isMe ? 'text-white' : 'text-field-300')}>
                             {isAi ? `AI ${s.slot_number}` : (s.profile?.display_name || s.profile?.username || s.team_name)}
-                            {isMe && ' ★'}
+                            {isMe && <Star className="w-3 h-3 shrink-0 fill-current" />}
                           </span>
                           {isOnClock && <Clock className="w-3 h-3 text-gold animate-pulse" />}
                         </div>
@@ -1689,7 +1689,7 @@ function MockDraftRoom({ mock: initialMock, mySlot, onMockUpdated, onBack }: {
           {/* Board header */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-field-700 bg-field-900">
             <span className="font-bold text-white text-sm flex items-center gap-2">
-              📋 Draft Board
+              <ClipboardList className="w-4 h-4" strokeWidth={2} /> Draft Board
               <span className="text-field-400 font-normal text-xs">· {mock.num_teams} teams · {mock.num_rounds} rounds</span>
             </span>
             <span className="text-field-400 text-xs">{picks.length} / {mock.num_teams * mock.num_rounds} picks</span>

@@ -9,16 +9,25 @@ import { useLeagueMembers } from '@/hooks/useLeague'
 import { useRosteredPlayerIds } from '@/hooks/useRoster'
 import { useAppStore } from '@/store/appStore'
 import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
-import { useDraftReactions } from '@/hooks/useDraftReactions'
+import { useDraftReactions, type ReactionKind } from '@/hooks/useDraftReactions'
 import { playPickLock } from '@/lib/sound'
 import { supabase } from '@/lib/supabase'
 import type { Player } from '@/types/database'
 import {
   Clock, Search, Play, Pause, AlertCircle, Calendar,
-  X, CheckCircle, Users, Settings, Zap, ChevronUp, ChevronDown, Timer, Bot
+  X, CheckCircle, Users, Settings, Zap, ChevronUp, ChevronDown, Timer, Bot,
+  Flame, DollarSign, Eye,
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
+
+// ── Draft reactions ──────────────────────────────────────────────────
+const REACTION_ICONS: { kind: ReactionKind; icon: typeof Flame; color: string }[] = [
+  { kind: 'fire',  icon: Flame,      color: 'text-orange-400' },
+  { kind: 'shock', icon: AlertCircle, color: 'text-red-400' },
+  { kind: 'money', icon: DollarSign, color: 'text-emerald-400' },
+  { kind: 'eyes',  icon: Eye,        color: 'text-nfl' },
+]
 
 // ── Timer options ──────────────────────────────────────────────────────
 const TIMER_OPTIONS = [
@@ -383,11 +392,15 @@ export function DraftRoom() {
           hijacks position:fixed for anything nested inside it. */}
       {createPortal(
         <div style={{ position: 'fixed', bottom: 90, right: 24, zIndex: 90, pointerEvents: 'none' }}>
-          {reactions.map(r => (
-            <div key={r.id} className="reaction-burst" style={{ position: 'absolute', right: 0, bottom: 0, fontSize: 28 }}>
-              {r.emoji}
-            </div>
-          ))}
+          {reactions.map(r => {
+            const ri = REACTION_ICONS.find(x => x.kind === r.kind)
+            if (!ri) return null
+            return (
+              <div key={r.id} className={clsx('reaction-burst', ri.color)} style={{ position: 'absolute', right: 0, bottom: 0 }}>
+                <ri.icon size={28} strokeWidth={2} />
+              </div>
+            )
+          })}
         </div>,
         document.body,
       )}
@@ -420,7 +433,7 @@ export function DraftRoom() {
               ? <span className="text-gold">Paused — waiting for commissioner</span>
               : autoDraft && isMyTurn
               ? <span className="flex items-center gap-2"><Bot className="w-4 h-4 animate-pulse text-gold" /> Autodrafting…</span>
-              : isMyTurn ? '🏈 YOUR PICK!' : `On the clock: ${currentPickerName}`}
+              : isMyTurn ? <span className="flex items-center gap-2"><Zap className="w-4 h-4" /> YOUR PICK!</span> : `On the clock: ${currentPickerName}`}
           </div>
         </div>
 
@@ -439,14 +452,14 @@ export function DraftRoom() {
               watching this draft room via a separate realtime
               channel from pick sync (see useDraftReactions) */}
           <div className="flex items-center gap-1 bg-field-800 border border-field-700 rounded-lg px-1.5 py-1">
-            {['🔥', '😱', '💰', '👀'].map(emoji => (
+            {REACTION_ICONS.map(({ kind, icon: Icon, color }) => (
               <button
-                key={emoji}
-                onClick={() => sendReaction(emoji)}
-                className="text-base hover:scale-125 transition-transform leading-none px-0.5"
+                key={kind}
+                onClick={() => sendReaction(kind)}
+                className={clsx('hover:scale-125 transition-transform leading-none px-1 py-0.5', color)}
                 title="React"
               >
-                {emoji}
+                <Icon className="w-4 h-4" strokeWidth={2.25} />
               </button>
             ))}
           </div>
@@ -547,9 +560,9 @@ export function DraftRoom() {
                             </button>
                           ) : isQueued ? (
                             <button
-                              className="text-xs border border-gold/40 text-gold px-2 py-1 rounded hover:bg-red-400/10 hover:border-red-400/40 hover:text-red-400 transition-colors"
+                              className="text-xs border border-gold/40 text-gold px-2 py-1 rounded hover:bg-red-400/10 hover:border-red-400/40 hover:text-red-400 transition-colors inline-flex items-center gap-1"
                               onClick={() => removeFromQueue(p.id)}
-                            >#{queuePos} ✕</button>
+                            >#{queuePos} <X className="w-3 h-3" strokeWidth={2.5} /></button>
                           ) : (
                             <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => addToQueue(p.id)}>+ Queue</button>
                           )}
@@ -617,7 +630,7 @@ export function DraftRoom() {
                           <div className="flex items-center gap-0.5 shrink-0">
                             <button className="w-5 h-5 flex items-center justify-center btn-ghost !p-0 disabled:opacity-20" disabled={idx === 0} onClick={() => moveQueueItem(idx, -1)}><ChevronUp className="w-3 h-3" /></button>
                             <button className="w-5 h-5 flex items-center justify-center btn-ghost !p-0 disabled:opacity-20" disabled={idx === queuedPlayers.length - 1} onClick={() => moveQueueItem(idx, 1)}><ChevronDown className="w-3 h-3" /></button>
-                            <button className="w-5 h-5 flex items-center justify-center btn-ghost !p-0 text-red-400" onClick={() => removeFromQueue(p.id)}>✕</button>
+                            <button className="w-5 h-5 flex items-center justify-center btn-ghost !p-0 text-red-400" onClick={() => removeFromQueue(p.id)}><X className="w-3 h-3" strokeWidth={2.5} /></button>
                           </div>
                         </div>
                       ))}
@@ -954,7 +967,7 @@ function CompletedDraft({ picks, members, numRounds }: {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <CheckCircle className="w-6 h-6 text-gold" />
-        <h1 className="section-title">Draft Complete 🏆</h1>
+        <h1 className="section-title">Draft Complete</h1>
       </div>
       <div className="panel !p-0 overflow-x-auto">
         <table className="data-table w-full min-w-[600px]">

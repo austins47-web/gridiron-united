@@ -235,7 +235,7 @@ export function useProposeTrade(leagueId: string | null) {
         userId: receiverId,
         leagueId,
         type: 'trade_offer',
-        title: '🤝 New trade offer',
+        title: 'New trade offer',
         body: `${proposerName} offers ${givePart} for ${getPart}`,
         data: { trade_id: trade.id },
       })
@@ -304,7 +304,7 @@ export function useRespondTrade(leagueId: string | null) {
           userId: notifyId,
           leagueId,
           type: 'trade_rejected',
-          title: '❌ Trade declined',
+          title: 'Trade declined',
           body: isProposer
             ? `You withdrew your offer to ${notifyName}`
             : `${notifyName} declined your trade offer`,
@@ -338,7 +338,7 @@ export function useRespondTrade(leagueId: string | null) {
           userId: propId,
           leagueId,
           type: 'trade_offer',
-          title: '🔄 Counter offer received',
+          title: 'Counter offer received',
           body: `${recName} countered: offers ${cGive} for ${cGet}`,
           data: { trade_id: counter.id },
         })
@@ -361,7 +361,7 @@ export function useRespondTrade(leagueId: string | null) {
             userId: propId,
             leagueId,
             type: 'trade_accepted',
-            title: '✅ Trade accepted!',
+            title: 'Trade accepted!',
             body: `${recName} accepted your offer. Check your bench for new players.`,
             data: { trade_id: tradeId },
           })
@@ -369,7 +369,7 @@ export function useRespondTrade(leagueId: string | null) {
             userId: recId,
             leagueId,
             type: 'trade_accepted',
-            title: '✅ Trade completed',
+            title: 'Trade completed',
             body: `Your trade with ${propName} is done. New players are on your bench.`,
             data: { trade_id: tradeId },
           })
@@ -386,7 +386,7 @@ export function useRespondTrade(leagueId: string | null) {
             userId: propId,
             leagueId,
             type: 'trade_pending',
-            title: '⏳ Trade awaiting review',
+            title: 'Trade awaiting review',
             body: `${recName} accepted — commissioner has ${settings.trade_review_hours}h to review.`,
             data: { trade_id: tradeId },
           })
@@ -395,7 +395,7 @@ export function useRespondTrade(leagueId: string | null) {
               userId: league.commissioner_id,
               leagueId,
               type: 'trade_review',
-              title: '🛡️ Trade needs your review',
+              title: 'Trade needs your review',
               body: `${propName} ↔ ${recName}: ${givePart} for ${getPart}`,
               data: { trade_id: tradeId },
             })
@@ -417,7 +417,7 @@ export function useRespondTrade(leagueId: string | null) {
               userId: m.user_id,
               leagueId,
               type: 'trade_vote',
-              title: '🗳️ Trade vote open',
+              title: 'Trade vote open',
               body: `${propName} and ${recName} agreed to a trade. Cast your vote!`,
               data: { trade_id: tradeId },
             })
@@ -426,7 +426,7 @@ export function useRespondTrade(leagueId: string | null) {
             userId: propId,
             leagueId,
             type: 'trade_pending',
-            title: '🗳️ Trade up for vote',
+            title: 'Trade up for vote',
             body: `${recName} accepted. League vote is open — ${settings.trade_votes_required} vetoes needed to block.`,
             data: { trade_id: tradeId },
           })
@@ -486,7 +486,7 @@ export function useCommissionerTrade(leagueId: string | null) {
           userId: trade.proposer_id!,
           leagueId: leagueId!,
           type: 'trade_accepted',
-          title: '✅ Trade approved by commissioner',
+          title: 'Trade approved by commissioner',
           body: `Your trade with ${recName} has been approved.`,
           data: { trade_id: tradeId },
         })
@@ -494,7 +494,7 @@ export function useCommissionerTrade(leagueId: string | null) {
           userId: trade.receiver_id!,
           leagueId: leagueId!,
           type: 'trade_accepted',
-          title: '✅ Trade approved by commissioner',
+          title: 'Trade approved by commissioner',
           body: `Your trade with ${propName} has been approved.`,
           data: { trade_id: tradeId },
         })
@@ -504,7 +504,7 @@ export function useCommissionerTrade(leagueId: string | null) {
           userId: trade.proposer_id!,
           leagueId: leagueId!,
           type: 'trade_rejected',
-          title: '🚫 Trade vetoed by commissioner',
+          title: 'Trade vetoed by commissioner',
           body: `Your trade with ${recName} was vetoed.`,
           data: { trade_id: tradeId },
         })
@@ -512,7 +512,7 @@ export function useCommissionerTrade(leagueId: string | null) {
           userId: trade.receiver_id!,
           leagueId: leagueId!,
           type: 'trade_rejected',
-          title: '🚫 Trade vetoed by commissioner',
+          title: 'Trade vetoed by commissioner',
           body: `Your trade with ${propName} was vetoed.`,
           data: { trade_id: tradeId },
         })
@@ -568,14 +568,14 @@ export function useVoteTrade(leagueId: string | null) {
         await sendNotification({
           userId: trade.proposer_id!, leagueId: leagueId!,
           type: 'trade_rejected',
-          title: '🚫 Trade vetoed by league vote',
+          title: 'Trade vetoed by league vote',
           body: `Your trade with ${recName} was blocked by ${vetoCount} veto votes.`,
           data: { trade_id: tradeId },
         })
         await sendNotification({
           userId: trade.receiver_id!, leagueId: leagueId!,
           type: 'trade_rejected',
-          title: '🚫 Trade vetoed by league vote',
+          title: 'Trade vetoed by league vote',
           body: `Your trade with ${propName} was blocked by ${vetoCount} veto votes.`,
           data: { trade_id: tradeId },
         })

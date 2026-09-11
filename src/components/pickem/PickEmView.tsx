@@ -1291,7 +1291,7 @@ function GamePickCard({
 
 // ── PICKS CHART ─────────────────────────────────────────────
 // Shows every game for the week with a per-user pick grid.
-// Other users' picks are hidden (🔒) until that game's kickoff.
+// Other users' picks are hidden (locked) until that game's kickoff.
 
 function PicksChart({
   games, allPicks, leagueMembers, userId, deadline, week

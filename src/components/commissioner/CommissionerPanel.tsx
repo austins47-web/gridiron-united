@@ -10,7 +10,8 @@ import type { League, Player, PlayerStatus, RosterSlotConfig } from '@/types/dat
 import {
   Shield, Users, Zap, TrendingUp, Trash2, Search,
   Save, AlertCircle, ChevronDown, ChevronUp,
-  Edit3, Check, X, Crown, Clock, Loader2, Lock
+  Edit3, Check, X, Crown, Clock, Loader2, Lock,
+  GraduationCap, ArrowLeftRight, Vote,
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -123,8 +124,8 @@ export function CommissionerPanel() {
         { id: 'players', label: 'Player Scores', icon: <Zap className="w-4 h-4" /> },
         { id: 'members', label: 'Members', icon: <Crown className="w-4 h-4" /> },
         { id: 'league', label: 'League', icon: <Shield className="w-4 h-4" /> },
-        { id: 'cfb_postseason', label: 'CFB Playoffs', icon: <span className="text-sm">🎓</span> },
-        { id: 'trades', label: 'Trades', icon: <span className="text-sm">🔄</span> },
+        { id: 'cfb_postseason', label: 'CFB Playoffs', icon: <GraduationCap className="w-4 h-4" /> },
+        { id: 'trades', label: 'Trades', icon: <ArrowLeftRight className="w-4 h-4" /> },
       ]
 
   return (
@@ -805,8 +806,9 @@ function PlayerScoreEditor() {
               Covers all active NFL players, all 32 D/ST units, and FBS college football players.
             </p>
             {syncResult && (
-              <p className="text-nfl text-xs mt-1 font-bold">
-                ✓ Last sync: {syncResult.rosterTotal} players synced, projections updated for {syncResult.projectionsUpdated}
+              <p className="text-nfl text-xs mt-1 font-bold flex items-center gap-1">
+                <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+                Last sync: {syncResult.rosterTotal} players synced, projections updated for {syncResult.projectionsUpdated}
               </p>
             )}
           </div>
@@ -1175,19 +1177,19 @@ function TradeSettings({ league }: { league: League }) {
     {
       id: 'instant' as const,
       label: 'Instant',
-      emoji: '⚡',
+      icon: Zap,
       desc: 'Trades execute immediately when both parties agree. No review period.',
     },
     {
       id: 'commissioner_review' as const,
       label: 'Commissioner Review',
-      emoji: '🛡️',
+      icon: Shield,
       desc: 'After both parties agree, the commissioner has a window to veto before the trade completes.',
     },
     {
       id: 'league_vote' as const,
       label: 'League Vote',
-      emoji: '🗳️',
+      icon: Vote,
       desc: 'After both parties agree, league members can vote to veto. Trade completes when the review window closes without enough vetoes.',
     },
   ]
@@ -1210,7 +1212,7 @@ function TradeSettings({ league }: { league: League }) {
                 ? 'bg-gold/10 border-gold/40 ring-1 ring-gold/20'
                 : 'bg-field-800 border-field-700 hover:border-field-600',
             )}>
-            <span className="text-2xl shrink-0">{opt.emoji}</span>
+            <opt.icon className="w-6 h-6 shrink-0 text-gold" strokeWidth={1.75} />
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-white text-sm">{opt.label}</span>
