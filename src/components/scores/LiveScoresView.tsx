@@ -273,8 +273,11 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
       ].map(({ team, ahead, tick }) => {
         const isFav   = teamIsFav(favTeams, team)
         const hasBall = isLive && game.possession === team.id
-        const winning = (isLive || isFinal) && ahead
-        const losing  = (isLive || isFinal) && !ahead && awayScore !== homeScore
+        // Only color by who's ahead once the game is actually FINAL -
+        // "winning" mid-game isn't real yet (the lead can flip), so
+        // both teams stay the same neutral color while live.
+        const winning = isFinal && ahead
+        const losing  = isFinal && !ahead && awayScore !== homeScore
 
         return (
           <div key={team.abbr} className="flex items-center gap-1.5">
@@ -290,7 +293,7 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
               className={clsx(
                 'font-cond font-bold flex-1 truncate text-left hover:text-gold transition-colors',
                 scale.abbr,
-                isFav ? 'text-gold' : (isLive && winning) ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+                isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
               )}
               onClick={e => { e.stopPropagation(); onTeamClick(team, game.league) }}
             >
@@ -307,7 +310,7 @@ function GridCard({ game, cols, favTeams, onToggleFav, odds, onSelect, onTeamCli
                 'score-flash font-cond font-black leading-none text-right shrink-0 px-0.5',
                 scale.score,
                 tick.flashing && 'is-flashing',
-                isFav ? 'text-gold' : (isLive && winning) ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+                isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
               )}>{tick.display}</span>
             )}
           </div>
@@ -425,8 +428,10 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
   const TeamBlock = ({ team, ahead, reverse = false }: { team: GameTeam, ahead: boolean, reverse?: boolean }) => {
     const isFav   = teamIsFav(favTeams, team)
     const hasBall = isLive && game.possession === team.id
-    const winning = (isLive || isFinal) && ahead
-    const losing  = (isLive || isFinal) && !ahead && awayScore !== homeScore
+    // Same reasoning as the grid card above - only color by who's
+    // ahead once the game is FINAL, not while it's still live.
+    const winning = isFinal && ahead
+    const losing  = isFinal && !ahead && awayScore !== homeScore
 
     if (reverse) {
       return (
@@ -437,7 +442,7 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
           <TeamLogo team={team} league={game.league} size={26} />
           <button
             className={clsx('font-cond font-black text-base shrink-0 w-10 text-right hover:text-gold transition-colors',
-              isFav ? 'text-gold' : (isLive && winning) ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+              isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
             )}
             onClick={e => { e.stopPropagation(); onTeamClick(team, game.league) }}
           >{team.abbr}</button>
@@ -458,7 +463,7 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
         <TeamLogo team={team} league={game.league} size={26} />
         <button
           className={clsx('font-cond font-black text-base shrink-0 w-10 text-left hover:text-gold transition-colors',
-            isFav ? 'text-gold' : (isLive && winning) ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
+            isFav ? 'text-gold' : winning ? 'text-white' : losing ? 'text-field-400' : 'text-field-200',
           )}
           onClick={e => { e.stopPropagation(); onTeamClick(team, game.league) }}
         >{team.abbr}</button>
@@ -500,11 +505,11 @@ function ListRow({ game, favTeams, onToggleFav, odds, onSelect, onTeamClick }: {
           <>
             <span className={clsx('score-flash font-cond font-black text-2xl w-7 text-right leading-none px-0.5',
               awayTick.flashing && 'is-flashing',
-              (isLive && awayScore > homeScore) ? 'text-gold' : awayScore > homeScore ? 'text-white' : 'text-field-400')}>{awayTick.display}</span>
+              (isFinal && awayScore > homeScore) ? 'text-white' : (isFinal && awayScore < homeScore) ? 'text-field-400' : 'text-field-200')}>{awayTick.display}</span>
             <span className="text-field-500 text-sm font-bold">–</span>
             <span className={clsx('score-flash font-cond font-black text-2xl w-7 text-left leading-none px-0.5',
               homeTick.flashing && 'is-flashing',
-              (isLive && homeScore > awayScore) ? 'text-gold' : homeScore > awayScore ? 'text-white' : 'text-field-400')}>{homeTick.display}</span>
+              (isFinal && homeScore > awayScore) ? 'text-white' : (isFinal && homeScore < awayScore) ? 'text-field-400' : 'text-field-200')}>{homeTick.display}</span>
           </>
         ) : (
           <span className="text-field-300 text-sm font-bold uppercase tracking-widest">vs</span>
