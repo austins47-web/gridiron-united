@@ -66,9 +66,22 @@ export function LeagueBottomBar() {
   return (
     <>
       {moreOpen && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/60" onClick={() => setMoreOpen(false)} />
-          <div className="fixed left-0 right-0 bottom-14 z-50 bg-field-800 border-t border-x border-field-700 rounded-t-2xl p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-2xl">
+        <div className="fixed inset-0 z-30 bg-black/60" onClick={() => setMoreOpen(false)} />
+      )}
+
+      {/* Sheet and nav bar stacked in ONE fixed-to-bottom container,
+          not independently positioned with a guessed pixel offset
+          between them (bottom-14 assuming a fixed nav-bar height) -
+          that guess didn't account for env(safe-area-inset-bottom)
+          on the nav bar below, which varies by device and left a
+          gap of real page content visible between the two on some
+          screens (confirmed directly). Stacking them in normal flow
+          inside one wrapper means there's nothing to get wrong -
+          whatever height either one actually renders at, they still
+          sit flush against each other. */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 flex flex-col">
+        {moreOpen && (
+          <div className="bg-field-800 border-t border-x border-field-700 rounded-t-2xl p-3 shadow-2xl">
             <div className="w-9 h-1 rounded-full bg-field-600 mx-auto mb-3" />
             <div className="grid grid-cols-3 gap-2">
               {more.map(m => (
@@ -89,39 +102,39 @@ export function LeagueBottomBar() {
               ))}
             </div>
           </div>
-        </>
-      )}
-
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex bg-field-900 border-t border-field-700 pb-[env(safe-area-inset-bottom)]">
-        {primary.map(t => (
-          <NavLink
-            key={t.to}
-            to={t.to}
-            onClick={() => setMoreOpen(false)}
-            className={({ isActive }) => clsx(
-              'relative flex-1 flex flex-col items-center gap-0.5 py-2 font-cond font-bold text-[10px] uppercase tracking-wider transition-colors',
-              isActive && !moreOpen ? 'text-gold' : 'text-field-400 hover:text-white',
-            )}
-          >
-            {t.badge && <span className="absolute top-1 right-[calc(50%-15px)] w-1.5 h-1.5 rounded-full bg-gold" />}
-            <t.icon className="w-5 h-5" strokeWidth={2.25} />
-            {t.label}
-          </NavLink>
-        ))}
-        {more.length > 0 && (
-          <button
-            onClick={() => setMoreOpen(v => !v)}
-            className={clsx(
-              'relative flex-1 flex flex-col items-center gap-0.5 py-2 font-cond font-bold text-[10px] uppercase tracking-wider transition-colors',
-              moreOpen || moreActive ? 'text-gold' : 'text-field-400 hover:text-white',
-            )}
-          >
-            {moreHasBadge && !moreOpen && <span className="absolute top-1 right-[calc(50%-15px)] w-1.5 h-1.5 rounded-full bg-gold" />}
-            {moreOpen ? <X className="w-5 h-5" strokeWidth={2.25} /> : <MoreHorizontal className="w-5 h-5" strokeWidth={2.25} />}
-            More
-          </button>
         )}
-      </nav>
+
+        <nav className="flex bg-field-900 border-t border-field-700 pb-[env(safe-area-inset-bottom)]">
+          {primary.map(t => (
+            <NavLink
+              key={t.to}
+              to={t.to}
+              onClick={() => setMoreOpen(false)}
+              className={({ isActive }) => clsx(
+                'relative flex-1 flex flex-col items-center gap-0.5 py-2 font-cond font-bold text-[10px] uppercase tracking-wider transition-colors',
+                isActive && !moreOpen ? 'text-gold' : 'text-field-400 hover:text-white',
+              )}
+            >
+              {t.badge && <span className="absolute top-1 right-[calc(50%-15px)] w-1.5 h-1.5 rounded-full bg-gold" />}
+              <t.icon className="w-5 h-5" strokeWidth={2.25} />
+              {t.label}
+            </NavLink>
+          ))}
+          {more.length > 0 && (
+            <button
+              onClick={() => setMoreOpen(v => !v)}
+              className={clsx(
+                'relative flex-1 flex flex-col items-center gap-0.5 py-2 font-cond font-bold text-[10px] uppercase tracking-wider transition-colors',
+                moreOpen || moreActive ? 'text-gold' : 'text-field-400 hover:text-white',
+              )}
+            >
+              {moreHasBadge && !moreOpen && <span className="absolute top-1 right-[calc(50%-15px)] w-1.5 h-1.5 rounded-full bg-gold" />}
+              {moreOpen ? <X className="w-5 h-5" strokeWidth={2.25} /> : <MoreHorizontal className="w-5 h-5" strokeWidth={2.25} />}
+              More
+            </button>
+          )}
+        </nav>
+      </div>
     </>
   )
 }
