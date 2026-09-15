@@ -16,7 +16,12 @@
 // scores/status flow in as games complete.
 //
 // Query params:
-//   ?week=N       sync one week only (default: 1-18, everything)
+//   ?week=N       sync one week only
+//   ?full=1       sync all 18 weeks (the old default — use for a full backfill)
+//   (default)     "light" mode: just the current week + the previous one,
+//                 cheap enough to run every minute so a game going final
+//                 on ESPN shows up in nfl_games (and Pick'Em scoring)
+//                 almost immediately
 //   ?season=YYYY  default 2026
 //   ?dry=1        report what would change without writing
 
@@ -49,7 +54,33 @@ serve(async (req) => {
   const season = Number(url.searchParams.get('season') ?? 2026)
   const dryRun = url.searchParams.get('dry') === '1'
   const oneWeek = url.searchParams.get('week')
-  const weeks = oneWeek ? [Number(oneWeek)] : Array.from({ length: 18 }, (_, i) => i + 1)
+  const fullSync = url.searchParams.get('full') === '1'
+
+  let weeks: number[]
+  if (oneWeek) {
+    weeks = [Number(oneWeek)]
+  } else if (fullSync) {
+    weeks = Array.from({ length: 18 }, (_, i) => i + 1)
+  } else {
+    // Default "light" mode: current week + the previous one, the same
+    // pair detect-games checks. This is what the every-minute cron
+    // actually calls (no params), so a game going final needs to show
+    // up in nfl_games — and therefore Pick'Em scoring — within about a
+    // minute, not wait for a full 18-week ESPN refetch. The previous
+    // week is included for the same reason detect-games checks it: a
+    // late-running game (Wednesday MAC game, weather delay, etc.) can
+    // still be live after ESPN's own "current week" has rolled over.
+    let currentWeek = 1
+    try {
+      const wkRes = await fetch(
+        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?limit=1`,
+        { headers: ESPN_HEADERS }
+      )
+      if (wkRes.ok) currentWeek = (await wkRes.json())?.week?.number ?? 1
+    } catch { /* fall back to week 1 */ }
+    const prevWeek = Math.max(1, currentWeek - 1)
+    weeks = prevWeek !== currentWeek ? [prevWeek, currentWeek] : [currentWeek]
+  }
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -135,6 +166,8 @@ serve(async (req) => {
     ok: errors.length === 0,
     dryRun,
     season,
+    mode: oneWeek ? 'single-week' : fullSync ? 'full' : 'light',
+    weeks,
     weeksSynced: weeks.length,
     totalUpserted,
     report,
