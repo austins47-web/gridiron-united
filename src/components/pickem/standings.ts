@@ -6,6 +6,14 @@
 //   - a member who just joined shows up immediately at 0-0
 //   - standings can never drift out of sync with actual results
 //   - no trigger or background job to keep alive
+//
+// Scoring is live, not just final: winnerOf() credits whoever is
+// currently ahead in an in-progress game, same as a final one. A
+// tied score (0-0 at kickoff included) credits nobody until one
+// team actually gets ahead, and picks can genuinely swing back and
+// forth on the lead change until the game goes final. The caller is
+// responsible for actually re-fetching game rows on an interval —
+// this module just recomputes off whatever it's handed.
 // ══════════════════════════════════════════════════════════════
 
 export interface Game {
@@ -37,7 +45,7 @@ export interface WeekRow {
   userId: string
   name: string
   correct: number
-  played: number          // games that have finished AND they picked
+  played: number          // games with a live-or-final score AND they picked
   submitted: boolean      // did they get any picks in at all
   tiebreakerGuess: number | null
   tiebreakerDiff: number | null   // distance from the actual total
@@ -65,9 +73,28 @@ export const isFinal = (g: Game) =>
   (g.status ?? '').toLowerCase().includes('final') ||
   (g.status ?? '').toLowerCase() === 'post'
 
-/** Winning team abbreviation, or null if not final / a tie. */
+/** True while a game is actively being played — its score can still move. */
+export const isLive = (g: Game) =>
+  (g.status ?? '').toLowerCase() === 'in_progress'
+
+/**
+ * A game has a score worth scoring picks against — either it's over,
+ * or it's live and already on the board. Doesn't mean anyone's
+ * actually ahead yet (still 0-0, or the scores are tied) — winnerOf
+ * is what decides that.
+ */
+export const isDecided = (g: Game) => isFinal(g) || isLive(g)
+
+/**
+ * Currently-leading team abbreviation, live or final — null if the
+ * game hasn't started, has no score yet, or is tied (nobody gets the
+ * point for a tied game until one team actually pulls ahead; a final
+ * tie never resolves). This is intentionally provisional for a live
+ * game: it can flip teams, or go back to null on a tying score, right
+ * up until the game actually goes final.
+ */
 export function winnerOf(g: Game): string | null {
-  if (!isFinal(g)) return null
+  if (!isDecided(g)) return null
   if (g.home_score == null || g.away_score == null) return null
   if (g.home_score === g.away_score) return null
   return g.home_score > g.away_score ? g.home_team : g.away_team
@@ -166,7 +193,7 @@ export function computeStandings(
   for (const wk of weeks) {
     const wkGames = games.filter(g => g.week === wk)
     const wkPicks = picks.filter(p => p.week === wk)
-    if (!wkGames.some(isFinal)) continue     // nothing settled yet
+    if (!wkGames.some(isDecided)) continue     // nothing on the board yet
 
     const rows = computeWeek(wkGames, wkPicks, members)
 

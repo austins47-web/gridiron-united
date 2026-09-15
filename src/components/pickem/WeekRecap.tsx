@@ -142,7 +142,7 @@ export function WeekRecap({
 }
 
 /** Small inline banner for a week still in progress. */
-export function WeekInProgress({ finished, total }: { finished: number; total: number }) {
+export function WeekInProgress({ finished, total, live = 0 }: { finished: number; total: number; live?: number }) {
   const pct = total > 0 ? Math.round((finished / total) * 100) : 0
   return (
     <div className="rounded-xl border border-field-700 bg-field-800/60 px-4 py-3">
@@ -150,6 +150,12 @@ export function WeekInProgress({ finished, total }: { finished: number; total: n
         <span className="flex items-center gap-1.5 font-cond font-bold text-[12px] uppercase tracking-[0.18em] text-field-300">
           <Flame className="w-3.5 h-3.5 text-gold" />
           Week in progress
+          {live > 0 && (
+            <span className="flex items-center gap-1 text-[10px] font-bold text-red-400 normal-case tracking-normal">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+              LIVE
+            </span>
+          )}
         </span>
         <span className="font-cond font-black text-xs text-white tabular-nums">
           {finished}/{total} final
@@ -162,7 +168,9 @@ export function WeekInProgress({ finished, total }: { finished: number; total: n
         />
       </div>
       <p className="text-field-500 text-xs mt-2">
-        Final standings post once every game wraps.
+        {live > 0
+          ? 'Standings below are live — leaders can change as games unfold. Final standings post once every game wraps.'
+          : 'Final standings post once every game wraps.'}
       </p>
     </div>
   )

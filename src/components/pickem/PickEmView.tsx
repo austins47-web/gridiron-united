@@ -8,7 +8,7 @@ import { teamLogoUrl } from '@/components/teams/teamIds'
 import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
-  computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal,
+  computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal, winnerOf,
 } from './standings'
 import { WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
@@ -168,7 +168,10 @@ export function PickEmView() {
     },
   })
 
-  // Games for this week
+  // Games for this week. Polled on an interval (not just on mount) so
+  // scores — and anything derived from them, like live Pick'Em
+  // standings below — actually move while someone's sitting on the
+  // page watching a game, not just the next time they refocus the tab.
   const { data: games = [] } = useQuery({
     queryKey: ['nfl-games', week],
     queryFn: async () => {
@@ -181,6 +184,7 @@ export function PickEmView() {
       if (error) throw error
       return data ?? []
     },
+    refetchInterval: 20_000,
   })
 
   // Only meaningful once real games are loaded for the week — an
@@ -277,6 +281,10 @@ export function PickEmView() {
     queryKey: ['pickem-season-games', CURRENT_SEASON],
     enabled: !!activeLeagueId && tab === 'standings',
     staleTime: 60_000,
+    // Live scores feed live Pick'Em standings (see standings.ts) —
+    // this needs to actually keep polling while the tab's open, same
+    // as the per-week `games` query above.
+    refetchInterval: 20_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('nfl_games')
@@ -316,6 +324,14 @@ export function PickEmView() {
   const weekTbTotal  = useMemo(() => tiebreakerTotal(games as any), [games])
   const finishedCount = useMemo(
     () => (games as any[]).filter(isFinal).length,
+    [games],
+  )
+  // Separate from finishedCount: a game that's merely live already
+  // moves the standings below (see standings.ts's live scoring), so
+  // the in-progress banner needs to show up the moment kickoff
+  // happens, not wait for the week's first true final.
+  const liveCount = useMemo(
+    () => (games as any[]).filter((g: any) => g.status === 'in_progress').length,
     [games],
   )
 
@@ -1015,8 +1031,8 @@ export function PickEmView() {
               currentUserId={user?.id}
               myStreak={standings.find((s: any) => s.userId === user?.id)?.streak}
             />
-          ) : finishedCount > 0 ? (
-            <WeekInProgress finished={finishedCount} total={games.length} />
+          ) : (finishedCount > 0 || liveCount > 0) ? (
+            <WeekInProgress finished={finishedCount} total={games.length} live={liveCount} />
           ) : null}
 
           <StandingsTable
@@ -1742,13 +1758,10 @@ function PicksBoard({
 
   const ptsByUser = new Map(weekRows.map(r => [r.userId, r]))
 
-  const winnerOf = (game: any): string | null => {
-    if (game.status !== 'final') return null
-    if (game.home_score == null || game.away_score == null) return null
-    if (game.home_score === game.away_score) return null
-    return game.home_score > game.away_score ? game.home_team : game.away_team
-  }
-
+  // Shared with the Pts column (via weekRows/computeWeek) — a live
+  // game's leader shows up here too, not just once it's final, so a
+  // cell's check/X mark never disagrees with the live point total in
+  // the same row.
   return (
     <div className="panel p-0 overflow-hidden">
       {weekNav}
