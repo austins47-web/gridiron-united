@@ -393,6 +393,60 @@
   .wkreveal-spark { animation: wkreveal-sparkFall 1.1s ease-out forwards; }
   @keyframes wkreveal-sparkFall { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(60px) scale(.4); } }
 
+  /* ── Pick'Em winner popup — PickemWinnerPopup.tsx ──
+     A global, unmissable celebration the first time anyone opens the
+     app after their league's week goes final. Confetti + a gold-lit
+     card, distinct from the quieter inline WeekRecap on the
+     Standings tab, which stays as the permanent record. */
+  .pwp-card {
+    animation: pwp-cardIn .5s cubic-bezier(.22,1,.36,1) both, pwp-glow 2.4s ease-in-out .5s infinite;
+  }
+  @keyframes pwp-cardIn {
+    0%   { opacity: 0; transform: scale(.85) translateY(10px); }
+    70%  { opacity: 1; transform: scale(1.02) translateY(0); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  @keyframes pwp-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(206,123,69,.25), 0 25px 50px -12px rgba(0,0,0,.6); }
+    50%      { box-shadow: 0 0 0 8px rgba(206,123,69,0), 0 25px 50px -12px rgba(0,0,0,.6); }
+  }
+  .pwp-trophy {
+    animation: pwp-trophyPop .6s cubic-bezier(.34,1.56,.64,1) .15s both, pwp-trophySpin 3.5s ease-in-out 1s infinite;
+  }
+  @keyframes pwp-trophyPop { from { opacity: 0; transform: scale(.4) rotate(-15deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+  @keyframes pwp-trophySpin {
+    0%, 100% { transform: rotate(-4deg); }
+    50%      { transform: rotate(4deg); }
+  }
+  .pwp-eyebrow { animation: wkreveal-fadeUp .4s ease .3s both; }
+  .pwp-name    { animation: pwp-nameIn .5s cubic-bezier(.22,1,.36,1) .4s both; }
+  @keyframes pwp-nameIn {
+    0%   { opacity: 0; transform: scale(.9) translateY(6px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .pwp-stat { animation: wkreveal-rowIn .4s cubic-bezier(.2,0,.2,1) both; }
+  .pwp-cta  { animation: fade-in .4s ease .9s both; }
+
+  /* Confetti — pure CSS, no asset/library. Each piece is positioned
+     and colored inline (see PickemWinnerPopup.tsx); the animation
+     just handles fall + spin + fade so the JS only has to set the
+     per-piece randomness (left offset, delay, duration, rotation). */
+  .pwp-confetti-piece {
+    position: absolute;
+    top: -5%;
+    width: 8px;
+    height: 14px;
+    opacity: 0;
+    animation-name: pwp-confettiFall;
+    animation-timing-function: cubic-bezier(.25,.46,.45,.94);
+    animation-fill-mode: forwards;
+  }
+  @keyframes pwp-confettiFall {
+    0%   { opacity: 1; transform: translateY(0) rotate(0deg); }
+    85%  { opacity: 1; }
+    100% { opacity: 0; transform: translateY(115vh) rotate(600deg); }
+  }
+
   /* ── Trade completion reveal — two sides slide in from their own
      direction, matching the card's own 2-column layout, then the
      whole card gets a brief settle flash. Reuses the exact isNew
@@ -527,6 +581,10 @@
     .bcopen-tagline, .bcopen-fadeout { animation: none !important; opacity: 1 !important; }
     .wkreveal-eyebrow, .wkreveal-title, .wkreveal-row, .wkreveal-winner,
     .wkreveal-spark { animation: none !important; opacity: 1 !important; }
+    .pwp-card, .pwp-trophy, .pwp-eyebrow, .pwp-name, .pwp-stat, .pwp-cta {
+      animation: none !important; opacity: 1 !important; transform: none !important;
+    }
+    .pwp-confetti-piece { display: none !important; }
     .trade-slide-left, .trade-slide-right { animation: none !important; opacity: 1 !important; transform: none !important; }
     .trade-settle { animation: none !important; }
     .ticker-live-dot, .ticker-scroll-track { animation: none !important; }

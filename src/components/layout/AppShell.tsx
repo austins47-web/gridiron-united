@@ -10,6 +10,7 @@ import { LeagueBottomBar } from './LeagueBottomBar'
 import { NotificationsPanel } from '@/components/ui/NotificationsPanel'
 import { LeagueSelector } from '@/components/leagues/LeagueSelector'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import { PickemWinnerPopup } from '@/components/pickem/PickemWinnerPopup'
 import clsx from 'clsx'
 
 export function AppShell() {
@@ -42,6 +43,13 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen flex flex-col">
+
+      {/* Global Pick'Em week-winner celebration — renders via a
+          portal, so its position here doesn't matter, but it needs
+          to live above the route Outlet (not inside PickEmView) to
+          actually be unmissable regardless of what page someone's
+          on when their league's week goes final. */}
+      <PickemWinnerPopup />
 
       {/*
         Header + global nav + live ticker + league sub-nav are one

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
@@ -130,11 +131,18 @@ export function PickEmView() {
   const { activeLeagueId, activeLeague, user, myMembership } = useAppStore()
   const qc = useQueryClient()
   const isCommissioner = myMembership?.is_commissioner
+  const location = useLocation()
 
   const activeWeek = getActiveWeek()
   const [week, setWeek] = useState(activeWeek)
   const [weekDropdownOpen, setWeekDropdownOpen] = useState(false)
-  const [tab, setTab] = useState<'picks' | 'standings' | 'results' | 'board'>('picks')
+  // Honors a deep link from the global Pick'Em winner popup ("Full
+  // Standings" navigates here wanting the Standings tab open, not
+  // the default Picks tab) — read once on mount, same as any other
+  // router-state-driven initial value.
+  const [tab, setTab] = useState<'picks' | 'standings' | 'results' | 'board'>(
+    () => (location.state as any)?.pickemTab ?? 'picks'
+  )
   const [pendingPicks, setPendingPicks] = useState<Record<string, string>>({})
   const [tiebreakerScore, setTiebreakerScore] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
