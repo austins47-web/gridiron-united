@@ -37,11 +37,22 @@ export function HomeView() {
   // Pick'Em member's losses column is never even written, so it
   // silently showed 0 regardless of how many picks were actually
   // wrong), and "Commish Of" is already surfaced per-league in the
-  // My Teams list below, so it didn't need its own hero tile. These
-  // two replacements are both fantasy-specific by nature, so there's
-  // no unit-mixing: pick'em teams simply carry no matchup/trades and
-  // contribute nothing rather than a misleading number.
-  const weekPts = teams.reduce((s, t) => s + (t.matchup?.myScore ?? 0), 0)
+  // My Teams list below, so it didn't need its own hero tile.
+  //
+  // A combined "Week Pts" total tried next has the exact same flaw
+  // as the record it replaced: summing raw points across leagues
+  // with different scoring settings (PPR vs. standard, custom
+  // multipliers) into one number is just as meaningless as summing
+  // wins and correct-picks was — a 140 in one league and a 60 in
+  // another add up to a "200" that describes nothing real.
+  //
+  // Matchups currently being won, on the other hand, is a plain
+  // count — comparable across every league regardless of its
+  // scoring rules, same as Trades below. Pick'Em teams simply carry
+  // no matchup and contribute nothing, rather than a misleading
+  // number.
+  const matchupTeams = teams.filter(t => t.matchup)
+  const winningCount = matchupTeams.filter(t => t.matchup!.myScore > t.matchup!.oppScore).length
   const pendingTrades = actions.filter(a => a.kind === 'trade_offer').length
 
   if (isLoading) {
@@ -90,9 +101,12 @@ export function HomeView() {
             {[
               { label: 'Leagues',  value: String(teams.length), urgent: false },
               {
-                label: 'Week Pts',
-                value: teams.some(t => t.matchup) ? weekPts.toFixed(1) : '—',
-                urgent: false,
+                label: 'Winning',
+                value: matchupTeams.length > 0 ? `${winningCount}/${matchupTeams.length}` : '—',
+                // Gold when you're winning every matchup you're in
+                // right now — a genuine "perfect week so far" flex,
+                // not just a neutral count.
+                urgent: matchupTeams.length > 0 && winningCount === matchupTeams.length,
               },
               // Highlighted gold when there's actually something
               // waiting — a bare "0" here is just informational, but
