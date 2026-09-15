@@ -30,10 +30,19 @@ export function HomeView() {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
-  // Aggregate scoreboard figures
-  const totalW = teams.reduce((s, t) => s + t.wins, 0)
-  const totalL = teams.reduce((s, t) => s + t.losses, 0)
-  const commishCount = teams.filter(t => t.isCommissioner).length
+  // Aggregate scoreboard figures. A combined win-loss record and a
+  // commissioner count both used to sit here — neither held up:
+  // record mixed two incompatible scoring systems into one string
+  // (a Pick'Em "win" is a correct pick, not a matchup, and a
+  // Pick'Em member's losses column is never even written, so it
+  // silently showed 0 regardless of how many picks were actually
+  // wrong), and "Commish Of" is already surfaced per-league in the
+  // My Teams list below, so it didn't need its own hero tile. These
+  // two replacements are both fantasy-specific by nature, so there's
+  // no unit-mixing: pick'em teams simply carry no matchup/trades and
+  // contribute nothing rather than a misleading number.
+  const weekPts = teams.reduce((s, t) => s + (t.matchup?.myScore ?? 0), 0)
+  const pendingTrades = actions.filter(a => a.kind === 'trade_offer').length
 
   if (isLoading) {
     return (
@@ -79,12 +88,19 @@ export function HomeView() {
           {/* Scoreboard readouts */}
           <div className="grid grid-cols-3 gap-px mt-5 bg-field-700/70 rounded-xl overflow-hidden">
             {[
-              { label: 'Leagues',   value: String(teams.length) },
-              { label: 'Record',    value: `${totalW}-${totalL}` },
-              { label: commishCount === 1 ? 'Commish Of' : 'Commish Of', value: String(commishCount) },
-            ].map(({ label, value }) => (
+              { label: 'Leagues',  value: String(teams.length), urgent: false },
+              {
+                label: 'Week Pts',
+                value: teams.some(t => t.matchup) ? weekPts.toFixed(1) : '—',
+                urgent: false,
+              },
+              // Highlighted gold when there's actually something
+              // waiting — a bare "0" here is just informational, but
+              // a pending trade is a decision someone's waiting on.
+              { label: 'Trades', value: String(pendingTrades), urgent: pendingTrades > 0 },
+            ].map(({ label, value, urgent }) => (
               <div key={label} className="bg-field-900/80 px-3 py-3 text-center">
-                <div className="readout-value">{value}</div>
+                <div className={clsx('readout-value', urgent && 'text-gold')}>{value}</div>
                 <div className="readout-label mt-1">{label}</div>
               </div>
             ))}
