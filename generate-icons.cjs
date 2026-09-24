@@ -76,3 +76,40 @@ for (const [name, buf] of Object.entries(files)) {
   fs.writeFileSync(path.join(OUT, name), buf)
   console.log(`public/icons/${name}  ${buf.length} bytes`)
 }
+
+// ── Notification icons ────────────────────────────────────────
+// One per kind of alert, shown beside the notification on Android and
+// desktop (iPhone always shows the app icon): the app's own lucide
+// glyph in gold on the dark tile. Kept inside the middle so a circular
+// crop still shows all of it.
+const { loadImage } = require('canvas')
+const NOTIFY = {
+  reminder: 'alarm-clock', result: 'trophy', lead: 'flame', clinch: 'crown',
+  tiebreaker: 'target', alive: 'swords', draft: 'timer', trade: 'arrow-left-right',
+  lineup: 'shirt', test: 'bell-ring',
+}
+const lucideSvg = (name, color) => {
+  const src = fs.readFileSync(path.join(__dirname, 'node_modules/lucide-react/dist/esm/icons', `${name}.js`), 'utf8')
+  const arr = src.match(/createLucideIcon\("[^"]+",\s*(\[[\s\S]*?\])\);/)[1]
+  const nodes = new Function(`return ${arr}`)()
+  const attrs = o => Object.entries(o).filter(([k]) => k !== 'key').map(([k, v]) => `${k}="${v}"`).join(' ')
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${nodes.map(([tag, a]) => `<${tag} ${attrs(a)}/>`).join('')}</svg>`
+}
+;(async () => {
+  const dir = path.join(OUT, 'notify')
+  fs.mkdirSync(dir, { recursive: true })
+  for (const [file, icon] of Object.entries(NOTIFY)) {
+    const size = 192
+    const c = createCanvas(size, size), ctx = c.getContext('2d')
+    ctx.fillStyle = '#141414'
+    ctx.beginPath(); ctx.roundRect(0, 0, size, size, 44); ctx.fill()
+    const glow = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size * 0.5)
+    glow.addColorStop(0, 'rgba(206,123,69,0.20)'); glow.addColorStop(1, 'rgba(206,123,69,0)')
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, size, size)
+    const img = await loadImage(Buffer.from(lucideSvg(icon, GOLD)))
+    const g = 104
+    ctx.drawImage(img, (size - g) / 2, (size - g) / 2, g, g)
+    fs.writeFileSync(path.join(dir, `${file}.png`), c.toBuffer('image/png'))
+  }
+  console.log(`public/icons/notify/: ${Object.keys(NOTIFY).join(', ')}`)
+})()

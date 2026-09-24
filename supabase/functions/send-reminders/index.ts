@@ -21,8 +21,9 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   isFinal, isVoid, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal,
-  nflSeasonFor, type Game,
+  nflSeasonFor, computeStandings, rankOf, describeWeekStats, type Game,
 } from '../_shared/pickemCore.ts'
+import { renderEmail, ordinal, type RichEmail, type PickRow } from './email.ts'
 import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
 
 const CORS = {
@@ -60,6 +61,14 @@ interface Reminder {
   pushTag?: string
   /** How long a push stays worth delivering (e.g. until the picks lock). */
   pushTtlSec?: number
+  /** Push: its image + title emoji, when not the eventType's (PUSH_LOOK). */
+  pushLook?: PushLook
+  /** Push: up to two buttons under it (Android, computers). */
+  pushActions?: { action: string; title: string; path: string }[]
+  /** Push: the number on the home-screen app icon, e.g. open picks. */
+  pushBadge?: number
+  /** Push: stays on a computer screen until dismissed. */
+  pushSticky?: boolean
   leagueId: string
   leagueName: string
   eventType: string
@@ -70,10 +79,16 @@ interface Reminder {
   ctaLabel: string
   ctaPath: string
   urgent?: boolean
+  /** Email: small gold line above the headline, e.g. "LOCKS IN 2H". */
+  kicker?: string
+  /** Email: inbox preview text (defaults to the body). */
+  preheader?: string
+  /** Email: the content block for this kind of email. */
+  rich?: RichEmail
 }
 
 // ══ PROVIDER — swap this one function to change email vendors ══
-async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+async function sendEmail(to: string, subject: string, html: string, text: string): Promise<void> {
   const key = Deno.env.get('RESEND_API_KEY')
   if (!key) throw new Error('RESEND_API_KEY not set')
 
@@ -88,6 +103,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
       to: [to],
       subject,
       html,
+      text,
       headers: {
         // Gmail and Yahoo require these on bulk mail. Without them
         // reminders are far more likely to land in spam.
@@ -103,59 +119,77 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
   }
 }
 
-// ── Email template — dark, on-brand, no external assets ───────
-function renderEmail(r: Reminder): string {
-  const accent = r.urgent ? '#CE7B45' : '#A3A3A3'
-  return `<!doctype html>
-<html>
-<body style="margin:0;padding:0;background:#141414;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#141414;padding:32px 16px;">
-    <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-             style="max-width:520px;background:#1C1C1C;border:1px solid #303030;border-radius:16px;overflow:hidden;">
+/**
+ * An app link that opens in the reminder's league: the app switches
+ * to the league named by ?league= (LeagueSelector), so a Pick'Em
+ * reminder from one league never opens on another.
+ */
+const inLeague = (path: string, leagueId: string) =>
+  `${path}${path.includes('?') ? '&' : '?'}league=${encodeURIComponent(leagueId)}`
 
-        <!-- gold chain marker -->
-        <tr><td style="height:3px;background:#CE7B45;font-size:0;line-height:0;">&nbsp;</td></tr>
+// ── Push: how each kind of alert looks ────────────────────────
+// The image beside it (public/icons/notify/, on Android and computers)
+// and the emoji leading its title — the one per-alert touch an iPhone
+// shows, since it always uses the app icon.
+interface PushLook { icon: string; emoji: string }
+const PUSH_LOOK: Record<string, PushLook> = {
+  pickem_deadline:   { icon: 'reminder',   emoji: '🏈' },
+  pickem_week_final: { icon: 'result',     emoji: '🏁' },
+  pickem_alive:      { icon: 'alive',      emoji: '⚔️' },
+  pickem_lead:       { icon: 'lead',       emoji: '🔥' },
+  pickem_clinch:     { icon: 'clinch',     emoji: '👑' },
+  pickem_tb:         { icon: 'tiebreaker', emoji: '🎯' },
+  on_the_clock:      { icon: 'draft',      emoji: '⏱️' },
+  trade_offer:       { icon: 'trade',      emoji: '🤝' },
+  trade_expiring:    { icon: 'trade',      emoji: '⌛' },
+  lineup_empty:      { icon: 'lineup',     emoji: '🚨' },
+}
+const WON_LOOK: PushLook = { icon: 'result', emoji: '🏆' }
 
-        <tr><td style="padding:28px 28px 8px;">
-          <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:${accent};font-weight:700;">
-            ${escapeHtml(r.leagueName)}
-          </div>
-          <div style="font-size:24px;font-weight:800;color:#ffffff;margin-top:8px;line-height:1.2;">
-            ${escapeHtml(r.heading)}
-          </div>
-          <div style="font-size:15px;color:#A3A3A3;margin-top:10px;line-height:1.5;">
-            ${escapeHtml(r.body)}
-          </div>
-        </td></tr>
-
-        <tr><td style="padding:20px 28px 28px;">
-          <a href="${APP_URL}${r.ctaPath}"
-             style="display:inline-block;background:#CE7B45;color:#0A0A0A;text-decoration:none;
-                    font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px;">
-            ${escapeHtml(r.ctaLabel)}
-          </a>
-        </td></tr>
-
-        <tr><td style="padding:16px 28px;border-top:1px solid #303030;">
-          <div style="font-size:11px;color:#666666;line-height:1.6;">
-            You're receiving this because email reminders are on for
-            <strong style="color:#A3A3A3;">${escapeHtml(r.leagueName)}</strong>.<br>
-            <a href="${APP_URL}/app/settings" style="color:#CE7B45;">Manage or turn off reminders</a>
-          </div>
-        </td></tr>
-      </table>
-
-      <div style="font-size:11px;color:#4A4A4A;margin-top:16px;">Gridiron United</div>
-    </td></tr>
-  </table>
-</body>
-</html>`
+const pushPayload = (r: Reminder) => {
+  const look = r.pushLook ?? PUSH_LOOK[r.eventType]
+  const title = r.pushTitle ?? r.heading
+  return JSON.stringify({
+    title: look ? `${look.emoji} ${title}` : title,
+    body: r.pushBody ?? `${r.leagueName} · ${r.body}`,
+    url: inLeague(r.ctaPath, r.leagueId),
+    tag: r.pushTag ?? `${r.eventType}-${r.leagueId}`,
+    icon: look ? `/icons/notify/${look.icon}.png` : undefined,
+    actions: r.pushActions?.map(a => ({ action: a.action, title: a.title, url: inLeague(a.path, r.leagueId) })),
+    badgeCount: r.pushBadge,
+    requireInteraction: r.pushSticky || undefined,
+    urgent: r.urgent || undefined,
+  })
 }
 
-function escapeHtml(s: string): string {
-  return String(s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+// ── Email: see email.ts for the template ──────────────────────
+const emailFor = (r: Reminder) => renderEmail({
+  leagueName: r.leagueName,
+  subject: r.subject,
+  preheader: r.preheader ?? r.body,
+  kicker: r.kicker ?? r.leagueName,
+  heading: r.heading,
+  body: r.body,
+  ctaLabel: r.ctaLabel,
+  ctaUrl: `${APP_URL}${inLeague(r.ctaPath, r.leagueId)}`,
+  manageUrl: `${APP_URL}/app/settings`,
+  iconUrl: `${APP_URL}/icons/icon-192.png`,
+  rich: r.rich,
+  urgent: r.urgent,
+})
+
+/**
+ * Every row of a query, a page at a time — the API returns at most
+ * 1,000 rows per request (a season of a league's picks passes that).
+ */
+async function fetchAllRows<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  const rows: T[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await page(from, from + 999)
+    if (error) throw error
+    rows.push(...(data ?? []))
+    if (!data || data.length < 1000) return rows
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -396,7 +430,10 @@ serve(async (req) => {
             // and covers every open game that week
             if (tag === 'p' && !l.weekStart) continue
             const scope = tag === 'p' ? openGames(weeks.get(l.week) ?? [], now) : l.games
-            const unpicked = scope.filter(g => !mine.some(p => p.game_id === g.id)).length
+            const unpickedGames = scope
+              .filter(g => !mine.some(p => p.game_id === g.id))
+              .sort((x, y) => new Date(x.game_date).getTime() - new Date(y.game_date).getTime())
+            const unpicked = unpickedGames.length
             const tb = scope.find(g => g.is_tiebreaker)
             const tbMissing = !!tb && !mine.some(p => p.game_id === tb.id && p.tiebreaker_score != null)
             if (unpicked === 0 && !tbMissing) continue
@@ -407,10 +444,39 @@ serve(async (req) => {
               unpicked, tbMissing,
               noneYet: !mine.some(p => p.week === l.week),
             })
+            const kind = onDeadline ? 'deadline' : tag === 'p' ? 'week' : 'day'
+            const h = Math.round(hrs)
+            const day = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(l.at)
+            const shown = unpickedGames.slice(0, 6)
+            const rich: RichEmail | undefined = unpicked > 0 ? {
+              kind: 'picks',
+              games: shown.map((g): PickRow => ({ away: g.away_team, home: g.home_team, when: shortWhen(g.game_date, tz), tiebreaker: g.is_tiebreaker })),
+              more: unpicked - shown.length,
+              lockLabel: kind === 'week' ? `First kickoff in ${h}h` : `Locks in ${h}h`,
+              tbMissing,
+              tbGame: tb ? `${tb.away_team} @ ${tb.home_team}` : undefined,
+            } : undefined
             reminders.push({
               userId: m.user_id, ...to,
               leagueId: lg.id, leagueName: lg.name,
               eventType: 'pickem_deadline',
+              kicker: unpicked === 0 ? `Week ${l.week} · Tiebreaker`
+                : kind === 'day' ? `${day} · Week ${l.week}`
+                : kind === 'week' ? `Week ${l.week} kickoff`
+                : `Week ${l.week} deadline`,
+              preheader: unpicked > 0
+                ? `${unpicked} game${unpicked === 1 ? '' : 's'} still open — ${shown[0].away_team} @ ${shown[0].home_team} kicks off ${shortWhen(shown[0].game_date, tz)}.`
+                : `Add your tiebreaker guess before ${tb ? `${tb.away_team} @ ${tb.home_team}` : 'it'} kicks off.`,
+              rich,
+              // Push: when it locks, then the open games themselves
+              pushBody: [
+                `${lg.name} · ${kind === 'week' ? `First kickoff in ${h}h` : `Locks in ${h}h`}`,
+                ...shown.slice(0, 3).map(g => `${g.away_team} @ ${g.home_team} · ${shortWhen(g.game_date, tz)}`),
+                ...(unpicked > 3 ? [`+${unpicked - 3} more`] : []),
+                ...(tbMissing ? [unpicked > 0 ? 'Your tiebreaker guess is missing too' : 'No guess means you lose every tie'] : []),
+              ].join('\n'),
+              pushActions: [{ action: 'picks', title: unpicked > 0 ? 'Make picks' : 'Add guess', path: `/app/pickem?week=${l.week}` }],
+              pushBadge: unpicked || undefined,
               // One reminder per league-week on the device: the 2h nudge
               // replaces the earlier one, and it's dropped once picks lock
               pushTag: `pickem-${lg.id}-w${l.week}`,
@@ -445,11 +511,15 @@ serve(async (req) => {
               userId: ds.current_user_id, ...to,
               leagueId: lg.id, leagueName: lg.name,
               eventType: 'on_the_clock',
+              kicker: `Round ${ds.current_round} · Pick ${ds.current_pick}`,
+              preheader: `The draft is waiting on you — round ${ds.current_round}, pick ${ds.current_pick}.`,
               dedupeKey: `clock:${lg.id}:r${ds.current_round}:p${ds.current_pick}`,
               subject: `You're on the clock - ${lg.name}`,
               heading: "You're on the clock",
               body: `Round ${ds.current_round}, pick ${ds.current_pick}. Make your selection before the timer runs out.`,
               ctaLabel: 'Draft now', ctaPath: '/app/draft',
+              pushActions: [{ action: 'draft', title: 'Draft now', path: '/app/draft' }],
+              pushSticky: true,
               urgent: true,
             })
           }
@@ -479,11 +549,14 @@ serve(async (req) => {
           userId: t.receiver_id, ...to,
           leagueId: lg.id, leagueName: lg.name,
           eventType: 'trade_offer',
+          kicker: 'New trade offer',
+          preheader: `${who} wants to make a deal. Accept, counter, or decline.`,
           dedupeKey: `trade:${t.id}:new`,
           subject: `${who} sent you a trade - ${lg.name}`,
           heading: `Trade offer from ${who}`,
           body: 'Review the offer and accept, counter, or decline.',
           ctaLabel: 'Review trade', ctaPath: '/app/trades',
+          pushActions: [{ action: 'trade', title: 'Review trade', path: '/app/trades' }],
         })
       }
 
@@ -495,11 +568,14 @@ serve(async (req) => {
             userId: t.receiver_id, ...to,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'trade_expiring',
+            kicker: 'Expires in 12h',
+            preheader: `The offer from ${who} expires in about 12 hours.`,
             dedupeKey: `trade:${t.id}:exp12`,
             subject: `Trade from ${who} expires soon - ${lg.name}`,
             heading: 'A trade offer is about to expire',
             body: `The offer from ${who} expires in about 12 hours. Respond before it lapses.`,
             ctaLabel: 'Review trade', ctaPath: '/app/trades',
+            pushActions: [{ action: 'trade', title: 'Review trade', path: '/app/trades' }],
             urgent: true,
           })
         }
@@ -538,16 +614,82 @@ serve(async (req) => {
             userId: m.user_id, ...to,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'lineup_empty',
+            kicker: `Week ${wk} · Kickoff today`,
+            preheader: `Week ${wk} kicks off today and nobody's in your lineup.`,
             dedupeKey: `lineup:${lg.id}:${season}:w${wk}`,
             subject: `Your lineup is empty - ${lg.name}`,
             heading: 'You have no players started',
             body: `Week ${wk} kicks off today and your lineup is empty. Set it before game time.`,
             ctaLabel: 'Set lineup', ctaPath: '/app/roster',
+            pushActions: [{ action: 'lineup', title: 'Set lineup', path: '/app/roster' }],
             urgent: true,
           })
         }
       }
     }
+
+    // The Pick'Em recap email's content: the week's winner, the top of
+    // the table, the Week Stats and the season picture — one set of
+    // numbers for the league, personalized per player by forUser().
+    const pickemRecap = async (leagueId: string, wk: number, lgMembers: { user_id: string }[]) => {
+      const seasonGames = [...(scheduleBySeason.get(season)?.values() ?? [])].flat()
+      const wkGames = scheduleBySeason.get(season)?.get(wk) ?? []
+      const seasonPicks = await fetchAllRows((from, to) => supabase
+        .from('pickem_picks')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score')
+        .eq('league_id', leagueId).eq('season', season)
+        .order('id').range(from, to))
+      const wkPicks = seasonPicks.filter(p => p.week === wk)
+      const people = lgMembers.map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
+      const rows = computeWeek(wkGames, wkPicks, people)
+      const played = rows.filter(r => r.submitted)
+      if (played.length === 0) return null
+      const top = played[0]
+      const winners = played.filter(r => r.correct === top.correct && (r.tiebreakerDiff ?? Infinity) === (top.tiebreakerDiff ?? Infinity))
+      const placeOf = (r: typeof played[number]) => 1 + played.filter(o =>
+        o.correct > r.correct || (o.correct === r.correct && (o.tiebreakerDiff ?? Infinity) < (r.tiebreakerDiff ?? Infinity))).length
+      const total = Math.max(...played.map(r => r.played), 0)
+      const winnerNames = winners.map(w => w.name).join(' & ')
+      const stats = describeWeekStats(computeWeekStats(wkGames, wkPicks, rows))
+      const standings = computeStandings(seasonGames, seasonPicks, people)
+      const record = (c: number, pl: number) => `${c}–${Math.max(0, pl - c)}`
+
+      return {
+        forUser(userId: string) {
+          const me = played.find(r => r.userId === userId)
+          const won = !!me && winners.includes(me)
+          const si = standings.findIndex(r => r.userId === userId)
+          const leader = standings[0]
+          const rich: RichEmail = {
+            kind: 'recap',
+            weekLabel: weekTitle(wk),
+            winners: winners.map(w => w.name),
+            winnerLine: `${top.correct}/${total}${total ? ` · ${Math.round((top.correct / total) * 100)}%` : ''}`,
+            decidedByTiebreak: played.filter(r => r.correct === top.correct).length > winners.length,
+            you: me ? { correct: me.correct, played: me.played, place: placeOf(me), of: played.length, won } : undefined,
+            top: played.slice(0, 5).map(r => ({ place: placeOf(r), name: r.name, score: `${r.correct}/${r.played}`, you: r.userId === userId })),
+            stats,
+            season: si >= 0 && leader && leader.played > 0 ? {
+              place: rankOf(standings, si), of: standings.length,
+              record: record(standings[si].correct, standings[si].played),
+              leader: leader.name, leaderRecord: record(leader.correct, leader.played),
+              youLead: rankOf(standings, si) === 1,
+            } : undefined,
+          }
+          return {
+            rich,
+            subject: won ? `You won ${weekTitle(wk)}! - ${lgName(leagueId)}` : `${weekTitle(wk)} results: ${winnerNames} won - ${lgName(leagueId)}`,
+            heading: won ? (winners.length > 1 ? `You tied for ${weekTitle(wk)}` : `You won ${weekTitle(wk)}`) : `${winnerNames} won ${weekTitle(wk)}`,
+            body: won
+              ? `${me!.correct} of ${me!.played} right — the best in the league this week. Here's how it all shook out.`
+              : me ? `You went ${me.correct}/${me.played} and finished ${ordinal(placeOf(me))} of ${played.length}. Here's how the week shook out.`
+              : `Here's how the week shook out.`,
+            preheader: `${winnerNames} won with ${top.correct}/${total}.${me && !won ? ` You finished ${ordinal(placeOf(me))} of ${played.length}.` : ''} Plus the Week Stats.`,
+          }
+        },
+      }
+    }
+    const lgName = (id: string) => (leagueById.get(id) as any)?.name ?? ''
 
     // ══ 5. WEEKLY RECAP — Tuesday morning ════════════════════
     if (dow === 2 && utcHour === 14) {   // Tuesday ~9am ET
@@ -566,6 +708,11 @@ serve(async (req) => {
         if (wk == null) continue
         const recapKey = `recap:${lg.id}:${season}:w${wk}`
         const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
+        // Pick'Em: the week's results, personalized per player (built
+        // only if someone here actually gets the email)
+        const recap = isPickem && lgMembers.some(m => reach(m.user_id, lg.id, 'notify_weekly_recap')?.email)
+          ? await pickemRecap(lg.id, wk, lgMembers)
+          : null
 
         for (const m of lgMembers) {
           const to = reach(m.user_id, lg.id, 'notify_weekly_recap')
@@ -573,15 +720,20 @@ serve(async (req) => {
           // (section 6) — the Tuesday recap stays an email.
           if (!to?.email) continue
 
+          const personal = recap?.forUser(m.user_id)
           reminders.push({
             userId: m.user_id, ...to, push: false,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'weekly_recap',
             dedupeKey: recapKey,
-            subject: `Week ${wk} wrapped - ${lg.name}`,
-            heading: `Week ${wk} is in the books`,
-            body: 'See where you landed in the standings and how the rest of the league did.',
-            ctaLabel: 'View standings', ctaPath: '/app/leagues',
+            subject: personal?.subject ?? `Week ${wk} wrapped - ${lg.name}`,
+            heading: personal?.heading ?? `Week ${wk} is in the books`,
+            body: personal?.body ?? 'See where you landed in the standings and how the rest of the league did.',
+            kicker: `${weekTitle(wk)} results`,
+            preheader: personal?.preheader,
+            rich: personal?.rich,
+            ctaLabel: 'See full standings',
+            ctaPath: isPickem ? `/app/pickem?week=${wk}&tab=standings` : '/app/leagues',
           })
         }
       }
@@ -655,6 +807,8 @@ serve(async (req) => {
       }
 
       const winnerNames = winners.map(w => w.name).join(' & ')
+      // The week's headline stat (usually the biggest upset) as a teaser
+      const teaser = describeWeekStats(payload.stats).find(l => l.key !== 'league')
       for (const r of played) {
         const to = reach(r.userId, lg.id, 'notify_weekly_recap')
         if (!to?.push) continue
@@ -665,8 +819,10 @@ serve(async (req) => {
         const title = won
           ? (winners.length > 1 ? `You tied for the ${weekName(wk)} win!` : `You won ${weekName(wk)}!`)
           : `${weekName(wk)} final: ${winnerNames} won`
-        const body = `${lg.name} · You went ${r.correct}/${r.played}` +
-          (won ? '' : `, ${ordinal(place)} of ${played.length}`) + '. Tap for the full results.'
+        const body = [
+          `${lg.name} · You went ${r.correct}/${r.played}` + (won ? ' — best in the league' : `, ${ordinal(place)} of ${played.length}`),
+          ...(teaser ? [`${teaser.label}: ${teaser.headline}`] : []),
+        ].join('\n')
         reminders.push({
           userId: r.userId, email: null, push: true, pushOnly: true,
           leagueId: lg.id, leagueName: lg.name,
@@ -675,7 +831,14 @@ serve(async (req) => {
           subject: title, heading: title, body,
           pushTitle: title, pushBody: body,
           pushTag: `weekfinal-${lg.id}-w${wk}`,
-          ctaLabel: 'See results', ctaPath: `/app/pickem?week=${wk}`,
+          // A win gets the trophy, and stays up on a computer until seen
+          pushLook: won ? WON_LOOK : undefined,
+          pushSticky: won,
+          pushActions: [
+            { action: 'board', title: 'See every pick', path: `/app/pickem?week=${wk}&tab=board` },
+            { action: 'chat', title: 'League chat', path: '/app/chat' },
+          ],
+          ctaLabel: 'See results', ctaPath: `/app/pickem?week=${wk}&tab=standings`,
         })
       }
     }
@@ -739,7 +902,10 @@ serve(async (req) => {
             pushTitle: title, pushBody: body,
             pushTag: `alive-${lg.id}-w${wk}`,
             pushTtlSec: 2 * 3600,
-            ctaLabel: 'Standings', ctaPath: `/app/pickem?week=${wk}`,
+            pushLook: r.status === 'clinched' ? PUSH_LOOK.pickem_clinch : undefined,
+            pushSticky: r.status === 'clinched',
+            pushActions: [{ action: 'board', title: 'Watch the Board', path: `/app/pickem?week=${wk}&tab=board` }],
+            ctaLabel: 'Standings', ctaPath: `/app/pickem?week=${wk}&tab=standings`,
           })
         }
       }
@@ -780,8 +946,10 @@ serve(async (req) => {
         .eq('week', wk)
       const wkMembers = lgMembers.map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
       const finals = wkGames.filter(isFinal)
-      const liveAlert = (userId: string, kind: string, dedupeKey: string, title: string, body: string) => {
+      const liveAlert = (userId: string, kind: 'lead' | 'clinch' | 'tb', dedupeKey: string, title: string, body: string) => {
         if (!optedIn.some(m => m.user_id === userId)) return
+        const board = { action: 'board', title: 'Watch the Board', path: `/app/pickem?week=${wk}&tab=board` }
+        const standings = { action: 'standings', title: 'Standings', path: `/app/pickem?week=${wk}&tab=standings` }
         reminders.push({
           userId, email: null, push: true, pushOnly: true,
           leagueId: lg.id, leagueName: lg.name,
@@ -790,7 +958,11 @@ serve(async (req) => {
           pushTitle: title, pushBody: body,
           pushTag: `${kind}-${lg.id}-w${wk}`,
           pushTtlSec: 3600, urgent: true,
-          ctaLabel: 'Standings', ctaPath: `/app/pickem?week=${wk}`,
+          pushSticky: kind === 'clinch',
+          // The tiebreaker sweat opens the Board, where every guess sits
+          // in the last game's box; the rest open the standings
+          pushActions: kind === 'tb' ? [board, standings] : [board],
+          ctaLabel: 'Standings', ctaPath: (kind === 'tb' ? board : standings).path,
         })
       }
 
@@ -868,6 +1040,7 @@ serve(async (req) => {
             channel, to: channel === 'email' ? r.email : `push:${r.userId}`,
             subject: channel === 'email' ? r.subject : (r.pushTitle ?? r.heading),
             dedupeKey: r.dedupeKey,
+            ...(channel === 'push' ? { push: JSON.parse(pushPayload(r)) } : {}),
           })
           sent++
           continue
@@ -875,15 +1048,10 @@ serve(async (req) => {
 
         try {
           if (channel === 'email') {
-            await sendEmail(r.email!, r.subject, renderEmail(r))
+            const { html, text } = emailFor(r)
+            await sendEmail(r.email!, r.subject, html, text)
           } else {
-            const payload = JSON.stringify({
-              title: r.pushTitle ?? r.heading,
-              body: r.pushBody ?? `${r.leagueName} · ${r.body}`,
-              url: r.ctaPath,
-              tag: r.pushTag ?? `${r.eventType}-${r.leagueId}`,
-            })
-            const took = await pushTo(r.userId, payload, r.pushTtlSec ?? 12 * 3600, !!r.urgent)
+            const took = await pushTo(r.userId, pushPayload(r), r.pushTtlSec ?? 12 * 3600, !!r.urgent)
             if (took === 0) throw new Error('no device accepted the notification')
           }
           await supabase.from('reminder_log').insert({
@@ -1142,15 +1310,22 @@ function upcomingWeek(weeks: Map<number, SchedGame[]> | undefined, now: Date): n
   return best?.week ?? null
 }
 
+/** "Sun 4:25 PM" in a zone — the kickoff line in pick-reminder emails. */
+function shortWhen(iso: string, tz: string): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: 'numeric', minute: '2-digit' })
+    .format(new Date(iso)).replace(/[\u202F\u00A0]/g, ' ')
+}
+
+/** "Week 3", or the playoff round as a title ("Wild Card Weekend"). */
+function weekTitle(w: number): string {
+  return w === 19 ? 'Wild Card Weekend' : w === 20 ? 'Divisional Round'
+    : w === 21 ? 'Championship Weekend' : w === 22 ? 'the Super Bowl' : `Week ${w}`
+}
+
 /** "Week 3", or the playoff round's name. */
 function weekName(w: number): string {
   return w === 19 ? 'Wild Card weekend' : w === 20 ? 'the Divisional round'
     : w === 21 ? 'Championship weekend' : w === 22 ? 'the Super Bowl' : `Week ${w}`
-}
-
-function ordinal(n: number): string {
-  const v = n % 100
-  return n + (v >= 11 && v <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')
 }
 
 /** First kickoff of a week's last game day (days in Eastern time). */

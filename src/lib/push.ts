@@ -34,6 +34,15 @@ export const isStandalone = () =>
 export function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return
   navigator.serviceWorker.register('/sw.js').catch(() => { /* push just won't be available */ })
+  // A notification can put a count on the home-screen icon (open picks,
+  // see sw.js) — opening the app clears it
+  const clearBadge = () => {
+    if (document.visibilityState !== 'visible') return
+    const nav = navigator as Navigator & { clearAppBadge?: () => Promise<void> }
+    nav.clearAppBadge?.().catch(() => {})
+  }
+  clearBadge()
+  document.addEventListener('visibilitychange', clearBadge)
 }
 
 async function registration(): Promise<ServiceWorkerRegistration> {

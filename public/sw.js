@@ -8,34 +8,56 @@
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
 
-// Payload: { title, body, url, tag } as JSON (see _shared/webPush.ts)
+// Payload (see send-reminders): {
+//   title, body, url, tag,
+//   icon?        per-event image (Android/desktop — iPhone shows the app icon)
+//   actions?     [{ action, title, url }] — buttons under the notification
+//   badgeCount?  number on the home-screen app icon (e.g. open picks)
+//   requireInteraction?  stays on screen until dismissed (desktop)
+//   urgent?      vibrates (Android)
+// }
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { data = { body: event.data && event.data.text() } }
 
   const title = data.title || 'Gridiron United'
-  event.waitUntil(self.registration.showNotification(title, {
+  const actions = Array.isArray(data.actions) ? data.actions.slice(0, 2) : []
+  const shown = self.registration.showNotification(title, {
     body: data.body || '',
-    icon: '/icons/icon-192.png',
+    icon: data.icon || '/icons/icon-192.png',
     badge: '/icons/badge-96.png',
     // Same tag replaces the earlier notification (e.g. the 2h pick
     // nudge replaces the 24h one) instead of stacking up
     tag: data.tag || undefined,
     renotify: !!data.tag,
-    data: { url: data.url || '/app/home' },
-  }))
+    requireInteraction: !!data.requireInteraction,
+    vibrate: data.urgent ? [120, 60, 120] : undefined,
+    timestamp: Date.now(),
+    actions: actions.map(a => ({ action: a.action, title: a.title })),
+    data: { url: data.url || '/app/home', actions },
+  })
+  // The count on the home-screen icon (iPhone home-screen app, Android,
+  // desktop PWA) — cleared when the app is opened
+  const badge = typeof data.badgeCount === 'number' && self.navigator.setAppBadge
+    ? self.navigator.setAppBadge(data.badgeCount).catch(() => {})
+    : Promise.resolve()
+  event.waitUntil(Promise.all([shown, badge]))
 })
 
-// Tap: focus an open app window and send it to the page, or open one
+// Tap (or an action button): focus an open app window and send it to
+// the page, or open one
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const url = new URL(event.notification.data?.url || '/app/home', self.location.origin).href
+  const d = event.notification.data || {}
+  const picked = event.action && (d.actions || []).find(a => a.action === event.action)
+  const url = new URL((picked && picked.url) || d.url || '/app/home', self.location.origin).href
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     for (const w of windows) {
       if (new URL(w.url).origin === self.location.origin) {
         await w.focus()
-        return w.navigate(url)
+        // navigate() fails on a window this worker doesn't control yet
+        return w.navigate(url).catch(() => self.clients.openWindow(url))
       }
     }
     return self.clients.openWindow(url)

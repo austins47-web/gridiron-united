@@ -1,10 +1,30 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { ChevronDown, Trophy, Shield } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useMyLeagues } from '@/hooks/useLeague'
 import type { League, LeagueMember } from '@/types/database'
 import clsx from 'clsx'
+
+// A link from a reminder email or notification names its league
+// (?league=id — send-reminders' inLeague), so it opens there rather
+// than on whichever league was open last. Read once per page load.
+let linkedLeague: string | null =
+  typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('league') : null
+
+// Invalidate all league-specific query caches so a newly picked
+// league loads fresh
+function resetLeagueQueries(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ['my-roster'] })
+  qc.invalidateQueries({ queryKey: ['rostered-ids'] })
+  qc.invalidateQueries({ queryKey: ['draft-state'] })
+  qc.invalidateQueries({ queryKey: ['draft-picks'] })
+  qc.invalidateQueries({ queryKey: ['league-members'] })
+  qc.invalidateQueries({ queryKey: ['standings'] })
+  qc.invalidateQueries({ queryKey: ['matchups'] })
+  qc.invalidateQueries({ queryKey: ['comm-members'] })
+  qc.invalidateQueries({ queryKey: ['comm-roster'] })
+}
 
 export function LeagueSelector() {
   const { activeLeague, activeLeagueId, setActiveLeague } = useAppStore()
@@ -36,29 +56,35 @@ export function LeagueSelector() {
   // localStorage persists the id across reloads (see appStore's
   // setActiveLeague). Only fall back to leagues[0] when there's no
   // persisted choice, or the persisted league no longer applies
-  // (left the league, id stale from another account).
+  // (left the league, id stale from another account). A ?league=
+  // link wins over both.
   useEffect(() => {
-    if (leagues.length === 0 || activeLeague) return
+    if (leagues.length === 0) return
+    // From the store, not this render: both selectors (header and
+    // phone bar) run this in the same commit
+    const current = useAppStore.getState().activeLeague
+    const wanted = linkedLeague
+    linkedLeague = null
+    const linked = wanted ? leagues.find(i => i.league.id === wanted) : null
+    if (linked) {
+      if (linked.league.id !== current?.id) {
+        if (current) resetLeagueQueries(qc)
+        setActiveLeague(linked.league, linked.membership)
+      }
+      return
+    }
+    if (current) return
     const restored = activeLeagueId
       ? leagues.find(i => i.league.id === activeLeagueId)
       : null
     const pick = restored ?? leagues[0]
     setActiveLeague(pick.league, pick.membership)
-  }, [leagues, activeLeague, activeLeagueId, setActiveLeague])
+  }, [leagues, activeLeague, activeLeagueId, setActiveLeague, qc])
 
   function switchLeague(league: League, membership: LeagueMember) {
     if (league.id === activeLeague?.id) { setOpen(false); return }
 
-    // Invalidate all league-specific query caches so new league loads fresh
-    qc.invalidateQueries({ queryKey: ['my-roster'] })
-    qc.invalidateQueries({ queryKey: ['rostered-ids'] })
-    qc.invalidateQueries({ queryKey: ['draft-state'] })
-    qc.invalidateQueries({ queryKey: ['draft-picks'] })
-    qc.invalidateQueries({ queryKey: ['league-members'] })
-    qc.invalidateQueries({ queryKey: ['standings'] })
-    qc.invalidateQueries({ queryKey: ['matchups'] })
-    qc.invalidateQueries({ queryKey: ['comm-members'] })
-    qc.invalidateQueries({ queryKey: ['comm-roster'] })
+    resetLeagueQueries(qc)
 
     setActiveLeague(league, membership)
     setOpen(false)

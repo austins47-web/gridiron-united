@@ -110,11 +110,14 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   const [weekDropdownOpen, setWeekDropdownOpen] = useState(false)
   // Honors a deep link from the global Pick'Em winner popup ("Full
   // Standings" navigates here wanting the Standings tab open, not
-  // the default Picks tab) — read once on mount, same as any other
-  // router-state-driven initial value.
-  const [tab, setTab] = useState<'picks' | 'standings' | 'results' | 'board'>(
-    () => (location.state as any)?.pickemTab ?? 'picks'
-  )
+  // the default Picks tab), or ?tab= from an email or notification
+  // ("See every pick" opens the Board) — read once on mount, same as
+  // any other router-state-driven initial value.
+  const [tab, setTab] = useState<'picks' | 'standings' | 'results' | 'board'>(() => {
+    const linked = new URLSearchParams(location.search).get('tab')
+    return (location.state as any)?.pickemTab
+      ?? (linked === 'standings' || linked === 'results' || linked === 'board' ? linked : 'picks')
+  })
   const [pendingPicks, setPendingPicks] = useState<Record<string, string>>({})
   const [tiebreakerScore, setTiebreakerScore] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)

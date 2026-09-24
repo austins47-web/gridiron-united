@@ -42,11 +42,14 @@ serve(async (req) => {
     .eq('user_id', user.id)
   if (!subs || subs.length === 0) return json({ sent: 0, failed: 0, devices: 0 })
 
+  // Looks like the real thing (see send-reminders' pushPayload)
   const payload = JSON.stringify({
-    title: "You're all set",
-    body: "Pick'Em reminders and results will show up here.",
+    title: "🔔 You're all set",
+    body: "Pick reminders, your weekly result and live game alerts will show up here.",
     url: '/app/settings',
     tag: 'push-test',
+    icon: '/icons/notify/test.png',
+    actions: [{ action: 'pickem', title: "Open Pick'Em", url: '/app/pickem' }],
   })
 
   let sent = 0, failed = 0
