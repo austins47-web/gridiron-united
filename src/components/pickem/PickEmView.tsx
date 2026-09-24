@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { resolveWeekDeadline } from '@/lib/deadline'
-import { PICKEM_WEEK_ENDS, currentPickemWeek, isGameLocked, livePollInterval } from '@/lib/pickemWeek'
+import { isGameLocked, livePollInterval } from '@/lib/pickemWeek'
+import { usePickemCalendar, type PickemCalendar } from '@/hooks/usePickemCalendar'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
@@ -30,6 +31,7 @@ import { useNflOdds } from '@/hooks/useNflOdds'
 import { useNflStandings } from '@/hooks/useTeamStandings'
 import { CURRENT_SEASON } from '@/lib/season'
 import { playPickLock } from '@/lib/sound'
+import { fetchAll } from '@/lib/fetchAll'
 
 const TEAM_INFO: Record<string, { name: string }> = {
   ARI: { name: 'Arizona Cardinals' },
@@ -73,13 +75,31 @@ function formatDeadline(iso: string): string {
   })
 }
 
+/**
+ * The week clock comes from the schedule (usePickemCalendar), so the
+ * page waits for it before choosing which week to open on — a brief
+ * placeholder the first time, cached after that.
+ */
 export function PickEmView() {
+  const calendar = usePickemCalendar()
+  if (!calendar) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        <div className="h-10 w-48 rounded-lg bg-field-800 animate-pulse" />
+        <div className="h-40 rounded-xl bg-field-800 animate-pulse" />
+      </div>
+    )
+  }
+  return <PickEmWeekView calendar={calendar} />
+}
+
+function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   const { activeLeagueId, activeLeague, user, myMembership } = useAppStore()
   const qc = useQueryClient()
   const isCommissioner = myMembership?.is_commissioner
   const location = useLocation()
 
-  const activeWeek = currentPickemWeek()
+  const activeWeek = calendar.currentWeek
   // ?week=N (from reminder emails) opens that week — a 48h reminder
   // for a Thursday kickoff lands Tuesday, while the page still shows
   // the week that just finished.
@@ -262,13 +282,14 @@ export function PickEmView() {
     enabled: !!activeLeagueId && tab === 'standings',
     staleTime: 30_000,
     queryFn: async () => {
-      const { data, error } = await supabase
+      // A season of picks passes the API's 1,000-row cap — page through
+      return (await fetchAll((from, to) => supabase
         .from('pickem_picks')
         .select('game_id, user_id, week, picked_team, tiebreaker_score')
         .eq('league_id', activeLeagueId!)
         .eq('season', CURRENT_SEASON)
-      if (error) throw error
-      return data ?? []
+        .order('id')
+        .range(from, to)))
     },
   })
 
@@ -686,7 +707,7 @@ export function PickEmView() {
                   <span className="text-field-500 text-[12px] font-bold uppercase tracking-wider">Regular Season</span>
                 </div>
                 {Array.from({ length: 18 }, (_, i) => i + 1).map(w => {
-                  const endDate = PICKEM_WEEK_ENDS[w]
+                  const endDate = calendar.weekEnds.get(w)
                   const isOver = endDate ? new Date() >= endDate : false
                   const isCurrent = w === activeWeek
                   return (
@@ -717,7 +738,7 @@ export function PickEmView() {
                   { w: 21, label: 'Conference Champ.' },
                   { w: 22, label: 'Super Bowl' },
                 ].map(({ w, label }) => {
-                  const endDate = PICKEM_WEEK_ENDS[w]
+                  const endDate = calendar.weekEnds.get(w)
                   const isOver = endDate ? new Date() >= endDate : false
                   const isCurrent = w === activeWeek
                   return (

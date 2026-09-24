@@ -6,6 +6,7 @@ import type { League, LeagueMember } from '@/types/database'
 import toast from 'react-hot-toast'
 import { computeStandings } from '@/components/pickem/standings'
 import { CURRENT_SEASON } from '@/lib/season'
+import { fetchAll } from '@/lib/fetchAll'
 
 // Build the default team name from the user's profile
 function defaultTeamName(profile: { username?: string | null; display_name?: string | null } | null): string {
@@ -97,13 +98,14 @@ export function usePickemStandings(leagueId: string | null) {
     enabled: !!leagueId,
     staleTime: 30_000,
     queryFn: async () => {
-      const { data, error } = await supabase
+      // A season of picks passes the API's 1,000-row cap — page through
+      return (await fetchAll((from, to) => supabase
         .from('pickem_picks')
         .select('game_id, user_id, week, picked_team, tiebreaker_score')
         .eq('league_id', leagueId!)
         .eq('season', CURRENT_SEASON)
-      if (error) throw error
-      return data ?? []
+        .order('id')
+        .range(from, to)))
     },
   })
 

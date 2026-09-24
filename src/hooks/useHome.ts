@@ -6,7 +6,7 @@ import type { LeagueMember } from '@/types/database'
 import { CURRENT_SEASON } from '@/lib/season'
 import { computeStandings, isVoid, isWeekComplete } from '@/components/pickem/standings'
 import { resolveWeekDeadline } from '@/lib/deadline'
-import { currentPickemWeek, isGameLocked } from '@/lib/pickemWeek'
+import { currentPickemWeek, pickemWeekEnds, isGameLocked } from '@/lib/pickemWeek'
 import { fantasyWeekFor } from '@/lib/scheduling'
 import { useCurrentWeek, useCurrentCFBWeek } from './useLiveStats'
 
@@ -148,7 +148,7 @@ export function useHomeData() {
   // 1 all season. "Open" uses the page's own lock rule (per-week
   // override, league deadline rule, else kickoff).
   const pickemWeek = (league: (typeof myLeagues)[number]['league']) => {
-    const wk = currentPickemWeek()
+    const wk = currentPickemWeek(pickemWeekEnds(d?.games ?? []))
     const wkGames = (d?.games ?? []).filter(g => g.week === wk && !isVoid(g as any))
     const kickoffs = wkGames
       .map(g => (g.game_date ? new Date(g.game_date).getTime() : NaN))

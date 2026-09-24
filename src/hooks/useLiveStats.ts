@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { CURRENT_SEASON } from '@/lib/season'
 import {
   getNFLScores,
   getNFLLiveScores,
@@ -53,7 +54,7 @@ export function useNFLLiveScores() {
 
 // ── NFL scores by week ────────────────────────────────────────
 
-export function useNFLScores(week: number, season = 2026) {
+export function useNFLScores(week: number, season = CURRENT_SEASON) {
   return useQuery<SDIOScore[]>({
     queryKey: ['nfl-scores', season, week],
     queryFn: () => getNFLScores(season, week),
@@ -69,7 +70,7 @@ export function useNFLScores(week: number, season = 2026) {
 
 // ── NFL player stats by week ──────────────────────────────────
 
-export function useNFLPlayerStats(week: number, season = 2026) {
+export function useNFLPlayerStats(week: number, season = CURRENT_SEASON) {
   return useQuery<SDIOPlayerGame[]>({
     queryKey: ['nfl-player-stats', season, week],
     queryFn: () => getNFLPlayerStats(season, week),
@@ -90,7 +91,7 @@ export function usePlayerFantasyPoints(
   team: string,
   week: number,
   rules: ScoringRules = DEFAULT_SCORING,
-  season = 2026
+  season = CURRENT_SEASON
 ) {
   const { data: stats } = useNFLPlayerStats(week, season)
 
@@ -121,7 +122,7 @@ export function useRosterLivePoints(
   roster: Array<{ name: string; team: string; pos: string }>,
   week: number,
   rules: ScoringRules = DEFAULT_SCORING,
-  season = 2026
+  season = CURRENT_SEASON
 ): RosterPlayerPoints[] {
   const { data: stats } = useNFLPlayerStats(week, season)
 
@@ -142,7 +143,7 @@ export function useRosterLivePoints(
 
 // ── CFB scores ────────────────────────────────────────────────
 
-export function useCFBScores(week: number, season = 2026) {
+export function useCFBScores(week: number, season = CURRENT_SEASON) {
   return useQuery({
     queryKey: ['cfb-scores', season, week],
     queryFn: () => getCFBScores(season, week),
@@ -153,7 +154,7 @@ export function useCFBScores(week: number, season = 2026) {
 
 // ── CFB player stats ──────────────────────────────────────────
 
-export function useCFBPlayerStats(week: number, season = 2026) {
+export function useCFBPlayerStats(week: number, season = CURRENT_SEASON) {
   return useQuery({
     queryKey: ['cfb-player-stats', season, week],
     queryFn: () => getCFBPlayerStats(season, week),

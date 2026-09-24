@@ -1,4 +1,5 @@
-import { zonedTimeToUtc } from './deadline'
+import { zonedTimeToUtc, partsInZone } from './deadline'
+import { isVoid } from '../../supabase/functions/_shared/pickemCore.ts'
 
 // ══════════════════════════════════════════════════════════════
 // Which Pick'Em week is "current"
@@ -10,58 +11,51 @@ import { zonedTimeToUtc } from './deadline'
 // week's standings behind the week selector the moment it was decided.
 //
 // Anything that means "the week a Pick'Em player is on right now"
-// (the Pick'Em page's default week, Home's picks-due nudge) should
-// read currentPickemWeek(), so they never disagree about it.
+// (the Pick'Em page's default week, Home's picks-due nudge, League
+// Info) should read currentPickemWeek() — via usePickemCalendar in
+// components — so they never disagree about it.
 // ══════════════════════════════════════════════════════════════
 
-// Keyed by the Tuesday each week hands off on. Weeks with no Monday
-// game (18, Divisional, Conf. Champ., Super Bowl) still hand off on
-// the Tuesday after their last game. Safe for 2026: the earliest any
-// week's first game kicks off is a Wednesday night (Week 12).
-// Resolved through zonedTimeToUtc so the Nov 1 switch from EDT to
-// EST lands the rollover at 11:59 PM Eastern on both sides of it.
-const WEEK_ROLLOVER_TUESDAYS: Record<number, string> = {
-  1:  '2026-09-15',
-  2:  '2026-09-22',
-  3:  '2026-09-29',
-  4:  '2026-10-06',
-  5:  '2026-10-13',
-  6:  '2026-10-20',
-  7:  '2026-10-27',
-  8:  '2026-11-03',
-  9:  '2026-11-10',
-  10: '2026-11-17',
-  11: '2026-11-24',
-  12: '2026-12-01',
-  13: '2026-12-08',
-  14: '2026-12-15',
-  15: '2026-12-22',
-  16: '2026-12-29',
-  17: '2027-01-05',
-  18: '2027-01-12',
-  // ── Postseason ──
-  19: '2027-01-19',  // Wild Card
-  20: '2027-01-26',  // Divisional
-  21: '2027-02-02',  // Conference Championships
-  22: '2027-02-16',  // Super Bowl (Feb 14 — the off week comes before it)
+/**
+ * When each week stops being current: 11:59 PM Eastern on the first
+ * Tuesday on or after the week's last game (by Eastern calendar
+ * date) — so a Monday-night week hands off Tuesday night, and a week
+ * that ends Sunday (Week 18, most playoff rounds) the Tuesday after.
+ * Worked out from the schedule, so it holds for any season without a
+ * code change (it replaced a table of 2026 dates, which it matches
+ * exactly). Resolved through zonedTimeToUtc, so it's 11:59 PM Eastern
+ * on both sides of the switch from daylight to standard time.
+ * Postponed/canceled games don't stretch a week.
+ */
+export function pickemWeekEnds(
+  games: { week: number; game_date: string | null; status?: string | null }[],
+): Map<number, Date> {
+  const lastKickoff = new Map<number, number>()
+  for (const g of games) {
+    if (!g.game_date || isVoid(g)) continue
+    const t = new Date(g.game_date).getTime()
+    lastKickoff.set(g.week, Math.max(lastKickoff.get(g.week) ?? -Infinity, t))
+  }
+  const ends = new Map<number, Date>()
+  for (const [week, t] of lastKickoff) {
+    const p = partsInZone(new Date(t), 'America/New_York')
+    const tuesday = new Date(Date.UTC(p.year, p.month - 1, p.day + ((2 - p.weekday + 7) % 7)))
+    ends.set(week, zonedTimeToUtc(
+      tuesday.getUTCFullYear(), tuesday.getUTCMonth() + 1, tuesday.getUTCDate(), 23, 59, 'America/New_York'))
+  }
+  return ends
 }
 
-/** The instant each week stops being the current one. */
-export const PICKEM_WEEK_ENDS: Record<number, Date> = Object.fromEntries(
-  Object.entries(WEEK_ROLLOVER_TUESDAYS).map(([w, day]) => {
-    const [y, m, d] = day.split('-').map(Number)
-    return [w, zonedTimeToUtc(y, m, d, 23, 59, 'America/New_York')]
-  }),
-)
-
-export function currentPickemWeek(now: Date = new Date()): number {
-  // Before season starts → Week 1
-  if (now < new Date('2026-09-09T00:00:00Z')) return 1
-  for (let w = 1; w <= 22; w++) {
-    const end = PICKEM_WEEK_ENDS[w]
-    if (end && now < end) return w
-  }
-  return 22
+/**
+ * The week a Pick'Em player is on right now: the first whose end is
+ * still ahead. After the last scheduled week it stays on that week;
+ * with no schedule yet (early preseason) it's Week 1.
+ */
+export function currentPickemWeek(ends: Map<number, Date>, now: Date = new Date()): number {
+  const weeks = [...ends.keys()].sort((x, y) => x - y)
+  if (weeks.length === 0) return 1
+  for (const w of weeks) if (now < ends.get(w)!) return w
+  return weeks[weeks.length - 1]
 }
 
 export function isGameLocked(gameDate: string | null, deadline: string | null, status?: string | null): boolean {

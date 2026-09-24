@@ -5,8 +5,9 @@ import { useAppStore } from '@/store/appStore'
 import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, usePickemStandings, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
 import { SeasonAwardsPanel } from '@/components/pickem/SeasonAwards'
 import { computeSeasonAwards } from '@/components/pickem/season'
+import { computeStandings, rankOf } from '@/components/pickem/standings'
 import { CURRENT_SEASON } from '@/lib/season'
-import { currentPickemWeek } from '@/lib/pickemWeek'
+import { usePickemCalendar } from '@/hooks/usePickemCalendar'
 import { fantasyWeekFor } from '@/lib/scheduling'
 import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
@@ -18,6 +19,7 @@ import { Trophy, Plus, LogIn, Users, Settings, Copy, Shield, ChevronUp, ChevronD
 import { QRModal } from './QRModal'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
+import { fetchAll } from '@/lib/fetchAll'
 
 // ── Label formatters ────────────────────────────────────────────
 const SCORING_LABELS: Record<string, string> = {
@@ -301,13 +303,14 @@ function PickemRecords({ leagueId }: { leagueId: string }) {
     queryKey: ['hof-pickem-picks', leagueId],
     staleTime: 30_000,
     queryFn: async () => {
-      const { data, error } = await supabase
+      // A season of picks passes the API's 1,000-row cap — page through
+      return (await fetchAll((from, to) => supabase
         .from('pickem_picks')
         .select('game_id, user_id, week, picked_team, tiebreaker_score')
         .eq('league_id', leagueId)
         .eq('season', CURRENT_SEASON)
-      if (error) throw error
-      return data ?? []
+        .order('id')
+        .range(from, to)))
     },
   })
   const { data: members = [], isLoading: mLoading } = useQuery({
@@ -322,11 +325,66 @@ function PickemRecords({ leagueId }: { leagueId: string }) {
     },
   })
 
+  // Every earlier season this league played — its champions stay in
+  // the Hall of Fame after the app rolls over to a new season. Picks
+  // and games are kept, so each past season's final standings can be
+  // recomputed. (Scored against today's member list, so someone who
+  // has since left the league isn't shown.)
+  const { data: pastSeasons = [] } = useQuery({
+    queryKey: ['hof-pickem-past', leagueId, CURRENT_SEASON],
+    staleTime: 6 * 3600_000,
+    queryFn: async () => {
+      const pastPicks = await fetchAll((from, to) => supabase
+        .from('pickem_picks')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score, season')
+        .eq('league_id', leagueId)
+        .lt('season', CURRENT_SEASON)
+        .order('id')
+        .range(from, to))
+      const seasons = [...new Set(pastPicks.map(p => p.season as number))].sort((a, b) => b - a)
+      if (seasons.length === 0) return []
+      const pastGames = await fetchAll((from, to) => supabase
+        .from('nfl_games')
+        .select('id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker, season')
+        .in('season', seasons)
+        .order('id')
+        .range(from, to))
+      return seasons.map(season => ({
+        season,
+        games: pastGames.filter(g => g.season === season),
+        picks: pastPicks.filter(p => p.season === season),
+      }))
+    },
+  })
+
   const loading = gLoading || pLoading || mLoading
   if (loading) return <StandingsSkeleton rows={2} />
 
-  // The same season awards the Pick'Em Standings tab shows
-  return <SeasonAwardsPanel data={computeSeasonAwards(games as any, picks as any, members as any)} bare />
+  const champions = pastSeasons.map(({ season, games: g, picks: pk }) => {
+    const table = computeStandings(g as any, pk as any, members as any)
+    const champs = table.filter((r, i) => r.played > 0 && rankOf(table, i) === 1)
+    return { season, names: champs.map(c => c.name), record: champs[0] ? `${champs[0].correct}–${champs[0].played - champs[0].correct}` : '' }
+  }).filter(c => c.names.length > 0)
+
+  return (
+    <div className="space-y-4">
+      {champions.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="font-cond font-bold text-[11px] uppercase tracking-[0.16em] text-field-500">Past champions</p>
+          {champions.map(c => (
+            <div key={c.season} className="flex items-center gap-3 rounded-xl border border-gold/30 bg-gold/[0.06] px-3 py-2.5">
+              <Trophy className="w-4 h-4 text-gold shrink-0" />
+              <span className="font-cond font-black text-gold tabular-nums shrink-0">{c.season}</span>
+              <span className="font-bold text-white text-sm truncate flex-1">{c.names.join(' & ')}</span>
+              <span className="font-cond font-bold text-field-300 text-sm tabular-nums shrink-0">{c.record}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* This season so far — the same awards the Pick'Em Standings tab shows */}
+      <SeasonAwardsPanel data={computeSeasonAwards(games as any, picks as any, members as any)} bare />
+    </div>
+  )
 }
 
 function FantasyRecords({ leagueId }: { leagueId: string }) {
@@ -401,8 +459,9 @@ function LeagueInfoPanel({ league, membership, isCommissioner }: any) {
   // same live NFL/CFB week the Roster and Matchup tabs default to.
   const { data: liveNflWeek = 1 } = useCurrentWeek()
   const { data: liveCfbWeek = 1 } = useCurrentCFBWeek()
+  const pickemCalendar = usePickemCalendar()
   const seasonWeek = league.league_type === 'pickem'
-    ? currentPickemWeek()
+    ? (pickemCalendar?.currentWeek ?? 1)
     : fantasyWeekFor(league.player_pool, liveNflWeek, liveCfbWeek)
 
   const copyInvite = () => {

@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { nflSeasonFor } from '../_shared/pickemCore.ts'
 
 // ── ESPN proxy + FantasyPros proxy ────────────────────────────
 // Replaces SportsDataIO. All sources are free, no API key needed.
@@ -208,13 +209,13 @@ serve(async (req) => {
 
     } else if (endpoint.startsWith('cfb/teams/') && endpoint.endsWith('/schedule')) {
       const teamId     = endpoint.split('/')[2]
-      const season     = url.searchParams.get('season') ?? '2026'
+      const season     = url.searchParams.get('season') ?? String(nflSeasonFor(new Date()))
       const seasontype = url.searchParams.get('seasontype') ?? '2'
       data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${teamId}/schedule?season=${season}&seasontype=${seasontype}`)
 
     } else if (endpoint.startsWith('nfl/teams/') && endpoint.endsWith('/schedule')) {
       const teamId     = endpoint.split('/')[2]
-      const season     = url.searchParams.get('season') ?? '2026'
+      const season     = url.searchParams.get('season') ?? String(nflSeasonFor(new Date()))
       const seasontype = url.searchParams.get('seasontype') ?? '2'
       data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${teamId}/schedule?season=${season}&seasontype=${seasontype}`)
 

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { CURRENT_SEASON } from '@/lib/season'
 
 const PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sportsdata`
 const ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -271,7 +272,7 @@ function toBracketGame(ev: any, round: string): BracketGame {
 // bye between Conference Championships and the Super Bowl ────
 export function useNflBracket() {
   return useQuery({
-    queryKey: ['nfl-bracket'],
+    queryKey: ['nfl-bracket', CURRENT_SEASON],
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<Record<string, BracketGame[]>> => {
       const rounds = [
@@ -281,7 +282,7 @@ export function useNflBracket() {
         { week: 5, label: 'Super Bowl' },
       ]
       const results = await Promise.all(
-        rounds.map(r => proxyFetch(`nfl/scores/2026/${r.week}`, { seasontype: '3' }))
+        rounds.map(r => proxyFetch(`nfl/scores/${CURRENT_SEASON}/${r.week}`, { seasontype: '3' }))
       )
       const out: Record<string, BracketGame[]> = {}
       rounds.forEach((r, i) => {
@@ -305,10 +306,10 @@ function cfpRoundFromNote(note: string): string | null {
 
 export function useCfbBracket() {
   return useQuery({
-    queryKey: ['cfb-bracket'],
+    queryKey: ['cfb-bracket', CURRENT_SEASON],
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<Record<string, BracketGame[]>> => {
-      const data = await proxyFetch('cfb/scores/2026/1', { seasontype: '3' })
+      const data = await proxyFetch(`cfb/scores/${CURRENT_SEASON}/1`, { seasontype: '3' })
       const out: Record<string, BracketGame[]> = {
         'First Round': [], 'Quarterfinal': [], 'Semifinal': [], 'National Championship': [],
       }

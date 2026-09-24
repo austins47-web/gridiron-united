@@ -1,3 +1,5 @@
+import { nflSeasonFor } from '../../supabase/functions/_shared/pickemCore.ts'
+
 /**
  * The season the app is currently operating on.
  *
@@ -10,8 +12,13 @@
  * `teamIds.ts` use '2026' as Appalachian State's ESPN team id, and
  * the projections sync reads 2025 on purpose for prior-year stats.
  * Those are left alone deliberately.
+ *
+ * Worked out from the date (a season runs July–June — see
+ * nflSeasonFor), so a new season starts on its own: the 2026 season
+ * stays current through the Super Bowl and the offseason, and 2027
+ * takes over on July 1, 2027.
  */
-export const CURRENT_SEASON = 2026
+export const CURRENT_SEASON = nflSeasonFor(new Date())
 
 /** NFL and CFB are on the same season year today; split if that changes. */
 export const NFL_SEASON = CURRENT_SEASON

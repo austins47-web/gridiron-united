@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { nflSeasonFor } from '../_shared/pickemCore.ts'
 
 // ── Daily projections + ADP sync via Sleeper API ─────────────
 // Sleeper has a fully public, no-key-required API.
@@ -41,7 +42,7 @@ serve(async (req) => {
     // Returns a map of player_id → player object with adp data
     const [sleeperPlayers, sleeperADP] = await Promise.all([
       get('https://api.sleeper.app/v1/players/nfl'),
-      get('https://api.sleeper.app/v1/stats/nfl/projections/2026/1?season_type=regular').catch(() => ({})),
+      get(`https://api.sleeper.app/v1/stats/nfl/projections/${nflSeasonFor(new Date())}/1?season_type=regular`).catch(() => ({})),
     ])
 
     // ── 2. ESPN injury report ─────────────────────────────────

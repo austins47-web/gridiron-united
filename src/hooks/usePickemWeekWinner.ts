@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
 import { livePollInterval } from '@/lib/pickemWeek'
+import { fetchAll } from '@/lib/fetchAll'
 import {
   computeWeek, computeStandings, isWeekComplete, tiebreakerTotal,
   type WeekRow, type StandingRow, type Game, type Pick, type Member,
@@ -60,13 +61,14 @@ export function usePickemWeekWinner(leagueId: string | null | undefined, enabled
     staleTime: 5 * 60_000,
     refetchInterval: () => livePollInterval(games, 60_000),
     queryFn: async () => {
-      const { data, error } = await supabase
+      // A season of picks passes the API's 1,000-row cap — page through
+      return (await fetchAll((from, to) => supabase
         .from('pickem_picks')
         .select('game_id, user_id, week, picked_team, tiebreaker_score')
         .eq('league_id', leagueId!)
         .eq('season', CURRENT_SEASON)
-      if (error) throw error
-      return (data ?? []) as Pick[]
+        .order('id')
+        .range(from, to))) as Pick[]
     },
   })
 

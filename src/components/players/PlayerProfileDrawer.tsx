@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
+import { CURRENT_SEASON } from '@/lib/season'
 import { X, Newspaper, BarChart2, User, ExternalLink, AlertTriangle, Link2, TrendingUp } from 'lucide-react'
 import clsx from 'clsx'
 import type { Player } from '@/types/database'
@@ -575,7 +576,7 @@ export function PlayerProfileDrawer({ player, onClose, onTeamClick }: { player: 
                   <p className="text-sm">
                     {player.league === 'CFB'
                       ? 'No stats available from ESPN for this player yet.'
-                      : 'Season stats will appear once the 2026 NFL season starts.'}
+                      : `Season stats will appear once the ${CURRENT_SEASON} NFL season starts.`}
                   </p>
                 </div>
               ) : (
