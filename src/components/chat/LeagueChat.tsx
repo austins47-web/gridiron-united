@@ -1,11 +1,14 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { markChatRead } from '@/hooks/useUnreadChat'
 import { useAppStore } from '@/store/appStore'
 import { useAnchoredPortal } from '@/hooks/useAnchoredPortal'
-import { Send, MessageSquare, Image as ImageIcon, Search, Loader2, ArrowLeftRight } from 'lucide-react'
+import {
+  Send, MessageSquare, Image as ImageIcon, Search, Loader2, ArrowLeftRight,
+  CornerUpLeft, Pencil, Trash2, Copy, SmilePlus, X,
+} from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { UserProfileModal } from './UserProfileModal'
@@ -20,6 +23,9 @@ interface ChatMessage {
   message: string
   is_system: boolean
   created_at: string
+  reply_to_id?: string | null
+  edited_at?: string | null
+  deleted_at?: string | null
   profiles?: {
     username: string
     display_name: string | null
@@ -96,9 +102,176 @@ function MessageText({ text, myUsername, onMentionClick }: {
   )
 }
 
+// ── Reactions, replies, the message menu ──────────────────────
+
+/** The quick-react palette (the table takes any emoji; these are offered). */
+const REACTIONS = ['🔥', '😂', '👍', '❤️', '😮', '💀', '🏈', '🗑️']
+
+interface ReactionRow { message_id: string; user_id: string; emoji: string }
+interface ReactionGroup { emoji: string; users: string[]; mine: boolean }
+type Align = 'left' | 'right' | 'center'
+
+const senderName = (m?: ChatMessage | null) =>
+  m?.profiles?.display_name || m?.profiles?.username || 'Someone'
+
+/** One line of a message, for reply quotes and the composer bar. */
+function snippet(m: ChatMessage): string {
+  if (m.deleted_at) return 'Message deleted'
+  if (m.message.startsWith('IMAGE:')) return '📷 Photo'
+  if (m.message.startsWith('GIF:')) return 'GIF'
+  if (m.is_system && PICKEM_WEEK_FINAL_PATTERN.test(m.message)) return "🏆 Pick'Em week final"
+  if (m.is_system && m.message.startsWith('TRADE_COMPLETED:')) return '🔁 Trade completed'
+  return m.message.length > 90 ? m.message.slice(0, 87) + '…' : m.message
+}
+
+const alignRow = (align: Align) =>
+  align === 'right' ? 'justify-end pr-9' : align === 'left' ? 'justify-start pl-9' : 'justify-center'
+
+function ReplyQuote({ original, isOwn, onJump }: {
+  original: ChatMessage | 'missing'; isOwn: boolean; onJump: (id: string) => void
+}) {
+  const missing = original === 'missing'
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); if (!missing) onJump(original.id) }}
+      className={clsx(
+        'chat-reply-quote flex items-start gap-1.5 max-w-full mb-1 px-2.5 py-1.5 rounded-xl text-left border-l-2 bg-field-800/80 border-gold/60',
+        isOwn ? 'self-end' : 'self-start',
+        !missing && 'hover:bg-field-700/80 transition-colors',
+      )}
+    >
+      <CornerUpLeft className="w-3 h-3 text-gold/80 shrink-0 mt-0.5" />
+      <span className="min-w-0 text-xs leading-snug">
+        {missing
+          ? <span className="italic text-field-500">Original message isn&apos;t loaded</span>
+          : <>
+              <span className="font-bold text-field-200">{senderName(original)}</span>{' '}
+              <span className="text-field-400 line-clamp-2">{snippet(original)}</span>
+            </>}
+      </span>
+    </button>
+  )
+}
+
+function ReactionChips({ groups, align, onToggle, nameOf }: {
+  groups: ReactionGroup[]
+  align: Align
+  onToggle: (emoji: string) => void
+  nameOf: (userId: string) => string
+}) {
+  if (groups.length === 0) return null
+  return (
+    <div className={clsx('flex flex-wrap gap-1 mt-1', alignRow(align))}>
+      {groups.map(g => (
+        <button
+          key={g.emoji}
+          onClick={() => onToggle(g.emoji)}
+          title={g.users.map(nameOf).join(', ')}
+          className={clsx(
+            'chat-reaction inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition-colors',
+            g.mine
+              ? 'bg-gold/20 border-gold/50 text-white'
+              : 'bg-field-800 border-field-600 text-field-300 hover:border-field-500',
+          )}
+        >
+          <span className="text-sm leading-none">{g.emoji}</span>
+          <span className="font-bold tabular-nums">{g.users.length}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Opens under a tapped message: react, reply, copy — and edit/delete your own. */
+function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit, onDelete, onClose }: {
+  msg: ChatMessage
+  isOwn: boolean
+  align: Align
+  myReactions: Set<string>
+  onReact: (emoji: string) => void
+  onReply: () => void
+  onEdit: () => void
+  onDelete: () => void
+  onClose: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const isText = !msg.is_system && !msg.message.startsWith('IMAGE:') && !msg.message.startsWith('GIF:')
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(msg.message); toast.success('Copied') }
+    catch { toast.error("Couldn't copy") }
+    onClose()
+  }
+
+  return (
+    <div className={clsx('flex mt-1', alignRow(align))}>
+      <div className="chat-menu rise-in rounded-2xl border border-field-600 bg-field-800 shadow-xl shadow-black/40 p-1.5 max-w-full">
+        {confirming ? (
+          <div className="flex items-center gap-1 px-1.5 py-1">
+            <span className="text-xs text-field-200 mr-1">Delete this message for everyone?</span>
+            <button onClick={onDelete} className="text-xs font-bold text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10">Delete</button>
+            <button onClick={() => setConfirming(false)} className="text-xs text-field-400 hover:text-white px-2 py-1">Cancel</button>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center flex-wrap">
+              {REACTIONS.map(e => (
+                <button
+                  key={e}
+                  onClick={() => onReact(e)}
+                  aria-label={`React ${e}`}
+                  className={clsx(
+                    'w-9 h-9 rounded-xl text-xl leading-none flex items-center justify-center transition-transform hover:scale-125 active:scale-95',
+                    myReactions.has(e) && 'bg-gold/20',
+                  )}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-0.5 border-t border-field-700 mt-1 pt-1">
+              <MenuButton icon={<CornerUpLeft className="w-3.5 h-3.5" />} label="Reply" onClick={onReply} />
+              {isText && <MenuButton icon={<Copy className="w-3.5 h-3.5" />} label="Copy" onClick={copy} />}
+              {isOwn && isText && <MenuButton icon={<Pencil className="w-3.5 h-3.5" />} label="Edit" onClick={onEdit} />}
+              {isOwn && !msg.is_system && (
+                <MenuButton icon={<Trash2 className="w-3.5 h-3.5" />} label="Delete" danger onClick={() => setConfirming(true)} />
+              )}
+              <button onClick={onClose} aria-label="Close" className="ml-auto p-1.5 text-field-500 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MenuButton({ icon, label, onClick, danger = false }: {
+  icon: ReactNode; label: string; onClick: () => void; danger?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors',
+        danger ? 'text-red-400 hover:bg-red-500/10' : 'text-field-200 hover:bg-field-700 hover:text-white',
+      )}
+    >
+      {icon} {label}
+    </button>
+  )
+}
+
 // ── Message bubble ────────────────────────────────────────────
 
-function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick, isNew }: {
+function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick, isNew, replyTo, onJump, onOpenMenu }: {
   msg: ChatMessage
   isOwn: boolean
   showAvatar: boolean
@@ -106,6 +279,10 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
   myAvatarUrl?: string | null
   onMentionClick: (username: string) => void
   isNew?: boolean
+  /** The message this one answers ('missing' when it isn't loaded). */
+  replyTo?: ChatMessage | 'missing' | null
+  onJump: (id: string) => void
+  onOpenMenu: () => void
 }) {
   // Trade completed card
   if (msg.is_system && msg.message.startsWith('TRADE_COMPLETED:')) {
@@ -177,14 +354,15 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
   // Storage URL); GIF: is a GIPHY result. Rendered inside the same
   // bubble wrapper (avatar, sender, timestamp) as a normal message —
   // only what's inside the bubble itself changes.
-  const isImage = msg.message.startsWith('IMAGE:')
-  const isGif   = msg.message.startsWith('GIF:')
+  const deleted = !!msg.deleted_at
+  const isImage = !deleted && msg.message.startsWith('IMAGE:')
+  const isGif   = !deleted && msg.message.startsWith('GIF:')
   const mediaUrl = isImage ? msg.message.slice('IMAGE:'.length)
                   : isGif  ? msg.message.slice('GIF:'.length)
                   : null
 
   return (
-    <div className={clsx('flex gap-2 items-end', isOwn ? 'flex-row-reverse' : 'flex-row')}>
+    <div className={clsx('group flex gap-2 items-end', isOwn ? 'flex-row-reverse' : 'flex-row')}>
       <div className="w-7 shrink-0">
         {showAvatar && !isOwn && <MiniAvatar profile={msg.profiles} />}
         {showAvatar && isOwn && (
@@ -208,16 +386,27 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
             <span className="text-xs text-field-500 chat-time">{formatTime(msg.created_at)}</span>
           </div>
         )}
-        <div className={clsx(
-          mediaUrl
-            ? 'rounded-2xl overflow-hidden border max-w-[220px]'
-            : 'px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm',
-          isOwn
-            ? clsx('chat-bubble-own border-gold/30', !mediaUrl && 'bg-gold/20 text-white rounded-br-md')
-            : clsx('chat-bubble-other border-field-600', !mediaUrl && 'bg-field-700 text-field-100 rounded-bl-md'),
-          isNew && 'message-reveal',
-        )}>
-          {mediaUrl ? (
+        {replyTo && <ReplyQuote original={replyTo} isOwn={isOwn} onJump={onJump} />}
+        <div className={clsx('flex items-center gap-1.5 max-w-full', isOwn ? 'flex-row-reverse' : 'flex-row')}>
+        {/* Tap a message for reactions, reply, edit, delete */}
+        <div
+          onClick={deleted ? undefined : onOpenMenu}
+          className={clsx(
+            !deleted && 'cursor-pointer',
+            deleted
+              ? 'px-3.5 py-2 rounded-2xl text-sm italic text-field-500 border border-dashed border-field-600'
+              : mediaUrl
+              ? 'rounded-2xl overflow-hidden border max-w-[220px]'
+              : 'px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm',
+            !deleted && (isOwn
+              ? clsx('chat-bubble-own border-gold/30', !mediaUrl && 'bg-gold/20 text-white rounded-br-md')
+              : clsx('chat-bubble-other border-field-600', !mediaUrl && 'bg-field-700 text-field-100 rounded-bl-md')),
+            isNew && 'message-reveal',
+          )}
+        >
+          {deleted ? (
+            'Message deleted'
+          ) : mediaUrl ? (
             // max-h caps user-uploaded photos, which — unlike GIPHY
             // GIFs (always 200px tall at the source) — have no
             // guaranteed aspect ratio. object-contain keeps the
@@ -225,8 +414,22 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
             <img src={mediaUrl} alt={isGif ? 'GIF' : 'Shared image'}
               className="block w-full max-h-[280px] object-contain bg-field-900" loading="lazy" />
           ) : (
-            <MessageText text={msg.message} myUsername={myUsername} onMentionClick={onMentionClick} />
+            <>
+              <MessageText text={msg.message} myUsername={myUsername} onMentionClick={onMentionClick} />
+              {msg.edited_at && <span className="ml-1.5 text-[10px] opacity-60 whitespace-nowrap">(edited)</span>}
+            </>
           )}
+        </div>
+        {/* Computers: a react button on hover (phones just tap the message) */}
+        {!deleted && (
+          <button
+            onClick={onOpenMenu}
+            aria-label="React or reply"
+            className="hidden sm:flex opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-full text-field-500 hover:text-gold hover:bg-field-700 transition-opacity shrink-0"
+          >
+            <SmilePlus className="w-4 h-4" />
+          </button>
+        )}
         </div>
       </div>
     </div>
@@ -481,6 +684,100 @@ export function LeagueChat() {
     },
   })
 
+  // ── Reactions ───────────────────────────────────────────────
+  const { data: reactionRows = [] } = useQuery({
+    queryKey: ['chat-reactions', activeLeagueId],
+    enabled: !!activeLeagueId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('league_message_reactions')
+        .select('message_id, user_id, emoji')
+        .eq('league_id', activeLeagueId!)
+        .order('created_at', { ascending: true })
+        .limit(3000)
+      if (error) throw error
+      return (data ?? []) as ReactionRow[]
+    },
+  })
+  const reactionsByMessage = useMemo(() => {
+    const out = new Map<string, ReactionGroup[]>()
+    for (const r of reactionRows) {
+      const groups = out.get(r.message_id) ?? []
+      let g = groups.find(x => x.emoji === r.emoji)
+      if (!g) { g = { emoji: r.emoji, users: [], mine: false }; groups.push(g) }
+      g.users.push(r.user_id)
+      if (r.user_id === user?.id) g.mine = true
+      out.set(r.message_id, groups)
+    }
+    return out
+  }, [reactionRows, user?.id])
+
+  const setReactions = useCallback((fn: (prev: ReactionRow[]) => ReactionRow[]) =>
+    qc.setQueryData<ReactionRow[]>(['chat-reactions', activeLeagueId], prev => fn(prev ?? [])), [qc, activeLeagueId])
+
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    if (!user || !activeLeagueId) return
+    const mine = reactionRows.some(r => r.message_id === messageId && r.user_id === user.id && r.emoji === emoji)
+    const same = (r: ReactionRow) => r.message_id === messageId && r.user_id === user.id && r.emoji === emoji
+    // Optimistic — realtime echoes are de-duplicated below
+    setReactions(prev => mine ? prev.filter(r => !same(r)) : [...prev.filter(r => !same(r)), { message_id: messageId, user_id: user.id, emoji }])
+    const { error } = mine
+      ? await supabase.from('league_message_reactions').delete()
+          .eq('message_id', messageId).eq('user_id', user.id).eq('emoji', emoji)
+      : await supabase.from('league_message_reactions').insert({ message_id: messageId, user_id: user.id, emoji, league_id: activeLeagueId })
+    if (error) {
+      toast.error("Couldn't save that reaction")
+      qc.invalidateQueries({ queryKey: ['chat-reactions', activeLeagueId] })
+    }
+  }
+
+  // ── Replies, edits, the message menu ────────────────────────
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
+  const [editing, setEditing] = useState<ChatMessage | null>(null)
+  const [flashId, setFlashId] = useState<string | null>(null)
+  const closeMenu = useCallback(() => setMenuFor(null), [])
+
+  const jumpTo = (id: string) => {
+    const el = document.getElementById(`chat-msg-${id}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setFlashId(id)
+    setTimeout(() => setFlashId(f => (f === id ? null : f)), 1600)
+  }
+
+  const startReply = (m: ChatMessage) => {
+    setEditing(null)
+    setReplyTo(m)
+    setMenuFor(null)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+  const startEdit = (m: ChatMessage) => {
+    setReplyTo(null)
+    setEditing(m)
+    setText(m.message)
+    setMenuFor(null)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.setSelectionRange(m.message.length, m.message.length)
+    })
+  }
+  const cancelCompose = () => {
+    if (editing) setText('')
+    setEditing(null)
+    setReplyTo(null)
+  }
+  const deleteMessage = async (m: ChatMessage) => {
+    setMenuFor(null)
+    const { error } = await supabase
+      .from('league_messages')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', m.id)
+    if (error) toast.error("Couldn't delete: " + error.message)
+    else qc.setQueryData<ChatMessage[]>(['league-chat', activeLeagueId], prev =>
+      (prev ?? []).map(x => (x.id === m.id ? { ...x, message: '', deleted_at: new Date().toISOString() } : x)))
+  }
+
   // Message reveal — same isolated-tracking technique as the draft
   // pick reveal (a completely separate feature, unrelated state):
   // flag whichever message is newest, briefly, so it can play a
@@ -519,11 +816,39 @@ export function LeagueChat() {
           .eq('id', payload.new.id)
           .single()
         if (data) {
-          qc.setQueryData<ChatMessage[]>(['league-chat', activeLeagueId], prev => [
-            ...(prev ?? []),
-            data as ChatMessage,
-          ])
+          qc.setQueryData<ChatMessage[]>(['league-chat', activeLeagueId], prev =>
+            (prev ?? []).some(m => m.id === data.id) ? prev! : [...(prev ?? []), data as ChatMessage])
         }
+      })
+      // Edits and deletes — keep the sender's profile already loaded
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public',
+        table: 'league_messages',
+        filter: `league_id=eq.${activeLeagueId}`,
+      }, (payload) => {
+        const row = payload.new as ChatMessage
+        qc.setQueryData<ChatMessage[]>(['league-chat', activeLeagueId], prev =>
+          (prev ?? []).map(m => (m.id === row.id ? { ...m, ...row, profiles: m.profiles } : m)))
+      })
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public',
+        table: 'league_message_reactions',
+        filter: `league_id=eq.${activeLeagueId}`,
+      }, (payload) => {
+        const r = payload.new as ReactionRow
+        qc.setQueryData<ReactionRow[]>(['chat-reactions', activeLeagueId], prev =>
+          (prev ?? []).some(x => x.message_id === r.message_id && x.user_id === r.user_id && x.emoji === r.emoji)
+            ? prev! : [...(prev ?? []), { message_id: r.message_id, user_id: r.user_id, emoji: r.emoji }])
+      })
+      // Removals can't be filtered by league; the key says which one
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public',
+        table: 'league_message_reactions',
+      }, (payload) => {
+        const r = payload.old as Partial<ReactionRow>
+        if (!r.message_id) return
+        qc.setQueryData<ReactionRow[]>(['chat-reactions', activeLeagueId], prev =>
+          (prev ?? []).filter(x => !(x.message_id === r.message_id && x.user_id === r.user_id && x.emoji === r.emoji)))
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
@@ -586,6 +911,7 @@ export function LeagueChat() {
       if (e.key === 'Escape') { e.preventDefault(); setMentionQuery(null); return }
       // Tab or ArrowDown to select first result — skip for now, mouse-only is fine
     }
+    if (e.key === 'Escape' && (replyTo || editing)) { e.preventDefault(); cancelCompose(); return }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
@@ -597,9 +923,27 @@ export function LeagueChat() {
     const trimmed = text.trim()
     if (!trimmed || !activeLeagueId || !user) return
 
+    // Saving an edit
+    if (editing) {
+      const target = editing
+      setEditing(null)
+      setText('')
+      if (trimmed === target.message) return
+      qc.setQueryData<ChatMessage[]>(['league-chat', activeLeagueId], prev =>
+        (prev ?? []).map(m => (m.id === target.id ? { ...m, message: trimmed, edited_at: new Date().toISOString() } : m)))
+      const { error } = await supabase.from('league_messages').update({ message: trimmed }).eq('id', target.id)
+      if (error) {
+        toast.error("Couldn't save the edit: " + error.message)
+        qc.invalidateQueries({ queryKey: ['league-chat', activeLeagueId] })
+      }
+      return
+    }
+
+    const answering = replyTo
     setMentionQuery(null)
     setSending(true)
     setText('')
+    setReplyTo(null)
 
     try {
       const { error } = await supabase
@@ -609,9 +953,24 @@ export function LeagueChat() {
           user_id: user.id,
           message: trimmed,
           is_system: false,
+          reply_to_id: answering?.id ?? null,
         })
       if (error) throw error
       setAutoScroll(true)
+
+      // ── Tell the person being replied to ────────────────────
+      if (answering?.user_id && answering.user_id !== user.id && !answering.is_system) {
+        const who = profile?.display_name || profile?.username || 'Someone'
+        await supabase.from('notifications').insert({
+          user_id: answering.user_id,
+          league_id: activeLeagueId,
+          type: 'mention',
+          title: `${who} replied to you`,
+          body: trimmed.length > 60 ? trimmed.slice(0, 57) + '…' : trimmed,
+          is_read: false,
+          data: { league_id: activeLeagueId },
+        })
+      }
 
       // ── Notify mentioned users ──────────────────────────────
       const mentionHandles = [...trimmed.matchAll(/@(\w+)/g)].map(m => m[1].toLowerCase())
@@ -634,6 +993,8 @@ export function LeagueChat() {
       }
     } catch (e: any) {
       setText(trimmed)
+      setReplyTo(answering)
+      toast.error("Couldn't send: " + (e?.message ?? e))
     } finally {
       setSending(false)
       requestAnimationFrame(() => inputRef.current?.focus())
@@ -716,6 +1077,12 @@ export function LeagueChat() {
 
   const myUsername = profile?.username
   const myAvatarUrl = profile?.avatar_url
+  const byId = new Map(messages.map(m => [m.id, m]))
+  const nameOf = (userId: string) => {
+    if (userId === user?.id) return 'You'
+    const m = members.find(x => x.user_id === userId)
+    return m?.display_name || m?.username || 'Someone'
+  }
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -740,18 +1107,64 @@ export function LeagueChat() {
             <p className="chat-empty text-field-500 text-xs">Be the first to say something!</p>
           </div>
         )}
-        {grouped.map(({ msg, isFirst }) => (
-          <MessageBubble
-            key={msg.id}
-            msg={msg}
-            isOwn={msg.user_id === user?.id}
-            showAvatar={isFirst}
-            myUsername={myUsername}
-            myAvatarUrl={myAvatarUrl}
-            onMentionClick={setProfileUsername}
-            isNew={msg.id === justArrivedMsgId}
-          />
-        ))}
+        {grouped.map(({ msg, isFirst }) => {
+          const isOwn = msg.user_id === user?.id
+          const align: Align = msg.is_system ? 'center' : isOwn ? 'right' : 'left'
+          const groups = msg.deleted_at ? [] : (reactionsByMessage.get(msg.id) ?? [])
+          const original = msg.reply_to_id ? (byId.get(msg.reply_to_id) ?? 'missing') : null
+          // Cards (week final, trades) aren't tappable bubbles — they get a react button
+          const isCard = msg.is_system && (PICKEM_WEEK_FINAL_PATTERN.test(msg.message) || msg.message.startsWith('TRADE_COMPLETED:'))
+          return (
+            <div
+              key={msg.id}
+              id={`chat-msg-${msg.id}`}
+              className={clsx('rounded-xl transition-colors duration-700', flashId === msg.id && 'bg-gold/10')}
+            >
+              <MessageBubble
+                msg={msg}
+                isOwn={isOwn}
+                showAvatar={isFirst || !!original}
+                myUsername={myUsername}
+                myAvatarUrl={myAvatarUrl}
+                onMentionClick={setProfileUsername}
+                isNew={msg.id === justArrivedMsgId}
+                replyTo={original}
+                onJump={jumpTo}
+                onOpenMenu={() => setMenuFor(id => (id === msg.id ? null : msg.id))}
+              />
+              {(groups.length > 0 || isCard) && (
+                <div className={clsx('flex items-center gap-1', isCard && groups.length === 0 && 'justify-center')}>
+                  <div className="flex-1">
+                    <ReactionChips groups={groups} align={align} onToggle={e => toggleReaction(msg.id, e)} nameOf={nameOf} />
+                  </div>
+                </div>
+              )}
+              {isCard && menuFor !== msg.id && (
+                <div className="flex justify-center -mt-0.5">
+                  <button
+                    onClick={() => setMenuFor(msg.id)}
+                    className="inline-flex items-center gap-1 text-[11px] text-field-500 hover:text-gold px-2 py-1 rounded-full hover:bg-field-800 transition-colors"
+                  >
+                    <SmilePlus className="w-3.5 h-3.5" /> React
+                  </button>
+                </div>
+              )}
+              {menuFor === msg.id && (
+                <MessageMenu
+                  msg={msg}
+                  isOwn={isOwn}
+                  align={align}
+                  myReactions={new Set(groups.filter(g => g.mine).map(g => g.emoji))}
+                  onReact={e => { toggleReaction(msg.id, e); setMenuFor(null) }}
+                  onReply={() => startReply(msg)}
+                  onEdit={() => startEdit(msg)}
+                  onDelete={() => deleteMessage(msg)}
+                  onClose={closeMenu}
+                />
+              )}
+            </div>
+          )
+        })}
         <div ref={bottomRef} />
       </div>
 
@@ -783,6 +1196,22 @@ export function LeagueChat() {
             <GifPicker onSelect={handleGifSelect} onClose={() => setShowGifPicker(false)} anchorRef={inputWrapRef as any} />
           )}
 
+          {/* Replying to / editing */}
+          {(replyTo || editing) && (
+            <div className="chat-compose-bar flex items-center gap-2 mb-1.5 px-3 py-1.5 rounded-xl bg-field-800 border border-field-700 border-l-2 border-l-gold">
+              {editing ? <Pencil className="w-3.5 h-3.5 text-gold shrink-0" /> : <CornerUpLeft className="w-3.5 h-3.5 text-gold shrink-0" />}
+              <div className="min-w-0 flex-1 text-xs leading-snug">
+                <span className="font-bold text-gold">
+                  {editing ? 'Editing your message' : `Replying to ${replyTo!.user_id === user?.id ? 'yourself' : senderName(replyTo)}`}
+                </span>
+                {replyTo && <span className="block text-field-400 truncate">{snippet(replyTo)}</span>}
+              </div>
+              <button onClick={cancelCompose} aria-label="Cancel" className="p-1 text-field-400 hover:text-white shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <div className="chat-input-wrap flex items-center gap-2 bg-field-700 border border-field-600 rounded-xl px-3 py-2 focus-within:border-gold/50 transition-colors">
             <div className="w-6 h-6 rounded-full overflow-hidden bg-gold/20 border border-gold/30 flex items-center justify-center shrink-0">
               {profile?.avatar_url
@@ -793,7 +1222,7 @@ export function LeagueChat() {
             <input
               ref={inputRef}
               className="chat-input flex-1 bg-transparent text-sm text-white placeholder-field-500 outline-none min-w-0"
-              placeholder="Message the league… (type @ to mention)"
+              placeholder={editing ? "Edit your message…" : replyTo ? "Write a reply…" : "Message the league… (type @ to mention)"}
               value={text}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
@@ -847,7 +1276,7 @@ export function LeagueChat() {
         </div>
 
         <div className="flex justify-between mt-1 px-1">
-          <span className="text-xs text-field-600">Enter to send · @ to mention</span>
+          <span className="text-xs text-field-600">{editing ? "Enter to save · Esc to cancel" : "Enter to send · @ to mention · tap a message to react or reply"}</span>
           <span className={clsx('text-xs', text.length > 450 ? 'text-gold' : 'text-field-600')}>
             {text.length}/500
           </span>

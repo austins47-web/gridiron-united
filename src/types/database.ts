@@ -300,6 +300,12 @@ export interface Database {
           },
         ]
       }
+      league_message_reactions: {
+        Row: { message_id: string; user_id: string; emoji: string; league_id: string; created_at: string }
+        Insert: { message_id: string; user_id: string; emoji: string; league_id: string; created_at?: string }
+        Update: Partial<{ message_id: string; user_id: string; emoji: string; league_id: string; created_at: string }>
+        Relationships: []
+      }
       league_messages: {
         Row: LeagueMessage
         Insert: Partial<Omit<LeagueMessage, 'id' | 'created_at'>> & Pick<LeagueMessage, 'message'>
@@ -1611,6 +1617,12 @@ export type LeagueMessage = {
   message: string
   is_system: boolean
   created_at: string
+  /** The message this one answers. */
+  reply_to_id?: string | null
+  /** Set by the database when the sender edits it. */
+  edited_at?: string | null
+  /** Set by the database when the sender deletes it (text is cleared). */
+  deleted_at?: string | null
   // Joined
   profiles?: Profile
 }
