@@ -14,8 +14,8 @@
 // ══════════════════════════════════════════════════════════════
 
 import {
-  computeWeek, isDecided, isWeekComplete, nameOf,
-  type Game, type Pick, type Member,
+  computeWeek, isDecided, isFinal, isLive, isVoid, isWeekComplete, nameOf, winnerOf,
+  type Game, type Pick, type Member, type WeekRow,
 } from '../../../supabase/functions/_shared/pickemCore.ts'
 
 export * from '../../../supabase/functions/_shared/pickemCore.ts'
@@ -153,4 +153,128 @@ export function rankOf(rows: StandingRow[], index: number): number {
     return rankOf(rows, index - 1)
   }
   return index + 1
+}
+
+// ── Who can still win the week ─────────────────────────────────
+
+export interface WhoCanWinRow {
+  userId: string
+  name: string
+  /** Correct picks on games that are already final. */
+  correct: number
+  status: 'clinched' | 'alive' | 'out'
+  /** Results this member needs in every outcome where they win. */
+  needs: { gameId: string; team: string }[]
+  /** Tiebreaker totals they need, when every winning outcome is a tiebreak. */
+  tiebreaker: { min: number; max: number | null } | null
+}
+
+export interface WhoCanWin {
+  remaining: number
+  rows: WhoCanWinRow[]
+}
+
+/** Enumerating outcomes is 2^n — past this many games left it's too early to matter anyway. */
+const MAX_REMAINING = 6
+
+/**
+ * Plays out every result of the games still to finish and works out
+ * who can still win the week — the same rule as WeekRecap: most
+ * correct, then closest tiebreaker guess, exact ties shared.
+ *
+ * Only final results count as locked in (a live game's current
+ * leader can still lose), and a tied game is ignored as an outcome.
+ * When people tie on correct picks and the tiebreaker game isn't
+ * final, each of them wins a range of totals (the ones their guess is
+ * closest to), limited to totals the game can still reach from its
+ * current score.
+ *
+ * Returns null when it isn't meaningful yet: nothing final, too many
+ * games left, or the week's already over (the recap covers that).
+ */
+export function computeWhoCanWin(games: Game[], picks: Pick[], rows: WeekRow[]): WhoCanWin | null {
+  const playable = games.filter(g => !isVoid(g))
+  const remaining = playable.filter(g => !isFinal(g))
+  if (remaining.length === 0 || remaining.length > MAX_REMAINING) return null
+  if (!playable.some(isFinal)) return null
+
+  const players = rows.filter(r => r.submitted)
+  if (players.length === 0) return null
+
+  const pickOf = new Map(picks.map(p => [`${p.user_id}:${p.game_id}`, p.picked_team]))
+  const base = new Map(players.map(r => [r.userId, playable.filter(g => {
+    if (!isFinal(g)) return false
+    const w = winnerOf(g)
+    return w != null && pickOf.get(`${r.userId}:${g.id}`) === w
+  }).length]))
+
+  // Tiebreaker: known once final; otherwise any total from where the
+  // game stands now upward is still possible.
+  const tb = playable.find(g => g.is_tiebreaker)
+  const tbKnown = tb && isFinal(tb) ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : null
+  const tbFloor = tb && isLive(tb) ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : 0
+
+  type Win = { mask: number; range: { min: number; max: number | null } | null }
+  const wins = new Map<string, Win[]>(players.map(r => [r.userId, []]))
+  const outcomes = 1 << remaining.length
+
+  for (let mask = 0; mask < outcomes; mask++) {
+    const winner = (i: number) => (mask >> i) & 1 ? remaining[i].home_team : remaining[i].away_team
+    const totals = players.map(r => ({
+      r,
+      total: (base.get(r.userId) ?? 0) + remaining.filter((g, i) => pickOf.get(`${r.userId}:${g.id}`) === winner(i)).length,
+    }))
+    const best = Math.max(...totals.map(t => t.total))
+    const tied = totals.filter(t => t.total === best).map(t => t.r)
+
+    if (tied.length === 1) { wins.get(tied[0].userId)!.push({ mask, range: null }); continue }
+
+    const guessed = tied.filter(r => r.tiebreakerGuess != null)
+    // Nobody tied has a guess: all of them share it, whatever the total
+    if (guessed.length === 0) { tied.forEach(r => wins.get(r.userId)!.push({ mask, range: null })); continue }
+
+    if (tbKnown != null) {
+      const diff = (r: WeekRow) => Math.abs((r.tiebreakerGuess as number) - tbKnown)
+      const closest = Math.min(...guessed.map(diff))
+      guessed.filter(r => diff(r) === closest).forEach(r => wins.get(r.userId)!.push({ mask, range: null }))
+      continue
+    }
+
+    // Each distinct guess owns the totals it's closest to (midpoints
+    // shared), clipped to what's still reachable.
+    const values = [...new Set(guessed.map(r => r.tiebreakerGuess as number))].sort((a, b) => a - b)
+    for (const r of guessed) {
+      const g = r.tiebreakerGuess as number
+      const i = values.indexOf(g)
+      const lo = Math.max(i > 0 ? Math.ceil((values[i - 1] + g) / 2) : 0, tbFloor)
+      const hi = i < values.length - 1 ? Math.floor((g + values[i + 1]) / 2) : null
+      if (hi != null && hi < lo) continue
+      const coversAll = lo <= tbFloor && hi == null
+      wins.get(r.userId)!.push({ mask, range: coversAll ? null : { min: lo, max: hi } })
+    }
+  }
+
+  const out: WhoCanWinRow[] = players.map(r => {
+    const w = wins.get(r.userId)!
+    const status: WhoCanWinRow['status'] =
+      w.length === 0 ? 'out'
+      : new Set(w.filter(x => x.range == null).map(x => x.mask)).size === outcomes ? 'clinched'
+      : 'alive'
+    const needs = status !== 'alive' ? [] : remaining.flatMap((g, i) => {
+      const teams = new Set(w.map(x => (x.mask >> i) & 1 ? g.home_team : g.away_team))
+      return teams.size === 1 ? [{ gameId: g.id, team: [...teams][0] }] : []
+    })
+    const ranges = w.map(x => x.range)
+    const tiebreaker = status === 'alive' && ranges.every(x => x != null)
+      ? {
+          min: Math.min(...ranges.map(x => x!.min)),
+          max: ranges.some(x => x!.max == null) ? null : Math.max(...ranges.map(x => x!.max as number)),
+        }
+      : null
+    return { userId: r.userId, name: r.name, correct: base.get(r.userId) ?? 0, status, needs, tiebreaker }
+  })
+
+  const order = { clinched: 0, alive: 1, out: 2 } as const
+  out.sort((a, b) => order[a.status] - order[b.status] || b.correct - a.correct || a.name.localeCompare(b.name))
+  return { remaining: remaining.length, rows: out }
 }

@@ -10,12 +10,13 @@ import { teamLogoUrl } from '@/components/teams/teamIds'
 import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
-  computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
+  computeWeek, computeStandings, computeWhoCanWin, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
   type WeekRow,
 } from './standings'
 import { WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
+import { WhoCanWinPanel } from './WhoCanWin'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
   TrendingDown, Home, Plane, Award
@@ -277,6 +278,12 @@ export function PickEmView() {
     [games, allPicks, leagueMembers],
   )
   const weekComplete = useMemo(() => isWeekComplete(games as any), [games])
+  // Late in a week (6 or fewer left): who can still take it, and what
+  // they need. Null early in the week and once it's final.
+  const whoCanWin = useMemo(
+    () => computeWhoCanWin(games as any, allPicks as any, weekRows),
+    [games, allPicks, weekRows],
+  )
   const weekTbTotal  = useMemo(() => tiebreakerTotal(games as any), [games])
   const finishedCount = useMemo(
     () => (games as any[]).filter(isFinal).length,
@@ -1012,6 +1019,10 @@ export function PickEmView() {
           ) : (finishedCount > 0 || liveCount > 0) ? (
             <WeekInProgress finished={finishedCount} total={games.filter((g: any) => !isVoid(g)).length} live={liveCount} />
           ) : null}
+
+          {!weekComplete && whoCanWin && (
+            <WhoCanWinPanel data={whoCanWin} currentUserId={user?.id} />
+          )}
 
           <StandingsTable
             rows={standings}
