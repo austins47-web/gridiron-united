@@ -3,7 +3,7 @@ import {
   Bell, User, ChevronDown, ChevronRight,
   Home, Trophy, Radio, Award, Newspaper, FlaskConical, Users, Smartphone,
 } from 'lucide-react'
-import { useState, Suspense } from 'react'
+import { useState, Suspense, lazy } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { LiveTickerStrip } from './LiveTickerStrip'
 import { LeagueBottomBar } from './LeagueBottomBar'
@@ -12,9 +12,11 @@ import { LeagueSelector } from '@/components/leagues/LeagueSelector'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { PickemWinnerPopup } from '@/components/pickem/PickemWinnerPopup'
 import { PullToRefresh } from './PullToRefresh'
-import { InstallGuide } from '@/components/ui/InstallGuide'
 import { useInstallPlatform } from '@/hooks/useInstallPlatform'
 import clsx from 'clsx'
+
+// Only downloaded when someone opens it from the account menu
+const InstallGuide = lazy(() => import('@/components/ui/InstallGuide').then(m => ({ default: m.InstallGuide })))
 
 export function AppShell() {
   const { profile, unreadCount, signOut, activeLeague, activeLeagueId } = useAppStore()
@@ -56,7 +58,7 @@ export function AppShell() {
           on when their league's week goes final. */}
       <PickemWinnerPopup />
       <PullToRefresh />
-      {showInstall && <InstallGuide onClose={() => setShowInstall(false)} />}
+      {showInstall && <Suspense fallback={null}><InstallGuide onClose={() => setShowInstall(false)} /></Suspense>}
 
       {/*
         Header + global nav + live ticker + league sub-nav are one
