@@ -5,13 +5,18 @@ import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
 import { useFlipList } from '@/hooks/useFlipList'
 import { useFeedCut, FeedCutOverlay } from '@/components/ui/FeedCut'
 import { TeamPage } from '@/components/teams/TeamPage'
+import { PlayoffPicture } from './PlayoffPicture'
 import {
-  useNflStandings, useCfbStandings, useNflBracket, useCfbBracket, useCfbRankings,
+  useNflStandings, useCfbStandings, useNflBracket, useCfbBracket, useCfbRankings, useNflPlayoffPicture,
   type StandingsGroup, type BracketGame, type StandingsTeam, type RankedTeam,
 } from '@/hooks/useTeamStandings'
 
 type League = 'nfl' | 'cfb'
 type SubTab = 'standings' | 'playoffs' | 'rankings'
+
+/** Real teams are in the NFL bracket (not just TBD placeholders). */
+const bracketReady = (rounds: Record<string, BracketGame[]> | undefined) =>
+  !!rounds && Object.values(rounds).some(games => games.some(g => !g.isTbd))
 
 export function StandingsView() {
   const [league, setLeague] = useState<League>('nfl')
@@ -26,6 +31,7 @@ export function StandingsView() {
   const nflBracket = useNflBracket()
   const cfbBracket = useCfbBracket()
   const cfbRankings = useCfbRankings()
+  const nflPicture = useNflPlayoffPicture(league === 'nfl' && sub === 'playoffs')
 
   const standingsQuery = league === 'nfl' ? nflStandings : cfbStandings
   const bracketQuery = league === 'nfl' ? nflBracket : cfbBracket
@@ -96,6 +102,11 @@ export function StandingsView() {
         <StandingsList query={standingsQuery} league={league} onTeamClick={handleTeamClick} />
       ) : effectiveSub === 'rankings' ? (
         <RankingsList query={cfbRankings} onTeamClick={handleTeamClick} />
+      ) : league === 'nfl' && !bracketReady(nflBracket.data) && !nflBracket.isLoading ? (
+        // Regular season: who'd be in if it ended today. The bracket
+        // takes over once real teams are in it (ESPN lists the
+        // postseason games early, with TBD placeholders).
+        <PlayoffPicture query={nflPicture} onTeamClick={id => handleTeamClick(id, 'nfl')} />
       ) : (
         <BracketView query={bracketQuery} league={league} onTeamClick={handleTeamClick} />
       )}

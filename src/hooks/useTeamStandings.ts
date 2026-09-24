@@ -153,6 +153,61 @@ export function useNflStandings() {
   })
 }
 
+// ── NFL playoff picture — "if the season ended today" ──────────
+//
+// ESPN's standings carry each team's current conference seed
+// (playoffSeed, 1–16, with the NFL's tiebreakers already applied)
+// and, later in the season, a clincher mark. Seeds 1–4 are division
+// leaders, 5–7 wild cards; only the 1 seed gets a bye.
+
+export interface PictureTeam extends StandingsTeam {
+  seed: number
+  division: string
+  /** ESPN's mark: x playoff spot, y division, z bye, * home field, e eliminated. */
+  clincher: string | null
+  /** Games behind the 7 seed (teams outside the field). */
+  gamesBack: number | null
+}
+
+export interface PlayoffPicture {
+  conferences: { name: 'AFC' | 'NFC'; teams: PictureTeam[] }[]
+  gamesPlayed: boolean
+}
+
+export function useNflPlayoffPicture(enabled = true) {
+  return useQuery({
+    queryKey: ['nfl-playoff-picture'],
+    enabled,
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<PlayoffPicture> => {
+      const data = await proxyFetch('nfl/standings', { seasontype: '2' })
+      const conferences = (data.children ?? []).map((conf: any) => {
+        const name: 'AFC' | 'NFC' = /American/i.test(conf.name ?? '') || conf.abbreviation === 'AFC' ? 'AFC' : 'NFC'
+        const teams: PictureTeam[] = (conf.standings?.entries ?? []).map((entry: any) => {
+          const stats = entry.stats ?? []
+          const clinch = stats.find((s: any) => s.name === 'clincher')?.displayValue
+          return {
+            ...toStandingsTeam(entry),
+            seed: statVal(stats, 'playoffseed') || 99,
+            division: NFL_DIVISIONS[entry.team?.abbreviation] ?? '',
+            clincher: clinch && clinch !== '-' ? String(clinch).toLowerCase() : null,
+            gamesBack: null,
+          }
+        }).sort((a: PictureTeam, b: PictureTeam) => a.seed - b.seed)
+        const seventh = teams.find(t => t.seed === 7)
+        if (seventh) {
+          for (const t of teams) {
+            if (t.seed > 7) t.gamesBack = ((seventh.wins - t.wins) + (t.losses - seventh.losses)) / 2
+          }
+        }
+        return { name, teams }
+      }).sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
+      const gamesPlayed = conferences.some((c: { teams: PictureTeam[] }) => c.teams.some(t => t.wins + t.losses + t.ties > 0))
+      return { conferences, gamesPlayed }
+    },
+  })
+}
+
 // ── CFB rankings — AP Top 25 specifically (ESPN also returns
 // Coaches Poll, FCS, and D-II polls in the same response; AP is
 // the one most people mean by "the rankings")
