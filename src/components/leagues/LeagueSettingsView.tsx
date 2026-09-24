@@ -4,10 +4,12 @@ import { useLeaveLeague, useUpdateMyMembership, useLeagueMembers } from '@/hooks
 import {
   Settings, User, Bell, Palette, LogOut, AlertCircle,
   Save, Copy, Trophy, Shield, Check, Mail, RotateCcw, Globe,
+  Smartphone, BellRing, BellOff, Send, Share,
 } from 'lucide-react'
 import {
   useNotificationPrefs, useSaveNotificationPrefs, useClearLeaguePrefs, resolvePrefs,
 } from '@/hooks/useNotificationPrefs'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { CURRENT_SEASON } from '@/lib/season'
@@ -188,14 +190,24 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
     savePrefs.mutate({ leagueId, updates: { [key]: value } })
 
   const isPickem = activeLeague?.league_type === 'pickem'
+  const push = usePushNotifications()
+  // Event toggles and timing apply to email and phone alike — only
+  // moot when neither is on
+  const anyChannel = eff.email_enabled || push.status === 'on' || push.deviceCount > 0
 
   const EVENTS = [
-    { key: 'notify_pickem_deadline', label: 'Pick deadlines',   desc: 'When your picks are about to lock', show: isPickem },
+    { key: 'notify_pickem_deadline', label: 'Pick deadlines',   desc: 'When games you haven\'t picked are about to lock', show: isPickem },
     { key: 'notify_draft',           label: 'Draft starting',   desc: 'Before your draft begins',          show: !isPickem },
     { key: 'notify_on_the_clock',    label: "You're on the clock", desc: 'When it becomes your pick',      show: !isPickem },
     { key: 'notify_trades',          label: 'Trade offers',     desc: 'New offers and ones about to expire', show: !isPickem },
     { key: 'notify_lineup',          label: 'Lineup not set',   desc: 'Before kickoff if your lineup is empty', show: !isPickem },
-    { key: 'notify_weekly_recap',    label: 'Weekly recap',     desc: 'A summary once the week wraps',     show: true },
+    {
+      key: 'notify_weekly_recap', label: isPickem ? 'Week results' : 'Weekly recap',
+      desc: isPickem
+        ? 'Who won each week — and, on your phone, whether you can still win before the last game'
+        : 'A summary once the week wraps',
+      show: true,
+    },
   ].filter(e => e.show)
 
   return (
@@ -223,12 +235,14 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
         <p className="text-field-500 text-xs">Applies across every league.</p>
       </div>
 
-      {/* Email reminders */}
+      <PhoneNotifications push={push} />
+
+      {/* Reminders — what to be told about, by email and on phones */}
       <div className="panel space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Bell className="w-4 h-4 text-gold" />
-            <h3 className="font-bold text-white text-sm">Email Reminders</h3>
+            <h3 className="font-bold text-white text-sm">Reminders</h3>
           </div>
           {savePrefs.isPending && (
             <span className="text-xs text-field-500">Saving…</span>
@@ -282,8 +296,9 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
               </div>
             </label>
 
-            {/* Per-event toggles */}
-            <div className={clsx('space-y-1 transition-opacity', !eff.email_enabled && 'opacity-40 pointer-events-none')}>
+            {/* Per-event toggles — email and phone */}
+            <p className="text-xs text-field-500 !mt-3">What to tell you about, by email and on your phone:</p>
+            <div className={clsx('space-y-1 transition-opacity', !anyChannel && 'opacity-40 pointer-events-none')}>
               {EVENTS.map(({ key, label, desc }) => (
                 <label key={key}
                   className="flex items-start gap-3 p-3 rounded-lg bg-field-800/60 cursor-pointer hover:bg-field-800 transition-colors">
@@ -302,7 +317,7 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
             </div>
 
             {/* Lead time */}
-            <div className={clsx('space-y-1.5 transition-opacity', !eff.email_enabled && 'opacity-40 pointer-events-none')}>
+            <div className={clsx('space-y-1.5 transition-opacity', !anyChannel && 'opacity-40 pointer-events-none')}>
               <label className="text-sm text-field-300">How early should we warn you?</label>
               <div className="grid grid-cols-4 gap-1.5">
                 {[6, 12, 24, 48].map(h => (
@@ -335,6 +350,95 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Phone Notifications (this device) ───────────────────────────────
+// Per device, not per league — so it sits outside the All leagues /
+// This league switch. What gets sent follows the Reminders toggles.
+function PhoneNotifications({ push }: { push: ReturnType<typeof usePushNotifications> }) {
+  const { status, deviceCount, busy, enable, disable, test } = push
+  const others = status === 'on' ? deviceCount - 1 : deviceCount
+
+  return (
+    <div className="panel space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Smartphone className="w-4 h-4 text-gold" />
+          <h3 className="font-bold text-white text-sm">Phone Notifications</h3>
+        </div>
+        {status === 'on' && (
+          <span className="text-[11px] font-bold uppercase tracking-wider text-field-950 bg-gold rounded px-1.5 py-0.5">On</span>
+        )}
+      </div>
+
+      {status === 'loading' && <div className="h-12 rounded-lg bg-field-800 animate-pulse" />}
+
+      {status === 'off' && (
+        <>
+          <p className="text-xs text-field-400">
+            Pick reminders, who won the week, and whether you can still win — as notifications on this phone or computer.
+          </p>
+          <button onClick={enable} disabled={busy} className="btn-gold w-full flex items-center justify-center gap-2">
+            <BellRing className="w-4 h-4" />
+            {busy ? 'Turning on…' : 'Turn on notifications on this device'}
+          </button>
+        </>
+      )}
+
+      {status === 'on' && (
+        <>
+          <p className="text-xs text-field-400">
+            This device will get notifications.
+            {others > 0 && ` So ${others === 1 ? 'does 1 other device' : `do ${others} other devices`}.`}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={test} disabled={busy} className="btn-ghost flex items-center justify-center gap-1.5 text-sm">
+              <Send className="w-3.5 h-3.5" /> Send a test
+            </button>
+            <button onClick={disable} disabled={busy} className="btn-ghost flex items-center justify-center gap-1.5 text-sm">
+              <BellOff className="w-3.5 h-3.5" /> Turn off here
+            </button>
+          </div>
+        </>
+      )}
+
+      {status === 'ios-install' && (
+        <div className="space-y-2 text-xs text-field-300">
+          <p className="text-field-400">
+            On iPhone, notifications work once Gridiron is on your home screen:
+          </p>
+          <ol className="space-y-1.5">
+            <li className="flex items-start gap-2">
+              <span className="font-cond font-black text-gold w-3 shrink-0">1</span>
+              <span>Tap the <Share className="w-3.5 h-3.5 inline -mt-0.5" /> <b className="text-white">Share</b> button in Safari</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-cond font-black text-gold w-3 shrink-0">2</span>
+              <span>Choose <b className="text-white">Add to Home Screen</b></span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="font-cond font-black text-gold w-3 shrink-0">3</span>
+              <span>Open <b className="text-white">Gridiron</b> from your home screen and come back here to turn notifications on</span>
+            </li>
+          </ol>
+        </div>
+      )}
+
+      {status === 'denied' && (
+        <p className="text-xs text-field-400">
+          Notifications are blocked for this site. Allow them in your browser&apos;s site settings
+          (the lock icon next to the address), then come back here.
+        </p>
+      )}
+
+      {status === 'unsupported' && (
+        <p className="text-xs text-field-400">
+          This browser can&apos;t show notifications. Chrome, Edge, Firefox and Safari can —
+          or on iPhone, add Gridiron to your home screen.
+        </p>
+      )}
     </div>
   )
 }

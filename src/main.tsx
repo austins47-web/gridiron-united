@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
+import { registerServiceWorker } from '@/lib/push'
 
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
@@ -204,6 +205,10 @@ function App() {
     </QueryClientProvider>
   )
 }
+
+// Push notifications (public/sw.js) — registered up front so the
+// device can receive them even when Settings was never opened
+registerServiceWorker()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -1277,6 +1277,31 @@ export interface Database {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_success_at: string | null
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        // Rows are added through save_push_subscription (see migration)
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_success_at?: string | null
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: Partial<Database['public']['Tables']['push_subscriptions']['Insert']>
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1317,6 +1342,10 @@ export interface Database {
         Returns: boolean
       }
       recalc_league_scores: { Args: { p_league_id: string }; Returns: number }
+      save_push_subscription: {
+        Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_user_agent: string }
+        Returns: undefined
+      }
       set_week_tiebreaker: {
         Args: { p_season: number; p_sport: string; p_week: number }
         Returns: undefined

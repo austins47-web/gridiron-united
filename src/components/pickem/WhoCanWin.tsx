@@ -1,7 +1,7 @@
 import { Swords, Crown, Target } from 'lucide-react'
 import clsx from 'clsx'
 import { teamLogoUrl } from '@/components/teams/teamIds'
-import type { WhoCanWin, WhoCanWinRow } from './standings'
+import { describeTiebreakerRange, type WhoCanWin, type WhoCanWinRow } from './standings'
 
 /**
  * "Who can still win" — shown on the Standings tab late in a week
@@ -85,16 +85,9 @@ function Needs({ row }: { row: WhoCanWinRow }) {
       {row.tiebreaker && (
         <span className="inline-flex items-center gap-1">
           <Target className="w-3 h-3 text-gold" />
-          {row.needs.length > 0 ? 'and a' : 'Needs a'} tiebreaker total {tiebreakerRange(row.tiebreaker)}
+          {row.needs.length > 0 ? 'and a' : 'Needs a'} tiebreaker total {describeTiebreakerRange(row.tiebreaker)}
         </span>
       )}
     </div>
   )
-}
-
-function tiebreakerRange({ min, max }: { min: number; max: number | null }): string {
-  if (max == null) return `of ${min}+`
-  if (min === max) return `of exactly ${min}`
-  if (min === 0) return `of ${max} or less`
-  return `of ${min}–${max}`
 }

@@ -19,7 +19,10 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { isFinal, isVoid, computeWeek, computeWeekStats, tiebreakerTotal, type Game } from '../_shared/pickemCore.ts'
+import {
+  isFinal, isVoid, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal, type Game,
+} from '../_shared/pickemCore.ts'
+import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -29,10 +32,33 @@ const CORS = {
 const APP_URL = Deno.env.get('APP_URL') ?? 'https://www.gridironunited.app'
 const FROM    = Deno.env.get('REMINDER_FROM') ?? 'Gridiron United <onboarding@resend.dev>'
 
+// Web push (phone/browser notifications) — off if the keys aren't set
+const VAPID: VapidKeys | null = Deno.env.get('VAPID_PRIVATE_KEY') && Deno.env.get('VAPID_PUBLIC_KEY')
+  ? {
+      publicKey: Deno.env.get('VAPID_PUBLIC_KEY')!,
+      privateKey: Deno.env.get('VAPID_PRIVATE_KEY')!,
+      subject: Deno.env.get('VAPID_SUBJECT') ?? 'https://www.gridironunited.app',
+    }
+  : null
+
+interface PushRow { id: string; user_id: string; endpoint: string; p256dh: string; auth: string }
+
 // ── Types ─────────────────────────────────────────────────────
 interface Reminder {
   userId: string
-  email: string
+  /** Address to email, or null when email is off for them. */
+  email: string | null
+  /** They have at least one device with push notifications on. */
+  push: boolean
+  /** A phone-only alert — never emailed. */
+  pushOnly?: boolean
+  /** Push text; defaults to the heading, and the league + body. */
+  pushTitle?: string
+  pushBody?: string
+  /** Same-tag notifications replace each other on the device. */
+  pushTag?: string
+  /** How long a push stays worth delivering (e.g. until the picks lock). */
+  pushTtlSec?: number
   leagueId: string
   leagueName: string
   eventType: string
@@ -217,6 +243,42 @@ serve(async (req) => {
     const emailOf = (userId: string): string | null =>
       emailById.get(userId) ?? null
 
+    // Devices with push on, by user
+    const { data: pushRows } = VAPID
+      ? await supabase.from('push_subscriptions').select('id, user_id, endpoint, p256dh, auth')
+      : { data: [] }
+    const pushByUser = new Map<string, PushRow[]>()
+    for (const r of (pushRows ?? []) as PushRow[]) pushByUser.set(r.user_id, [...(pushByUser.get(r.user_id) ?? []), r])
+
+    // Who to reach, and how, for one kind of event: null when they've
+    // switched it off or have no way to receive it. Event toggles apply
+    // to email and push alike; "email me" only governs email.
+    type NotifyKey = 'notify_pickem_deadline' | 'notify_draft' | 'notify_on_the_clock' | 'notify_trades' | 'notify_lineup' | 'notify_weekly_recap'
+    const reach = (userId: string, leagueId: string, notify: NotifyKey) => {
+      const pref = prefFor(userId, leagueId)
+      if (!pref[notify]) return null
+      const email = pref.email_enabled ? emailOf(userId) : null
+      const push = (pushByUser.get(userId)?.length ?? 0) > 0
+      return email || push ? { email, push } : null
+    }
+
+    // Sends one push to every device of a user; returns how many took it.
+    const pushTo = async (userId: string, payload: string, ttlSec: number, urgent: boolean): Promise<number> => {
+      let ok = 0
+      for (const d of pushByUser.get(userId) ?? []) {
+        try {
+          const r = await sendWebPush(d, payload, VAPID!, { ttlSec, urgency: urgent ? 'high' : 'normal' })
+          if (r.status >= 200 && r.status < 300) {
+            ok++
+            await supabase.from('push_subscriptions').update({ last_success_at: new Date().toISOString() }).eq('id', d.id)
+          } else if (r.gone) {
+            await supabase.from('push_subscriptions').delete().eq('id', d.id)
+          }
+        } catch { /* one bad device shouldn't stop the rest */ }
+      }
+      return ok
+    }
+
     // ── Pick'Em schedule, for working out which week is which ──
     // league.current_week is never written, so it read Week 1 all
     // season. Pick'Em weeks are derived from the schedule instead.
@@ -307,9 +369,8 @@ serve(async (req) => {
 
       for (const m of (members ?? []).filter(x => x.league_id === lg.id)) {
         const pref = prefFor(m.user_id, lg.id)
-        if (!pref.email_enabled || !pref.notify_pickem_deadline) continue
-        const email = emailOf(m.user_id)
-        if (!email) continue
+        const to = reach(m.user_id, lg.id, 'notify_pickem_deadline')
+        if (!to) continue
         const mine = (picks ?? []).filter(p => p.user_id === m.user_id)
 
         for (const l of locks) {
@@ -332,9 +393,13 @@ serve(async (req) => {
               noneYet: !mine.some(p => p.week === l.week),
             })
             reminders.push({
-              userId: m.user_id, email,
+              userId: m.user_id, ...to,
               leagueId: lg.id, leagueName: lg.name,
               eventType: 'pickem_deadline',
+              // One reminder per league-week on the device: the 2h nudge
+              // replaces the earlier one, and it's dropped once picks lock
+              pushTag: `pickem-${lg.id}-w${l.week}`,
+              pushTtlSec: Math.max(600, Math.round((l.at.getTime() - now.getTime()) / 1000)),
               dedupeKey: l.key
                 ? `pickem:${lg.id}:${season}:w${l.week}:${l.key}:${tag}`
                 : `pickem:${lg.id}:${season}:w${l.week}:${tag}`,
@@ -358,12 +423,11 @@ serve(async (req) => {
 
       // On the clock — fires once per pick
       if (ds.status === 'active' && ds.current_user_id) {
-        const pref = prefFor(ds.current_user_id, lg.id)
-        if (pref.email_enabled && pref.notify_on_the_clock) {
-          const email = emailOf(ds.current_user_id)
-          if (email) {
+        const to = reach(ds.current_user_id, lg.id, 'notify_on_the_clock')
+        if (to) {
+          {
             reminders.push({
-              userId: ds.current_user_id, email,
+              userId: ds.current_user_id, ...to,
               leagueId: lg.id, leagueName: lg.name,
               eventType: 'on_the_clock',
               dedupeKey: `clock:${lg.id}:r${ds.current_round}:p${ds.current_pick}`,
@@ -387,10 +451,8 @@ serve(async (req) => {
     for (const t of trades ?? []) {
       const lg: any = leagueById.get(t.league_id)
       if (!lg || !t.receiver_id) continue
-      const pref = prefFor(t.receiver_id, lg.id)
-      if (!pref.email_enabled || !pref.notify_trades) continue
-      const email = emailOf(t.receiver_id)
-      if (!email) continue
+      const to = reach(t.receiver_id, lg.id, 'notify_trades')
+      if (!to) continue
 
       const proposer: any = profileById.get(t.proposer_id ?? '')
       const who = proposer?.display_name || proposer?.username || 'A league member'
@@ -399,7 +461,7 @@ serve(async (req) => {
       const ageMin = (Date.now() - new Date(t.created_at).getTime()) / 60000
       if (ageMin <= 20) {
         reminders.push({
-          userId: t.receiver_id, email,
+          userId: t.receiver_id, ...to,
           leagueId: lg.id, leagueName: lg.name,
           eventType: 'trade_offer',
           dedupeKey: `trade:${t.id}:new`,
@@ -415,7 +477,7 @@ serve(async (req) => {
         const hrs = hoursUntil(t.expires_at)
         if (inWindow(hrs, 12, 0.3)) {
           reminders.push({
-            userId: t.receiver_id, email,
+            userId: t.receiver_id, ...to,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'trade_expiring',
             dedupeKey: `trade:${t.id}:exp12`,
@@ -450,13 +512,11 @@ serve(async (req) => {
 
         for (const m of lgMembers) {
           if (hasRoster.has(m.user_id)) continue
-          const pref = prefFor(m.user_id, lg.id)
-          if (!pref.email_enabled || !pref.notify_lineup) continue
-          const email = emailOf(m.user_id)
-          if (!email) continue
+          const to = reach(m.user_id, lg.id, 'notify_lineup')
+          if (!to) continue
 
           reminders.push({
-            userId: m.user_id, email,
+            userId: m.user_id, ...to,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'lineup_empty',
             dedupeKey: `lineup:${lg.id}:w${lg.current_week ?? 1}`,
@@ -489,13 +549,13 @@ serve(async (req) => {
         const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
 
         for (const m of lgMembers) {
-          const pref = prefFor(m.user_id, lg.id)
-          if (!pref.email_enabled || !pref.notify_weekly_recap) continue
-          const email = emailOf(m.user_id)
-          if (!email) continue
+          const to = reach(m.user_id, lg.id, 'notify_weekly_recap')
+          // Phones already got the result the moment the week went final
+          // (section 6) — the Tuesday recap stays an email.
+          if (!to?.email) continue
 
           reminders.push({
-            userId: m.user_id, email,
+            userId: m.user_id, ...to, push: false,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'weekly_recap',
             dedupeKey: recapKey,
@@ -508,13 +568,16 @@ serve(async (req) => {
       }
     }
 
-    // ══ 6. PICK'EM WEEK FINAL → LEAGUE CHAT ══════════════════
-    // Posts the winner and Week Stats to each Pick'Em league's chat as
-    // soon as a week goes final — every pass, not just on recap day.
+    // ══ 6. PICK'EM WEEK FINAL → LEAGUE CHAT + PHONES ══════════
+    // As soon as a week goes final (every pass, not just recap day):
+    //   - posts the winner and Week Stats to the league's chat, once —
+    //     the season/week prefix is checked first; rendered by
+    //     PickemWeekFinalCard in the app
+    //   - pushes each player their own result to their phone
+    //     ("You won Week 3!" / "Week 3 final: Riley won · you went
+    //     12/16, 2nd of 8"), deduped per player through reminder_log
     // Only for a week whose last game kicked off in the past 48h, so a
-    // deploy or a brand-new league doesn't backfill old weeks, and
-    // never twice: the season/week prefix is checked first. Rendered
-    // by PickemWeekFinalCard in the app.
+    // deploy or a brand-new league doesn't backfill old weeks.
     const chatPosts: { league: string; week: number }[] = []
     for (const lg of leagues ?? []) {
       if (lg.league_type !== 'pickem') continue
@@ -531,7 +594,7 @@ serve(async (req) => {
         .eq('is_system', true)
         .like('message', `${prefix}%`)
         .limit(1)
-      if (already && already.length > 0) continue
+      const posted = !!already && already.length > 0
 
       const { data: wkPicks } = await supabase
         .from('pickem_picks')
@@ -563,12 +626,101 @@ serve(async (req) => {
         winnerGuess: top.tiebreakerGuess,
         stats: computeWeekStats(wkGames, wkPicks ?? [], rows),
       }
-      chatPosts.push({ league: lg.name, week: wk })
-      if (!dryRun) {
-        await supabase.from('league_messages').insert({
-          league_id: lg.id, user_id: null, is_system: true,
-          message: prefix + JSON.stringify(payload),
+      if (!posted) {
+        chatPosts.push({ league: lg.name, week: wk })
+        if (!dryRun) {
+          await supabase.from('league_messages').insert({
+            league_id: lg.id, user_id: null, is_system: true,
+            message: prefix + JSON.stringify(payload),
+          })
+        }
+      }
+
+      const winnerNames = winners.map(w => w.name).join(' & ')
+      for (const r of played) {
+        const to = reach(r.userId, lg.id, 'notify_weekly_recap')
+        if (!to?.push) continue
+        const won = winners.includes(r)
+        const place = 1 + played.filter(o =>
+          o.correct > r.correct ||
+          (o.correct === r.correct && (o.tiebreakerDiff ?? Infinity) < (r.tiebreakerDiff ?? Infinity))).length
+        const title = won
+          ? (winners.length > 1 ? `You tied for the ${weekName(wk)} win!` : `You won ${weekName(wk)}!`)
+          : `${weekName(wk)} final: ${winnerNames} won`
+        const body = `${lg.name} · You went ${r.correct}/${r.played}` +
+          (won ? '' : `, ${ordinal(place)} of ${played.length}`) + '. Tap for the full results.'
+        reminders.push({
+          userId: r.userId, email: null, push: true, pushOnly: true,
+          leagueId: lg.id, leagueName: lg.name,
+          eventType: 'pickem_week_final',
+          dedupeKey: `weekfinal:${lg.id}:${season}:w${wk}`,
+          subject: title, heading: title, body,
+          pushTitle: title, pushBody: body,
+          pushTag: `weekfinal-${lg.id}-w${wk}`,
+          ctaLabel: 'See results', ctaPath: `/app/pickem?week=${wk}`,
         })
+      }
+    }
+
+    // ══ 7. PICK'EM "STILL ALIVE" — before the last game day ══
+    // Two hours before the first kickoff of a week's last game day
+    // (usually Monday night), phones get who can still win it — the
+    // same computeWhoCanWin the Standings panel runs: "You can still
+    // win Week 3 · you need PHI and a tiebreaker total of 47 or less",
+    // or "You've clinched". Eliminated players aren't told. Phone
+    // only, once per player per week, under the weekly-recap toggle.
+    for (const lg of leagues ?? []) {
+      if (lg.league_type !== 'pickem') continue
+      const season = lg.season ?? 2026
+      for (const [wk, wkGames] of scheduleBySeason.get(season) ?? []) {
+        const lastDay = lastGameDayKickoff(wkGames)
+        if (!lastDay || !inWindow(hoursUntil(lastDay.toISOString()), 2)) continue
+
+        const { data: wkPicks } = await supabase
+          .from('pickem_picks')
+          .select('game_id, user_id, week, picked_team, tiebreaker_score')
+          .eq('league_id', lg.id)
+          .eq('season', season)
+          .eq('week', wk)
+        const wkMembers = (members ?? [])
+          .filter(m => m.league_id === lg.id)
+          .map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
+        const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
+        const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows)
+        if (!who) continue
+        const aliveCount = who.rows.filter(r => r.status !== 'out').length
+
+        for (const r of who.rows) {
+          if (r.status === 'out') continue
+          const to = reach(r.userId, lg.id, 'notify_weekly_recap')
+          if (!to?.push) continue
+          let title: string, body: string
+          if (r.status === 'clinched') {
+            title = `You've clinched ${weekName(wk)}!`
+            body = `${lg.name} · Nobody can catch you, whatever happens.`
+          } else {
+            title = `You can still win ${weekName(wk)}`
+            const teams = r.needs.map(n => n.team).join(' + ')
+            const tb = r.tiebreaker ? `a tiebreaker total ${describeTiebreakerRange(r.tiebreaker)}` : ''
+            body = `${lg.name} · ` + (
+              teams && tb ? `You need ${teams} and ${tb}.`
+              : teams ? `You need ${teams}.`
+              : tb ? `You need ${tb}.`
+              : `${aliveCount} players are still alive, and you've got a few ways to win.`
+            )
+          }
+          reminders.push({
+            userId: r.userId, email: null, push: true, pushOnly: true,
+            leagueId: lg.id, leagueName: lg.name,
+            eventType: 'pickem_alive',
+            dedupeKey: `alive:${lg.id}:${season}:w${wk}`,
+            subject: title, heading: title, body,
+            pushTitle: title, pushBody: body,
+            pushTag: `alive-${lg.id}-w${wk}`,
+            pushTtlSec: 2 * 3600,
+            ctaLabel: 'Standings', ctaPath: `/app/pickem?week=${wk}`,
+          })
+        }
       }
     }
 
@@ -577,38 +729,60 @@ serve(async (req) => {
     const results: any[] = []
 
     for (const r of reminders) {
-      // Idempotency — has this exact reminder already gone out?
-      const { data: existing } = await supabase
-        .from('reminder_log')
-        .select('id')
-        .eq('user_id', r.userId)
-        .eq('dedupe_key', r.dedupeKey)
-        .eq('channel', 'email')
-        .maybeSingle()
+      const channels: ('email' | 'push')[] = []
+      if (r.email && !r.pushOnly) channels.push('email')
+      if (r.push && VAPID) channels.push('push')
 
-      if (existing) { skipped++; continue }
+      for (const channel of channels) {
+        // Idempotency — has this exact reminder already gone out on
+        // this channel? (Email and push are logged separately.)
+        const { data: existing } = await supabase
+          .from('reminder_log')
+          .select('id')
+          .eq('user_id', r.userId)
+          .eq('dedupe_key', r.dedupeKey)
+          .eq('channel', channel)
+          .maybeSingle()
 
-      if (dryRun) {
-        results.push({ to: r.email, subject: r.subject, dedupeKey: r.dedupeKey })
-        sent++
-        continue
-      }
+        if (existing) { skipped++; continue }
 
-      try {
-        await sendEmail(r.email, r.subject, renderEmail(r))
-        await supabase.from('reminder_log').insert({
-          user_id: r.userId, league_id: r.leagueId,
-          event_type: r.eventType, dedupe_key: r.dedupeKey,
-          channel: 'email', status: 'sent',
-        })
-        sent++
-      } catch (e) {
-        failed++
-        await supabase.from('reminder_log').insert({
-          user_id: r.userId, league_id: r.leagueId,
-          event_type: r.eventType, dedupe_key: r.dedupeKey,
-          channel: 'email', status: 'failed', error: String(e),
-        })
+        if (dryRun) {
+          results.push({
+            channel, to: channel === 'email' ? r.email : `push:${r.userId}`,
+            subject: channel === 'email' ? r.subject : (r.pushTitle ?? r.heading),
+            dedupeKey: r.dedupeKey,
+          })
+          sent++
+          continue
+        }
+
+        try {
+          if (channel === 'email') {
+            await sendEmail(r.email!, r.subject, renderEmail(r))
+          } else {
+            const payload = JSON.stringify({
+              title: r.pushTitle ?? r.heading,
+              body: r.pushBody ?? `${r.leagueName} · ${r.body}`,
+              url: r.ctaPath,
+              tag: r.pushTag ?? `${r.eventType}-${r.leagueId}`,
+            })
+            const took = await pushTo(r.userId, payload, r.pushTtlSec ?? 12 * 3600, !!r.urgent)
+            if (took === 0) throw new Error('no device accepted the notification')
+          }
+          await supabase.from('reminder_log').insert({
+            user_id: r.userId, league_id: r.leagueId,
+            event_type: r.eventType, dedupe_key: r.dedupeKey,
+            channel, status: 'sent',
+          })
+          sent++
+        } catch (e) {
+          failed++
+          await supabase.from('reminder_log').insert({
+            user_id: r.userId, league_id: r.leagueId,
+            event_type: r.eventType, dedupe_key: r.dedupeKey,
+            channel, status: 'failed', error: String(e),
+          })
+        }
       }
     }
 
@@ -835,6 +1009,28 @@ function justFinishedWeek(weeks: Map<number, SchedGame[]> | undefined, now: Date
     if (best == null || week > best) best = week
   }
   return best
+}
+
+/** "Week 3", or the playoff round's name. */
+function weekName(w: number): string {
+  return w === 19 ? 'Wild Card weekend' : w === 20 ? 'the Divisional round'
+    : w === 21 ? 'Championship weekend' : w === 22 ? 'the Super Bowl' : `Week ${w}`
+}
+
+function ordinal(n: number): string {
+  const v = n % 100
+  return n + (v >= 11 && v <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')
+}
+
+/** First kickoff of a week's last game day (days in Eastern time). */
+function lastGameDayKickoff(games: SchedGame[]): Date | null {
+  if (games.length === 0) return null
+  const dayOf = (g: SchedGame) => {
+    const pp = partsInZone(new Date(g.game_date), 'America/New_York')
+    return pp.year * 10000 + pp.month * 100 + pp.day
+  }
+  const last = Math.max(...games.map(dayOf))
+  return new Date(Math.min(...games.filter(g => dayOf(g) === last).map(g => new Date(g.game_date).getTime())))
 }
 
 /** Render an instant in a zone, e.g. 'Wed, Aug 19, 5:00 PM MDT'. */

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { disablePush } from '@/lib/push'
 import type { Profile, League, LeagueMember, Notification } from '@/types/database'
 import type { User, Session } from '@supabase/supabase-js'
 
@@ -111,6 +112,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   signOut: async () => {
+    // Stop this device getting the signed-out user's notifications
+    // (must happen while still signed in, to delete their row). The
+    // next person to sign in here opts in for themselves.
+    await disablePush().catch(() => { /* never block signing out */ })
     await supabase.auth.signOut()
     localStorage.removeItem('gu-active-league-id')
     set({
