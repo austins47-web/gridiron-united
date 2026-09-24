@@ -1642,6 +1642,42 @@ function PicksBoard({
   onWeekChange: (week: number) => void
 }) {
   const now = new Date()
+
+  // ── Top scrollbar ────────────────────────────────────────────
+  // The table's own horizontal scrollbar sits under the last row, so
+  // with a full league you had to scroll the whole page down just to
+  // reach it. A second bar above the table mirrors it: an empty strip
+  // as wide as the table, its position kept in step with the table's
+  // in both directions. Only rendered while the table overflows.
+  const topScrollRef = useRef<HTMLDivElement>(null)
+  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const [overflowWidth, setOverflowWidth] = useState<number | null>(null)
+  const hasGames = games.length > 0
+
+  useEffect(() => {
+    const el = tableScrollRef.current
+    if (!el) return
+    const measure = () => setOverflowWidth(el.scrollWidth > el.clientWidth ? el.scrollWidth : null)
+    measure()
+    // The container resizes with the viewport, the table with its
+    // rows and columns — either can start or stop the overflow.
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => ro.disconnect()
+  }, [hasGames])
+
+  // Only copies when the positions actually differ, so the scroll
+  // event this echoes back from the other bar is a no-op, not a loop.
+  const syncScroll = (from: HTMLDivElement | null, to: HTMLDivElement | null) => {
+    if (from && to && Math.abs(to.scrollLeft - from.scrollLeft) > 1) to.scrollLeft = from.scrollLeft
+  }
+  // A bar that appears mid-scroll (e.g. after a resize) starts where
+  // the table already is, not back at the left edge.
+  useEffect(() => {
+    syncScroll(tableScrollRef.current, topScrollRef.current)
+  }, [overflowWidth])
+
   // Kickoff order, with the tiebreaker last among games sharing a
   // kickoff (Week 18's all list one placeholder time), so the
   // tiebreaker is always the board's final column.
@@ -1735,7 +1771,22 @@ function PicksBoard({
   return (
     <div className="panel p-0 overflow-hidden">
       {weekNav}
-      <div className="overflow-x-auto">
+      {overflowWidth != null && (
+        <div
+          ref={topScrollRef}
+          onScroll={() => syncScroll(topScrollRef.current, tableScrollRef.current)}
+          className="overflow-x-auto overflow-y-hidden"
+          aria-hidden
+          tabIndex={-1}
+        >
+          <div style={{ width: overflowWidth, height: 1 }} />
+        </div>
+      )}
+      <div
+        ref={tableScrollRef}
+        onScroll={() => syncScroll(tableScrollRef.current, topScrollRef.current)}
+        className="overflow-x-auto"
+      >
       <table className="border-collapse text-xs w-full">
         <thead>
           <tr className="border-b border-field-700">
