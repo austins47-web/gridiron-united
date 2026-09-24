@@ -170,6 +170,157 @@ export function computeWeek(
   })
 }
 
+// ── End-of-week fun facts ─────────────────────────────────────
+
+export interface WeekStats {
+  /** The game the most people got wrong: `loser` is who they backed. */
+  upset: { winner: string; loser: string; winnerScore: number; loserScore: number; wrong: number; pickers: number } | null
+  /** The least-picked team of the week, and whether it paid off. */
+  underdog: { team: string; opponent: string; picks: number; pickers: number; won: boolean | null; teamScore: number | null; oppScore: number | null; backers: string[] } | null
+  /** The winning team the league leaned on hardest. */
+  lock: { team: string; picks: number; pickers: number } | null
+  /** The game that divided the league most evenly. */
+  split: { away: string; home: string; awayPicks: number; homePicks: number; winner: string | null } | null
+  /** Whoever went against the league's majority most often. */
+  loneWolf: { name: string; against: number; hits: number } | null
+  /** Every pick in the league this week, combined. */
+  league: { correct: number; played: number }
+}
+
+/**
+ * Fun facts for a finished week, all derived from the same picks and
+ * results the recap ranks — so nothing here can disagree with it.
+ *
+ * Counts only ever include people who picked that game. A game nobody
+ * picked is skipped, and a game that ended tied has no winner, so it's
+ * left out of anything that depends on who won.
+ */
+export function computeWeekStats(games: Game[], picks: Pick[], rows: WeekRow[]): WeekStats {
+  const nameById = new Map(rows.map(r => [r.userId, r.name]))
+  const byKickoff = [...games].sort(
+    (a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime(),
+  )
+
+  const tallies = byKickoff.map(g => {
+    const gp = picks.filter(p => p.game_id === g.id)
+    const home = gp.filter(p => p.picked_team === g.home_team)
+    const away = gp.filter(p => p.picked_team === g.away_team)
+    return { g, winner: winnerOf(g), home, away, pickers: home.length + away.length }
+  }).filter(t => t.pickers > 0)
+
+  const side = (t: typeof tallies[number], team: string) =>
+    team === t.g.home_team ? t.home : t.away
+  const scoreOf = (g: Game, team: string) =>
+    team === g.home_team ? g.home_score : g.away_score
+
+  // Biggest upset: most people on the losing side, then the biggest
+  // share of the game's pickers. Earliest kickoff breaks a full tie
+  // (sort is stable), same for every "first" below.
+  let upset: WeekStats['upset'] = null
+  for (const t of tallies) {
+    if (!t.winner) continue
+    const loser = t.winner === t.g.home_team ? t.g.away_team : t.g.home_team
+    const wrong = side(t, loser).length
+    if (wrong === 0) continue
+    const better = !upset
+      || wrong > upset.wrong
+      || (wrong === upset.wrong && wrong / t.pickers > upset.wrong / upset.pickers)
+    if (better) {
+      upset = {
+        winner: t.winner, loser,
+        winnerScore: scoreOf(t.g, t.winner) ?? 0, loserScore: scoreOf(t.g, loser) ?? 0,
+        wrong, pickers: t.pickers,
+      }
+    }
+  }
+
+  // Underdog: the fewest picks of any team playing. Among ties, a
+  // team that actually won is the better story, then the most
+  // lopsided matchup (the crowd piled on the other side).
+  let underdog: WeekStats['underdog'] = null
+  let underdogOppPicks = -1
+  for (const t of tallies) {
+    for (const team of [t.g.away_team, t.g.home_team]) {
+      const opponent = team === t.g.home_team ? t.g.away_team : t.g.home_team
+      const mine = side(t, team)
+      const oppPicks = side(t, opponent).length
+      const won = t.winner == null ? null : t.winner === team
+      const better = !underdog
+        || mine.length < underdog.picks
+        || (mine.length === underdog.picks && won === true && underdog.won !== true)
+        || (mine.length === underdog.picks && won === underdog.won && oppPicks > underdogOppPicks)
+      if (better) {
+        underdog = {
+          team, opponent, picks: mine.length, pickers: t.pickers, won,
+          teamScore: scoreOf(t.g, team), oppScore: scoreOf(t.g, opponent),
+          backers: mine.map(p => nameById.get(p.user_id) ?? 'Someone'),
+        }
+        underdogOppPicks = oppPicks
+      }
+    }
+  }
+
+  // Lock of the week: the winner with the biggest share of picks.
+  let lock: WeekStats['lock'] = null
+  for (const t of tallies) {
+    if (!t.winner) continue
+    const n = side(t, t.winner).length
+    if (n === 0) continue
+    const better = !lock
+      || n / t.pickers > lock.picks / lock.pickers
+      || (n / t.pickers === lock.picks / lock.pickers && n > lock.picks)
+    if (better) lock = { team: t.winner, picks: n, pickers: t.pickers }
+  }
+
+  // Split decision: the most even split, skipping the upset's game so
+  // two tiles don't tell the same story. More pickers wins a tie.
+  let split: WeekStats['split'] = null
+  const splitCandidates = tallies.filter(t => t.pickers >= 2)
+  const withoutUpset = splitCandidates.filter(t =>
+    !(upset && t.winner === upset.winner && (t.g.home_team === upset.loser || t.g.away_team === upset.loser)),
+  )
+  for (const t of withoutUpset.length ? withoutUpset : splitCandidates) {
+    const gap = Math.abs(t.home.length - t.away.length)
+    const cur = split ? Math.abs(split.homePicks - split.awayPicks) : Infinity
+    const better = !split || gap < cur
+      || (gap === cur && t.pickers > split.homePicks + split.awayPicks)
+    if (better) {
+      split = {
+        away: t.g.away_team, home: t.g.home_team,
+        awayPicks: t.away.length, homePicks: t.home.length, winner: t.winner,
+      }
+    }
+  }
+
+  // Lone wolf: picks against a clear majority (3+ pickers, not an
+  // even split), and how many of those went their way.
+  const wolf = new Map<string, { against: number; hits: number }>()
+  for (const t of tallies) {
+    if (t.pickers < 3 || t.home.length === t.away.length) continue
+    const minority = t.home.length < t.away.length ? t.home : t.away
+    for (const p of minority) {
+      const w = wolf.get(p.user_id) ?? { against: 0, hits: 0 }
+      w.against++
+      if (t.winner != null && p.picked_team === t.winner) w.hits++
+      wolf.set(p.user_id, w)
+    }
+  }
+  const [wolfTop] = [...wolf].sort((a, b) =>
+    b[1].against - a[1].against || b[1].hits - a[1].hits ||
+    (nameById.get(a[0]) ?? '').localeCompare(nameById.get(b[0]) ?? ''),
+  )
+  const loneWolf: WeekStats['loneWolf'] = wolfTop
+    ? { name: nameById.get(wolfTop[0]) ?? 'Someone', ...wolfTop[1] }
+    : null
+
+  const league = rows.reduce(
+    (acc, r) => ({ correct: acc.correct + r.correct, played: acc.played + r.played }),
+    { correct: 0, played: 0 },
+  )
+
+  return { upset, underdog, lock, split, loneWolf, league }
+}
+
 /**
  * Season standings across every completed week.
  *

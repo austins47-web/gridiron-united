@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Crown, Flame, Star } from 'lucide-react'
 import { WeekRecap } from './WeekRecap'
-import type { WeekRow } from './standings'
+import type { WeekRow, Game, Pick } from './standings'
 import { playWinReveal } from '@/lib/sound'
 
 /**
@@ -17,13 +17,16 @@ import { playWinReveal } from '@/lib/sound'
  * distance) so the animated sequence and the static card it settles
  * into never disagree about who actually won.
  */
-export function AnimatedWeekReveal({ leagueId, week, rows, tiebreakerTotal, currentUserId, myStreak }: {
+export function AnimatedWeekReveal({ leagueId, week, rows, tiebreakerTotal, currentUserId, myStreak, games, picks }: {
   leagueId: string
   week: number
   rows: WeekRow[]
   tiebreakerTotal: number | null
   currentUserId?: string
   myStreak?: number
+  /** Passed through to WeekRecap's Week Stats. */
+  games?: Game[]
+  picks?: Pick[]
 }) {
   const storageKey = `reveal-seen-${leagueId}-${week}`
   const [phase, setPhase] = useState<'animate' | 'settled'>(() => {
@@ -52,7 +55,7 @@ export function AnimatedWeekReveal({ leagueId, week, rows, tiebreakerTotal, curr
 
   if (played.length === 0) return null
   if (phase === 'settled') {
-    return <WeekRecap week={week} rows={rows} tiebreakerTotal={tiebreakerTotal} currentUserId={currentUserId} />
+    return <WeekRecap week={week} rows={rows} tiebreakerTotal={tiebreakerTotal} currentUserId={currentUserId} games={games} picks={picks} />
   }
 
   const top = played[0]

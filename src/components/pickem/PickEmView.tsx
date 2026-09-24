@@ -980,6 +980,8 @@ export function PickEmView() {
               tiebreakerTotal={weekTbTotal}
               currentUserId={user?.id}
               myStreak={standings.find((s: any) => s.userId === user?.id)?.streak}
+              games={games as any}
+              picks={allPicks as any}
             />
           ) : (finishedCount > 0 || liveCount > 0) ? (
             <WeekInProgress finished={finishedCount} total={games.length} live={liveCount} />
