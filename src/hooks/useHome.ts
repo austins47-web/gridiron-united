@@ -4,7 +4,7 @@ import { useAppStore } from '@/store/appStore'
 import { useMyLeagues } from './useLeague'
 import type { LeagueMember } from '@/types/database'
 import { CURRENT_SEASON } from '@/lib/season'
-import { computeStandings } from '@/components/pickem/standings'
+import { computeStandings, isVoid, isWeekComplete } from '@/components/pickem/standings'
 import { resolveWeekDeadline } from '@/lib/deadline'
 import { currentPickemWeek, isGameLocked } from '@/lib/pickemWeek'
 
@@ -38,6 +38,8 @@ export interface TeamRow {
   draftStatus: string
   memberCount: number
   numTeams: number
+  /** Pick'Em only: where this week stands for you, e.g. "Week 3 · 9/16 picked". */
+  pickemStatus?: string
   // current week matchup (fantasy only)
   matchup?: {
     opponentName: string
@@ -136,6 +138,43 @@ export function useHomeData() {
 
   const d = q.data
 
+  // ── Your Pick'Em week, per league ───────────────────────────
+  // The week comes from the same Tuesday-night clock the Pick'Em page
+  // opens on — league.current_week is never written, so it read Week
+  // 1 all season. "Open" uses the page's own lock rule (per-week
+  // override, league deadline rule, else kickoff).
+  const pickemWeek = (league: (typeof myLeagues)[number]['league']) => {
+    const wk = currentPickemWeek()
+    const wkGames = (d?.games ?? []).filter(g => g.week === wk && !isVoid(g as any))
+    const kickoffs = wkGames
+      .map(g => (g.game_date ? new Date(g.game_date).getTime() : NaN))
+      .filter(t => Number.isFinite(t))
+    const { deadline } = resolveWeekDeadline({
+      weekOverride: d?.weekSettings.find(s => s.league_id === league.id && s.week === wk)?.pick_deadline ?? null,
+      lockType:     (league as any).pick_lock_type,
+      day:          (league as any).pick_deadline_day,
+      time:         (league as any).pick_deadline_time,
+      tz:           (league as any).pick_deadline_tz,
+      firstKickoff: kickoffs.length ? new Date(Math.min(...kickoffs)) : null,
+    })
+    const deadlineIso = deadline ? deadline.toISOString() : null
+    const mine = (d?.picks ?? []).filter(p => p.league_id === league.id && p.week === wk)
+    const pickedIds = new Set(mine.map(p => p.game_id))
+    const open = wkGames.filter(g => !isGameLocked(g.game_date, deadlineIso, g.status))
+    const unpicked = open.filter(g => !pickedIds.has(g.id))
+    const tb = wkGames.find(g => g.is_tiebreaker)
+    return {
+      wk,
+      total: wkGames.length,
+      picked: wkGames.filter(g => pickedIds.has(g.id)).length,
+      open: open.length,
+      unpicked,
+      // Only while it can still be fixed; a guess saves with the TB pick
+      tbMissing: !!tb && open.includes(tb) && !mine.some(p => p.game_id === tb.id && p.tiebreaker_score != null),
+      complete: isWeekComplete(wkGames as any),
+    }
+  }
+
   // ── Build team rows ────────────────────────────────────────
   const teams: TeamRow[] = myLeagues.map(({ league, ...m }) => {
     const membership = m as unknown as LeagueMember
@@ -150,6 +189,16 @@ export function useHomeData() {
       const leaguePicks = (d?.picks ?? []).filter(p => p.league_id === league.id)
       const rows = computeStandings((d?.games ?? []) as any, leaguePicks as any, [{ user_id: user.id }])
       pickemCorrect = rows.find(r => r.userId === user.id)?.correct ?? 0
+    }
+
+    let pickemStatus: string | undefined
+    if (isPickem && d) {
+      const pw = pickemWeek(league)
+      pickemStatus = pw.total === 0 ? `Week ${pw.wk}`
+        : pw.complete ? `Week ${pw.wk} final`
+        : pw.open === 0 ? `Week ${pw.wk} · games underway`
+        : pw.unpicked.length === 0 ? `Week ${pw.wk} · all picks in`
+        : `Week ${pw.wk} · ${pw.picked}/${pw.total} picked`
     }
 
     // Current-week matchup
@@ -182,6 +231,7 @@ export function useHomeData() {
       draftStatus: league.draft_status,
       memberCount,
       numTeams: league.num_teams,
+      pickemStatus,
       matchup,
     }
   })
@@ -216,37 +266,35 @@ export function useHomeData() {
       })
     }
 
-    // 3. Pick'Em picks not submitted for the current week
+    // 3. Pick'Em: games still open that you haven't picked
     //
-    // The week comes from the same Tuesday-night clock the Pick'Em
-    // page opens on — league.current_week is never written, so it
-    // read Week 1 all season. Only nags while something in that
-    // week can still be picked, so the finished week that stays
-    // current through Tuesday doesn't ask for picks it can't take.
-    if (isPickem) {
-      const wk = currentPickemWeek()
-      const wkGames = (d?.games ?? []).filter(g => g.week === wk)
-      const kickoffs = wkGames
-        .map(g => (g.game_date ? new Date(g.game_date).getTime() : NaN))
-        .filter(t => Number.isFinite(t))
-      const { deadline } = resolveWeekDeadline({
-        weekOverride: d?.weekSettings.find(s => s.league_id === league.id && s.week === wk)?.pick_deadline ?? null,
-        lockType:     (league as any).pick_lock_type,
-        day:          (league as any).pick_deadline_day,
-        time:         (league as any).pick_deadline_time,
-        tz:           (league as any).pick_deadline_tz,
-        firstKickoff: kickoffs.length ? new Date(Math.min(...kickoffs)) : null,
-      })
-      const deadlineIso = deadline ? deadline.toISOString() : null
-      const stillOpen = wkGames.some(g => !isGameLocked(g.game_date, deadlineIso, g.status))
-      const made = d?.picks.filter(p => p.league_id === league.id && p.week === wk).length ?? 0
-      if (stillOpen && made === 0) {
+    // Counts unpicked games that can still be picked, not "made any
+    // pick at all" — someone who picked Thursday night but forgot the
+    // Sunday slate used to get no nudge. The finished week that stays
+    // current through Tuesday has nothing open, so it stays quiet.
+    if (isPickem && d) {
+      const pw = pickemWeek(league)
+      const n = pw.unpicked.length
+      if (n > 0) {
+        const nextLock = Math.min(...pw.unpicked.map(g => (g.game_date ? new Date(g.game_date).getTime() : Infinity)))
         actions.push({
           id: `picks-${league.id}`, kind: 'picks_due', priority: 1,
           leagueId: league.id, leagueName: league.name,
-          title: `Week ${wk} picks not submitted`,
-          detail: 'Make your picks before kickoff',
+          title: pw.picked === 0
+            ? `Week ${pw.wk} picks not submitted`
+            : `${n} Week ${pw.wk} game${n === 1 ? '' : 's'} still unpicked`,
+          detail: Number.isFinite(nextLock)
+            ? `Next one locks ${new Date(nextLock).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
+            : 'Make your picks before kickoff',
           to: '/app/pickem', cta: 'Make picks',
+        })
+      } else if (pw.tbMissing) {
+        actions.push({
+          id: `picks-${league.id}`, kind: 'picks_due', priority: 1,
+          leagueId: league.id, leagueName: league.name,
+          title: `Week ${pw.wk} tiebreaker guess missing`,
+          detail: 'Without one you lose every tie',
+          to: '/app/pickem', cta: 'Add guess',
         })
       }
     }

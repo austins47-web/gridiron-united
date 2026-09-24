@@ -469,7 +469,7 @@ function TeamCard({ team, index }: { team: TeamRow; index: number }) {
           </div>
         ) : (
           <div className="text-xs text-field-500 mt-0.5">
-            {isPickem ? 'Picks open' : preDraft ? 'Waiting to draft' : 'No matchup this week'}
+            {isPickem ? (team.pickemStatus ?? "Pick'Em") : preDraft ? 'Waiting to draft' : 'No matchup this week'}
           </div>
         )}
       </div>

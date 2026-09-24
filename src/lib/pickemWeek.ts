@@ -72,7 +72,9 @@ export function isGameLocked(gameDate: string | null, deadline: string | null, s
   // sits in the future (a bad sync, clock skew, or in testing, a
   // manually-finalized game). A pick should never be editable once
   // the outcome is actually known, independent of what the clock says.
-  if (status === 'final' || status === 'in_progress') return true
+  // Postponed/canceled games can't be picked either; if one gets
+  // rescheduled, the schedule sync flips it back to 'scheduled'.
+  if (status === 'final' || status === 'in_progress' || status === 'postponed') return true
   if (!gameDate) return false
   const now = new Date()
   // If commissioner set a custom deadline, use whichever is earlier

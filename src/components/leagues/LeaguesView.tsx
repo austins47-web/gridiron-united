@@ -5,6 +5,9 @@ import { useAppStore } from '@/store/appStore'
 import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, usePickemStandings, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
 import { computeWeek, isFinal } from '@/components/pickem/standings'
 import { CURRENT_SEASON } from '@/lib/season'
+import { currentPickemWeek } from '@/lib/pickemWeek'
+import { REGULAR_SEASON_WEEKS } from '@/lib/scheduling'
+import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
 import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
 import { ModalPortal } from '@/components/ui/ModalPortal'
@@ -417,6 +420,15 @@ function FantasyRecords({ leagueId }: { leagueId: string }) {
 }
 
 function LeagueInfoPanel({ league, membership, isCommissioner }: any) {
+  // leagues.current_week is never written, so it read Week 1 all
+  // season. Pick'Em uses its own Tuesday-night clock; fantasy uses the
+  // same live NFL/CFB week the Roster and Matchup tabs default to.
+  const { data: liveNflWeek = 1 } = useCurrentWeek()
+  const { data: liveCfbWeek = 1 } = useCurrentCFBWeek()
+  const seasonWeek = league.league_type === 'pickem'
+    ? currentPickemWeek()
+    : Math.min(Math.max(league.player_pool === 'cfb' ? liveCfbWeek : liveNflWeek, 1), REGULAR_SEASON_WEEKS)
+
   const copyInvite = () => {
     navigator.clipboard.writeText(league.invite_code)
     toast.success('Invite code copied!')
@@ -432,7 +444,7 @@ function LeagueInfoPanel({ league, membership, isCommissioner }: any) {
       <div className="grid grid-cols-2 gap-2 text-sm">
         {[
           ['Format', league.league_type === 'pickem' ? "Pick'Em" : league.scoring_type?.toUpperCase()],
-          ['Season', `Week ${league.current_week ?? 1}`],
+          ['Season', `Week ${seasonWeek}`],
           // Draft type, team cap, and draft status are all draft-lifecycle
           // concepts with no meaning in a Pick'Em league — there's no
           // draft, and the "500" team cap is an internal ceiling we set

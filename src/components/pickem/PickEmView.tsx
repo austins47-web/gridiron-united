@@ -10,7 +10,7 @@ import { teamLogoUrl } from '@/components/teams/teamIds'
 import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
-  computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal, winnerOf,
+  computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
   type WeekRow,
 } from './standings'
 import { WeekInProgress } from './WeekRecap'
@@ -564,8 +564,21 @@ export function PickEmView() {
   const tiebreakerGame = games.find((g: any) => g.is_tiebreaker)
   const regularGames = games.filter((g: any) => !g.is_tiebreaker)
   const lockedCount = games.filter((g: any) => isGameLocked(g.game_date, weekDeadline, g.status)).length
-  const pickedCount = Object.keys(pendingPicks).filter(id => games.some((g: any) => g.id === id)).length
-  const totalGames = games.length
+  // Postponed/canceled games aren't part of the week's count — they
+  // can't be picked, so they'd otherwise keep "x/y picked" from ever
+  // reaching done.
+  const playableGames = games.filter((g: any) => !isVoid(g))
+  const pickedCount = Object.keys(pendingPicks).filter(id => playableGames.some((g: any) => g.id === id)).length
+  const totalGames = playableGames.length
+
+  // A blank tiebreaker guess loses every tie, and a guess only saves
+  // alongside a pick for that game — flag either while it can still
+  // be fixed.
+  const tiebreakerWarning: 'missing' | 'needs-pick' | null =
+    !tiebreakerGame || isGameLocked(tiebreakerGame.game_date, weekDeadline, tiebreakerGame.status) ? null
+    : !tiebreakerScore[tiebreakerGame.id] ? 'missing'
+    : !pendingPicks[tiebreakerGame.id] ? 'needs-pick'
+    : null
 
   // Determine if the whole week is still open for picks
   const anyUnlocked = games.some((g: any) => !isGameLocked(g.game_date, weekDeadline, g.status))
@@ -941,6 +954,7 @@ export function PickEmView() {
                 isTiebreaker
                 tiebreakerScore={tiebreakerScore[tiebreakerGame.id] ?? ''}
                 onTiebreakerScore={(val) => setTiebreakerScore(s => ({ ...s, [tiebreakerGame.id]: val }))}
+                tiebreakerWarning={tiebreakerWarning}
               />
             </div>
           )}
@@ -949,13 +963,19 @@ export function PickEmView() {
               after each change (see the debounced effect near the
               top of this component), no explicit button needed. */}
           {pickedCount > 0 && (
-            <div className="pt-1 flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider">
+            <div className="pt-1 flex flex-col items-center gap-1.5 text-xs font-bold uppercase tracking-wider">
               {saving ? (
                 <span className="text-field-400">Saving…</span>
               ) : (
                 <span className="text-field-500 flex items-center gap-1">
                   <Check className="w-3.5 h-3.5 text-nfl" />
                   All picks saved · {pickedCount}/{totalGames}
+                </span>
+              )}
+              {tiebreakerWarning && (
+                <span className="text-gold flex items-center gap-1">
+                  <Target className="w-3.5 h-3.5" />
+                  {tiebreakerWarning === 'missing' ? 'Tiebreaker guess missing' : 'Tiebreaker guess not saved — pick a winner in that game'}
                 </span>
               )}
             </div>
@@ -984,7 +1004,7 @@ export function PickEmView() {
               picks={allPicks as any}
             />
           ) : (finishedCount > 0 || liveCount > 0) ? (
-            <WeekInProgress finished={finishedCount} total={games.length} live={liveCount} />
+            <WeekInProgress finished={finishedCount} total={games.filter((g: any) => !isVoid(g)).length} live={liveCount} />
           ) : null}
 
           <StandingsTable
@@ -1027,7 +1047,7 @@ export function PickEmView() {
 }
 
 function GamePickCard({
-  game, pickedTeam, onPick, deadline, odds, recordsByAbbr, recordsArePreseason, isTiebreaker, tiebreakerScore, onTiebreakerScore
+  game, pickedTeam, onPick, deadline, odds, recordsByAbbr, recordsArePreseason, isTiebreaker, tiebreakerScore, onTiebreakerScore, tiebreakerWarning,
 }: {
   game: any
   pickedTeam: string | undefined
@@ -1039,8 +1059,10 @@ function GamePickCard({
   isTiebreaker?: boolean
   tiebreakerScore?: string
   onTiebreakerScore?: (val: string) => void
+  tiebreakerWarning?: 'missing' | 'needs-pick' | null
 }) {
   const locked = isGameLocked(game.game_date, deadline, game.status)
+  const postponed = isVoid(game)
   const gameTime = game.game_date
     ? new Date(game.game_date).toLocaleString('en-US', {
         weekday: 'short', month: 'short', day: 'numeric',
@@ -1075,7 +1097,9 @@ function GamePickCard({
     <div className={clsx('panel space-y-3', isTiebreaker && 'border-gold/30 bg-gold/[0.02]')}>
       <div className="flex items-center justify-between">
         <span className="text-field-400 text-xs">{gameTime}</span>
-        {locked && !isFinal && (
+        {postponed ? (
+          <span className="text-xs text-field-300 font-bold">Postponed · doesn't count</span>
+        ) : locked && !isFinal && (
           <span className="flex items-center gap-1 text-xs text-gold font-bold">
             <Lock className="w-3 h-3" /> Locked
           </span>
@@ -1246,8 +1270,14 @@ function GamePickCard({
             value={tiebreakerScore ?? ''}
             onChange={e => onTiebreakerScore(e.target.value)}
             disabled={locked}
-            className="input w-28 text-center text-lg font-bold"
+            className={clsx('input w-28 text-center text-lg font-bold', tiebreakerWarning && '!border-gold ring-1 ring-gold/40')}
           />
+          {tiebreakerWarning === 'missing' && (
+            <p className="text-gold text-xs font-bold">Add a guess — without one you lose every tie.</p>
+          )}
+          {tiebreakerWarning === 'needs-pick' && (
+            <p className="text-gold text-xs font-bold">Pick a winner above too — your guess only saves with a pick.</p>
+          )}
           <p className="text-field-500 text-xs">
             Closest guess wins when two players tie on correct picks.
           </p>
