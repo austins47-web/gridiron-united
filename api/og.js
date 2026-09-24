@@ -98,6 +98,7 @@ export default async function handler(req) {
     ['full', tree, fonts],
     ['default-font', tree, []],
   ]
+  const errors = []
   for (const [label, t, f] of attempts) {
     try {
       const res = new ImageResponse(t, { width: 1200, height: 630, fonts: f.length ? f : undefined })
@@ -113,7 +114,12 @@ export default async function handler(req) {
       }
     } catch (e) {
       console.error('og render failed', label, e)
+      errors.push(label + ': ' + String(e?.message ?? e).replace(/[^ -~]/g, ' ').slice(0, 180))
     }
   }
-  return Response.redirect(new URL('/og-image.png', url.origin), 302)
+  // The site's standard card, with why (for diagnosing a bad deploy)
+  return new Response(null, {
+    status: 302,
+    headers: { Location: new URL('/og-image.png', url.origin).href, 'x-og-error': errors.join(' | ') || 'empty image', 'Cache-Control': 'no-store' },
+  })
 }
