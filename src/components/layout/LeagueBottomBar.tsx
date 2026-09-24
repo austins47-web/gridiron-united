@@ -104,7 +104,10 @@ export function LeagueBottomBar() {
           </div>
         )}
 
-        <nav className="flex bg-field-900 border-t border-field-700 pb-[env(safe-area-inset-bottom)]">
+        {/* Safe-area padding lifts the tabs above the iPhone home
+            indicator (and away from the notch in landscape) — needs
+            viewport-fit=cover in index.html to be non-zero */}
+        <nav className="flex bg-field-900 border-t border-field-700 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
           {primary.map(t => (
             <NavLink
               key={t.to}

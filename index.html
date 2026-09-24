@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover makes iOS report the safe-area insets (home indicator,
+         notch); without it env(safe-area-inset-*) is always 0 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- Installable app (home screen) — needed for push notifications on iPhone -->
     <link rel="manifest" href="/manifest.webmanifest" />

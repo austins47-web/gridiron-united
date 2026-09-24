@@ -64,7 +64,7 @@ export function AppShell() {
         wrapper needs no height math at all - whatever they actually
         render at, the whole group moves and locks together.
       */}
-      <div className="sticky top-0 z-40 flex flex-col shrink-0 bg-field-950">
+      <div className="sticky top-0 z-40 flex flex-col shrink-0 bg-field-950 pt-[env(safe-area-inset-top)]">
 
       {/* ── Header ── */}
       <header className="app-shell-top-nav bg-field-950 border-b border-field-700 flex items-center justify-between px-4 h-14 shrink-0">
@@ -192,10 +192,14 @@ export function AppShell() {
       </div>
 
       {/* ── Main content ── */}
-      {/* pb-14 reserves room for the fixed LeagueBottomBar below so
-          it never overlaps page content - only needed once a league
-          is active, since that's the only time the bar renders. */}
-      <main className={clsx('flex-1 flex flex-col min-h-0 bg-field-900', activeLeagueId && 'pb-14')}>
+      {/* Bottom padding reserves room for the fixed LeagueBottomBar
+          (3.5rem) plus the iPhone home-indicator safe area it pads
+          itself by, so the bar never covers the end of a page. With no
+          league there's no bar, just the safe area. */}
+      <main className={clsx(
+        'flex-1 flex flex-col min-h-0 bg-field-900',
+        activeLeagueId ? 'pb-[calc(3.5rem_+_env(safe-area-inset-bottom))]' : 'pb-[env(safe-area-inset-bottom)]',
+      )}>
         {/* No league selected + on a league route → prompt */}
         {!activeLeagueId && isOnLeagueRoute ? (
           <div className="max-w-md mx-auto text-center py-20 px-6">
