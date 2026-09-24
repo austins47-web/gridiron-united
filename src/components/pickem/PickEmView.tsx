@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { resolveWeekDeadline } from '@/lib/deadline'
+import { PICKEM_WEEK_ENDS, currentPickemWeek, isGameLocked } from '@/lib/pickemWeek'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
@@ -60,66 +61,6 @@ const TEAM_INFO: Record<string, { name: string }> = {
   WSH: { name: 'Washington Commanders' },
 }
 
-// Week 1 starts Sep 4 2025. Each week runs Thu–Mon.
-// Week is "over" when the final MNF game (Mon ~10:15pm ET) has passed.
-// Week boundaries (approximate Mon night end):
-const WEEK_END_DATES: Record<number, string> = {
-  1:  '2026-09-15T03:00:00Z', // Tue 3am UTC after Mon Sep 14 MNF
-  2:  '2026-09-22T03:00:00Z',
-  3:  '2026-09-29T03:00:00Z',
-  4:  '2026-10-06T03:00:00Z',
-  5:  '2026-10-13T03:00:00Z',
-  6:  '2026-10-20T03:00:00Z',
-  7:  '2026-10-27T03:00:00Z',
-  8:  '2026-11-03T03:00:00Z',
-  9:  '2026-11-10T03:00:00Z',
-  10: '2026-11-17T03:00:00Z',
-  11: '2026-11-24T03:00:00Z',
-  12: '2026-12-01T03:00:00Z',
-  13: '2026-12-08T03:00:00Z',
-  14: '2026-12-15T03:00:00Z',
-  15: '2026-12-22T03:00:00Z',
-  16: '2026-12-29T03:00:00Z',
-  17: '2027-01-06T03:00:00Z',
-  18: '2027-01-11T03:00:00Z',
-  // ── Postseason ──
-  19: '2027-01-19T05:00:00Z',  // Wild Card weekend end
-  20: '2027-01-26T05:00:00Z',  // Divisional weekend end
-  21: '2027-02-02T05:00:00Z',  // Conference Championships end
-  22: '2027-02-09T05:00:00Z',  // Super Bowl end
-}
-
-function getActiveWeek(): number {
-  const now = new Date()
-  // Before season starts → Week 1
-  if (now < new Date('2026-09-09T00:00:00Z')) return 1
-  for (let w = 1; w <= 22; w++) {
-    const end = WEEK_END_DATES[w] ? new Date(WEEK_END_DATES[w]) : null
-    if (end && now < end) return w
-  }
-  return 22
-}
-
-function isGameLocked(gameDate: string | null, deadline: string | null, status?: string | null): boolean {
-  // Status is checked independently of time, as a backstop. Every
-  // existing check here only ever compared clock time to kickoff or
-  // deadline — meaning a game that's already final or in progress
-  // could still show as pickable if its stored kickoff time somehow
-  // sits in the future (a bad sync, clock skew, or in testing, a
-  // manually-finalized game). A pick should never be editable once
-  // the outcome is actually known, independent of what the clock says.
-  if (status === 'final' || status === 'in_progress') return true
-  if (!gameDate) return false
-  const now = new Date()
-  // If commissioner set a custom deadline, use whichever is earlier
-  const kickoff = new Date(gameDate)
-  if (deadline) {
-    const dl = new Date(deadline)
-    return now >= dl || now >= kickoff
-  }
-  return now >= kickoff
-}
-
 function formatDeadline(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
@@ -133,7 +74,7 @@ export function PickEmView() {
   const isCommissioner = myMembership?.is_commissioner
   const location = useLocation()
 
-  const activeWeek = getActiveWeek()
+  const activeWeek = currentPickemWeek()
   const [week, setWeek] = useState(activeWeek)
   const [weekDropdownOpen, setWeekDropdownOpen] = useState(false)
   // Honors a deep link from the global Pick'Em winner popup ("Full
@@ -698,8 +639,8 @@ export function PickEmView() {
                   <span className="text-field-500 text-[12px] font-bold uppercase tracking-wider">Regular Season</span>
                 </div>
                 {Array.from({ length: 18 }, (_, i) => i + 1).map(w => {
-                  const endDate = WEEK_END_DATES[w]
-                  const isOver = endDate ? new Date() >= new Date(endDate) : false
+                  const endDate = PICKEM_WEEK_ENDS[w]
+                  const isOver = endDate ? new Date() >= endDate : false
                   const isCurrent = w === activeWeek
                   return (
                     <button
@@ -729,8 +670,8 @@ export function PickEmView() {
                   { w: 21, label: 'Conference Champ.' },
                   { w: 22, label: 'Super Bowl' },
                 ].map(({ w, label }) => {
-                  const endDate = WEEK_END_DATES[w]
-                  const isOver = endDate ? new Date() >= new Date(endDate) : false
+                  const endDate = PICKEM_WEEK_ENDS[w]
+                  const isOver = endDate ? new Date() >= endDate : false
                   const isCurrent = w === activeWeek
                   return (
                     <button
