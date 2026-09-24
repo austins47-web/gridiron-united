@@ -169,11 +169,10 @@ function WeekStatsGrid({ stats }: { stats: WeekStats }) {
     const who = underdog.picks === 0 ? 'Nobody picked them'
       : underdog.picks <= 2 ? `Only ${underdog.backers.join(' & ')} picked them`
       : `Picked by ${underdog.picks} of ${underdog.pickers}`
-    const result = underdog.won == null || underdog.teamScore == null || underdog.oppScore == null ? ''
-      : ` · ${underdog.won ? 'won' : 'lost'} ${underdog.teamScore}–${underdog.oppScore}`
     tiles.push({
       icon: Dog, label: 'Underdog', logo: logo(underdog.team),
-      headline: underdog.team, detail: who + result,
+      headline: underdog.team,
+      detail: `${who} · won ${underdog.teamScore}–${underdog.oppScore}`,
     })
   }
 

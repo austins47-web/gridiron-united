@@ -175,8 +175,8 @@ export function computeWeek(
 export interface WeekStats {
   /** The game the most people got wrong: `loser` is who they backed. */
   upset: { winner: string; loser: string; winnerScore: number; loserScore: number; wrong: number; pickers: number } | null
-  /** The least-picked team of the week, and whether it paid off. */
-  underdog: { team: string; opponent: string; picks: number; pickers: number; won: boolean | null; teamScore: number | null; oppScore: number | null; backers: string[] } | null
+  /** The least-picked team that won, and who believed in it. */
+  underdog: { team: string; opponent: string; picks: number; pickers: number; teamScore: number; oppScore: number; backers: string[] } | null
   /** The winning team the league leaned on hardest. */
   lock: { team: string; picks: number; pickers: number } | null
   /** The game that divided the league most evenly. */
@@ -234,29 +234,27 @@ export function computeWeekStats(games: Game[], picks: Pick[], rows: WeekRow[]):
     }
   }
 
-  // Underdog: the fewest picks of any team playing. Among ties, a
-  // team that actually won is the better story, then the most
-  // lopsided matchup (the crowd piled on the other side).
+  // Underdog: the winner the fewest people picked. Only winners —
+  // plenty of teams nobody picks lose, which isn't a story. Among
+  // ties, the most lopsided matchup (the crowd piled on the loser).
   let underdog: WeekStats['underdog'] = null
   let underdogOppPicks = -1
   for (const t of tallies) {
-    for (const team of [t.g.away_team, t.g.home_team]) {
-      const opponent = team === t.g.home_team ? t.g.away_team : t.g.home_team
-      const mine = side(t, team)
-      const oppPicks = side(t, opponent).length
-      const won = t.winner == null ? null : t.winner === team
-      const better = !underdog
-        || mine.length < underdog.picks
-        || (mine.length === underdog.picks && won === true && underdog.won !== true)
-        || (mine.length === underdog.picks && won === underdog.won && oppPicks > underdogOppPicks)
-      if (better) {
-        underdog = {
-          team, opponent, picks: mine.length, pickers: t.pickers, won,
-          teamScore: scoreOf(t.g, team), oppScore: scoreOf(t.g, opponent),
-          backers: mine.map(p => nameById.get(p.user_id) ?? 'Someone'),
-        }
-        underdogOppPicks = oppPicks
+    if (!t.winner) continue
+    const team = t.winner
+    const opponent = team === t.g.home_team ? t.g.away_team : t.g.home_team
+    const mine = side(t, team)
+    const oppPicks = side(t, opponent).length
+    const better = !underdog
+      || mine.length < underdog.picks
+      || (mine.length === underdog.picks && oppPicks > underdogOppPicks)
+    if (better) {
+      underdog = {
+        team, opponent, picks: mine.length, pickers: t.pickers,
+        teamScore: scoreOf(t.g, team) ?? 0, oppScore: scoreOf(t.g, opponent) ?? 0,
+        backers: mine.map(p => nameById.get(p.user_id) ?? 'Someone'),
       }
+      underdogOppPicks = oppPicks
     }
   }
 
