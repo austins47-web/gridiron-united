@@ -5,6 +5,8 @@ import { useMyLeagues } from './useLeague'
 import type { LeagueMember } from '@/types/database'
 import { CURRENT_SEASON } from '@/lib/season'
 import { computeStandings } from '@/components/pickem/standings'
+import { resolveWeekDeadline } from '@/lib/deadline'
+import { currentPickemWeek, isGameLocked } from '@/lib/pickemWeek'
 
 export type ActionKind =
   | 'on_the_clock' | 'draft_live' | 'draft_soon'
@@ -56,7 +58,7 @@ export function useHomeData() {
     enabled: !!user && leagueIds.length > 0,
     staleTime: 60_000,
     queryFn: async () => {
-      const [tradesRes, draftsRes, matchupsRes, membersRes, rostersRes, picksRes, gamesRes] =
+      const [tradesRes, draftsRes, matchupsRes, membersRes, rostersRes, picksRes, gamesRes, weekSettingsRes] =
         await Promise.all([
           // Pending trade offers addressed to me
           supabase
@@ -109,6 +111,14 @@ export function useHomeData() {
             .from('nfl_games')
             .select('id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker')
             .eq('season', CURRENT_SEASON),
+
+          // Per-week Pick'Em deadline overrides, so the picks-due
+          // nudge locks at the same moment the Pick'Em page does.
+          supabase
+            .from('pickem_week_settings')
+            .select('league_id, week, pick_deadline')
+            .in('league_id', leagueIds)
+            .eq('season', CURRENT_SEASON),
         ])
 
       return {
@@ -119,6 +129,7 @@ export function useHomeData() {
         rosters:  rostersRes.data ?? [],
         picks:    picksRes.data ?? [],
         games:    gamesRes.data ?? [],
+        weekSettings: weekSettingsRes.data ?? [],
       }
     },
   })
@@ -206,10 +217,30 @@ export function useHomeData() {
     }
 
     // 3. Pick'Em picks not submitted for the current week
+    //
+    // The week comes from the same Tuesday-night clock the Pick'Em
+    // page opens on — league.current_week is never written, so it
+    // read Week 1 all season. Only nags while something in that
+    // week can still be picked, so the finished week that stays
+    // current through Tuesday doesn't ask for picks it can't take.
     if (isPickem) {
-      const wk = league.current_week ?? 1
+      const wk = currentPickemWeek()
+      const wkGames = (d?.games ?? []).filter(g => g.week === wk)
+      const kickoffs = wkGames
+        .map(g => (g.game_date ? new Date(g.game_date).getTime() : NaN))
+        .filter(t => Number.isFinite(t))
+      const { deadline } = resolveWeekDeadline({
+        weekOverride: d?.weekSettings.find(s => s.league_id === league.id && s.week === wk)?.pick_deadline ?? null,
+        lockType:     (league as any).pick_lock_type,
+        day:          (league as any).pick_deadline_day,
+        time:         (league as any).pick_deadline_time,
+        tz:           (league as any).pick_deadline_tz,
+        firstKickoff: kickoffs.length ? new Date(Math.min(...kickoffs)) : null,
+      })
+      const deadlineIso = deadline ? deadline.toISOString() : null
+      const stillOpen = wkGames.some(g => !isGameLocked(g.game_date, deadlineIso, g.status))
       const made = d?.picks.filter(p => p.league_id === league.id && p.week === wk).length ?? 0
-      if (made === 0) {
+      if (stillOpen && made === 0) {
         actions.push({
           id: `picks-${league.id}`, kind: 'picks_due', priority: 1,
           leagueId: league.id, leagueName: league.name,

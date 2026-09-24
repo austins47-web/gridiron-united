@@ -216,21 +216,62 @@ serve(async (req) => {
     const emailOf = (userId: string): string | null =>
       emailById.get(userId) ?? null
 
+    // ── Pick'Em schedule, for working out which week is which ──
+    // league.current_week is never written, so it read Week 1 all
+    // season. Pick'Em weeks are derived from the schedule instead.
+    const pickemSeasons = [...new Set(
+      (leagues ?? []).filter(l => l.league_type === 'pickem').map(l => l.season ?? 2026),
+    )]
+    const [{ data: nflGames }, { data: weekSettings }] = pickemSeasons.length
+      ? await Promise.all([
+          supabase.from('nfl_games').select('season, week, game_date, status').in('season', pickemSeasons),
+          supabase.from('pickem_week_settings').select('league_id, season, week, pick_deadline').in('season', pickemSeasons),
+        ])
+      : [{ data: [] }, { data: [] }]
+
+    // season -> week -> games
+    const scheduleBySeason = new Map<number, Map<number, SchedGame[]>>()
+    for (const g of nflGames ?? []) {
+      if (!g.game_date) continue
+      const weeks = scheduleBySeason.get(g.season) ?? new Map<number, SchedGame[]>()
+      scheduleBySeason.set(g.season, weeks)
+      weeks.set(g.week, [...(weeks.get(g.week) ?? []), g])
+    }
+
     // ══ 1. PICK'EM DEADLINES ═════════════════════════════════
     // Only for leagues on a fixed weekly deadline.
+    //
+    // A reminder is about the week its deadline locks — resolved the
+    // same way the Pick'Em page resolves a week's deadline (per-week
+    // override, else the league rule anchored to that week's first
+    // kickoff). Not the "current" week: a 48h reminder for a Thursday
+    // deadline goes out Tuesday, before the Pick'Em page rolls over.
     for (const lg of leagues ?? []) {
       if (lg.league_type !== 'pickem') continue
       if (lg.pick_lock_type !== 'deadline') continue
       if (lg.pick_deadline_day == null || !lg.pick_deadline_time) continue
 
       const lgTz = lg.pick_deadline_tz || 'UTC'
-      const next = nextWeeklyDeadline(lg.pick_deadline_day, lg.pick_deadline_time, lgTz)
+      const season = lg.season ?? 2026
+      const overrides = new Map<number, string>(
+        (weekSettings ?? [])
+          .filter(s => s.league_id === lg.id && s.season === season && s.pick_deadline)
+          .map(s => [s.week, s.pick_deadline]),
+      )
+      const upcoming = nextPickemDeadline(
+        scheduleBySeason.get(season), overrides,
+        lg.pick_deadline_day, lg.pick_deadline_time, lgTz, now,
+      )
+      // No scheduled week with a deadline still ahead (offseason,
+      // or the schedule hasn't synced that far yet)
+      if (!upcoming) continue
+      const { week: wk, deadline: next } = upcoming
       const hrs = hoursUntil(next.toISOString())
-      const wk = lg.current_week ?? 1
 
       nearMisses.push({
         league: lg.name,
         type: 'pickem_deadline',
+        week: wk,
         deadlineUtc: next.toISOString(),
         deadlineLocal: formatInZone(next, lgTz),
         tz: lgTz,
@@ -246,7 +287,7 @@ serve(async (req) => {
         .select('user_id')
         .eq('league_id', lg.id)
         .eq('week', wk)
-        .eq('season', lg.season ?? 2026)
+        .eq('season', season)
       const picked = new Set((picks ?? []).map(p => p.user_id))
 
       for (const m of lgMembers) {
@@ -262,7 +303,7 @@ serve(async (req) => {
             userId: m.user_id, email,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'pickem_deadline',
-            dedupeKey: `pickem:${lg.id}:${lg.season ?? 2026}:w${wk}:${tag}`,
+            dedupeKey: `pickem:${lg.id}:${season}:w${wk}:${tag}`,
             subject: `Week ${wk} picks due in ${Math.round(hrs)}h - ${lg.name}`,
             heading: `Your Week ${wk} picks aren't in`,
             body: `Picks lock ${formatInZone(next, lgTz)} — about ${Math.round(hrs)} hours from now. Get them in before then.`,
@@ -396,11 +437,22 @@ serve(async (req) => {
       }
     }
 
-    // ══ 5. WEEKLY RECAP — Monday morning ═════════════════════
+    // ══ 5. WEEKLY RECAP — Tuesday morning ════════════════════
     if (dow === 2 && utcHour === 14) {   // Tuesday ~9am ET
       for (const lg of leagues ?? []) {
         if (lg.draft_status === 'pre_draft') continue
-        const wk = lg.current_week ?? 1
+        // Pick'Em recaps the week that just wrapped, from the
+        // schedule — and skips a Tuesday with no freshly finished
+        // week (preseason, offseason) rather than recapping Week 1.
+        // The season is in its key so next season's Week N isn't
+        // mistaken for this one's.
+        const isPickem = lg.league_type === 'pickem'
+        const season = lg.season ?? 2026
+        const wk = isPickem
+          ? justFinishedWeek(scheduleBySeason.get(season), now)
+          : (lg.current_week ?? 1)
+        if (wk == null) continue
+        const recapKey = isPickem ? `recap:${lg.id}:${season}:w${wk}` : `recap:${lg.id}:w${wk}`
         const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
 
         for (const m of lgMembers) {
@@ -413,7 +465,7 @@ serve(async (req) => {
             userId: m.user_id, email,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'weekly_recap',
-            dedupeKey: `recap:${lg.id}:w${wk}`,
+            dedupeKey: recapKey,
             subject: `Week ${wk} wrapped - ${lg.name}`,
             heading: `Week ${wk} is in the books`,
             body: 'See where you landed in the standings and how the rest of the league did.',
@@ -526,19 +578,71 @@ function partsInZone(date: Date, tz: string) {
   }
 }
 
-/** Next occurrence of `day` at `time` in `tz`, as a UTC Date. */
-function nextWeeklyDeadline(day: number, time: string, tz = 'UTC'): Date {
+/**
+ * The occurrence of a weekly rule that applies to a week: the latest
+ * one at or before that week's first kickoff, looking back at most 6
+ * days. A copy of weeklyDeadlineForWeek in src/lib/deadline.ts (see
+ * there for why 6) — keep the two in step, or reminders and the
+ * Pick'Em page will disagree about when a week locks.
+ */
+function weeklyDeadlineForWeek(
+  firstKickoff: Date, day: number, time: string, tz: string,
+): Date | null {
   const [h, m] = time.split(':').map(Number)
-  const from = new Date()
-  for (let add = 0; add <= 8; add++) {
-    const probe = new Date(from.getTime() + add * 86400_000)
+  for (let back = 0; back <= 6; back++) {
+    const probe = new Date(firstKickoff.getTime() - back * 86400_000)
     const pp = partsInZone(probe, tz)
     if (pp.weekday !== day) continue
     const candidate = zonedTimeToUtc(pp.year, pp.month, pp.day, h, m, tz)
-    if (candidate.getTime() > from.getTime()) return candidate
+    if (candidate.getTime() <= firstKickoff.getTime()) return candidate
   }
-  const pp = partsInZone(from, tz)
-  return zonedTimeToUtc(pp.year, pp.month, pp.day + 7, h, m, tz)
+  return null
+}
+
+// ══ Pick'Em weeks, from the schedule ═════════════════════════
+interface SchedGame { week: number; game_date: string; status: string | null }
+
+/**
+ * The next Pick'Em deadline still ahead of `now`, and the week it
+ * locks. Per-week override first, else the league rule — the same
+ * precedence as resolveWeekDeadline in src/lib/deadline.ts.
+ */
+function nextPickemDeadline(
+  weeks: Map<number, SchedGame[]> | undefined,
+  overrides: Map<number, string>,
+  day: number, time: string, tz: string, now: Date,
+): { week: number; deadline: Date } | null {
+  let best: { week: number; deadline: Date } | null = null
+  for (const [week, games] of weeks ?? []) {
+    const override = overrides.get(week)
+    const firstKickoff = new Date(Math.min(...games.map(g => new Date(g.game_date).getTime())))
+    const deadline = override
+      ? new Date(override)
+      : weeklyDeadlineForWeek(firstKickoff, day, time, tz)
+    if (!deadline || deadline.getTime() <= now.getTime()) continue
+    if (!best || deadline.getTime() < best.deadline.getTime()) best = { week, deadline }
+  }
+  return best
+}
+
+/**
+ * The week that just wrapped: every game final (the isWeekComplete
+ * rule from src/components/pickem/standings.ts), and the last one
+ * kicked off within the past 4 days — so an offseason Tuesday never
+ * recaps a months-old week.
+ */
+function justFinishedWeek(weeks: Map<number, SchedGame[]> | undefined, now: Date): number | null {
+  const isFinal = (g: SchedGame) =>
+    (g.status ?? '').toLowerCase().includes('final') ||
+    (g.status ?? '').toLowerCase() === 'post'
+  let best: number | null = null
+  for (const [week, games] of weeks ?? []) {
+    if (games.length === 0 || !games.every(isFinal)) continue
+    const sinceLastKickoff = now.getTime() - Math.max(...games.map(g => new Date(g.game_date).getTime()))
+    if (sinceLastKickoff < 0 || sinceLastKickoff > 4 * 24 * HOUR) continue
+    if (best == null || week > best) best = week
+  }
+  return best
 }
 
 /** Render an instant in a zone, e.g. 'Wed, Aug 19, 5:00 PM MDT'. */
