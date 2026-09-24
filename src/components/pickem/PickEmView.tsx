@@ -11,6 +11,7 @@ import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, isWeekComplete, tiebreakerTotal, isFinal, winnerOf,
+  type WeekRow,
 } from './standings'
 import { WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
@@ -1634,15 +1635,19 @@ function PicksBoard({
   games: any[]
   allPicks: any[]
   leagueMembers: any[]
-  weekRows: { userId: string; correct: number; played: number }[]
+  weekRows: WeekRow[]
   userId: string | undefined
   deadline: string | null
   week: number
   onWeekChange: (week: number) => void
 }) {
   const now = new Date()
+  // Kickoff order, with the tiebreaker last among games sharing a
+  // kickoff (Week 18's all list one placeholder time), so the
+  // tiebreaker is always the board's final column.
   const sortedGames = [...games].sort(
     (a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime()
+      || Number(!!a.is_tiebreaker) - Number(!!b.is_tiebreaker)
   )
 
   // Same reveal rule as the Results tab: your own picks are always
@@ -1707,6 +1712,22 @@ function PicksBoard({
 
   const ptsByUser = new Map(weekRows.map(r => [r.userId, r]))
 
+  // ── Tiebreaker, right in the tiebreaker game's column ────────
+  // Each member's guess sits under their pick for that game, with how
+  // far off it was once the game is final. Both come from weekRows —
+  // the same guess and distance computeWeek ranks the rows by — so
+  // the board's order and this column can never disagree.
+  //
+  // When 2+ people share the most correct picks, the tiebreaker is
+  // what decided the week, so the winning guess is highlighted.
+  const tbFinal = sortedGames.some(g => g.is_tiebreaker && isFinal(g))
+  const submitted = weekRows.filter(r => r.submitted)
+  const topCorrect = submitted[0]?.correct
+  const tiedAtTop = submitted.filter(r => r.correct === topCorrect)
+  const tbWinningDiff = tbFinal && tiedAtTop.length > 1 ? tiedAtTop[0].tiebreakerDiff : null
+  const wonTiebreaker = (r: WeekRow | undefined) =>
+    !!r && tbWinningDiff != null && r.submitted && r.correct === topCorrect && r.tiebreakerDiff === tbWinningDiff
+
   // Shared with the Pts column (via weekRows/computeWeek) — a live
   // game's leader shows up here too, not just once it's final, so a
   // cell's check/X mark never disagrees with the live point total in
@@ -1728,9 +1749,14 @@ function PicksBoard({
               const isFinalGame = game.status === 'final'
               const isLive = game.status === 'in_progress'
               return (
-                <th key={game.id} className="px-2 py-2 text-center min-w-[64px] border-l border-field-700/60">
+                <th key={game.id} className={clsx(
+                  'px-2 py-2 text-center border-l border-field-700/60',
+                  game.is_tiebreaker ? 'min-w-[84px] bg-gold/[0.05]' : 'min-w-[64px]',
+                )}>
                   {game.is_tiebreaker && (
-                    <div className="text-[9px] font-bold text-gold uppercase tracking-wider mb-0.5">TB</div>
+                    <div className="text-[9px] font-bold text-gold uppercase tracking-wider mb-0.5 flex items-center justify-center gap-0.5">
+                      <Target className="w-2.5 h-2.5" /> Tiebreaker
+                    </div>
                   )}
                   <div className="flex flex-col items-center gap-0.5">
                     <div className="flex items-center gap-1">
@@ -1746,6 +1772,12 @@ function PicksBoard({
                       </span>
                     </div>
                   </div>
+                  {/* The number every guess below is measured against */}
+                  {game.is_tiebreaker && (isFinalGame || isLive) && (
+                    <div className="text-[9px] font-bold text-gold uppercase tracking-wider mt-0.5">
+                      Total {(game.home_score ?? 0) + (game.away_score ?? 0)}
+                    </div>
+                  )}
                   {isLive && <div className="text-[9px] font-bold text-gold mt-0.5">LIVE</div>}
                 </th>
               )
@@ -1788,9 +1820,13 @@ function PicksBoard({
                   const isCorrect = winner != null && picked === winner
                   const isWrong = winner != null && !!picked && picked !== winner
                   const logo = picked ? teamLogoUrl({ abbr: picked }, 'NFL') : null
+                  const tbWon = game.is_tiebreaker && wonTiebreaker(pts)
 
                   return (
-                    <td key={game.id} className="text-center px-2 py-2 border-l border-field-700/60">
+                    <td key={game.id} className={clsx(
+                      'text-center px-2 py-2 border-l border-field-700/60',
+                      game.is_tiebreaker && 'bg-gold/[0.05]',
+                    )}>
                       {!visible ? (
                         <Lock className="w-3 h-3 text-field-600 mx-auto" />
                       ) : !picked ? (
@@ -1804,6 +1840,29 @@ function PicksBoard({
                           <span className="font-cond font-black text-[11px]">{picked}</span>
                           {isCorrect && <Check className="w-3 h-3" />}
                           {isWrong && <X className="w-3 h-3" />}
+                        </div>
+                      )}
+                      {/* Tiebreaker guess, under the pick — hidden on the
+                          same reveal rule as the pick itself */}
+                      {visible && picked && game.is_tiebreaker && (
+                        <div
+                          className={clsx(
+                            'mt-1 mx-auto w-fit flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap',
+                            tbWon ? 'bg-gold/15 text-gold' : 'text-field-400',
+                          )}
+                          title={tbWon ? 'Closest guess among those tied for first — won the tiebreaker' : 'Tiebreaker guess: combined total points'}
+                        >
+                          <Target className="w-3 h-3 shrink-0" />
+                          {pts?.tiebreakerGuess == null ? (
+                            <span className="text-field-600 text-[10px] uppercase font-bold tracking-wider">No guess</span>
+                          ) : (
+                            <>
+                              <span className={clsx('font-cond font-black text-[13px]', tbWon ? 'text-gold' : 'text-white')}>
+                                {pts.tiebreakerGuess}
+                              </span>
+                              {pts.tiebreakerDiff != null && <span>±{pts.tiebreakerDiff}</span>}
+                            </>
+                          )}
                         </div>
                       )}
                     </td>
