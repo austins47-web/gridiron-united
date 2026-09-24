@@ -19,7 +19,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { isFinal, isVoid } from '../_shared/pickemCore.ts'
+import { isFinal, isVoid, computeWeek, computeWeekStats, tiebreakerTotal, type Game } from '../_shared/pickemCore.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -225,7 +225,7 @@ serve(async (req) => {
     )]
     const [{ data: nflGames }, { data: weekSettings }] = pickemSeasons.length
       ? await Promise.all([
-          supabase.from('nfl_games').select('id, season, week, game_date, status, is_tiebreaker').in('season', pickemSeasons),
+          supabase.from('nfl_games').select('id, season, week, game_date, status, is_tiebreaker, home_team, away_team, home_score, away_score').in('season', pickemSeasons),
           supabase.from('pickem_week_settings').select('league_id, season, week, pick_deadline').in('season', pickemSeasons),
         ])
       : [{ data: [] }, { data: [] }]
@@ -508,6 +508,70 @@ serve(async (req) => {
       }
     }
 
+    // ══ 6. PICK'EM WEEK FINAL → LEAGUE CHAT ══════════════════
+    // Posts the winner and Week Stats to each Pick'Em league's chat as
+    // soon as a week goes final — every pass, not just on recap day.
+    // Only for a week whose last game kicked off in the past 48h, so a
+    // deploy or a brand-new league doesn't backfill old weeks, and
+    // never twice: the season/week prefix is checked first. Rendered
+    // by PickemWeekFinalCard in the app.
+    const chatPosts: { league: string; week: number }[] = []
+    for (const lg of leagues ?? []) {
+      if (lg.league_type !== 'pickem') continue
+      const season = lg.season ?? 2026
+      const weeks = scheduleBySeason.get(season)
+      const wk = justFinishedWeek(weeks, now, 48 * HOUR)
+      if (wk == null) continue
+
+      const prefix = `PICKEM_WEEK_FINAL:${season}:${wk}:`
+      const { data: already } = await supabase
+        .from('league_messages')
+        .select('id')
+        .eq('league_id', lg.id)
+        .eq('is_system', true)
+        .like('message', `${prefix}%`)
+        .limit(1)
+      if (already && already.length > 0) continue
+
+      const { data: wkPicks } = await supabase
+        .from('pickem_picks')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score')
+        .eq('league_id', lg.id)
+        .eq('season', season)
+        .eq('week', wk)
+      const wkMembers = (members ?? [])
+        .filter(m => m.league_id === lg.id)
+        .map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
+      const wkGames = weeks?.get(wk) ?? []
+
+      // Same winner rule as the app's WeekRecap: most correct, then
+      // closest tiebreaker guess; an exact tie on both is shared.
+      const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
+      const played = rows.filter(r => r.submitted)
+      if (played.length === 0) continue
+      const top = played[0]
+      const winners = played.filter(r =>
+        r.correct === top.correct && (r.tiebreakerDiff ?? Infinity) === (top.tiebreakerDiff ?? Infinity))
+
+      const payload = {
+        season, week: wk,
+        winners: winners.map(w => w.name),
+        correct: top.correct,
+        total: Math.max(...played.map(r => r.played), 0),
+        decidedByTiebreak: played.filter(r => r.correct === top.correct).length > winners.length,
+        tiebreakerTotal: tiebreakerTotal(wkGames),
+        winnerGuess: top.tiebreakerGuess,
+        stats: computeWeekStats(wkGames, wkPicks ?? [], rows),
+      }
+      chatPosts.push({ league: lg.name, week: wk })
+      if (!dryRun) {
+        await supabase.from('league_messages').insert({
+          league_id: lg.id, user_id: null, is_system: true,
+          message: prefix + JSON.stringify(payload),
+        })
+      }
+    }
+
     // ══ SEND ═════════════════════════════════════════════════
     let sent = 0, skipped = 0, failed = 0
     const results: any[] = []
@@ -550,7 +614,8 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       ok: true, dryRun, considered: reminders.length, sent, skipped, failed,
-      ...(dryRun ? { preview: results, nearMisses } : {}),
+      chatPosts: chatPosts.length,
+      ...(dryRun ? { preview: results, nearMisses, chatPreview: chatPosts } : {}),
     }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
 
   } catch (e) {
@@ -633,7 +698,8 @@ function weeklyDeadlineForWeek(
 }
 
 // ══ Pick'Em weeks, from the schedule ═════════════════════════
-interface SchedGame { id: string; week: number; game_date: string; status: string | null; is_tiebreaker: boolean }
+/** A schedule row — the full shared Game, so the Pick'Em core can score it. */
+type SchedGame = Game
 
 /** A moment picks lock that a reminder can count down to. */
 interface PickLock {
@@ -757,15 +823,15 @@ function nextPickemDeadline(
 /**
  * The week that just wrapped: every game final (the schedule already
  * leaves postponed games out, matching isWeekComplete), and the last one
- * kicked off within the past 4 days — so an offseason Tuesday never
- * recaps a months-old week.
+ * kicked off within `maxAgeMs` (4 days by default) — so an offseason
+ * Tuesday never recaps a months-old week.
  */
-function justFinishedWeek(weeks: Map<number, SchedGame[]> | undefined, now: Date): number | null {
+function justFinishedWeek(weeks: Map<number, SchedGame[]> | undefined, now: Date, maxAgeMs = 4 * 24 * HOUR): number | null {
   let best: number | null = null
   for (const [week, games] of weeks ?? []) {
     if (games.length === 0 || !games.every(isFinal)) continue
     const sinceLastKickoff = now.getTime() - Math.max(...games.map(g => new Date(g.game_date).getTime()))
-    if (sinceLastKickoff < 0 || sinceLastKickoff > 4 * 24 * HOUR) continue
+    if (sinceLastKickoff < 0 || sinceLastKickoff > maxAgeMs) continue
     if (best == null || week > best) best = week
   }
   return best

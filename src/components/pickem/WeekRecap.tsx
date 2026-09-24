@@ -1,7 +1,7 @@
-import { Trophy, Crown, Target, Flame, Medal, Zap, Dog, Lock, Scale, Footprints, BarChart3, type LucideIcon } from 'lucide-react'
+import { Trophy, Crown, Target, Flame, Medal } from 'lucide-react'
 import clsx from 'clsx'
-import { teamLogoUrl } from '@/components/teams/teamIds'
 import { computeWeekStats, type WeekRow, type WeekStats, type Game, type Pick } from './standings'
+import { buildStatTiles, type StatTileData } from './weekStatTiles'
 
 /**
  * The end-of-week winner's post.
@@ -153,63 +153,7 @@ export function WeekRecap({
 // doesn't produce one (nobody picked wrong, too few players, …).
 
 function WeekStatsGrid({ stats }: { stats: WeekStats }) {
-  const { upset, underdog, lock, split, loneWolf, league } = stats
-  const logo = (abbr: string) => teamLogoUrl({ abbr }, 'NFL')
-  const tiles: StatTileProps[] = []
-
-  if (upset) {
-    tiles.push({
-      icon: Zap, label: 'Biggest Upset', logo: logo(upset.winner),
-      headline: `${upset.winner} over ${upset.loser}`,
-      detail: `${upset.wrong === upset.pickers && upset.pickers > 1 ? `All ${upset.pickers}` : `${upset.wrong} of ${upset.pickers}`} picked ${upset.loser} · ${upset.winnerScore}–${upset.loserScore}`,
-    })
-  }
-
-  if (underdog) {
-    const who = underdog.picks === 0 ? 'Nobody picked them'
-      : underdog.picks <= 2 ? `Only ${underdog.backers.join(' & ')} picked them`
-      : `Picked by ${underdog.picks} of ${underdog.pickers}`
-    tiles.push({
-      icon: Dog, label: 'Underdog', logo: logo(underdog.team),
-      headline: underdog.team,
-      detail: `${who} · won ${underdog.teamScore}–${underdog.oppScore}`,
-    })
-  }
-
-  if (lock) {
-    tiles.push({
-      icon: Lock, label: 'Lock of the Week', logo: logo(lock.team),
-      headline: lock.team,
-      detail: lock.picks === lock.pickers && lock.pickers > 1
-        ? `Unanimous — all ${lock.pickers} had them`
-        : `${lock.picks} of ${lock.pickers} had them`,
-    })
-  }
-
-  if (split) {
-    tiles.push({
-      icon: Scale, label: 'Split Decision',
-      headline: `${split.away} vs ${split.home}`,
-      detail: `League split ${split.awayPicks}–${split.homePicks} · ${split.winner ? `${split.winner} won` : 'ended in a tie'}`,
-    })
-  }
-
-  if (loneWolf) {
-    tiles.push({
-      icon: Footprints, label: 'Lone Wolf',
-      headline: loneWolf.name,
-      detail: `${loneWolf.against} pick${loneWolf.against === 1 ? '' : 's'} against the crowd · ${loneWolf.hits === 0 ? 'none' : loneWolf.hits} hit`,
-    })
-  }
-
-  if (league.played > 0) {
-    tiles.push({
-      icon: BarChart3, label: 'League Record',
-      headline: `${league.correct}–${league.played - league.correct}`,
-      detail: `${Math.round((league.correct / league.played) * 100)}% of the league's picks were right`,
-    })
-  }
-
+  const tiles = buildStatTiles(stats)
   if (tiles.length === 0) return null
 
   return (
@@ -224,15 +168,7 @@ function WeekStatsGrid({ stats }: { stats: WeekStats }) {
   )
 }
 
-interface StatTileProps {
-  icon: LucideIcon
-  label: string
-  logo?: string | null
-  headline: string
-  detail: string
-}
-
-function StatTile({ icon: Icon, label, logo, headline, detail }: StatTileProps) {
+export function StatTile({ icon: Icon, label, logo, headline, detail }: StatTileData) {
   return (
     <div className="rounded-lg bg-field-900/50 border border-field-700/60 px-3 py-2.5 min-w-0">
       <div className="flex items-center gap-1.5 font-cond font-bold text-[10px] uppercase tracking-[0.16em] text-field-400">

@@ -9,6 +9,7 @@ import { Send, MessageSquare, Image as ImageIcon, Search, Loader2, ArrowLeftRigh
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { UserProfileModal } from './UserProfileModal'
+import { PickemWeekFinalCard, PICKEM_WEEK_FINAL_PATTERN, type PickemWeekFinalPayload } from './PickemWeekFinalCard'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -148,6 +149,14 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
           </div>
         </div>
       )
+    } catch { /* fall through */ }
+  }
+
+  // Pick'Em week final — posted by send-reminders when a week wraps
+  if (msg.is_system && PICKEM_WEEK_FINAL_PATTERN.test(msg.message)) {
+    try {
+      const data = JSON.parse(msg.message.replace(PICKEM_WEEK_FINAL_PATTERN, '')) as PickemWeekFinalPayload
+      return <PickemWeekFinalCard data={data} timeLabel={formatTime(msg.created_at)} isNew={isNew} />
     } catch { /* fall through */ }
   }
 
