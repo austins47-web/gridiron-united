@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { resolveWeekDeadline } from '@/lib/deadline'
-import { PICKEM_WEEK_ENDS, currentPickemWeek, isGameLocked } from '@/lib/pickemWeek'
+import { PICKEM_WEEK_ENDS, currentPickemWeek, isGameLocked, livePollInterval } from '@/lib/pickemWeek'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
@@ -144,7 +144,7 @@ export function PickEmView() {
       if (error) throw error
       return data ?? []
     },
-    refetchInterval: 20_000,
+    refetchInterval: (q) => livePollInterval(q.state.data as any, 20_000),
   })
 
   // Only meaningful once real games are loaded for the week — an
@@ -212,7 +212,8 @@ export function PickEmView() {
       if (error) throw error
       return data ?? []
     },
-    refetchInterval: 30_000, // refresh every 30s during live games
+    // Others' picks reveal at kickoff; nothing else changes them
+    refetchInterval: () => livePollInterval(games as any, 60_000),
   })
 
   // League members for display
@@ -244,7 +245,8 @@ export function PickEmView() {
     // Live scores feed live Pick'Em standings (see standings.ts) —
     // this needs to actually keep polling while the tab's open, same
     // as the per-week `games` query above.
-    refetchInterval: 20_000,
+    // Live scores move the standings — but only poll while games are on
+    refetchInterval: (q) => livePollInterval(q.state.data as any, 20_000),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('nfl_games')

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
+import { livePollInterval } from '@/lib/pickemWeek'
 import {
   computeWeek, computeStandings, isWeekComplete, tiebreakerTotal,
   type WeekRow, type StandingRow, type Game, type Pick, type Member,
@@ -39,8 +40,10 @@ export function usePickemWeekWinner(leagueId: string | null | undefined, enabled
   const { data: games = [] } = useQuery({
     queryKey: ['pickem-winner-games', CURRENT_SEASON],
     enabled: active,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    // This runs on every page for Pick'Em players — only poll while a
+    // week can actually be finishing (games on), not around the clock
+    staleTime: 5 * 60_000,
+    refetchInterval: (q) => livePollInterval(q.state.data, 60_000),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('nfl_games')
@@ -54,8 +57,8 @@ export function usePickemWeekWinner(leagueId: string | null | undefined, enabled
   const { data: picks = [] } = useQuery({
     queryKey: ['pickem-winner-picks', leagueId],
     enabled: active,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: () => livePollInterval(games, 60_000),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pickem_picks')

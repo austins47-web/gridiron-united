@@ -85,3 +85,34 @@ export function isGameLocked(gameDate: string | null, deadline: string | null, s
   }
   return now >= kickoff
 }
+
+/**
+ * How often to re-fetch data that only changes while games are on:
+ * fast while any game is live (or should have just kicked off — the
+ * score sync lags kickoff a little), otherwise asleep until about 15
+ * minutes before the next kickoff, checking at most every 30 minutes
+ * so a page left open still wakes up in time. Nothing left to play:
+ * no polling at all. React Query already pauses intervals in
+ * background tabs and refetches when you come back.
+ *
+ * These queries used to poll every 20–60s around the clock — the
+ * winner-popup check alone pulled the whole season's games and every
+ * pick in the league once a minute on every page.
+ */
+export function livePollInterval(
+  games: { game_date: string | null; status: string | null }[] | undefined,
+  liveMs: number,
+  now = Date.now(),
+): number | false {
+  let nextKickoff = Infinity
+  for (const g of games ?? []) {
+    const status = g.status ?? ''
+    if (status === 'in_progress') return liveMs
+    if (status === 'final' || status === 'postponed' || !g.game_date) continue
+    const kickoff = new Date(g.game_date).getTime()
+    if (kickoff <= now && now - kickoff < 6 * 3600_000) return liveMs
+    if (kickoff > now) nextKickoff = Math.min(nextKickoff, kickoff)
+  }
+  if (nextKickoff === Infinity) return false
+  return Math.min(Math.max(nextKickoff - now - 15 * 60_000, liveMs), 30 * 60_000)
+}
