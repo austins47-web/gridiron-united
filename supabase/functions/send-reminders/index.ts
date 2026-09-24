@@ -236,6 +236,7 @@ serve(async (req) => {
         notify_trades:          pick('notify_trades', true),
         notify_lineup:          pick('notify_lineup', true),
         notify_weekly_recap:    pick('notify_weekly_recap', true),
+        notify_live_alerts:     pick('notify_live_alerts', false),
         lead_primary:   Number(pick('lead_hours_primary', 24)),
         lead_secondary: Number(pick('lead_hours_secondary', 2)),
       }
@@ -254,7 +255,7 @@ serve(async (req) => {
     // Who to reach, and how, for one kind of event: null when they've
     // switched it off or have no way to receive it. Event toggles apply
     // to email and push alike; "email me" only governs email.
-    type NotifyKey = 'notify_pickem_deadline' | 'notify_draft' | 'notify_on_the_clock' | 'notify_trades' | 'notify_lineup' | 'notify_weekly_recap'
+    type NotifyKey = 'notify_pickem_deadline' | 'notify_draft' | 'notify_on_the_clock' | 'notify_trades' | 'notify_lineup' | 'notify_weekly_recap' | 'notify_live_alerts'
     const reach = (userId: string, leagueId: string, notify: NotifyKey) => {
       const pref = prefFor(userId, leagueId)
       if (!pref[notify]) return null
@@ -724,13 +725,113 @@ serve(async (req) => {
             userId: r.userId, email: null, push: true, pushOnly: true,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'pickem_alive',
-            dedupeKey: `alive:${lg.id}:${season}:w${wk}`,
+            // Clinching shares the live alert's key (section 8), so a
+            // player who clinched is only told once, whichever sees it first
+            dedupeKey: r.status === 'clinched'
+              ? `clinch:${lg.id}:${season}:w${wk}`
+              : `alive:${lg.id}:${season}:w${wk}`,
             subject: title, heading: title, body,
             pushTitle: title, pushBody: body,
             pushTag: `alive-${lg.id}-w${wk}`,
             pushTtlSec: 2 * 3600,
             ctaLabel: 'Standings', ctaPath: `/app/pickem?week=${wk}`,
           })
+        }
+      }
+    }
+
+    // ══ 8. PICK'EM LIVE ALERTS — opt-in, phone only ══════════
+    // While a week is being played (some games final, some not), for
+    // players who turned on "Live game alerts":
+    //   - lead:   you're now alone in first, counting finished games
+    //             only — told once per lead change (the last lead alert
+    //             in this league-week decides whether it's news)
+    //   - clinch: nobody can catch you now (computeWhoCanWin)
+    //   - tiebreaker sweat, only for players whose every path to
+    //     winning runs through the tiebreaker: once when the live
+    //     total gets within 7 of your guess, once when it passes it
+    // Every pass (15 min), so alerts land within a few minutes of the
+    // score sync picking up the result.
+    for (const lg of leagues ?? []) {
+      if (lg.league_type !== 'pickem') continue
+      const weeks = scheduleBySeason.get(season)
+      // The week being played: the first with both finished and
+      // unfinished games (earlier weeks are complete)
+      const live = [...(weeks ?? [])].sort((a, b) => a[0] - b[0])
+        .find(([, gs]) => gs.some(isFinal) && gs.some(g => !isFinal(g)))
+      if (!live) continue
+      const [wk, wkGames] = live
+
+      const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
+      // Nobody opted in with a phone — skip the picks query entirely
+      const optedIn = lgMembers.filter(m => reach(m.user_id, lg.id, 'notify_live_alerts')?.push)
+      if (optedIn.length === 0) continue
+
+      const { data: wkPicks } = await supabase
+        .from('pickem_picks')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score')
+        .eq('league_id', lg.id)
+        .eq('season', season)
+        .eq('week', wk)
+      const wkMembers = lgMembers.map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
+      const finals = wkGames.filter(isFinal)
+      const liveAlert = (userId: string, kind: string, dedupeKey: string, title: string, body: string) => {
+        if (!optedIn.some(m => m.user_id === userId)) return
+        reminders.push({
+          userId, email: null, push: true, pushOnly: true,
+          leagueId: lg.id, leagueName: lg.name,
+          eventType: `pickem_${kind}`,
+          dedupeKey, subject: title, heading: title, body,
+          pushTitle: title, pushBody: body,
+          pushTag: `${kind}-${lg.id}-w${wk}`,
+          pushTtlSec: 3600, urgent: true,
+          ctaLabel: 'Standings', ctaPath: `/app/pickem?week=${wk}`,
+        })
+      }
+
+      // Lead — finished games only, so a live game can't flip it back and forth
+      const settled = computeWeek(finals, wkPicks ?? [], wkMembers).filter(r => r.submitted)
+      const [first, second] = settled
+      if (first && first.correct > 0 && first.correct > (second?.correct ?? -1)) {
+        const { data: lastLead } = await supabase
+          .from('reminder_log')
+          .select('user_id')
+          .eq('event_type', 'pickem_lead')
+          .like('dedupe_key', `lead:${lg.id}:${season}:w${wk}:%`)
+          .order('sent_at', { ascending: false })
+          .limit(1)
+        if (lastLead?.[0]?.user_id !== first.userId) {
+          const left = wkGames.length - finals.length
+          liveAlert(first.userId, 'lead', `lead:${lg.id}:${season}:w${wk}:${finals.length}`,
+            `You took the lead in ${weekName(wk)}`,
+            `${lg.name} · You're ${first.correct}–${first.played - first.correct}, alone in first with ${left} game${left === 1 ? '' : 's'} left.`)
+        }
+      }
+
+      // Clinch + tiebreaker sweat
+      const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
+      const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows)
+      const tb = wkGames.find(g => g.is_tiebreaker)
+      const tbLive = !!tb && tb.status === 'in_progress'
+      const total = tb ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : 0
+      for (const r of who?.rows ?? []) {
+        if (r.status === 'clinched') {
+          liveAlert(r.userId, 'clinch', `clinch:${lg.id}:${season}:w${wk}`,
+            `You've clinched ${weekName(wk)}!`,
+            `${lg.name} · Nobody can catch you, whatever happens.`)
+        }
+        if (r.status !== 'alive' || !r.tiebreaker || !tbLive || !tb) continue
+        const guess = rows.find(x => x.userId === r.userId)?.tiebreakerGuess
+        if (guess == null) continue
+        const game = `${tb.away_team} @ ${tb.home_team}`
+        if (total < guess && total >= guess - 7) {
+          liveAlert(r.userId, 'tb', `tbclose:${lg.id}:${season}:w${wk}`,
+            `${game} is at ${total}`,
+            `${lg.name} · You guessed ${guess} for the tiebreaker, ${guess - total} to go.`)
+        } else if (total > guess) {
+          liveAlert(r.userId, 'tb', `tbpass:${lg.id}:${season}:w${wk}`,
+            `${game} is at ${total}`,
+            `${lg.name} · That's past your tiebreaker guess of ${guess}.`)
         }
       }
     }

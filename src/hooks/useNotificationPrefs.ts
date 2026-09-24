@@ -15,6 +15,8 @@ export interface NotificationPrefs {
   notify_trades: boolean
   notify_lineup: boolean
   notify_weekly_recap: boolean
+  /** Opt-in, phone only: lead changes, clinching, tiebreaker sweat during games. */
+  notify_live_alerts: boolean
   lead_hours_primary: number
   lead_hours_secondary: number
 }
@@ -28,6 +30,7 @@ export const PREF_DEFAULTS: Omit<NotificationPrefs, 'user_id' | 'league_id'> = {
   notify_trades: true,
   notify_lineup: true,
   notify_weekly_recap: true,
+  notify_live_alerts: false,
   lead_hours_primary: 24,
   lead_hours_secondary: 2,
 }

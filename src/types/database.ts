@@ -997,6 +997,7 @@ export interface Database {
           notify_pickem_deadline: boolean
           notify_trades: boolean
           notify_weekly_recap: boolean
+          notify_live_alerts: boolean
           sms_enabled: boolean
           updated_at: string
           user_id: string
@@ -1014,6 +1015,7 @@ export interface Database {
           notify_pickem_deadline?: boolean
           notify_trades?: boolean
           notify_weekly_recap?: boolean
+          notify_live_alerts?: boolean
           sms_enabled?: boolean
           updated_at?: string
           user_id: string

@@ -208,6 +208,11 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
         : 'A summary once the week wraps',
       show: true,
     },
+    {
+      key: 'notify_live_alerts', label: 'Live game alerts',
+      desc: 'Phone only, while games are on: when you take the lead, clinch the week, or the tiebreaker total gets close to your guess',
+      show: isPickem,
+    },
   ].filter(e => e.show)
 
   return (
