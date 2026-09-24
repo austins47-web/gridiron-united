@@ -9,22 +9,17 @@ export const config = { runtime: 'edge' }
 
 const GOLD = '#CE7B45'
 
-// Barlow Condensed, the app's display face. Google Fonts serves TTF
-// (what the renderer needs) to an older browser's user agent.
+// Barlow Condensed, the app's display face — shipped with the function
+// (api/fonts, SIL Open Font License) rather than fetched from Google
+// Fonts, whose response depends on the requester.
 let fontsPromise
 function loadFonts() {
-  fontsPromise ??= (async () => {
-    const css = await fetch('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800;900', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_8) AppleWebKit/533.21.1 (KHTML, like Gecko) Version/5.0.5 Safari/533.21.1' },
-    }).then((r) => r.text())
-    const faces = [...css.matchAll(/font-weight:\s*(\d+);[\s\S]*?src:\s*url\(([^)]+)\)/g)]
-    return Promise.all(faces.map(async ([, weight, src]) => ({
-      name: 'Barlow Condensed',
-      data: await fetch(src).then((r) => r.arrayBuffer()),
-      weight: Number(weight),
-      style: 'normal',
-    })))
-  })().catch(() => (fontsPromise = undefined, []))
+  fontsPromise ??= Promise.all([600, 800, 900].map(async (weight) => ({
+    name: 'Barlow Condensed',
+    data: await fetch(new URL(`./fonts/BarlowCondensed-${weight}.ttf`, import.meta.url)).then((r) => r.arrayBuffer()),
+    weight,
+    style: 'normal',
+  }))).catch(() => (fontsPromise = undefined, []))
   return fontsPromise
 }
 
@@ -97,10 +92,28 @@ export default async function handler(req) {
     ),
   )
 
-  return new ImageResponse(tree, {
-    width: 1200,
-    height: 630,
-    fonts: fonts.length ? fonts : undefined,
-    headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400' },
-  })
+  // Rendered up front (not streamed) so a failure falls back to a
+  // plainer card instead of an empty image; x-og-render says which ran
+  const attempts = [
+    ['full', tree, fonts],
+    ['default-font', tree, []],
+  ]
+  for (const [label, t, f] of attempts) {
+    try {
+      const res = new ImageResponse(t, { width: 1200, height: 630, fonts: f.length ? f : undefined })
+      const png = await res.arrayBuffer()
+      if (png.byteLength > 0) {
+        return new Response(png, {
+          headers: {
+            'Content-Type': 'image/png',
+            'Cache-Control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400',
+            'x-og-render': label,
+          },
+        })
+      }
+    } catch (e) {
+      console.error('og render failed', label, e)
+    }
+  }
+  return Response.redirect(new URL('/og-image.png', url.origin), 302)
 }
