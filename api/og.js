@@ -2,10 +2,13 @@
 // (iMessage, WhatsApp, Discord, Slack…): the league's name big and
 // bold on the app's dark field with its format, member count and
 // commissioner. 1200×630, cached at the edge.
+//
+// Runs on the Node.js runtime: the Edge runtime refuses to compile the
+// renderer's WebAssembly outside Next.js ("Wasm code generation
+// disallowed by embedder"), which left every preview blank.
+import { readFile } from 'node:fs/promises'
 import { ImageResponse } from '@vercel/og'
 import { invitePreview } from './_invite.js'
-
-export const config = { runtime: 'edge' }
 
 const GOLD = '#CE7B45'
 
@@ -16,7 +19,7 @@ let fontsPromise
 function loadFonts() {
   fontsPromise ??= Promise.all([600, 800, 900].map(async (weight) => ({
     name: 'Barlow Condensed',
-    data: await fetch(new URL(`./fonts/BarlowCondensed-${weight}.ttf`, import.meta.url)).then((r) => r.arrayBuffer()),
+    data: await readFile(new URL(`./fonts/BarlowCondensed-${weight}.ttf`, import.meta.url)),
     weight,
     style: 'normal',
   }))).catch(() => (fontsPromise = undefined, []))
@@ -30,7 +33,7 @@ const h = (type, style, ...children) => ({
 })
 const img = (src, style) => ({ type: 'img', props: { src, style } })
 
-export default async function handler(req) {
+export async function GET(req) {
   const url = new URL(req.url)
   const code = (url.searchParams.get('code') ?? '').toUpperCase()
   const [league, fonts] = await Promise.all([invitePreview(code), loadFonts()])

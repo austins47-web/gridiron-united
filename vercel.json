@@ -1,6 +1,17 @@
 {
+  "functions": {
+    "api/og.js": {
+      "includeFiles": "api/fonts/**"
+    }
+  },
   "rewrites": [
-    { "source": "/join/:code", "destination": "/api/join?code=:code" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/join/:code",
+      "destination": "/api/join?code=:code"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
