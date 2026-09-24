@@ -3,7 +3,7 @@ import {
   Bell, User, ChevronDown, ChevronRight,
   Home, Trophy, Radio, Award, Newspaper, FlaskConical, Users,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { LiveTickerStrip } from './LiveTickerStrip'
 import { LeagueBottomBar } from './LeagueBottomBar'
@@ -221,7 +221,9 @@ export function AppShell() {
           /* Chat gets full remaining height with no padding */
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <ErrorBoundary label="This page hit an error">
-              <Outlet />
+              <Suspense fallback={<PageLoading />}>
+                <Outlet />
+              </Suspense>
             </ErrorBoundary>
           </div>
         ) : (
@@ -230,7 +232,10 @@ export function AppShell() {
               <ErrorBoundary label="This page hit an error">
                 {/* keyed on pathname so the entrance replays each navigation */}
                 <div key={location.pathname} className="route-enter">
-                  <Outlet />
+                  {/* A page's code loads the first time it's opened */}
+                  <Suspense fallback={<PageLoading />}>
+                    <Outlet />
+                  </Suspense>
                 </div>
               </ErrorBoundary>
             </div>
@@ -240,6 +245,17 @@ export function AppShell() {
 
       <LeagueBottomBar />
 
+    </div>
+  )
+}
+
+/** While a page's code downloads (first visit only) — the shell stays put. */
+function PageLoading() {
+  return (
+    <div className="space-y-4 py-2" aria-busy="true" aria-label="Loading">
+      <div className="h-8 w-48 rounded-lg bg-field-800 animate-pulse" />
+      <div className="h-32 rounded-xl bg-field-800 animate-pulse" />
+      <div className="h-24 rounded-xl bg-field-800/70 animate-pulse" />
     </div>
   )
 }

@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import html2canvas from 'html2canvas'
 import { X, Download, Loader2 } from 'lucide-react'
 import { ModalPortal } from './ModalPortal'
 import { useMyRoster } from '@/hooks/useRoster'
@@ -32,6 +31,8 @@ export function FranchiseCard({ league, membership, onClose }: {
     if (!cardRef.current) return
     setDownloading(true)
     try {
+      // Loaded on demand — only needed when someone saves the card
+      const { default: html2canvas } = await import('html2canvas')
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#0A0A0A',
         scale: 2, // sharper output for sharing/screenshots

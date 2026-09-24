@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, lazy, Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -11,28 +11,47 @@ import { useAppStore } from '@/store/appStore'
 
 // Pages / Layouts
 import { AppShell } from '@/components/layout/AppShell'
-import { AuthPage } from '@/components/auth/AuthPage'
-import { LandingPage } from '@/components/landing/LandingPage'
-import { RosterView } from '@/components/roster/RosterView'
-import { MatchupView } from '@/components/matchup/MatchupView'
-import { PlayersView } from '@/components/players/PlayersView'
-import { LeaguesView } from '@/components/leagues/LeaguesView'
-import { DraftRoom } from '@/components/draft/DraftRoom'
-import { ScoringView } from '@/components/scoring/ScoringView'
-import { AccountPage } from '@/components/auth/AccountPage'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
-import { CommissionerPanel } from '@/components/commissioner/CommissionerPanel'
-import { MockDraftHub } from '@/components/mock/MockDraftHub'
-import { SocialHub } from '@/components/social/SocialHub'
-import { PickEmView } from '@/components/pickem/PickEmView'
-import { LeagueChat } from '@/components/chat/LeagueChat'
-import { TradeCenter } from '@/components/trades/TradeCenter'
-import { LiveScoresView } from '@/components/scores/LiveScoresView'
-import { StandingsView } from '@/components/scores/StandingsView'
-import { JoinPage } from '@/components/leagues/JoinPage'
-import { LeagueSettingsView } from '@/components/leagues/LeagueSettingsView'
-import { HomeView } from '@/components/home/HomeView'
-import { NewsView } from '@/components/scores/NewsView'
+
+// Every page is its own chunk, downloaded the first time it's opened —
+// the whole app used to ship as one 1.46 MB file that phones had to
+// download before showing anything. The shell (AppShell, header, bottom
+// bar) stays in the main bundle so it paints immediately.
+const page = <K extends string>(load: () => Promise<Record<K, React.ComponentType<any>>>, name: K) =>
+  lazy(() => load().then(m => ({ default: m[name] })))
+const LandingPage = page(() => import('@/components/landing/LandingPage'), 'LandingPage')
+const AuthPage = page(() => import('@/components/auth/AuthPage'), 'AuthPage')
+const RosterView = page(() => import('@/components/roster/RosterView'), 'RosterView')
+const MatchupView = page(() => import('@/components/matchup/MatchupView'), 'MatchupView')
+const PlayersView = page(() => import('@/components/players/PlayersView'), 'PlayersView')
+const LeaguesView = page(() => import('@/components/leagues/LeaguesView'), 'LeaguesView')
+const DraftRoom = page(() => import('@/components/draft/DraftRoom'), 'DraftRoom')
+const ScoringView = page(() => import('@/components/scoring/ScoringView'), 'ScoringView')
+const AccountPage = page(() => import('@/components/auth/AccountPage'), 'AccountPage')
+const CommissionerPanel = page(() => import('@/components/commissioner/CommissionerPanel'), 'CommissionerPanel')
+const MockDraftHub = page(() => import('@/components/mock/MockDraftHub'), 'MockDraftHub')
+const SocialHub = page(() => import('@/components/social/SocialHub'), 'SocialHub')
+const PickEmView = page(() => import('@/components/pickem/PickEmView'), 'PickEmView')
+const LeagueChat = page(() => import('@/components/chat/LeagueChat'), 'LeagueChat')
+const TradeCenter = page(() => import('@/components/trades/TradeCenter'), 'TradeCenter')
+const LiveScoresView = page(() => import('@/components/scores/LiveScoresView'), 'LiveScoresView')
+const StandingsView = page(() => import('@/components/scores/StandingsView'), 'StandingsView')
+const JoinPage = page(() => import('@/components/leagues/JoinPage'), 'JoinPage')
+const LeagueSettingsView = page(() => import('@/components/leagues/LeagueSettingsView'), 'LeagueSettingsView')
+const HomeView = page(() => import('@/components/home/HomeView'), 'HomeView')
+const NewsView = page(() => import('@/components/scores/NewsView'), 'NewsView')
+
+// Once the app is idle, warm the pages people open most, so the first
+// tap on them is instant too
+const warmCommonPages = () => {
+  void import('@/components/home/HomeView')
+  void import('@/components/pickem/PickEmView')
+  void import('@/components/leagues/LeaguesView')
+}
+if (typeof window !== 'undefined') {
+  const idle = (window as any).requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 2500))
+  window.addEventListener('load', () => idle(warmCommonPages), { once: true })
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -142,6 +161,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AppInitializer>
+          <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/auth" element={<AuthPage />} />
@@ -179,6 +199,7 @@ function App() {
             <Route path="/join/:code" element={<JoinPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </AppInitializer>
       </BrowserRouter>
       <Toaster
