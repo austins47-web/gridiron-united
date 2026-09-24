@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 
 export interface NotificationPrefs {
   id?: string
+  updated_at?: string
   user_id: string
   league_id: string | null
   email_enabled: boolean
@@ -57,6 +58,19 @@ export function useNotificationPrefs() {
 }
 
 /**
+ * The row for one scope (a league, or global when leagueId is null) —
+ * the most recently saved one. The (user_id, league_id) unique
+ * constraint never matched a NULL league_id, so every global save used
+ * to insert a new row; some users have dozens. Reading the newest one
+ * means the last thing they chose is what counts.
+ */
+export function latestPrefsRow(rows: NotificationPrefs[], leagueId: string | null): NotificationPrefs | undefined {
+  return rows
+    .filter(r => r.league_id === leagueId)
+    .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))[0]
+}
+
+/**
  * Resolve the effective settings for a league: the league-specific
  * row if one exists, otherwise the global row, otherwise defaults.
  */
@@ -64,20 +78,32 @@ export function resolvePrefs(
   rows: NotificationPrefs[],
   leagueId: string | null,
 ): Omit<NotificationPrefs, 'user_id' | 'league_id'> & { source: 'league' | 'global' | 'default' } {
-  const scoped = leagueId ? rows.find(r => r.league_id === leagueId) : undefined
-  const global = rows.find(r => r.league_id === null)
+  const scoped = leagueId ? latestPrefsRow(rows, leagueId) : undefined
+  const global = latestPrefsRow(rows, null)
   const base   = scoped ?? global
 
   if (!base) return { ...PREF_DEFAULTS, source: 'default' }
 
-  const { id, user_id, league_id, ...rest } = base as any
+  const { id, user_id, league_id, updated_at, created_at, ...rest } = base as any
   return { ...PREF_DEFAULTS, ...rest, source: scoped ? 'league' : 'global' }
 }
 
-/** Upsert one preference row (global when leagueId is null). */
+/**
+ * Save changes to one scope's preferences (global when leagueId is
+ * null).
+ *
+ * Updates the scope's existing row in place, touching only the fields
+ * changed. This used to upsert { ...defaults, ...changes } on
+ * (user_id, league_id), which (a) never matched a NULL league_id, so
+ * each global save inserted another row, and (b) reset every other
+ * setting to its default on each save. A scope with no row yet starts
+ * from what the user currently sees (for a league override, their
+ * global settings), not from the defaults.
+ */
 export function useSaveNotificationPrefs() {
   const qc = useQueryClient()
   const { user } = useAppStore()
+  const key = ['notification-prefs', user?.id]
 
   return useMutation({
     mutationFn: async (params: {
@@ -85,25 +111,36 @@ export function useSaveNotificationPrefs() {
       updates: Partial<NotificationPrefs>
     }) => {
       if (!user) throw new Error('Not logged in')
+      const rows = qc.getQueryData<NotificationPrefs[]>(key) ?? []
+      const existing = latestPrefsRow(rows, params.leagueId)
+      const now = new Date().toISOString()
 
+      if (existing?.id) {
+        const { data, error } = await supabase
+          .from('notification_preferences')
+          .update({ ...params.updates, updated_at: now })
+          .eq('id', existing.id)
+          .select()
+          .single()
+        if (error) throw error
+        return data as NotificationPrefs
+      }
+
+      const { source: _source, ...current } = resolvePrefs(rows, params.leagueId)
       const { data, error } = await supabase
         .from('notification_preferences')
-        .upsert(
-          {
-            user_id: user.id,
-            league_id: params.leagueId,
-            ...PREF_DEFAULTS,
-            ...params.updates,
-          },
-          { onConflict: 'user_id,league_id' },
-        )
+        .insert({ ...current, ...params.updates, user_id: user.id, league_id: params.leagueId, updated_at: now })
         .select()
         .single()
-
       if (error) throw error
       return data as NotificationPrefs
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Put the saved row in the cache right away, so a quick second
+      // change updates it instead of inserting another row before the
+      // refetch lands
+      qc.setQueryData<NotificationPrefs[]>(key, rows =>
+        [...(rows ?? []).filter(r => r.id !== saved.id), saved])
       qc.invalidateQueries({ queryKey: ['notification-prefs'] })
     },
     onError: (e: any) => toast.error(e.message ?? 'Could not save settings'),

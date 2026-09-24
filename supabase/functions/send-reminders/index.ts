@@ -221,9 +221,14 @@ serve(async (req) => {
     const leagueById  = new Map((leagues ?? []).map(l => [l.id, l]))
     const profileById = new Map((profiles ?? []).map(p => [p.id, p]))
 
-    // prefs lookup: `${user}:${league ?? 'global'}`
+    // prefs lookup: the league's row, else the global one — newest
+    // first, since the (user_id, league_id) unique constraint never
+    // matched a NULL league_id and some users have many global rows
+    // (the last one saved is what they chose)
+    const prefsNewestFirst = [...(prefsRows ?? [])]
+      .sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
     const prefFor = (userId: string, leagueId: string) => {
-      const rows = prefsRows ?? []
+      const rows = prefsNewestFirst
       const scoped = rows.find(r => r.user_id === userId && r.league_id === leagueId)
       const global = rows.find(r => r.user_id === userId && r.league_id === null)
       const pick = (k: string, dflt: any) =>
