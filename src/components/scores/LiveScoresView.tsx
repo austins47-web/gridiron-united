@@ -810,13 +810,29 @@ export function LiveScoresView() {
     retry: 2,
   })
 
-  // Auto-refresh: faster when games are live
+  // Every refresh here is a billed edge function invocation (the
+  // sportsdata proxy), per open tab. The old loop never stopped —
+  // it kept polling every 2 min in background tabs and on weeks
+  // where every game was already final, which is what pushed the
+  // project past its Supabase quota.
+  const [pageVisible, setPageVisible] = useState(() => !document.hidden)
   useEffect(() => {
+    const onVis = () => setPageVisible(!document.hidden)
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+
+  // Auto-refresh: 30s while games are live, 5 min while waiting on
+  // kickoffs, never for a fully-final week or a hidden tab. React
+  // Query's own focus refetch catches the tab up on return.
+  useEffect(() => {
+    if (!pageVisible) return
     const games = query.data?.games ?? []
-    const ms = games.some(g => g.status === 'in') ? 30_000 : 120_000
+    if (games.length > 0 && games.every(g => g.status === 'post')) return
+    const ms = games.some(g => g.status === 'in') ? 30_000 : 5 * 60_000
     const t = setTimeout(() => setRefreshTick(n => n + 1), ms)
     return () => clearTimeout(t)
-  }, [query.data])
+  }, [query.data, pageVisible])
 
   const allGames  = query.data?.games ?? []
   const liveCount = allGames.filter(g => g.status === 'in').length
