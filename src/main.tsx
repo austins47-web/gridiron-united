@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
 import { registerServiceWorker } from '@/lib/push'
+// Catches the browser's one-time install offer (see lib/install.ts)
+import '@/lib/install'
 
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'

@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   Bell, User, ChevronDown, ChevronRight,
-  Home, Trophy, Radio, Award, Newspaper, FlaskConical, Users,
+  Home, Trophy, Radio, Award, Newspaper, FlaskConical, Users, Smartphone,
 } from 'lucide-react'
 import { useState, Suspense } from 'react'
 import { useAppStore } from '@/store/appStore'
@@ -11,6 +11,9 @@ import { NotificationsPanel } from '@/components/ui/NotificationsPanel'
 import { LeagueSelector } from '@/components/leagues/LeagueSelector'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { PickemWinnerPopup } from '@/components/pickem/PickemWinnerPopup'
+import { PullToRefresh } from './PullToRefresh'
+import { InstallGuide } from '@/components/ui/InstallGuide'
+import { useInstallPlatform } from '@/hooks/useInstallPlatform'
 import clsx from 'clsx'
 
 export function AppShell() {
@@ -19,6 +22,8 @@ export function AppShell() {
   const location = useLocation()
   const [showNotifs, setShowNotifs] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showInstall, setShowInstall] = useState(false)
+  const installed = useInstallPlatform() === 'installed'
 
   // ── Global tabs — always visible ──────────────────────────
   const globalTabs = [
@@ -50,6 +55,8 @@ export function AppShell() {
           actually be unmissable regardless of what page someone's
           on when their league's week goes final. */}
       <PickemWinnerPopup />
+      <PullToRefresh />
+      {showInstall && <InstallGuide onClose={() => setShowInstall(false)} />}
 
       {/*
         Header + global nav + live ticker + league sub-nav are one
@@ -156,6 +163,14 @@ export function AppShell() {
                 >
                   <User size={14} /> Account Settings
                 </button>
+                {!installed && (
+                  <button
+                    onClick={() => { setShowInstall(true); setShowUserMenu(false) }}
+                    className="w-full text-left px-3 py-2.5 text-sm text-field-200 hover:bg-field-700 hover:text-gold transition-colors flex items-center gap-2"
+                  >
+                    <Smartphone size={14} /> Get the App
+                  </button>
+                )}
                 <div className="border-t border-field-700" />
                 <button
                   onClick={() => { signOut(); setShowUserMenu(false) }}

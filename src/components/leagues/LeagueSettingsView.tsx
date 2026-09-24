@@ -10,6 +10,7 @@ import {
   useNotificationPrefs, useSaveNotificationPrefs, useClearLeaguePrefs, resolvePrefs,
 } from '@/hooks/useNotificationPrefs'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { InstallGuide } from '@/components/ui/InstallGuide'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { CURRENT_SEASON } from '@/lib/season'
@@ -363,6 +364,7 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
 // Per device, not per league — so it sits outside the All leagues /
 // This league switch. What gets sent follows the Reminders toggles.
 function PhoneNotifications({ push }: { push: ReturnType<typeof usePushNotifications> }) {
+  const [showInstall, setShowInstall] = useState(false)
   const { status, deviceCount, busy, enable, disable, test } = push
   const others = status === 'on' ? deviceCount - 1 : deviceCount
 
@@ -428,6 +430,10 @@ function PhoneNotifications({ push }: { push: ReturnType<typeof usePushNotificat
               <span>Open <b className="text-white">Gridiron</b> from your home screen and come back here to turn notifications on</span>
             </li>
           </ol>
+          <button onClick={() => setShowInstall(true)} className="btn-ghost w-full justify-center !py-2">
+            Show me how
+          </button>
+          {showInstall && <InstallGuide onClose={() => setShowInstall(false)} />}
         </div>
       )}
 

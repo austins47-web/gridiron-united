@@ -1,3 +1,4 @@
+import { lazy, Suspense, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
 import { useHomeData, useTickerGames, type ActionItem, type TeamRow } from '@/hooks/useHome'
@@ -8,6 +9,10 @@ import {
   Radio, Newspaper, FlaskConical, Settings2,
 } from 'lucide-react'
 import clsx from 'clsx'
+import { InstallCard } from '@/components/ui/InstallGuide'
+import { YourTeams } from './YourTeamCard'
+
+const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
 
 const KIND_ICON: Record<string, React.ReactNode> = {
   on_the_clock:    <Flame className="w-4 h-4" />,
@@ -24,6 +29,8 @@ export function HomeView() {
   const navigate = useNavigate()
   const { profile } = useAppStore()
   const { teams, actions, isLoading, hasLeagues } = useHomeData()
+  // A favorite team's page opens in place, like it does from Standings
+  const [teamPage, setTeamPage] = useState<{ id: string; league: 'NFL' | 'CFB' } | null>(null)
 
   const name = profile?.display_name || profile?.username || ''
   const firstName = name.split(' ')[0]
@@ -64,6 +71,14 @@ export function HomeView() {
           <div key={i} className="h-16 rounded-xl bg-field-800 animate-pulse" />
         ))}
       </div>
+    )
+  }
+
+  if (teamPage) {
+    return (
+      <Suspense fallback={<div className="max-w-4xl mx-auto px-4 py-6"><div className="h-40 rounded-2xl bg-field-800 animate-pulse" /></div>}>
+        <TeamPage teamId={teamPage.id} league={teamPage.league} onBack={() => setTeamPage(null)} />
+      </Suspense>
     )
   }
 
@@ -122,6 +137,9 @@ export function HomeView() {
         </div>
       </div>
 
+      {/* ══ GET THE APP (phones, until installed) ══ */}
+      <InstallCard />
+
       {/* ══ TICKER ══ */}
       <ScoreTicker />
 
@@ -169,6 +187,12 @@ export function HomeView() {
         <div className="space-y-2">
           {teams.map((t, i) => <TeamCard key={t.leagueId} team={t} index={i} />)}
         </div>
+      </section>
+
+      {/* ══ FAVORITE TEAMS ══ */}
+      <section>
+        <SectionHead label="Favorite Teams" />
+        <YourTeams onOpenTeam={(id, league) => setTeamPage({ id, league })} />
       </section>
 
       {/* ══ RECENT ACTIVITY ══ */}
