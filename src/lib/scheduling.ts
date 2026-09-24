@@ -12,6 +12,17 @@
 // only the 14 regular-season weeks are scheduled here.
 export const REGULAR_SEASON_WEEKS = 14
 
+/**
+ * The fantasy week a league is on right now: the live NFL week, or the
+ * college week for a college-only league, kept within the regular
+ * season. Roster, Matchup, Home, trades and League Info all use this
+ * so they agree — leagues.current_week is never written, so it read
+ * Week 1 all season.
+ */
+export function fantasyWeekFor(playerPool: string | null | undefined, nflWeek: number, cfbWeek: number): number {
+  return Math.min(Math.max(playerPool === 'cfb' ? cfbWeek : nflWeek, 1), REGULAR_SEASON_WEEKS)
+}
+
 const BYE = '__BYE__'
 
 function circleMethodRounds(userIds: string[]): Array<Array<[string, string]>> {

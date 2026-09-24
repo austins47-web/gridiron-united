@@ -7,6 +7,8 @@ import { CURRENT_SEASON } from '@/lib/season'
 import { computeStandings, isVoid, isWeekComplete } from '@/components/pickem/standings'
 import { resolveWeekDeadline } from '@/lib/deadline'
 import { currentPickemWeek, isGameLocked } from '@/lib/pickemWeek'
+import { fantasyWeekFor } from '@/lib/scheduling'
+import { useCurrentWeek, useCurrentCFBWeek } from './useLiveStats'
 
 export type ActionKind =
   | 'on_the_clock' | 'draft_live' | 'draft_soon'
@@ -52,6 +54,8 @@ export interface TeamRow {
 export function useHomeData() {
   const { user } = useAppStore()
   const { data: myLeagues = [], isLoading: leaguesLoading } = useMyLeagues()
+  const { data: liveNflWeek = 1 } = useCurrentWeek()
+  const { data: liveCfbWeek = 1 } = useCurrentCFBWeek()
 
   const leagueIds = myLeagues.map(l => l.league.id)
 
@@ -201,11 +205,15 @@ export function useHomeData() {
         : `Week ${pw.wk} · ${pw.picked}/${pw.total} picked`
     }
 
-    // Current-week matchup
+    // This week's matchup — same live week the Matchup tab opens on
+    // (league.current_week is never written, so this always showed the
+    // Week 1 matchup). Only for a league in the current season; an old
+    // season's league has no "this week".
     let matchup: TeamRow['matchup'] = null
-    const mu = d?.matchups.find(
-      x => x.league_id === league.id && x.week === (league.current_week ?? 1)
-    )
+    const fantasyWeek = fantasyWeekFor(league.player_pool, liveNflWeek, liveCfbWeek)
+    const mu = league.season === CURRENT_SEASON
+      ? d?.matchups.find(x => x.league_id === league.id && x.week === fantasyWeek)
+      : undefined
     if (mu) {
       const iAmHome = mu.home_user_id === user?.id
       const oppId = iAmHome ? mu.away_user_id : mu.home_user_id

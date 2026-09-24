@@ -450,3 +450,15 @@ export function describeTiebreakerRange({ min, max }: { min: number; max: number
   if (min === 0) return `of ${max} or less`
   return `of ${min}–${max}`
 }
+
+/**
+ * The NFL (and college) season a date belongs to. A season runs from
+ * July through the following June, so the Super Bowl in February
+ * still counts toward the season that started in September, and the
+ * offseason keeps showing last season's final standings until the new
+ * one's preseason. The app, the reminder engine and the schedule sync
+ * all use this, so next season starts without a code change.
+ */
+export function nflSeasonFor(date: Date): number {
+  return date.getUTCMonth() >= 6 ? date.getUTCFullYear() : date.getUTCFullYear() - 1
+}

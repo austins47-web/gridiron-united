@@ -5,7 +5,7 @@ import { useMyRoster, useDropPlayer, useMovePlayer, useRosterRealtime } from '@/
 import { useActualPoints } from '@/hooks/useActualPoints'
 import { useWeekLineup } from '@/hooks/useWeekLineup'
 import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
-import { REGULAR_SEASON_WEEKS } from '@/lib/scheduling'
+import { REGULAR_SEASON_WEEKS, fantasyWeekFor } from '@/lib/scheduling'
 import { CURRENT_SEASON } from '@/lib/season'
 import { teamAbbr, getCfbTeamAbbrMap } from '@/lib/sportsdata'
 import { byeWeeksForTeam, type WeekGame } from '@/lib/byeWeeks'
@@ -51,7 +51,7 @@ export function RosterView() {
   // any special-casing here.
   const { data: liveNflWeek = 1 } = useCurrentWeek()
   const { data: liveCfbWeek = 1 } = useCurrentCFBWeek()
-  const currentWeek = Math.min(Math.max(activeLeague?.player_pool === 'cfb' ? liveCfbWeek : liveNflWeek, 1), REGULAR_SEASON_WEEKS)
+  const currentWeek = fantasyWeekFor(activeLeague?.player_pool, liveNflWeek, liveCfbWeek)
 
   const [week, setWeek] = useState(currentWeek)
   useEffect(() => { setWeek(currentWeek) }, [currentWeek])

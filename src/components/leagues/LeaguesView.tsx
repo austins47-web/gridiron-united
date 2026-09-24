@@ -7,7 +7,7 @@ import { SeasonAwardsPanel } from '@/components/pickem/SeasonAwards'
 import { computeSeasonAwards } from '@/components/pickem/season'
 import { CURRENT_SEASON } from '@/lib/season'
 import { currentPickemWeek } from '@/lib/pickemWeek'
-import { REGULAR_SEASON_WEEKS } from '@/lib/scheduling'
+import { fantasyWeekFor } from '@/lib/scheduling'
 import { useCurrentWeek, useCurrentCFBWeek } from '@/hooks/useLiveStats'
 import { LeagueSettingsModal } from './LeagueSettingsModal'
 import { BroadcastOpen } from '@/components/ui/BroadcastOpen'
@@ -403,7 +403,7 @@ function LeagueInfoPanel({ league, membership, isCommissioner }: any) {
   const { data: liveCfbWeek = 1 } = useCurrentCFBWeek()
   const seasonWeek = league.league_type === 'pickem'
     ? currentPickemWeek()
-    : Math.min(Math.max(league.player_pool === 'cfb' ? liveCfbWeek : liveNflWeek, 1), REGULAR_SEASON_WEEKS)
+    : fantasyWeekFor(league.player_pool, liveNflWeek, liveCfbWeek)
 
   const copyInvite = () => {
     navigator.clipboard.writeText(league.invite_code)

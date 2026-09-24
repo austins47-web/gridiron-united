@@ -20,7 +20,8 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  isFinal, isVoid, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal, type Game,
+  isFinal, isVoid, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal,
+  nflSeasonFor, type Game,
 } from '../_shared/pickemCore.ts'
 import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
 
@@ -207,7 +208,7 @@ serve(async (req) => {
       { data: profiles },
       { data: prefsRows },
     ] = await Promise.all([
-      supabase.from('leagues').select('id, name, league_type, current_week, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz'),
+      supabase.from('leagues').select('id, name, league_type, player_pool, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz'),
       supabase.from('league_members').select('id, league_id, user_id, team_name'),
       supabase.from('profiles').select('id, username, display_name'),
       supabase.from('notification_preferences').select('*'),
@@ -279,18 +280,27 @@ serve(async (req) => {
       return ok
     }
 
-    // ── Pick'Em schedule, for working out which week is which ──
-    // league.current_week is never written, so it read Week 1 all
-    // season. Pick'Em weeks are derived from the schedule instead.
-    const pickemSeasons = [...new Set(
-      (leagues ?? []).filter(l => l.league_type === 'pickem').map(l => l.season ?? 2026),
-    )]
-    const [{ data: nflGames }, { data: weekSettings }] = pickemSeasons.length
-      ? await Promise.all([
-          supabase.from('nfl_games').select('id, season, week, game_date, status, is_tiebreaker, home_team, away_team, home_score, away_score').in('season', pickemSeasons),
-          supabase.from('pickem_week_settings').select('league_id, season, week, pick_deadline').in('season', pickemSeasons),
-        ])
-      : [{ data: [] }, { data: [] }]
+    // ── The schedule, for working out which week is which ──────
+    // leagues.current_week is never written, so it read Week 1 all
+    // season; weeks come from the schedule instead. The season comes
+    // from the date (nflSeasonFor), so Pick'Em leagues roll into a new
+    // season on their own, and a fantasy league from a past season is
+    // left alone.
+    const season = nflSeasonFor(now)
+    const hasCfbPool = (leagues ?? []).some(l => l.league_type !== 'pickem' && l.player_pool === 'cfb')
+    const [{ data: nflGames }, { data: weekSettings }, { data: cfbGames }] = await Promise.all([
+      supabase.from('nfl_games').select('id, season, week, game_date, status, is_tiebreaker, home_team, away_team, home_score, away_score').eq('season', season),
+      supabase.from('pickem_week_settings').select('league_id, season, week, pick_deadline').eq('season', season),
+      hasCfbPool
+        ? supabase.from('cfb_games').select('id, season, week, game_date, status, is_tiebreaker, home_team, away_team, home_score, away_score').eq('season', season)
+        : Promise.resolve({ data: [] }),
+    ])
+    // College-only fantasy leagues run on the college schedule
+    const cfbWeeks = new Map<number, SchedGame[]>()
+    for (const g of (cfbGames ?? []) as SchedGame[]) {
+      if (!g.game_date || isVoid(g)) continue
+      cfbWeeks.set(g.week, [...(cfbWeeks.get(g.week) ?? []), g])
+    }
 
     // season -> week -> games. Postponed/canceled games are left out:
     // they can't be picked and never finish (see isVoid).
@@ -319,7 +329,6 @@ serve(async (req) => {
     // of each game day (Thu, Sun, Mon …) and covers that day's games.
     for (const lg of leagues ?? []) {
       if (lg.league_type !== 'pickem') continue
-      const season = lg.season ?? 2026
       const weeks = scheduleBySeason.get(season)
       if (!weeks) continue
 
@@ -492,14 +501,18 @@ serve(async (req) => {
     }
 
     // ══ 4. LINEUP NOT SET ════════════════════════════════════
-    // Fires Sunday morning for in-season fantasy leagues with an
-    // empty roster for the current week.
+    // Fires Sunday morning for this season's fantasy leagues with an
+    // empty roster. The week is the one kicking off today, from the
+    // schedule (college schedule for a college-only league).
     const dow = now.getUTCDay()          // 0 = Sunday
     const utcHour = now.getUTCHours()
     if (dow === 0 && utcHour === 14) {   // ~9am ET Sunday
       for (const lg of leagues ?? []) {
         if (lg.league_type === 'pickem') continue
         if (lg.draft_status === 'pre_draft') continue
+        if (lg.season !== season) continue
+        const wk = upcomingWeek(lg.player_pool === 'cfb' ? cfbWeeks : scheduleBySeason.get(season), now)
+        if (wk == null) continue
 
         const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
         const { data: rosters } = await supabase
@@ -519,10 +532,10 @@ serve(async (req) => {
             userId: m.user_id, ...to,
             leagueId: lg.id, leagueName: lg.name,
             eventType: 'lineup_empty',
-            dedupeKey: `lineup:${lg.id}:w${lg.current_week ?? 1}`,
+            dedupeKey: `lineup:${lg.id}:${season}:w${wk}`,
             subject: `Your lineup is empty - ${lg.name}`,
             heading: 'You have no players started',
-            body: `Week ${lg.current_week ?? 1} kicks off today and your lineup is empty. Set it before game time.`,
+            body: `Week ${wk} kicks off today and your lineup is empty. Set it before game time.`,
             ctaLabel: 'Set lineup', ctaPath: '/app/roster',
             urgent: true,
           })
@@ -533,19 +546,19 @@ serve(async (req) => {
     // ══ 5. WEEKLY RECAP — Tuesday morning ════════════════════
     if (dow === 2 && utcHour === 14) {   // Tuesday ~9am ET
       for (const lg of leagues ?? []) {
-        if (lg.draft_status === 'pre_draft') continue
-        // Pick'Em recaps the week that just wrapped, from the
-        // schedule — and skips a Tuesday with no freshly finished
-        // week (preseason, offseason) rather than recapping Week 1.
-        // The season is in its key so next season's Week N isn't
-        // mistaken for this one's.
+        // Recaps the week that just wrapped, from the schedule — and
+        // skips a Tuesday with no freshly finished week (preseason,
+        // offseason) rather than recapping Week 1. Fantasy: this
+        // season's drafted leagues only. (Pick'Em leagues never draft,
+        // so their draft_status stays 'pre_draft' — that check used to
+        // skip every Pick'Em recap.) The season is in the key so next
+        // season's Week N isn't mistaken for this one's.
         const isPickem = lg.league_type === 'pickem'
-        const season = lg.season ?? 2026
-        const wk = isPickem
-          ? justFinishedWeek(scheduleBySeason.get(season), now)
-          : (lg.current_week ?? 1)
+        if (!isPickem && (lg.draft_status === 'pre_draft' || lg.season !== season)) continue
+        const wk = justFinishedWeek(
+          !isPickem && lg.player_pool === 'cfb' ? cfbWeeks : scheduleBySeason.get(season), now)
         if (wk == null) continue
-        const recapKey = isPickem ? `recap:${lg.id}:${season}:w${wk}` : `recap:${lg.id}:w${wk}`
+        const recapKey = `recap:${lg.id}:${season}:w${wk}`
         const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
 
         for (const m of lgMembers) {
@@ -581,7 +594,6 @@ serve(async (req) => {
     const chatPosts: { league: string; week: number }[] = []
     for (const lg of leagues ?? []) {
       if (lg.league_type !== 'pickem') continue
-      const season = lg.season ?? 2026
       const weeks = scheduleBySeason.get(season)
       const wk = justFinishedWeek(weeks, now, 48 * HOUR)
       if (wk == null) continue
@@ -671,7 +683,6 @@ serve(async (req) => {
     // only, once per player per week, under the weekly-recap toggle.
     for (const lg of leagues ?? []) {
       if (lg.league_type !== 'pickem') continue
-      const season = lg.season ?? 2026
       for (const [wk, wkGames] of scheduleBySeason.get(season) ?? []) {
         const lastDay = lastGameDayKickoff(wkGames)
         if (!lastDay || !inWindow(hoursUntil(lastDay.toISOString()), 2)) continue
@@ -1009,6 +1020,20 @@ function justFinishedWeek(weeks: Map<number, SchedGame[]> | undefined, now: Date
     if (best == null || week > best) best = week
   }
   return best
+}
+
+/** The week of the next game still to be played (today's, on a game day). */
+function upcomingWeek(weeks: Map<number, SchedGame[]> | undefined, now: Date): number | null {
+  let best: { week: number; at: number } | null = null
+  for (const [week, games] of weeks ?? []) {
+    for (const g of games) {
+      if (isFinal(g)) continue
+      const at = new Date(g.game_date).getTime()
+      if (at < now.getTime() - 12 * HOUR) continue   // stale row that never got a result
+      if (!best || at < best.at) best = { week, at }
+    }
+  }
+  return best?.week ?? null
 }
 
 /** "Week 3", or the playoff round's name. */

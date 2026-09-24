@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import type { Trade, Profile, Player, Json } from '@/types/database'
 import toast from 'react-hot-toast'
+import { fantasyWeekFor } from '@/lib/scheduling'
+import { useCurrentWeek, useCurrentCFBWeek } from './useLiveStats'
 
 export type TradeWithDetails = Trade & {
   proposer: Profile
@@ -48,7 +50,7 @@ async function sendNotification(params: {
 async function getLeagueTradeSettings(leagueId: string) {
   const { data } = await supabase
     .from('leagues')
-    .select('trade_mode, trade_review_hours, trade_deadline_week, trade_votes_required, current_week')
+    .select('trade_mode, trade_review_hours, trade_deadline_week, trade_votes_required, player_pool')
     .eq('id', leagueId)
     .single()
   return data ?? {
@@ -56,7 +58,7 @@ async function getLeagueTradeSettings(leagueId: string) {
     trade_review_hours: 24,
     trade_deadline_week: 13,
     trade_votes_required: 4,
-    current_week: 0,
+    player_pool: null as string | null,
   }
 }
 
@@ -188,6 +190,8 @@ export function useLeagueTrades(leagueId: string | null) {
 export function useProposeTrade(leagueId: string | null) {
   const qc = useQueryClient()
   const { user } = useAppStore()
+  const { data: liveNflWeek = 1 } = useCurrentWeek()
+  const { data: liveCfbWeek = 1 } = useCurrentCFBWeek()
 
   return useMutation({
     mutationFn: async ({
@@ -202,7 +206,10 @@ export function useProposeTrade(leagueId: string | null) {
 
       // Fetch fresh settings from DB
       const settings = await getLeagueTradeSettings(leagueId)
-      if ((settings.current_week ?? 0) > settings.trade_deadline_week)
+      // The live fantasy week (leagues.current_week is never written, so
+      // this check compared against Week 1 and the deadline never hit)
+      const week = fantasyWeekFor(settings.player_pool, liveNflWeek, liveCfbWeek)
+      if (week > settings.trade_deadline_week)
         throw new Error(`Trade deadline has passed (Week ${settings.trade_deadline_week})`)
 
       const { data: trade, error } = await supabase.from('trades').insert({
