@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { PickemWelcome } from './PickemWelcome'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
@@ -98,6 +99,15 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   const qc = useQueryClient()
   const isCommissioner = myMembership?.is_commissioner
   const location = useLocation()
+  const navigate = useNavigate()
+  // Just joined from an invite (JoinPage) — explain how this league works
+  const welcome = (location.state as any)?.welcome as string | undefined
+  const [showWelcome, setShowWelcome] = useState(() => !!welcome)
+  const closeWelcome = () => {
+    setShowWelcome(false)
+    // Drop the flag so a refresh or back doesn't show it again
+    navigate(location.pathname + location.search, { replace: true, state: null })
+  }
 
   const activeWeek = calendar.currentWeek
   // ?week=N (from reminder emails) opens that week — a 48h reminder
@@ -652,6 +662,10 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
+
+      {showWelcome && activeLeague && welcome === activeLeague.id && (
+        <PickemWelcome league={activeLeague} memberCount={(location.state as any)?.memberCount} onClose={closeWelcome} />
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between">

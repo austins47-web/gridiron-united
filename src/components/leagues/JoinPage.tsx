@@ -17,17 +17,16 @@ export function JoinPage() {
   const [error, setError] = useState<string | null>(null)
   const [joined, setJoined] = useState(false)
 
-  // Look up the league by invite code so we can show its name before joining
+  // Look up the league by invite code so we can show it before joining —
+  // through league_invite_preview, which only returns what an invite
+  // may show (and the member count, which a non-member can't read)
   useEffect(() => {
     if (!code) return
-    supabase
-      .from('leagues')
-      .select('id, name, num_teams, league_type, scoring_type, draft_type')
-      .eq('invite_code', code.toUpperCase())
-      .single()
-      .then(({ data, error }) => {
-        if (error || !data) setError('Invalid or expired invite code.')
-        else setLeague(data)
+    ;(supabase.rpc as any)('league_invite_preview', { p_code: code.toUpperCase() })
+      .then(({ data, error }: { data: any[] | null; error: unknown }) => {
+        const found = data?.[0]
+        if (error || !found) setError('Invalid or expired invite code.')
+        else setLeague(found)
         setChecking(false)
       })
   }, [code])
@@ -44,7 +43,12 @@ export function JoinPage() {
     try {
       await joinLeague.mutateAsync(code.toUpperCase())
       setJoined(true)
-      setTimeout(() => navigate('/app/leagues'), 1500)
+      // Pick'Em: straight to the picks, with a welcome that explains
+      // this league's rules (PickemWelcome)
+      setTimeout(() => navigate(
+        league?.league_type === 'pickem' ? '/app/pickem' : '/app/leagues',
+        { state: league?.league_type === 'pickem' ? { welcome: league.id, memberCount: (league.member_count ?? 0) + 1 } : undefined },
+      ), 1500)
     } catch (e: any) {
       setError(e.message ?? 'Could not join league.')
     } finally {
@@ -84,6 +88,14 @@ export function JoinPage() {
               <p className="text-field-400 text-sm mt-1 capitalize">
                 {league.league_type === 'pickem' ? "Pick'Em League" : `${league.scoring_type?.toUpperCase()} · ${league.draft_type} draft`}
               </p>
+              {(league.member_count > 0 || league.commissioner) && (
+                <p className="text-field-500 text-xs mt-1">
+                  {[
+                    league.member_count > 0 ? `${league.member_count} member${league.member_count === 1 ? '' : 's'}` : null,
+                    league.commissioner ? `run by ${league.commissioner}` : null,
+                  ].filter(Boolean).join(' · ')}
+                </p>
+              )}
             </div>
 
             {user ? (
