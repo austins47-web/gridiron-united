@@ -52,12 +52,12 @@ export interface WeekRow {
 export const nameOf = (m: Member) =>
   m.profile?.display_name || m.profile?.username || 'Unknown'
 
-export const isFinal = (g: Game) =>
+export const isFinal = (g: { status?: string | null }) =>
   (g.status ?? '').toLowerCase().includes('final') ||
   (g.status ?? '').toLowerCase() === 'post'
 
 /** True while a game is actively being played — its score can still move. */
-export const isLive = (g: Game) =>
+export const isLive = (g: { status?: string | null }) =>
   (g.status ?? '').toLowerCase() === 'in_progress'
 
 /**
@@ -66,7 +66,7 @@ export const isLive = (g: Game) =>
  * actually ahead yet (still 0-0, or the scores are tied) — winnerOf
  * is what decides that.
  */
-export const isDecided = (g: Game) => isFinal(g) || isLive(g)
+export const isDecided = (g: { status?: string | null }) => isFinal(g) || isLive(g)
 
 /**
  * Postponed or canceled (the schedule sync stores both as
@@ -75,7 +75,7 @@ export const isDecided = (g: Game) => isFinal(g) || isLive(g)
  * week open forever: no winner, no recap, no Week Stats. Picks on it
  * already score nothing, since winnerOf needs a live/final game.
  */
-export const isVoid = (g: Game) => {
+export const isVoid = (g: { status?: string | null }) => {
   const s = (g.status ?? '').toLowerCase()
   return s.includes('postpon') || s.includes('cancel')
 }

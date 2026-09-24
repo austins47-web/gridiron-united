@@ -76,7 +76,13 @@ export function PickEmView() {
   const location = useLocation()
 
   const activeWeek = currentPickemWeek()
-  const [week, setWeek] = useState(activeWeek)
+  // ?week=N (from reminder emails) opens that week — a 48h reminder
+  // for a Thursday kickoff lands Tuesday, while the page still shows
+  // the week that just finished.
+  const [week, setWeek] = useState(() => {
+    const linked = Number(new URLSearchParams(location.search).get('week'))
+    return Number.isInteger(linked) && linked >= 1 && linked <= 22 ? linked : activeWeek
+  })
   const [weekDropdownOpen, setWeekDropdownOpen] = useState(false)
   // Honors a deep link from the global Pick'Em winner popup ("Full
   // Standings" navigates here wanting the Standings tab open, not

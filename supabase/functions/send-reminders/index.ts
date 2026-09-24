@@ -19,6 +19,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { isFinal, isVoid } from '../_shared/pickemCore.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -224,92 +225,124 @@ serve(async (req) => {
     )]
     const [{ data: nflGames }, { data: weekSettings }] = pickemSeasons.length
       ? await Promise.all([
-          supabase.from('nfl_games').select('season, week, game_date, status').in('season', pickemSeasons),
+          supabase.from('nfl_games').select('id, season, week, game_date, status, is_tiebreaker').in('season', pickemSeasons),
           supabase.from('pickem_week_settings').select('league_id, season, week, pick_deadline').in('season', pickemSeasons),
         ])
       : [{ data: [] }, { data: [] }]
 
-    // season -> week -> games
+    // season -> week -> games. Postponed/canceled games are left out:
+    // they can't be picked and never finish (see isVoid).
     const scheduleBySeason = new Map<number, Map<number, SchedGame[]>>()
     for (const g of nflGames ?? []) {
-      if (!g.game_date) continue
+      if (!g.game_date || isVoid(g)) continue
       const weeks = scheduleBySeason.get(g.season) ?? new Map<number, SchedGame[]>()
       scheduleBySeason.set(g.season, weeks)
       weeks.set(g.week, [...(weeks.get(g.week) ?? []), g])
     }
 
-    // ══ 1. PICK'EM DEADLINES ═════════════════════════════════
-    // Only for leagues on a fixed weekly deadline.
+    // ══ 1. PICK'EM PICK REMINDERS ════════════════════════════
+    // Every reminder is about specific open games the member hasn't
+    // picked (or a missing tiebreaker guess) — someone who's picked
+    // everything never hears from this.
     //
-    // A reminder is about the week its deadline locks — resolved the
-    // same way the Pick'Em page resolves a week's deadline (per-week
-    // override, else the league rule anchored to that week's first
-    // kickoff). Not the "current" week: a 48h reminder for a Thursday
-    // deadline goes out Tuesday, before the Pick'Em page rolls over.
+    // Deadline leagues: one lock per week, the deadline the Pick'Em
+    // page shows (per-week override, else the league rule anchored to
+    // that week's first kickoff), at both lead times. Not the
+    // "current" week: a 48h reminder for a Thursday deadline goes out
+    // Tuesday, before the page rolls over.
+    //
+    // Kickoff leagues (each game locks at its own kickoff): the early
+    // lead time counts down to the week's first kickoff and covers the
+    // whole week; the final lead time counts down to the first kickoff
+    // of each game day (Thu, Sun, Mon …) and covers that day's games.
     for (const lg of leagues ?? []) {
       if (lg.league_type !== 'pickem') continue
-      if (lg.pick_lock_type !== 'deadline') continue
-      if (lg.pick_deadline_day == null || !lg.pick_deadline_time) continue
-
-      const lgTz = lg.pick_deadline_tz || 'UTC'
       const season = lg.season ?? 2026
-      const overrides = new Map<number, string>(
-        (weekSettings ?? [])
-          .filter(s => s.league_id === lg.id && s.season === season && s.pick_deadline)
-          .map(s => [s.week, s.pick_deadline]),
-      )
-      const upcoming = nextPickemDeadline(
-        scheduleBySeason.get(season), overrides,
-        lg.pick_deadline_day, lg.pick_deadline_time, lgTz, now,
-      )
-      // No scheduled week with a deadline still ahead (offseason,
-      // or the schedule hasn't synced that far yet)
-      if (!upcoming) continue
-      const { week: wk, deadline: next } = upcoming
-      const hrs = hoursUntil(next.toISOString())
+      const weeks = scheduleBySeason.get(season)
+      if (!weeks) continue
 
-      nearMisses.push({
-        league: lg.name,
-        type: 'pickem_deadline',
-        week: wk,
-        deadlineUtc: next.toISOString(),
-        deadlineLocal: formatInZone(next, lgTz),
-        tz: lgTz,
-        hoursUntil: Number(hrs.toFixed(2)),
-        note: 'fires when hoursUntil is within 0.5 of a member lead time (default 24 or 2)',
-      })
+      const onDeadline = lg.pick_lock_type === 'deadline' && lg.pick_deadline_day != null && !!lg.pick_deadline_time
+      const tz = onDeadline ? (lg.pick_deadline_tz || 'UTC') : 'America/New_York'
 
-      const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
+      let locks: PickLock[] = []
+      if (onDeadline) {
+        const overrides = new Map<number, string>(
+          (weekSettings ?? [])
+            .filter(s => s.league_id === lg.id && s.season === season && s.pick_deadline)
+            .map(s => [s.week, s.pick_deadline]),
+        )
+        const upcoming = nextPickemDeadline(weeks, overrides, lg.pick_deadline_day, lg.pick_deadline_time, tz, now)
+        if (upcoming) {
+          locks = [{
+            week: upcoming.week, at: upcoming.deadline, key: null, weekStart: true,
+            games: openGames(weeks.get(upcoming.week) ?? [], now),
+          }]
+        }
+      } else {
+        locks = kickoffLocks(weeks, now)
+      }
+      // Lead times top out at 48h — nothing further out can fire yet
+      locks = locks.filter(l => hoursUntil(l.at.toISOString()) <= 48.5)
+      if (locks.length === 0) continue
 
-      // Who has already picked this week?
+      for (const l of locks) {
+        nearMisses.push({
+          league: lg.name,
+          type: onDeadline ? 'pickem_deadline' : (l.weekStart ? 'pickem_first_kickoff' : 'pickem_game_day'),
+          week: l.week,
+          lockUtc: l.at.toISOString(),
+          lockLocal: formatInZone(l.at, tz),
+          openGames: l.games.length,
+          hoursUntil: Number(hoursUntil(l.at.toISOString()).toFixed(2)),
+          note: 'fires when hoursUntil is within 0.5 of a member lead time (default 24 or 2), for members with open picks',
+        })
+      }
+
       const { data: picks } = await supabase
         .from('pickem_picks')
-        .select('user_id')
+        .select('user_id, game_id, week, tiebreaker_score')
         .eq('league_id', lg.id)
-        .eq('week', wk)
         .eq('season', season)
-      const picked = new Set((picks ?? []).map(p => p.user_id))
+        .in('week', [...new Set(locks.map(l => l.week))])
 
-      for (const m of lgMembers) {
-        if (picked.has(m.user_id)) continue          // already done — don't nag
+      for (const m of (members ?? []).filter(x => x.league_id === lg.id)) {
         const pref = prefFor(m.user_id, lg.id)
         if (!pref.email_enabled || !pref.notify_pickem_deadline) continue
+        const email = emailOf(m.user_id)
+        if (!email) continue
+        const mine = (picks ?? []).filter(p => p.user_id === m.user_id)
 
-        for (const [target, tag] of [[pref.lead_primary, 'p'], [pref.lead_secondary, 's']] as const) {
-          if (!inWindow(hrs, target)) continue
-          const email = emailOf(m.user_id)
-          if (!email) continue
-          reminders.push({
-            userId: m.user_id, email,
-            leagueId: lg.id, leagueName: lg.name,
-            eventType: 'pickem_deadline',
-            dedupeKey: `pickem:${lg.id}:${season}:w${wk}:${tag}`,
-            subject: `Week ${wk} picks due in ${Math.round(hrs)}h - ${lg.name}`,
-            heading: `Your Week ${wk} picks aren't in`,
-            body: `Picks lock ${formatInZone(next, lgTz)} — about ${Math.round(hrs)} hours from now. Get them in before then.`,
-            ctaLabel: 'Make picks', ctaPath: '/app/pickem',
-            urgent: target <= 4,
-          })
+        for (const l of locks) {
+          const hrs = hoursUntil(l.at.toISOString())
+          for (const [target, tag] of [[pref.lead_primary, 'p'], [pref.lead_secondary, 's']] as const) {
+            if (!inWindow(hrs, target)) continue
+            // The early reminder only runs ahead of a week's first lock,
+            // and covers every open game that week
+            if (tag === 'p' && !l.weekStart) continue
+            const scope = tag === 'p' ? openGames(weeks.get(l.week) ?? [], now) : l.games
+            const unpicked = scope.filter(g => !mine.some(p => p.game_id === g.id)).length
+            const tb = scope.find(g => g.is_tiebreaker)
+            const tbMissing = !!tb && !mine.some(p => p.game_id === tb.id && p.tiebreaker_score != null)
+            if (unpicked === 0 && !tbMissing) continue
+
+            const copy = pickReminderCopy({
+              kind: onDeadline ? 'deadline' : tag === 'p' ? 'week' : 'day',
+              week: l.week, at: l.at, tz, hours: Math.round(hrs), leagueName: lg.name,
+              unpicked, tbMissing,
+              noneYet: !mine.some(p => p.week === l.week),
+            })
+            reminders.push({
+              userId: m.user_id, email,
+              leagueId: lg.id, leagueName: lg.name,
+              eventType: 'pickem_deadline',
+              dedupeKey: l.key
+                ? `pickem:${lg.id}:${season}:w${l.week}:${l.key}:${tag}`
+                : `pickem:${lg.id}:${season}:w${l.week}:${tag}`,
+              ...copy,
+              ctaPath: `/app/pickem?week=${l.week}`,
+              urgent: target <= 4,
+            })
+          }
         }
       }
     }
@@ -600,7 +633,103 @@ function weeklyDeadlineForWeek(
 }
 
 // ══ Pick'Em weeks, from the schedule ═════════════════════════
-interface SchedGame { week: number; game_date: string; status: string | null }
+interface SchedGame { id: string; week: number; game_date: string; status: string | null; is_tiebreaker: boolean }
+
+/** A moment picks lock that a reminder can count down to. */
+interface PickLock {
+  week: number
+  at: Date
+  /** Part of the dedupe key for kickoff leagues; null keeps a deadline league's key as it was. */
+  key: string | null
+  /** The week's first lock — the early (primary) reminder only runs ahead of this one. */
+  weekStart: boolean
+  /** Games that lock here and are still open. */
+  games: SchedGame[]
+}
+
+/** Games that haven't kicked off yet (so can still be picked). */
+function openGames(games: SchedGame[], now: Date): SchedGame[] {
+  return games.filter(g =>
+    new Date(g.game_date).getTime() > now.getTime() && !isFinal(g) && g.status !== 'in_progress')
+}
+
+/**
+ * Kickoff leagues: one lock per game day per week, at that day's
+ * first kickoff (days in Eastern time, so a London 9:30 AM game and
+ * the 1 PM slate share Sunday). The week's earliest kickoff is its
+ * weekStart lock.
+ */
+function kickoffLocks(weeks: Map<number, SchedGame[]>, now: Date): PickLock[] {
+  const out: PickLock[] = []
+  for (const [week, games] of weeks) {
+    const firstKickoff = Math.min(...games.map(g => new Date(g.game_date).getTime()))
+    const byDay = new Map<string, SchedGame[]>()
+    for (const g of openGames(games, now)) {
+      const pp = partsInZone(new Date(g.game_date), 'America/New_York')
+      const day = `${pp.year}-${pp.month}-${pp.day}`
+      byDay.set(day, [...(byDay.get(day) ?? []), g])
+    }
+    for (const dayGames of byDay.values()) {
+      const at = new Date(Math.min(...dayGames.map(g => new Date(g.game_date).getTime())))
+      out.push({
+        week, at, key: `k${at.toISOString().slice(0, 13)}`,
+        weekStart: at.getTime() === firstKickoff, games: dayGames,
+      })
+    }
+  }
+  return out
+}
+
+/**
+ * Subject/heading/body for a pick reminder.
+ *   deadline — deadline leagues: everything locks at once
+ *   week     — kickoff leagues, early reminder: the week's first kickoff
+ *   day      — kickoff leagues, final nudge: one game day's first kickoff
+ */
+function pickReminderCopy(o: {
+  kind: 'deadline' | 'week' | 'day'
+  week: number; at: Date; tz: string; hours: number; leagueName: string
+  unpicked: number; tbMissing: boolean; noneYet: boolean
+}): Pick<Reminder, 'subject' | 'heading' | 'body' | 'ctaLabel'> {
+  const { kind, week: wk, at, tz, hours: h, leagueName, unpicked: n, tbMissing, noneYet } = o
+  const s = n === 1 ? '' : 's'
+  const when = formatInZone(at, tz)
+  const day = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(at)
+
+  if (n === 0) {
+    const lock = kind === 'deadline' ? `Picks lock ${when}` : `It locks at kickoff, ${when}`
+    return {
+      subject: `Week ${wk} tiebreaker guess missing - ${leagueName}`,
+      heading: `Your Week ${wk} tiebreaker guess isn't in`,
+      body: `${lock} — about ${h} hours from now. Without a guess you lose every tie.`,
+      ctaLabel: 'Add guess',
+    }
+  }
+
+  const tbLine = tbMissing ? ' Your tiebreaker guess is missing too — without one you lose every tie.' : ''
+  if (kind === 'deadline') {
+    return {
+      subject: `Week ${wk} picks due in ${h}h - ${leagueName}`,
+      heading: noneYet ? `Your Week ${wk} picks aren't in` : `${n} of your Week ${wk} picks aren't in`,
+      body: `Picks lock ${when} — about ${h} hours from now. Get them in before then.${tbLine}`,
+      ctaLabel: 'Make picks',
+    }
+  }
+  if (kind === 'week') {
+    return {
+      subject: `Week ${wk} kicks off in ${h}h - ${leagueName}`,
+      heading: noneYet ? `Your Week ${wk} picks aren't in` : `${n} Week ${wk} game${s} still unpicked`,
+      body: `The first game kicks off ${when} — about ${h} hours from now. Each game locks at its own kickoff.${tbLine}`,
+      ctaLabel: 'Make picks',
+    }
+  }
+  return {
+    subject: `${n} ${day} pick${s} lock${n === 1 ? 's' : ''} in ${h}h - ${leagueName}`,
+    heading: `${n} ${day} game${s} still unpicked`,
+    body: `${day}'s first game kicks off ${when} — about ${h} hours from now, and picks lock at kickoff.${tbLine}`,
+    ctaLabel: 'Make picks',
+  }
+}
 
 /**
  * The next Pick'Em deadline still ahead of `now`, and the week it
@@ -626,15 +755,12 @@ function nextPickemDeadline(
 }
 
 /**
- * The week that just wrapped: every game final (the isWeekComplete
- * rule from src/components/pickem/standings.ts), and the last one
+ * The week that just wrapped: every game final (the schedule already
+ * leaves postponed games out, matching isWeekComplete), and the last one
  * kicked off within the past 4 days — so an offseason Tuesday never
  * recaps a months-old week.
  */
 function justFinishedWeek(weeks: Map<number, SchedGame[]> | undefined, now: Date): number | null {
-  const isFinal = (g: SchedGame) =>
-    (g.status ?? '').toLowerCase().includes('final') ||
-    (g.status ?? '').toLowerCase() === 'post'
   let best: number | null = null
   for (const [week, games] of weeks ?? []) {
     if (games.length === 0 || !games.every(isFinal)) continue
