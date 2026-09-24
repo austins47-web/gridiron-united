@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { useMyLeagues, useCreateLeague, useJoinLeague, useStandings, usePickemStandings, useLeagueRealtime, useLeaveLeague } from '@/hooks/useLeague'
-import { computeWeek, isFinal } from '@/components/pickem/standings'
+import { SeasonAwardsPanel } from '@/components/pickem/SeasonAwards'
+import { computeSeasonAwards } from '@/components/pickem/season'
 import { CURRENT_SEASON } from '@/lib/season'
 import { currentPickemWeek } from '@/lib/pickemWeek'
 import { REGULAR_SEASON_WEEKS } from '@/lib/scheduling'
@@ -324,33 +325,8 @@ function PickemRecords({ leagueId }: { leagueId: string }) {
   const loading = gLoading || pLoading || mLoading
   if (loading) return <StandingsSkeleton rows={2} />
 
-  const weeks = [...new Set(games.map((g: any) => g.week))].sort((a, b) => a - b)
-  let best: { name: string; correct: number; played: number; week: number } | null = null
-  for (const wk of weeks) {
-    const wkGames = games.filter((g: any) => g.week === wk)
-    if (!wkGames.some((g: any) => isFinal(g))) continue
-    const wkPicks = picks.filter((p: any) => p.week === wk)
-    const rows = computeWeek(wkGames as any, wkPicks as any, members as any)
-    for (const r of rows) {
-      if (r.played === 0) continue
-      if (!best || r.correct > best.correct) best = { name: r.name, correct: r.correct, played: r.played, week: wk }
-    }
-  }
-
-  if (!best) {
-    return <p className="text-field-400 text-sm text-center py-4">No completed weeks yet — check back after Week 1</p>
-  }
-
-  return (
-    <div className="flex items-center gap-3 bg-gold/[0.06] border border-gold/20 rounded-xl px-3 py-3">
-      <Flame className="w-8 h-8 text-gold shrink-0" />
-      <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-gold/80">Best Week Ever</p>
-        <p className="text-white font-bold truncate">{best.name}</p>
-        <p className="text-field-400 text-xs">{best.correct}/{best.played} correct · Week {best.week}</p>
-      </div>
-    </div>
-  )
+  // The same season awards the Pick'Em Standings tab shows
+  return <SeasonAwardsPanel data={computeSeasonAwards(games as any, picks as any, members as any)} bare />
 }
 
 function FantasyRecords({ leagueId }: { leagueId: string }) {

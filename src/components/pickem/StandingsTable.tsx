@@ -1,17 +1,19 @@
-import { Crown, Flame, Minus, Check, X, Sparkles } from 'lucide-react'
+import { Crown, Flame, Minus, Check, X, Sparkles, ChevronRight } from 'lucide-react'
 import clsx from 'clsx'
 import { rankOf, type StandingRow, type WeekRow } from './standings'
 import { useFlipList } from '@/hooks/useFlipList'
 import { tierLabel, isFoundingMember } from '@/lib/prestige'
 
 export function StandingsTable({
-  rows, currentUserId, thisWeekRows, leagueCreatedAt, joinedAtByUser,
+  rows, currentUserId, thisWeekRows, leagueCreatedAt, joinedAtByUser, onSelect,
 }: {
   rows: StandingRow[]
   currentUserId?: string
   thisWeekRows: WeekRow[]
   leagueCreatedAt?: string | null
   joinedAtByUser?: Map<string, string | null>
+  /** Opens that player's season card. */
+  onSelect?: (userId: string) => void
 }) {
   // Rows are already sorted by rank (rankOf/computeStandings does
   // that upstream) — this just animates the reorder whenever that
@@ -76,7 +78,17 @@ export function StandingsTable({
           <span className="font-cond font-black text-sm uppercase tracking-[0.14em] text-white">
             Standings
           </span>
-          <span className="text-field-500 text-xs">{rows.length} players</span>
+          <span className="flex items-center gap-3">
+            <span className="text-field-500 text-xs">{rows.length} players</span>
+            {onSelect && currentUserId && rows.some(r => r.userId === currentUserId) && (
+              <button
+                onClick={() => onSelect(currentUserId)}
+                className="flex items-center gap-0.5 text-xs font-bold uppercase tracking-wider text-gold hover:text-gold-light transition-colors"
+              >
+                Your season <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </span>
         </div>
 
         <div ref={tbodyRef as any} className="divide-y divide-field-700/40">
@@ -96,7 +108,15 @@ export function StandingsTable({
               <div
                 key={r.userId}
                 data-flip-key={r.userId}
-                className={clsx('px-3 py-2.5', isYou ? 'bg-gold/[0.06]' : '')}
+                {...(onSelect ? {
+                  role: 'button', tabIndex: 0, title: `${r.name}'s season`,
+                  onClick: () => onSelect(r.userId),
+                  onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(r.userId) } },
+                } : {})}
+                className={clsx(
+                  'px-3 py-2.5', isYou ? 'bg-gold/[0.06]' : '',
+                  onSelect && 'cursor-pointer hover:bg-field-700/30 transition-colors',
+                )}
               >
                 {/* Primary row */}
                 <div className="flex items-center gap-2 min-w-0">

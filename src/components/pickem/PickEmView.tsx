@@ -17,6 +17,9 @@ import { WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
 import { WhoCanWinPanel } from './WhoCanWin'
+import { SeasonAwardsPanel } from './SeasonAwards'
+import { SeasonCard } from './SeasonCard'
+import { computeSeasonAwards, computeSeasonProfiles } from './season'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
   TrendingDown, Home, Plane, Award
@@ -270,6 +273,21 @@ export function PickEmView() {
   const standings = useMemo(
     () => computeStandings(seasonGames as any, seasonPicks as any, leagueMembers as any),
     [seasonGames, seasonPicks, leagueMembers],
+  )
+
+  // Season awards under the standings, and the season card a
+  // Standings row opens — both from the same season data.
+  const [seasonUserId, setSeasonUserId] = useState<string | null>(null)
+  const seasonAwards = useMemo(
+    () => computeSeasonAwards(seasonGames as any, seasonPicks as any, leagueMembers as any),
+    [seasonGames, seasonPicks, leagueMembers],
+  )
+  const seasonProfile = useMemo(
+    () => seasonUserId
+      ? computeSeasonProfiles(seasonGames as any, seasonPicks as any, leagueMembers as any)
+          .find(p => p.userId === seasonUserId) ?? null
+      : null,
+    [seasonUserId, seasonGames, seasonPicks, leagueMembers],
   )
 
   // ── This week's results, for the recap post ─────────────────
@@ -1030,7 +1048,19 @@ export function PickEmView() {
             thisWeekRows={weekRows}
             leagueCreatedAt={activeLeague?.created_at ?? null}
             joinedAtByUser={joinedAtByUser}
+            onSelect={setSeasonUserId}
           />
+
+          <SeasonAwardsPanel data={seasonAwards} />
+
+          {seasonProfile && (
+            <SeasonCard
+              profile={seasonProfile}
+              totalPlayers={standings.length}
+              isYou={seasonProfile.userId === user?.id}
+              onClose={() => setSeasonUserId(null)}
+            />
+          )}
         </div>
       )}
 
