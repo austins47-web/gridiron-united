@@ -234,7 +234,9 @@ serve(async (req) => {
       .sort((a, b) => b[1] - a[1]).slice(0, 3)
       .map(([id, chance]) => ({ name: nameById.get(id) ?? 'Someone', chance }))
     const stakes = (withSwings?.swings ?? [])
-      .filter(sw => !sw.settled && sw.stakes > 0.02)
+      // Only games that have locked: before that, "if PHI wins, these people
+      // gain" reads as who picked PHI, even though hidden picks aren't used
+      .filter(sw => !sw.settled && sw.stakes > 0.02 && !isOpen(sw.game))
       .slice(0, 4)
       .map(sw => ({
         game: matchup(sw.game),
