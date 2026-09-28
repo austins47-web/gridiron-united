@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
+import { supabase } from '@/lib/supabase'
+import { brandVars } from '@/lib/brand'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from '@/components/pickem/Belt'
 
@@ -72,6 +74,8 @@ interface TvName { name: string; chance: number }
 
 interface TvBoard {
   league: string
+  /** The league's logo and accent color (Commish panel → League branding). */
+  brand?: { logo: string | null; color: string | null }
   week: number
   now: string
   started: boolean
@@ -244,11 +248,16 @@ export function ShopTV() {
     >
       <div
         className="shrink-0 bg-field-950 text-white relative"
-        style={{ width: W, height: H, transform: `scale(${scale})`, transformOrigin: 'center' }}
+        style={{
+          width: W, height: H, transform: `scale(${scale})`, transformOrigin: 'center',
+          // The league's own accent color, where it has one
+          ...(brandVars(board?.brand?.color) as CSSProperties | null ?? {}),
+        }}
       >
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
           : <Board board={board} offline={status === 'offline'} />}
+        {status !== 'gone' && <FloatingReactions code={code} />}
       </div>
     </div>
   )
@@ -301,9 +310,12 @@ function Board({ board, offline }: { board: TvBoard; offline: boolean }) {
     <div className="absolute inset-0 flex flex-col">
       {/* Header */}
       <header className="h-[92px] shrink-0 flex items-center gap-6 px-8 border-b-2 border-field-800 bg-field-900">
-        <div className="min-w-0 w-[520px]">
-          <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[16px] leading-none">Gridiron United · Pick&apos;Em</p>
-          <p className="font-cond font-black uppercase text-white text-[40px] leading-tight truncate">{board.league}</p>
+        <div className="min-w-0 w-[520px] flex items-center gap-4">
+          {board.brand?.logo && <img src={board.brand.logo} alt="" className="h-[68px] w-auto max-w-[140px] object-contain shrink-0" />}
+          <div className="min-w-0">
+            <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[16px] leading-none">Gridiron United · Pick&apos;Em</p>
+            <p className="font-cond font-black uppercase text-white text-[40px] leading-tight truncate">{board.league}</p>
+          </div>
         </div>
         <div className="flex-1 flex items-center justify-center gap-4">
           <span className="font-cond font-black uppercase text-[40px] text-white tracking-wide whitespace-nowrap">{weekTitle(board.week)}</span>
@@ -1104,6 +1116,57 @@ function Takeover({ board }: { board: TvBoard }) {
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Reactions from phones ─────────────────────────────────────
+// Members tap an emoji in the app (send_tv_reaction); it's broadcast to
+// tv:<code> and floats up the screen with their name under it.
+interface Floater { id: number; emoji: string; name: string; x: number; drift: number; size: number; dur: number }
+
+function FloatingReactions({ code }: { code: string }) {
+  const [items, setItems] = useState<Floater[]>([])
+  useEffect(() => {
+    let n = 0
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const channel = supabase
+      .channel(`tv:${code}`)
+      .on('broadcast', { event: 'reaction' }, ({ payload }) => {
+        const p = payload as { emoji?: string; name?: string }
+        if (!p?.emoji) return
+        const f: Floater = {
+          id: ++n,
+          emoji: p.emoji,
+          name: String(p.name ?? '').slice(0, 24),
+          x: 4 + Math.random() * 90,
+          drift: (Math.random() - 0.5) * 180,
+          size: 70 + Math.random() * 44,
+          dur: 4200 + Math.random() * 1800,
+        }
+        // Keep it to a screenful: a flood drops the oldest
+        setItems(list => [...list.slice(-60), f])
+        timers.push(setTimeout(() => setItems(list => list.filter(x => x.id !== f.id)), f.dur + 200))
+      })
+      .subscribe()
+    return () => { timers.forEach(clearTimeout); supabase.removeChannel(channel) }
+  }, [code])
+
+  return (
+    <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden">
+      <style>{'@keyframes tv-float { 0% { transform: translate(0, 0) scale(.5); opacity: 0 } 10% { transform: translate(calc(var(--dx) * .1), -90px) scale(1); opacity: 1 } 75% { opacity: 1 } 100% { transform: translate(var(--dx), -960px) scale(1.12); opacity: 0 } }'}</style>
+      {items.map(f => (
+        <div
+          key={f.id}
+          className="absolute bottom-[60px] flex flex-col items-center"
+          style={{ left: `${f.x}%`, '--dx': `${f.drift}px`, animation: `tv-float ${f.dur}ms ease-out forwards` } as CSSProperties}
+        >
+          <span style={{ fontSize: f.size, lineHeight: 1 }}>{f.emoji}</span>
+          {f.name && (
+            <span className="mt-1 rounded-full bg-black/70 px-2.5 py-0.5 text-[18px] font-bold text-white whitespace-nowrap">{f.name}</span>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

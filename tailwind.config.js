@@ -4,10 +4,12 @@ export default {
   theme: {
     extend: {
       colors: {
+        // A league can set its own accent (brand_color): the app swaps these
+        // CSS variables (src/lib/brand.ts). The defaults are the copper.
         gold: {
-          DEFAULT: '#CE7B45',
-          dark: '#c4841c',
-          light: '#DE9163',
+          DEFAULT: 'rgb(var(--gold) / <alpha-value>)',
+          dark: 'rgb(var(--gold-dark) / <alpha-value>)',
+          light: 'rgb(var(--gold-light) / <alpha-value>)',
         },
         field: {
           950: '#0A0A0A',

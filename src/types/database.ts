@@ -1384,6 +1384,8 @@ export interface Database {
       }
       unpin_league_announcement: { Args: { p_league: string }; Returns: undefined }
       league_tv_token: { Args: { p_league: string; p_reset?: boolean }; Returns: string }
+      league_has_tv: { Args: { p_league: string }; Returns: boolean }
+      send_tv_reaction: { Args: { p_league: string; p_emoji: string }; Returns: undefined }
       notify_league_member: {
         Args: { p_user: string; p_league: string; p_type: string; p_title: string; p_body?: string | null; p_data?: Json }
         Returns: undefined
@@ -1530,6 +1532,9 @@ export type League = ScoringRules & RosterSlotConfig & {
   ai_recap?: boolean
   /** The commissioner's note about the league, for the weekly roast. */
   roast_notes?: string | null
+  /** The league's own logo and accent color (the app and the Shop TV). */
+  brand_logo_url?: string | null
+  brand_color?: string | null
   created_at: string
   updated_at: string
 }

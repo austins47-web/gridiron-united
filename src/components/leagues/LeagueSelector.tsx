@@ -112,7 +112,9 @@ export function LeagueSelector() {
         onClick={() => setOpen(!open)}
         className="league-selector-btn flex items-center gap-2 px-3 py-1.5 rounded bg-field-700 border border-white/[0.06] hover:border-gold/30 transition-colors"
       >
-        <Trophy size={13} className="text-gold shrink-0" />
+        {activeLeague?.brand_logo_url
+          ? <img src={activeLeague.brand_logo_url} alt="" className="w-5 h-5 rounded object-contain shrink-0" />
+          : <Trophy size={13} className="text-gold shrink-0" />}
         <span className="league-selector-name font-cond font-bold text-sm text-gray-200 max-w-[180px] truncate">
           {activeLeague?.name ?? 'Select League'}
         </span>
@@ -144,13 +146,17 @@ export function LeagueSelector() {
                     )}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      {/* League initial avatar */}
-                      <div className={clsx(
-                        'w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm shrink-0',
-                        isActive ? 'bg-gold text-field-950' : 'league-selector-avatar-inactive bg-field-700 text-gold',
-                      )}>
-                        {league.name[0].toUpperCase()}
-                      </div>
+                      {/* The league's logo, or its initial */}
+                      {league.brand_logo_url ? (
+                        <img src={league.brand_logo_url} alt="" className="w-8 h-8 rounded-lg object-contain bg-field-900 shrink-0" />
+                      ) : (
+                        <div className={clsx(
+                          'w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm shrink-0',
+                          isActive ? 'bg-gold text-field-950' : 'league-selector-avatar-inactive bg-field-700 text-gold',
+                        )}>
+                          {league.name[0].toUpperCase()}
+                        </div>
+                      )}
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">

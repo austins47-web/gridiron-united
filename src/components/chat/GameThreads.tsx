@@ -1,6 +1,7 @@
 import { ArrowLeft, MessageSquare } from 'lucide-react'
 import clsx from 'clsx'
 import { teamLogoUrl } from '@/components/teams/teamIds'
+import { TvReactionButton } from '@/components/tv/TvReactions'
 import { isFinal, isVoid, isLive, winnerOf, homeWinChance, gameClockLabel, type Game } from '@/components/pickem/standings'
 
 const kickoffLabel = (iso: string | null) =>
@@ -123,7 +124,7 @@ export function GameThreadHeader({ game, picks, myId, onBack }: {
         ) : (
           <div className="flex-1 h-8 rounded-lg bg-field-800 animate-pulse" />
         )}
-        <span className="w-7" />
+        <span className="w-7 flex justify-end"><TvReactionButton /></span>
       </div>
       {game && (
         <div className="mt-1 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-[11px]">

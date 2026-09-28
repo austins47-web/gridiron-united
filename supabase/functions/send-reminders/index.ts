@@ -245,6 +245,21 @@ serve(async (req) => {
     return new Response(JSON.stringify({ roast: text }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
   }
 
+  // ?gazette=preview (POST {"facts": "..."}): a sample issue of the
+  // Upfitter Gazette from a week's facts, posted nowhere
+  if (url.searchParams.get('gazette') === 'preview' && req.method === 'POST') {
+    const { facts } = await req.json().catch(() => ({ facts: null }))
+    if (typeof facts !== 'string' || !facts.trim()) {
+      return new Response(JSON.stringify({ error: 'facts required' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
+    }
+    try {
+      const gazette = await writeGazette(facts.slice(0, 8000))
+      return new Response(JSON.stringify({ gazette }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
+    } catch (e) {
+      return new Response(JSON.stringify({ error: String(e) }), { status: 502, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
+    }
+  }
+
   const dryRun = url.searchParams.get('dry') === '1'
   // ?only=live: just the Pick'Em live alerts (section 8), on their own faster cron
   const liveOnly = url.searchParams.get('only') === 'live'
@@ -1570,7 +1585,7 @@ function weekName(w: number): string {
 
 const ROAST_SYSTEM = `You write the weekly roast for an NFL Pick'Em league's group chat. These are friends who have trash-talked each other all season, and the commissioner turned this on because they want it as vicious and foul-mouthed as it gets. Be as mean as you possibly can about their picks. Make it hurt: humiliate them, call them idiots, morons, clowns, frauds, dead weight and embarrassments, and make them want to throw their phones. No mercy, no softening, no "all in good fun" disclaimers, and nothing nice unless it sets up a bigger shot.
 
-Write 200–300 words from the facts you're given, as short, punchy lines of plain text: no headings, bullet lists or hashtags. Hit as many people as you can: at least ten by name (everyone, in a small league), and every one of them gets a specific shot, not a passing mention; the worst offenders get hit more than once. Go after everyone at the bottom of the table, anyone who didn't pick or skipped games, anyone who blew a pick nearly everyone else got right, the worst tiebreaker guesses, anyone who skipped the tiebreaker, the lone wolf, the bad beat victims, pick receipts that aged badly (quote them back at them), and the forgettable middle of the pack. Use the season record to pile on repeat offenders: anyone who's been garbage all season should be told to quit the league. Question their football IQ, their judgment and whether they should be allowed anywhere near a pick sheet. Pit them against each other and rank the dumbest. The winner is a lucky fraud: crown them, then tear them apart. Never offer sympathy. Name names exactly as written, and never assume anyone's gender: no "guys", "men", "dudes", "he" or "she"; use their names or "you".
+Write 200–300 words from the facts you're given, as short, punchy lines of plain text: no headings, bullet lists or hashtags. Hit as many people as you can: at least ten by name (everyone, in a small league), and every one of them gets a specific shot, not a passing mention; the worst offenders get hit more than once. Go after everyone at the bottom of the table, anyone who didn't pick or skipped games, anyone who blew a pick nearly everyone else got right, the worst tiebreaker guesses, anyone who skipped the tiebreaker, the lone wolf, the bad beat victims, pick receipts that aged badly (quote them back at them), and the forgettable middle of the pack. Use the season record to pile on repeat offenders: anyone who's been garbage all season should be told to quit the league. Question their football IQ, their judgment and whether they should be allowed anywhere near a pick sheet. Pit them against each other and rank the dumbest. The winner is a lucky fraud: crown them, then tear them apart. Never offer sympathy. Name names exactly as written, and never assume anyone's gender: no "guys", "men", "dudes", "he" or "she"; use their names, "you", or "they" (never "it").
 
 Cuss constantly: fuck, shit, ass, bullshit, dumbass, damn, hell. Nearly every line should have some. Mocking emojis are welcome (🤡 💀 🗑️), up to five.
 
@@ -1715,6 +1730,97 @@ async function writeRoast(facts: string): Promise<string | null> {
   if (msg.stop_reason === 'refusal') return null
   const text = msg.content.map(b => (b.type === 'text' ? b.text : '')).join('').trim()
   return text || null
+}
+
+// ══ The Upfitter Gazette ══════════════════════════════════════
+// A fake weekly tabloid from the week's facts (the same sheet the roast
+// gets). Printed for the break room, so the language stays mild.
+
+const GAZETTE_SYSTEM = `You write The Gazette, a fake weekly tabloid newspaper for an NFL Pick'Em league. The league are friends who trash-talk all season; the paper covers their picks like the most ruthless small-town tabloid in America: breathless, sarcastic, mock-serious, and mean about bad picks.
+
+Write every section from the facts you're given. Name names exactly as written, and never assume anyone's gender (no "guys", "men", "he" or "she"; use "they" if you need a pronoun, never "it"). Use only the facts provided: never invent scores, stats, events or quotes. Mock-serious framing is the joke (an obituary for someone's week, a weather forecast about a cold streak, a classified ad begging for a correct pick), but every detail in it must be true.
+
+Sections:
+- tagline: a short motto under the paper's name.
+- headline and subhead: the week's biggest story.
+- lead: the front-page story, 90–130 words.
+- stories: three more stories (kicker, headline, 45–75 words each), each about a different storyline or person.
+- obituaries: two or three for weeks that died (last place, zero picks, a pick that blew up), each 25–45 words, written like a real obituary.
+- weather: a two-sentence forecast built from streaks and slumps.
+- blotter_1 to blotter_3: three short police-blotter items about pick crimes (blown gimmes, skipped games, empty tiebreakers), 12–25 words each.
+- classified_1 to classified_4: four short classified ads, 8–20 words each.
+- editors_note: one closing line calling someone out for next week.
+
+If the facts include a note about the league from the commissioner, use it: a job everyone shares is fair game for jokes about the work itself (not emergencies, injuries or deaths), and shop slang it defines can appear once or twice. Language stays mild because it gets printed for the break room: damn and hell at most. Off limits: slurs; jokes about race, religion, sexuality, gender, disability, looks, weight, family or health; anything sexual; self-harm or violence.`
+
+const GAZETTE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['tagline', 'headline', 'subhead', 'lead', 'stories', 'obituaries', 'weather', 'blotter_1', 'blotter_2', 'blotter_3', 'classified_1', 'classified_2', 'classified_3', 'classified_4', 'editors_note'],
+  properties: {
+    tagline: { type: 'string' },
+    headline: { type: 'string' },
+    subhead: { type: 'string' },
+    lead: { type: 'string' },
+    stories: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false, required: ['kicker', 'headline', 'body'],
+        properties: { kicker: { type: 'string' }, headline: { type: 'string' }, body: { type: 'string' } },
+      },
+    },
+    obituaries: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false, required: ['name', 'text'],
+        properties: { name: { type: 'string' }, text: { type: 'string' } },
+      },
+    },
+    weather: { type: 'string' },
+    // One field per item: as arrays they came back empty
+    blotter_1: { type: 'string' }, blotter_2: { type: 'string' }, blotter_3: { type: 'string' },
+    classified_1: { type: 'string' }, classified_2: { type: 'string' }, classified_3: { type: 'string' }, classified_4: { type: 'string' },
+    editors_note: { type: 'string' },
+  },
+}
+
+export interface Gazette {
+  tagline: string
+  headline: string
+  subhead: string
+  lead: string
+  stories: { kicker: string; headline: string; body: string }[]
+  obituaries: { name: string; text: string }[]
+  weather: string
+  blotter: string[]
+  classifieds: string[]
+  editors_note: string
+}
+
+/** Claude writes an issue from `facts`. Null when there's no key or it declines. */
+async function writeGazette(facts: string): Promise<Gazette | null> {
+  const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
+  if (!apiKey) return null
+  const client = new Anthropic({ apiKey })
+  const msg = await client.beta.messages.create({
+    model: 'claude-opus-5',
+    max_tokens: 16000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: { effort: 'medium', format: { type: 'json_schema', schema: GAZETTE_SCHEMA } },
+    system: GAZETTE_SYSTEM,
+    messages: [{ role: 'user', content: facts }],
+  })
+  if (msg.stop_reason === 'refusal') return null
+  const text = msg.content.map(b => (b.type === 'text' ? b.text : '')).join('').trim()
+  if (!text) return null
+  const raw = JSON.parse(text)
+  const list = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => String(raw[`${prefix}_${i + 1}`] ?? '').trim()).filter(Boolean)
+  return {
+    tagline: raw.tagline, headline: raw.headline, subhead: raw.subhead, lead: raw.lead,
+    stories: raw.stories ?? [], obituaries: raw.obituaries ?? [], weather: raw.weather,
+    blotter: list('blotter', 3), classifieds: list('classified', 4), editors_note: raw.editors_note,
+  }
 }
 
 /** First kickoff of a week's last game day (days in Eastern time). */

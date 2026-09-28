@@ -29,6 +29,7 @@ import { usePickemSeasonData, useLeagueMembersList } from '@/hooks/usePickemSeas
 import { openPlayerCard } from '@/hooks/usePlayerCard'
 import { useThreadCounts } from '@/hooks/useGameThreads'
 import { PinnedBanner, PinComposer } from '@/components/chat/PinnedAnnouncement'
+import { TvReactionFab } from '@/components/tv/TvReactions'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
   TrendingDown, Home, Plane, Award, Quote, MessageSquare, Pin
@@ -686,9 +687,14 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="section-title">Pick'Em</h1>
-          <p className="text-field-400 text-sm">{activeLeague.name} · {CURRENT_SEASON} NFL Season</p>
+        <div className="flex items-center gap-3 min-w-0">
+          {activeLeague.brand_logo_url && (
+            <img src={activeLeague.brand_logo_url} alt="" className="w-12 h-12 object-contain shrink-0" />
+          )}
+          <div className="min-w-0">
+            <h1 className="section-title">Pick'Em</h1>
+            <p className="text-field-400 text-sm truncate">{activeLeague.name} · {CURRENT_SEASON} NFL Season</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {isCommissioner && (
@@ -714,6 +720,9 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
           )}
         </div>
       </div>
+
+      {/* Reacting on the Shop TV, while a game is on */}
+      <TvReactionFab />
 
       {/* The commissioner's pinned announcement */}
       <PinnedBanner leagueId={activeLeagueId} isCommissioner={!!isCommissioner} dismissible />

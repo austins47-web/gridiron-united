@@ -8,6 +8,7 @@ import { CfbPostseasonManager } from './CfbPostseasonManager'
 import { PickDeadlineSettings } from './PickDeadlineSettings'
 import { AiRecapSetting } from './AiRecapSetting'
 import { ShopTvSetting } from './ShopTvSetting'
+import { BrandingSetting } from './BrandingSetting'
 import type { League, Player, PlayerStatus, RosterSlotConfig } from '@/types/database'
 import {
   Shield, Users, Zap, TrendingUp, Trash2, Search,
@@ -180,7 +181,12 @@ export function CommissionerPanel() {
       {tab === 'rosters' && <RosterEditor leagueId={activeLeagueId} league={activeLeague!} />}
       {tab === 'players' && <PlayerScoreEditor />}
       {tab === 'members' && <MembersManager leagueId={activeLeagueId} league={activeLeague!} />}
-      {tab === 'league' && <LeagueManager league={activeLeague!} />}
+      {tab === 'league' && (
+        <div className="space-y-6">
+          <BrandingSetting leagueId={activeLeagueId!} />
+          <LeagueManager league={activeLeague!} />
+        </div>
+      )}
       {tab === 'cfb_postseason' && <CfbPostseasonManager league={activeLeague!} />}
       {tab === 'trades' && <TradeSettings league={activeLeague!} />}
     </div>

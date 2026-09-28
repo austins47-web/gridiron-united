@@ -14,6 +14,7 @@ import { PickemWinnerPopup } from '@/components/pickem/PickemWinnerPopup'
 import { PullToRefresh } from './PullToRefresh'
 import { useInstallPlatform } from '@/hooks/useInstallPlatform'
 import { usePlayerCard } from '@/hooks/usePlayerCard'
+import { applyBrand } from '@/lib/brand'
 import clsx from 'clsx'
 
 // Only downloaded when someone opens it from the account menu
@@ -33,6 +34,9 @@ export function AppShell() {
   const cardOpen = usePlayerCard(s => s.userId) != null
   const [cardHost, setCardHost] = useState(false)
   useEffect(() => { if (cardOpen) setCardHost(true) }, [cardOpen])
+  // The active league's own accent color, everywhere the app uses gold
+  const brandColor = activeLeague?.brand_color ?? null
+  useEffect(() => { applyBrand(document.documentElement, brandColor) }, [brandColor])
 
   // ── Global tabs — always visible ──────────────────────────
   const globalTabs = [

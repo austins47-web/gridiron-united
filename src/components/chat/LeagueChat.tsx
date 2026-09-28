@@ -22,6 +22,7 @@ import { CommishReplyCard, COMMISH_REPLY_PREFIX, type CommishReplyPayload } from
 import { PollCard, PollComposer, POLL_PREFIX } from './Polls'
 import { PinnedBanner, PinComposer } from './PinnedAnnouncement'
 import { GameThreadStrip, GameThreadHeader } from './GameThreads'
+import { TvReactionButton } from '@/components/tv/TvReactions'
 import { BeltIcon } from '@/components/pickem/Belt'
 import { useBeltHolders } from '@/hooks/useBeltHolders'
 
@@ -1250,10 +1251,13 @@ export function LeagueChat() {
         <GameThreadHeader game={threadGame} picks={threadPicks} myId={user?.id} onBack={closeThread} />
       ) : (
         <div className="flex items-center gap-2 px-4 py-3 border-b border-field-700 shrink-0">
-          <MessageSquare className="w-4 h-4 text-gold" />
+          {activeLeague?.brand_logo_url
+            ? <img src={activeLeague.brand_logo_url} alt="" className="w-5 h-5 object-contain" />
+            : <MessageSquare className="w-4 h-4 text-gold" />}
           <span className="font-cond font-bold text-sm uppercase tracking-wider text-white">League Chat</span>
           <span className="text-field-500 text-xs ml-1 truncate">— {activeLeague?.name}</span>
           <div className="ml-auto flex items-center gap-1.5 shrink-0">
+            <TvReactionButton />
             {isCommissioner && (
               <button
                 onClick={() => setComposingPin(true)}
