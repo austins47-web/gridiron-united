@@ -33,7 +33,8 @@
 //     line, kept current until kickoff and then frozen — ESPN drops
 //     the line once a game ends, and "who was the favorite" has to
 //     survive that
-//   - live_home_wp / period / clock while a game is on
+//   - live_home_wp / period / clock while a game is on, and the situation
+//     (possession, down & distance, red zone, last play) for the Shop TV
 //   - game_story once it's final: how it was lost (the loser's best
 //     second-half win chance, the score that decided it), from ESPN's
 //     game summary. Up to STORY_BATCH games per run; a game final
@@ -206,6 +207,13 @@ serve(async (req) => {
       const kept = storedLine.get(String(ev.id))
       const keep = kept?.pregame_home_wp != null && (status !== 'scheduled' || line.pregame_home_wp == null)
       const prob = comp.situation?.lastPlay?.probability?.homeWinPercentage
+      // The live situation (the Shop TV's live tiles): possession is ESPN's team id
+      const sit = live ? comp.situation : null
+      const ballId = sit?.possession != null ? String(sit.possession) : null
+      const possession = ballId == null ? null
+        : String(home.team?.id ?? home.id) === ballId ? homeAbbr
+        : String(away.team?.id ?? away.id) === ballId ? awayAbbr
+        : null
 
       rows.push({
         espn_event_id: String(ev.id),
@@ -223,6 +231,10 @@ serve(async (req) => {
         live_home_wp: live && typeof prob === 'number' ? prob : null,
         period: live ? num(comp.status?.period) : null,
         clock: live ? comp.status?.displayClock ?? null : null,
+        possession,
+        down_distance: sit?.downDistanceText ?? sit?.shortDownDistanceText ?? null,
+        red_zone: sit ? !!sit.isRedZone : null,
+        last_play: typeof sit?.lastPlay?.text === 'string' ? sit.lastPlay.text.slice(0, 300) : null,
       })
     }
 

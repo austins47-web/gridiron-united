@@ -334,51 +334,5 @@ export function computeSeasonAwards(games: Game[], picks: Pick[], members: Membe
 // Pick DNA lives in the shared core (the Commish reads it too)
 export { computePickDNA, type PickDNA, type PickTraits, type PickArchetype } from './standings'
 
-// ── Twins & Nemesis ───────────────────────────────────────────
-
-export interface PickMatch {
-  userId: string
-  name: string
-  /** Final games you both picked. */
-  shared: number
-  /** Share of those you picked the same way, 0–1. */
-  agree: number
-  /** Games you picked differently, and who was right. */
-  split: number
-  youRight: number
-  theyRight: number
-}
-
-/** Fewer shared games than this and a match doesn't mean anything yet. */
-const MIN_SHARED = 10
-
-/**
- * For one player: the leaguemate who picks most like them (twin), the
- * one they disagree with most (nemesis), and their record in the games
- * they split. Final games only — every pick there is public.
- */
-export function computePickMatches(games: Game[], picks: Pick[], members: Member[], userId: string): { twin: PickMatch | null; nemesis: PickMatch | null } {
-  const finals = games.filter(g => !isVoid(g) && isFinal(g) && winnerOf(g) != null)
-  const pickOf = new Map(picks.map(p => [`${p.user_id}:${p.game_id}`, p.picked_team]))
-  const matches: PickMatch[] = members.filter(m => m.user_id !== userId).map(m => {
-    let shared = 0, same = 0, youRight = 0, theyRight = 0
-    for (const g of finals) {
-      const mine = pickOf.get(`${userId}:${g.id}`)
-      const theirs = pickOf.get(`${m.user_id}:${g.id}`)
-      if (!mine || !theirs) continue
-      shared++
-      if (mine === theirs) { same++; continue }
-      if (mine === winnerOf(g)) youRight++
-      else if (theirs === winnerOf(g)) theyRight++
-    }
-    return {
-      userId: m.user_id, name: nameOf(m), shared, agree: shared ? same / shared : 0,
-      split: shared - same, youRight, theyRight,
-    }
-  }).filter(x => x.shared >= MIN_SHARED)
-
-  if (matches.length === 0) return { twin: null, nemesis: null }
-  const twin = [...matches].sort((a, b) => b.agree - a.agree || b.shared - a.shared)[0]
-  const nemesis = [...matches].sort((a, b) => a.agree - b.agree || b.split - a.split)[0]
-  return { twin, nemesis: nemesis.userId === twin.userId ? null : nemesis }
-}
+// Twins & Nemesis live in the shared core (the Shop TV uses them too)
+export { computePickMatches, type PickMatch } from './standings'

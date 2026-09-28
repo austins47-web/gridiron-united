@@ -30,7 +30,29 @@ interface TvGame {
   tiebreaker: boolean
   picked: number
   riders: { away: string[]; home: string[] } | null
+  /** Live only: the team with the ball, "3rd & 7 at MIA 23", red zone, the last play. */
+  possession?: string | null
+  downDistance?: string | null
+  redZone?: boolean
+  lastPlay?: string | null
 }
+
+interface TvSpotlight {
+  name: string
+  avatarUrl: string | null
+  rank: number
+  of: number
+  correct: number
+  played: number
+  weeksWon: number
+  archetype: { title: string; blurb: string } | null
+  badges: string[]
+  twin: { name: string; agree: number } | null
+  nemesis: { name: string; split: number; youRight: number; theyRight: number } | null
+  beltWeeks: number[]
+}
+
+interface TvInjury { team: string; name: string; pos: string; status: 'out' | 'questionable' }
 
 interface TvRow {
   userId: string
@@ -90,6 +112,16 @@ interface TvBoard {
   chat?: { name: string; text: string; at: string }[]
   roast?: { week: number; text: string } | null
   poll?: { question: string; options: { text: string; votes: number }[]; total: number; closesAt: string | null; commish: boolean } | null
+  /** Every pick on every game: a team, '?' while it can still be picked, null for no pick. */
+  board?: {
+    games: { id: string; away: string; home: string; winner: string | null; final: boolean; live: boolean; tiebreaker: boolean; locked: boolean }[]
+    rows: { userId: string; cells: Record<string, string | null>; tiebreaker: number | null }[]
+  }
+  /** Who still owes picks, while any game can be picked. */
+  shame?: { lockAt: string | null; open: number; rows: { name: string; missing: number; none: boolean; noTiebreaker: boolean }[] } | null
+  spotlights?: TvSpotlight[]
+  next_week?: { week: number; games: { away: string; home: string; kickoff: string; spread: number | null; total: number | null; homeChance: number }[] } | null
+  injuries?: TvInjury[]
 }
 
 const CODE_KEY = 'gu-tv-code'
@@ -256,6 +288,13 @@ function Board({ board, offline }: { board: TvBoard; offline: boolean }) {
         ? new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime()
         : new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime()))
   }, [board.games])
+  const injuries = useMemo(() => {
+    const m = new Map<string, TvInjury[]>()
+    for (const i of board.injuries ?? []) m.set(i.team, [...(m.get(i.team) ?? []), i])
+    return m
+  }, [board.injuries])
+  // The full Board takes turns with the games once anything has locked
+  const view = useMainView(!!board.board?.games.some(g => g.locked))
   const s = board.summary
 
   return (
@@ -286,6 +325,9 @@ function Board({ board, offline }: { board: TvBoard; offline: boolean }) {
             </>
           )}
           {!board.started && <Chip>{board.pickedIn}/{board.members} picked</Chip>}
+          {board.shame?.lockAt && board.shame.rows.length > 0 && (
+            <Chip><span className="text-amber-300">Picks lock in <Countdown to={board.shame.lockAt} /></span></Chip>
+          )}
         </div>
         <div className="w-[260px] flex items-center justify-end gap-4">
           {offline && <span className="text-[18px] font-bold text-amber-300">Reconnecting…</span>}
@@ -293,10 +335,16 @@ function Board({ board, offline }: { board: TvBoard; offline: boolean }) {
         </div>
       </header>
 
-      {/* Body: games · standings · the rotating panel */}
+      {/* Body: games + standings (or the full Board) · the rotating panel */}
       <div className="flex-1 min-h-0 flex gap-[18px] p-5">
-        <GamesGrid games={games} />
-        <StandingsPanel board={board} rows={table} week={showWeek} />
+        {view === 'board' && board.board
+          ? <PicksBoardView board={board} />
+          : (
+            <>
+              <GamesGrid games={games} injuries={injuries} />
+              <StandingsPanel board={board} rows={table} week={showWeek} />
+            </>
+          )}
         <FeaturePanel board={board} />
       </div>
 
@@ -304,6 +352,20 @@ function Board({ board, offline }: { board: TvBoard; offline: boolean }) {
       <Takeover board={board} />
     </div>
   )
+}
+
+const GAMES_MS = 50_000
+const BOARD_MS = 25_000
+
+/** Games for a while, then the full Board for a while — while there's a Board to show. */
+function useMainView(hasBoard: boolean): 'games' | 'board' {
+  const [view, setView] = useState<'games' | 'board'>('games')
+  useEffect(() => {
+    if (!hasBoard) { setView('games'); return }
+    const t = setTimeout(() => setView(v => (v === 'games' ? 'board' : 'games')), view === 'games' ? GAMES_MS : BOARD_MS)
+    return () => clearTimeout(t)
+  }, [view, hasBoard])
+  return hasBoard ? view : 'games'
 }
 
 function Chip({ children }: { children: ReactNode }) {
@@ -314,8 +376,30 @@ function Chip({ children }: { children: ReactNode }) {
   )
 }
 
+function useNow(everyMs: number): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), everyMs)
+    return () => clearInterval(t)
+  }, [everyMs])
+  return now
+}
+
+function untilLabel(iso: string, now: number): string {
+  const ms = new Date(iso).getTime() - now
+  if (ms <= 0) return 'now'
+  const m = Math.floor(ms / 60_000)
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60
+  return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${mm}m` : `${Math.max(1, mm)}m`
+}
+
+function Countdown({ to }: { to: string }) {
+  const now = useNow(20_000)
+  return <>{untilLabel(to, now)}</>
+}
+
 // ── Games ─────────────────────────────────────────────────────
-function GamesGrid({ games }: { games: TvGame[] }) {
+function GamesGrid({ games, injuries }: { games: TvGame[]; injuries: Map<string, TvInjury[]> }) {
   if (games.length === 0) {
     return (
       <div className="w-[1010px] shrink-0 flex items-center justify-center rounded-3xl border-2 border-field-800 text-field-400 text-4xl font-cond font-bold uppercase">
@@ -330,21 +414,31 @@ function GamesGrid({ games }: { games: TvGame[] }) {
       className="w-[1010px] shrink-0 grid gap-3"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
     >
-      {games.map(g => <GameTile key={g.id} g={g} big={cols <= 3} />)}
+      {games.map(g => <GameTile key={g.id} g={g} big={cols <= 3} injuries={injuries} />)}
     </div>
   )
 }
 
 /** "CHI -3.5" — the favorite's line, from the home team's number. */
-function lineLabel(g: TvGame): string | null {
+function lineLabel(g: { home: string; away: string; spread: number | null }): string | null {
   if (g.spread == null) return null
   if (g.spread === 0) return 'Pick’em'
   return g.spread < 0 ? `${g.home} ${g.spread}` : `${g.away} -${g.spread}`
 }
 
-function GameTile({ g, big }: { g: TvGame; big: boolean }) {
+/** The short injury flag for a team: "QB OUT", "2 OUT", or "Q". */
+function injuryFlag(list: TvInjury[] | undefined): { text: string; out: boolean } | null {
+  if (!list?.length) return null
+  const out = list.filter(i => i.status === 'out')
+  if (out.some(i => i.pos === 'QB')) return { text: 'QB OUT', out: true }
+  if (out.length) return { text: `${out.length} OUT`, out: true }
+  return { text: list.some(i => i.pos === 'QB') ? 'QB Q' : 'Q', out: false }
+}
+
+function GameTile({ g, big, injuries }: { g: TvGame; big: boolean; injuries: Map<string, TvInjury[]> }) {
   const final = g.state === 'final'
   const live = g.state === 'live'
+  const pre = g.state === 'pre'
   const started = live || final
   const winner = final && g.awayScore != null && g.homeScore != null && g.awayScore !== g.homeScore
     ? (g.homeScore > g.awayScore ? g.home : g.away) : null
@@ -352,18 +446,24 @@ function GameTile({ g, big }: { g: TvGame; big: boolean }) {
     : g.homeChance >= 0.5 ? { team: g.home, pct: g.homeChance } : { team: g.away, pct: 1 - g.homeChance }
   const a = g.riders?.away.length ?? 0
   const h = g.riders?.home.length ?? 0
+  const redZone = live && !!g.redZone
 
   const side = (team: string, score: number | null, riders: number | null) => {
     const logo = teamLogoUrl({ abbr: team }, 'NFL')
     const lost = winner != null && winner !== team
+    const hurt = pre ? injuryFlag(injuries.get(team)) : null
     return (
-      <div className={clsx('flex items-center gap-2.5', lost && 'opacity-40')}>
+      <div className={clsx('flex items-center gap-2', lost && 'opacity-40')}>
         {logo
           ? <img src={logo} alt="" className={clsx('object-contain shrink-0', big ? 'w-12 h-12' : 'w-9 h-9')} />
           : <span className={clsx('shrink-0', big ? 'w-12' : 'w-9')} />}
         <span className={clsx('font-cond font-black tracking-wide', big ? 'text-[36px]' : 'text-[27px]')}>{team}</span>
+        {live && g.possession === team && <span className="text-[17px] leading-none" title="Has the ball">🏈</span>}
         {riders != null && (
           <span className="rounded-md bg-field-800 px-1.5 text-[15px] font-bold text-field-300 tabular-nums" title="League picks">{riders}</span>
+        )}
+        {hurt && (
+          <span className={clsx('rounded px-1 text-[12px] font-black tracking-wide', hurt.out ? 'bg-red-500/25 text-red-300' : 'bg-amber-500/20 text-amber-300')}>{hurt.text}</span>
         )}
         <span className={clsx('ml-auto font-cond font-black tabular-nums', big ? 'text-[44px]' : 'text-[33px]', started ? 'text-white' : 'text-field-700')}>
           {started ? (score ?? 0) : '–'}
@@ -375,7 +475,8 @@ function GameTile({ g, big }: { g: TvGame; big: boolean }) {
   return (
     <div className={clsx(
       'min-h-0 flex flex-col justify-between rounded-xl border-2 px-3.5 py-2.5',
-      live ? 'border-gold bg-gold/[0.08] shadow-[0_0_24px_rgba(206,123,69,0.25)]'
+      redZone ? 'border-red-500 bg-red-500/[0.08] shadow-[0_0_24px_rgba(239,68,68,0.3)]'
+        : live ? 'border-gold bg-gold/[0.08] shadow-[0_0_24px_rgba(206,123,69,0.25)]'
         : final ? 'border-field-800 bg-field-900/60'
         : 'border-field-700 bg-field-900',
     )}>
@@ -384,7 +485,10 @@ function GameTile({ g, big }: { g: TvGame; big: boolean }) {
         <span className={clsx('truncate', live ? 'text-gold' : final ? 'text-field-400' : 'text-field-300')}>
           {g.state === 'void' ? 'Postponed' : final ? 'Final' : live ? g.clock : kickoffLabel(g.kickoff)}
         </span>
-        {g.tiebreaker && <span className="ml-auto shrink-0 rounded bg-gold/15 text-gold text-[13px] font-black px-1.5 py-0.5 tracking-wider">TB</span>}
+        <span className="ml-auto flex items-center gap-1 shrink-0">
+          {redZone && <span className="rounded bg-red-600 text-white text-[12px] font-black px-1.5 py-0.5 tracking-wider">RED ZONE</span>}
+          {g.tiebreaker && <span className="rounded bg-gold/15 text-gold text-[13px] font-black px-1.5 py-0.5 tracking-wider">TB</span>}
+        </span>
       </div>
       <div className="space-y-0.5">
         {side(g.away, g.awayScore, g.riders ? a : null)}
@@ -399,18 +503,91 @@ function GameTile({ g, big }: { g: TvGame; big: boolean }) {
       )}
       <div className="flex items-center gap-2 text-[15px] text-field-400">
         <span className="min-w-0 truncate">
-          {fav
-            ? <><span className="font-black text-white">{fav.team} {Math.round(fav.pct * 100)}%</span></>
+          {live
+            ? (g.downDistance ? <span className="font-bold text-field-100">{g.downDistance}</span> : null)
+            : fav ? <span className="font-black text-white">{fav.team} {Math.round(fav.pct * 100)}%</span>
             : final ? (winner ? `${winner} wins` : 'Tie')
             : ''}
         </span>
         <span className="ml-auto shrink-0 whitespace-nowrap">
-          {!g.riders && g.state === 'pre'
-            ? <>🔒 {g.picked}</>
-            : g.state === 'pre' && lineLabel(g) ? lineLabel(g)
-            : null}
-          {g.state === 'pre' && g.total != null && <span className="ml-2">O/U {g.total}</span>}
+          {live && fav && <span className="font-black text-white">{fav.team} {Math.round(fav.pct * 100)}%</span>}
+          {pre && !g.riders ? <>🔒 {g.picked}</> : pre && lineLabel(g) ? lineLabel(g) : null}
+          {pre && g.total != null && <span className="ml-2">O/U {g.total}</span>}
         </span>
+      </div>
+    </div>
+  )
+}
+
+// ── The full Board: every player's pick on every game ─────────
+function PicksBoardView({ board }: { board: TvBoard }) {
+  const b = board.board!
+  const byUser = new Map(b.rows.map(r => [r.userId, r]))
+  const rows = board.week_table
+  const hasTb = b.games.some(g => g.tiebreaker)
+  const cols = `270px 76px repeat(${b.games.length}, minmax(0, 1fr))${hasTb ? ' 64px' : ''}`
+  const rowH = Math.min(44, Math.floor(800 / Math.max(rows.length, 1)))
+
+  return (
+    <div className="w-[1468px] shrink-0 flex flex-col rounded-2xl border-2 border-field-800 bg-field-900 overflow-hidden">
+      <div className="px-5 py-2.5 border-b-2 border-field-800 flex items-baseline justify-between">
+        <p className="font-cond font-black uppercase text-white text-[28px] tracking-wide">The Board</p>
+        <p className="font-cond font-bold uppercase tracking-wider text-field-400 text-[15px]">Every pick · 🔒 shows at kickoff</p>
+      </div>
+      <div className="flex-1 min-h-0 px-3 py-1.5">
+        <div className="grid items-end gap-x-1 pb-1 border-b border-field-800" style={{ gridTemplateColumns: cols }}>
+          <span />
+          <span className="text-center font-cond font-bold text-[14px] text-field-400 uppercase">Pts</span>
+          {b.games.map(g => (
+            <span key={g.id} className={clsx('text-center font-cond font-black leading-tight text-[14px]', g.live ? 'text-gold' : 'text-field-300')}>
+              <span className={clsx('block', g.winner === g.away && 'text-white')}>{g.away}</span>
+              <span className={clsx('block', g.winner === g.home && 'text-white')}>{g.home}</span>
+              {g.live && <span className="block text-[10px] text-red-400">LIVE</span>}
+            </span>
+          ))}
+          {hasTb && <span className="text-center font-cond font-bold text-[14px] text-gold uppercase">TB</span>}
+        </div>
+        {rows.map(r => {
+          const cells = byUser.get(r.userId)?.cells ?? {}
+          return (
+            <div key={r.userId} className={clsx('grid items-center gap-x-1', r.winner && 'bg-gold/10 rounded-md')} style={{ gridTemplateColumns: cols, height: rowH }}>
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="w-6 text-right font-cond font-black text-[18px] text-field-400 tabular-nums">{r.rank}</span>
+                <span className="truncate text-[19px] font-bold text-white">{r.name}</span>
+                {r.belt && <BeltIcon className="w-[22px] h-[14px]" />}
+              </span>
+              <span className="text-center font-cond font-black text-[20px] text-white tabular-nums">
+                {r.correct}<span className="text-field-500 text-[15px]">/{r.played}</span>
+              </span>
+              {b.games.map(g => {
+                const pick = cells[g.id]
+                const decided = g.winner != null
+                const right = decided && pick === g.winner
+                const wrong = decided && pick != null && pick !== '?' && pick !== g.winner
+                return (
+                  <span
+                    key={g.id}
+                    className={clsx(
+                      'h-[80%] flex items-center justify-center rounded font-cond font-black text-[16px]',
+                      pick == null ? 'text-field-700'
+                        : pick === '?' ? 'text-field-600'
+                        : right ? (g.final ? 'bg-emerald-500/25 text-emerald-200' : 'bg-emerald-500/10 text-emerald-300')
+                        : wrong ? (g.final ? 'bg-red-500/20 text-red-300' : 'bg-red-500/10 text-red-300/80')
+                        : 'bg-field-800 text-field-100',
+                    )}
+                  >
+                    {pick == null ? '—' : pick === '?' ? '🔒' : pick}
+                  </span>
+                )
+              })}
+              {hasTb && (
+                <span className="text-center font-cond font-black text-[17px] text-field-300 tabular-nums">
+                  {byUser.get(r.userId)?.tiebreaker ?? '—'}
+                </span>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -501,10 +678,72 @@ const ago = (iso: string) => {
 // ── The rotating panel ────────────────────────────────────────
 interface Panel { key: string; title: string; body: ReactNode }
 
-function panelsFor(b: TvBoard): Panel[] {
+function SpotlightCard({ p }: { p: TvSpotlight }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-4">
+        {p.avatarUrl
+          ? <img src={p.avatarUrl} alt="" className="w-20 h-20 rounded-2xl object-cover shrink-0" />
+          : <span className="w-20 h-20 rounded-2xl bg-field-700 flex items-center justify-center text-[36px] font-black text-gold shrink-0">{p.name[0]?.toUpperCase()}</span>}
+        <div className="min-w-0">
+          <p className="font-cond font-black uppercase text-white text-[32px] leading-tight truncate">{p.name}</p>
+          <p className="text-[18px] text-field-300">#{p.rank} of {p.of} · <span className="font-bold text-white">{p.correct}–{p.played - p.correct}</span>{p.weeksWon > 0 && <> · {p.weeksWon}×🏆</>}</p>
+        </div>
+      </div>
+      {p.archetype && (
+        <div>
+          <p className="font-cond font-bold uppercase tracking-[0.15em] text-[15px] text-field-400">Pick DNA</p>
+          <p className="font-cond font-black uppercase text-[26px] text-gold leading-tight">{p.archetype.title}</p>
+          <p className="text-[17px] text-field-300 leading-snug">{p.archetype.blurb}</p>
+        </div>
+      )}
+      {(p.twin || p.nemesis) && (
+        <div className="space-y-1">
+          {p.twin && <p className="text-[18px] text-field-200"><span className="font-bold text-gold">Twin:</span> {p.twin.name} · same pick {Math.round(p.twin.agree * 100)}%</p>}
+          {p.nemesis && <p className="text-[18px] text-field-200"><span className="font-bold text-red-400">Nemesis:</span> {p.nemesis.name} · {p.nemesis.youRight}–{p.nemesis.theyRight} in their {p.nemesis.split} splits</p>}
+        </div>
+      )}
+      {p.beltWeeks.length > 0 && (
+        <p className="flex items-center gap-2 text-[18px] text-field-200"><BeltIcon className="w-[28px] h-[17px]" /> Held the Belt: {p.beltWeeks.map(w => `W${w}`).join(', ')}</p>
+      )}
+      {p.badges.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {p.badges.map(b => <span key={b} className="rounded-md bg-gold/15 border border-gold/30 px-2 py-0.5 text-[15px] font-bold text-gold">{b}</span>)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function panelsFor(b: TvBoard, spot: number): Panel[] {
   const out: Panel[] = []
   const names = (list: string[], max = 4) => list.length <= max ? list.join(', ') : `${list.slice(0, max).join(', ')} +${list.length - max}`
+  const spots = b.spotlights ?? []
+  const spotlight = (n: number): Panel | null => {
+    if (!spots.length) return null
+    const p = spots[n % spots.length]
+    return { key: `spot-${n % 2}`, title: '⭐ Player spotlight', body: <SpotlightCard p={p} /> }
+  }
 
+  if (b.shame && b.shame.rows.length) {
+    const sh = b.shame
+    out.push({ key: 'shame', title: '⏰ Still owe picks', body: (
+      <div className="space-y-3">
+        {sh.lockAt && (
+          <p className="font-cond font-black uppercase text-[34px] text-amber-300 leading-tight">Locks in <Countdown to={sh.lockAt} /></p>
+        )}
+        {sh.rows.slice(0, 12).map(r => (
+          <div key={r.name} className="flex items-baseline justify-between gap-3">
+            <span className="text-[22px] font-bold text-white truncate">{r.name}</span>
+            <span className={clsx('shrink-0 text-[16px] font-bold', r.none ? 'text-red-400' : 'text-amber-300')}>
+              {r.none ? 'No picks at all' : r.missing > 0 ? `${r.missing} game${r.missing === 1 ? '' : 's'} missing` : 'No tiebreaker'}
+            </span>
+          </div>
+        ))}
+        {sh.rows.length > 12 && <p className="text-[16px] text-field-400">+{sh.rows.length - 12} more</p>}
+      </div>
+    ) })
+  }
   if (b.pin) {
     out.push({ key: 'pin', title: '📌 From the commissioner', body: <p className="text-[28px] leading-snug text-white whitespace-pre-line">{b.pin}</p> })
   }
@@ -550,6 +789,8 @@ function panelsFor(b: TvBoard): Panel[] {
       </div>
     ) })
   }
+  const first = spotlight(spot * 2)
+  if (first) out.push(first)
   if (b.headlines?.length) {
     out.push({ key: 'headlines', title: `📰 ${weekTitle(b.week)} headlines`, body: (
       <div className="space-y-3">
@@ -590,6 +831,39 @@ function panelsFor(b: TvBoard): Panel[] {
       </div>
     ) })
   }
+  if (b.next_week?.games.length) {
+    const nw = b.next_week
+    out.push({ key: 'next', title: `📅 ${weekTitle(nw.week)} preview`, body: (
+      <div className="space-y-1">
+        {nw.games.slice(0, 16).map((g, i) => (
+          <div key={i} className="flex items-baseline justify-between gap-2">
+            <span className="font-cond font-black text-[21px] text-white whitespace-nowrap">{g.away} @ {g.home}</span>
+            <span className="text-[15px] text-field-400 truncate text-right">
+              {kickoffLabel(g.kickoff)}{lineLabel(g) ? ` · ${lineLabel(g)}` : ''}{g.total != null ? ` · ${g.total}` : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    ) })
+  }
+  if (b.injuries?.length) {
+    out.push({ key: 'injuries', title: '🩹 Injury report', body: (
+      <div className="space-y-2">
+        {b.injuries.slice(0, 12).map((x, i) => {
+          const logo = teamLogoUrl({ abbr: x.team }, 'NFL')
+          return (
+            <div key={i} className="flex items-center gap-2.5">
+              {logo ? <img src={logo} alt="" className="w-8 h-8 object-contain shrink-0" /> : <span className="w-8 font-cond font-black text-[15px]">{x.team}</span>}
+              <span className="min-w-0 flex-1 truncate text-[20px] font-bold text-white">{x.name} <span className="text-field-400 font-normal">{x.pos}</span></span>
+              <span className={clsx('shrink-0 rounded px-1.5 text-[14px] font-black tracking-wider', x.status === 'out' ? 'bg-red-500/25 text-red-300' : 'bg-amber-500/20 text-amber-300')}>
+                {x.status === 'out' ? 'OUT' : 'QUESTIONABLE'}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    ) })
+  }
   if (b.poll) {
     const p = b.poll
     const top = Math.max(0, ...p.options.map(o => o.votes))
@@ -612,6 +886,8 @@ function panelsFor(b: TvBoard): Panel[] {
       </div>
     ) })
   }
+  const second = spotlight(spot * 2 + 1)
+  if (second) out.push(second)
   if (b.belt) {
     out.push({ key: 'belt', title: 'The Belt', body: (
       <div className="space-y-4">
@@ -684,12 +960,16 @@ function Stat({ label, value, bad = false }: { label: string; value: string; bad
 const PANEL_MS = 14_000
 
 function FeaturePanel({ board }: { board: TvBoard }) {
-  const panels = useMemo(() => panelsFor(board), [board])
-  const keys = panels.map(p => p.key).join(',')
   const [i, setI] = useState(0)
+  // Which panels there are doesn't depend on whose spotlight it is
+  const count = useMemo(() => panelsFor(board, 0).length, [board])
+  // Each lap through the panels moves on to the next two players
+  const spot = count ? Math.floor(i / count) : 0
+  const panels = useMemo(() => panelsFor(board, spot), [board, spot])
+  const keys = panels.map(p => p.key).join(',')
   useEffect(() => {
     setI(0)
-    if (panels.length <= 1) return
+    if (count <= 1) return
     const t = setInterval(() => setI(x => x + 1), PANEL_MS)
     return () => clearInterval(t)
     // Restart only when the set of panels changes, not on every refresh
@@ -705,7 +985,7 @@ function FeaturePanel({ board }: { board: TvBoard }) {
       <div className="px-5 py-3 border-b-2 border-field-800">
         <p className="font-cond font-black uppercase text-white text-[26px] tracking-wide truncate">{panel.title}</p>
       </div>
-      <div key={panel.key + at} className="flex-1 min-h-0 overflow-hidden px-5 py-4 rise-in">
+      <div key={panel.key + i} className="flex-1 min-h-0 overflow-hidden px-5 py-4 rise-in">
         {panel.body}
       </div>
       {panels.length > 1 && (
@@ -726,6 +1006,13 @@ function Ticker({ board }: { board: TvBoard }) {
     const out: string[] = []
     if (board.pin) out.push(`📌 ${board.pin}`)
     out.push(...board.upsets.map(u => `🚨 ${u}`))
+    // The last play in every live game
+    for (const g of board.games) {
+      if (g.state === 'live' && g.lastPlay) out.push(`🏈 ${g.away} @ ${g.home}: ${g.lastPlay}`)
+    }
+    if (board.shame?.rows.length && board.shame.lockAt) {
+      out.push(`⏰ Picks lock ${kickoffLabel(board.shame.lockAt)} · still waiting on ${board.shame.rows.map(r => r.name).join(', ')}`)
+    }
     if (board.started && !board.complete) {
       const lead = [...board.week_table].sort((a, b) => (b.chance ?? 0) - (a.chance ?? 0))[0]
       if (lead?.chance != null) out.push(`Favorite to win ${weekTitle(board.week)}: ${lead.name} (${pct(lead.chance)})`)
@@ -739,6 +1026,7 @@ function Ticker({ board }: { board: TvBoard }) {
       out.push(`The Belt: ${board.belt.names.join(' & ')}${board.belt.reign > 1 ? ` · ${board.belt.reign} weeks straight` : ''}`)
     }
     for (const x of (board.badges ?? []).slice(0, 4)) out.push(`🏅 ${x.name} earned ${x.label}`)
+    for (const x of (board.injuries ?? []).filter(i => i.status === 'out').slice(0, 4)) out.push(`🩹 ${x.team} ${x.pos} ${x.name} is out`)
     if (board.nextKickoff) {
       const g = board.games.find(x => x.kickoff === board.nextKickoff && x.state === 'pre')
       out.push(`Next kickoff: ${g ? `${g.away} @ ${g.home}, ` : ''}${kickoffLabel(board.nextKickoff)}`)
@@ -763,23 +1051,43 @@ function Ticker({ board }: { board: TvBoard }) {
   )
 }
 
-// ── Takeover: the roast (and the champion) full screen now and then ──
+// ── Takeovers: the full screen now and then ───────────────────
+// Before a lock that's under three hours away: who still owes picks.
+// Otherwise the Commish's latest roast, and the champion once the
+// week's final.
 const TAKEOVER_EVERY = 5 * 60_000
 const TAKEOVER_FOR = 40_000
 
 function Takeover({ board }: { board: TvBoard }) {
+  const now = useNow(60_000)
+  const sh = board.shame
+  const urgent = !!sh?.lockAt && sh.rows.length > 0 && new Date(sh.lockAt).getTime() - now < 3 * 3600_000
   const roast = board.roast?.text ? board.roast : null
   const champ = board.complete && board.winners.length ? board.winners : null
+  const kind = urgent ? 'shame' : roast || champ ? 'roast' : null
   const [on, setOn] = useState(false)
   useEffect(() => {
-    if (!roast && !champ) return
+    if (!kind) { setOn(false); return }
     let hide: ReturnType<typeof setTimeout>
-    const show = () => { setOn(true); hide = setTimeout(() => setOn(false), roast ? TAKEOVER_FOR : 15_000) }
+    const show = () => { setOn(true); hide = setTimeout(() => setOn(false), kind === 'roast' && roast ? TAKEOVER_FOR : 15_000) }
     const first = setTimeout(show, 60_000)
     const every = setInterval(show, TAKEOVER_EVERY)
     return () => { clearTimeout(first); clearInterval(every); clearTimeout(hide) }
-  }, [roast, champ])
-  if (!on || (!roast && !champ)) return null
+  }, [kind, roast])
+  if (!on || !kind) return null
+
+  if (kind === 'shame' && sh?.lockAt) {
+    return (
+      <div className="absolute inset-0 z-10 bg-field-950/[0.97] flex flex-col items-center justify-center px-24 py-16 text-center rise-in">
+        <p className="font-cond font-bold uppercase tracking-[0.3em] text-amber-300 text-[32px]">Picks lock in</p>
+        <p className="font-cond font-black uppercase text-white text-[120px] leading-none mb-10"><Countdown to={sh.lockAt} /></p>
+        <p className="font-cond font-bold uppercase tracking-[0.2em] text-field-400 text-[28px] mb-4">Still waiting on</p>
+        <p className="text-[46px] font-bold text-white leading-snug max-w-[1600px]">
+          {sh.rows.map(r => r.name + (r.none ? '' : r.missing ? ` (${r.missing} left)` : ' (tiebreaker)')).join(' · ')}
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="absolute inset-0 z-10 bg-field-950/[0.97] flex flex-col items-center justify-center px-24 py-16 rise-in">

@@ -20,6 +20,7 @@ import {
   nflSeasonFor, isVoid, isFinal, isLive, computeWeek, computeWinOdds, computeUpsetWatch, computeBelt,
   computeStandings, weekWinners, isWeekComplete, homeWinChance, gameClockLabel, winnerOf,
   computeWeekStats, describeWeekStats, computeWhoCanWin, computeBadBeats, computeAchievements, ACHIEVEMENTS,
+  computePickDNA, computePickMatches, keyInjuries,
   type Game, type Pick, type Member,
 } from '../_shared/pickemCore.ts'
 import { partsInZone, zonedTimeToUtc, stillPickable, weekDeadline } from '../_shared/pickLocks.ts'
@@ -32,7 +33,10 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
 })
 
-const GAME_COLS = 'id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker, pregame_home_wp, spread, over_under, live_home_wp, period, clock, game_story'
+/** The live situation columns sync-nfl-schedule writes (not part of the core Game). */
+type SituationGame = Game & { possession?: string | null; down_distance?: string | null; red_zone?: boolean | null; last_play?: string | null }
+
+const GAME_COLS = 'id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker, pregame_home_wp, spread, over_under, live_home_wp, period, clock, game_story, possession, down_distance, red_zone, last_play'
 
 /**
  * The week the league is on: a week stays current until Tuesday 11:59 PM
@@ -97,7 +101,7 @@ serve(async (req) => {
         .select('id, name, league_type, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz')
         .eq('id', tv.league_id).maybeSingle(),
       admin.from('league_members')
-        .select('user_id, profile:profiles(username, display_name, avatar_url)')
+        .select('user_id, profile:profiles(username, display_name, avatar_url, favorite_nfl_team)')
         .eq('league_id', tv.league_id),
       admin.from('nfl_games').select(GAME_COLS).eq('season', season),
       admin.from('league_pins').select('message').eq('league_id', tv.league_id).maybeSingle(),
@@ -125,10 +129,13 @@ serve(async (req) => {
     const wkGames = games.filter(g => g.week === week)
       .sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime())
 
-    const [{ data: settings }, allPicks] = await Promise.all([
+    const [{ data: settings }, allPicks, { data: hurt }] = await Promise.all([
       admin.from('pickem_week_settings').select('pick_deadline')
         .eq('league_id', league.id).eq('season', season).eq('week', week).maybeSingle(),
       seasonPicks(admin, league.id, season),
+      admin.from('players')
+        .select('id, name, team, pos, status, depth_chart_rank, avg_pts, status_changed_at')
+        .eq('league', 'NFL').eq('depth_chart_rank', 1).neq('status', 'active'),
     ])
     const wkPicks = allPicks.filter(p => p.week === week)
     const isOpen = stillPickable(wkGames, now, settings?.pick_deadline, league)
@@ -151,6 +158,10 @@ serve(async (req) => {
         awayScore: g.away_score, homeScore: g.home_score,
         state: isVoid(g) ? 'void' : isFinal(g) ? 'final' : isLive(g) ? 'live' : 'pre',
         clock: isLive(g) ? gameClockLabel(g) : null,
+        possession: isLive(g) ? (g as SituationGame).possession ?? null : null,
+        downDistance: isLive(g) ? (g as SituationGame).down_distance ?? null : null,
+        redZone: isLive(g) ? !!(g as SituationGame).red_zone : false,
+        lastPlay: isLive(g) ? (g as SituationGame).last_play ?? null : null,
         kickoff: g.game_date,
         homeChance: isVoid(g) ? null : homeWinChance(g),
         spread: g.spread ?? null,
@@ -301,6 +312,85 @@ serve(async (req) => {
       basement: seasonRows.slice(-3).reverse().map(r => ({ name: r.name, correct: r.correct, played: r.played })),
     }
 
+    // ── The Board: every pick on every game (hidden until it locks) ──
+    const pickOf = new Map(wkPicks.map(p => [`${p.user_id}:${p.game_id}`, p]))
+    const board = {
+      games: wkGames.filter(g => !isVoid(g)).map(g => ({ id: g.id, away: g.away_team, home: g.home_team, winner: isFinal(g) || isLive(g) ? winnerOf(g) : null, final: isFinal(g), live: isLive(g), tiebreaker: !!g.is_tiebreaker, locked: !isOpen(g) })),
+      rows: weekTable.map(r => ({
+        userId: r.userId,
+        cells: Object.fromEntries(wkGames.filter(g => !isVoid(g)).map(g => {
+          const p = pickOf.get(`${r.userId}:${g.id}`)
+          return [g.id, !p ? null : isOpen(g) ? '?' : p.picked_team]
+        })),
+        tiebreaker: (() => {
+          const tb = wkGames.find(g => g.is_tiebreaker)
+          const p = tb ? pickOf.get(`${r.userId}:${tb.id}`) : null
+          return tb && p && !isOpen(tb) ? p.tiebreaker_score ?? null : null
+        })(),
+      })),
+    }
+
+    // ── Wall of shame: who still owes picks, while any game can be picked ──
+    const openGames = wkGames.filter(g => isOpen(g))
+    const tbOpen = openGames.find(g => g.is_tiebreaker)
+    const lockAt = deadline && deadline > now ? deadline.toISOString()
+      : openGames.length ? openGames.map(g => g.game_date).sort()[0] : null
+    const shame = openGames.length === 0 ? null : {
+      lockAt,
+      open: openGames.length,
+      rows: rows
+        .map(r => {
+          const mine = openGames.filter(g => pickOf.has(`${r.userId}:${g.id}`)).length
+          const noTb = !!tbOpen && pickOf.get(`${r.userId}:${tbOpen.id}`)?.tiebreaker_score == null
+          return { name: r.name, missing: openGames.length - mine, none: mine === 0 && !r.submitted, noTiebreaker: noTb }
+        })
+        .filter(x => x.missing > 0 || x.noTiebreaker)
+        .sort((a, b) => Number(b.none) - Number(a.none) || b.missing - a.missing),
+    }
+
+    // ── Player spotlights: one card per player, the TV rotates through them ──
+    const openIds = new Set(openGames.map(g => g.id))
+    const lockedPicks = allPicks.filter(p => !openIds.has(p.game_id))
+    const dna = computePickDNA(seasonGames, lockedPicks, members)
+    const beltWeeks = new Map<string, number[]>()
+    for (const l of belt?.lineage ?? []) for (const w of l.winners) beltWeeks.set(w.userId, [...(beltWeeks.get(w.userId) ?? []), l.week])
+    const spotlights = seasonTable.map(r => {
+      const d = dna.players.find(p => p.userId === r.userId)
+      const m = computePickMatches(seasonGames, lockedPicks, members, r.userId)
+      return {
+        name: r.name,
+        avatarUrl: r.avatarUrl,
+        rank: r.rank,
+        of: seasonTable.length,
+        correct: r.correct,
+        played: r.played,
+        weeksWon: r.weeksWon,
+        archetype: d && d.picks > 0 ? { title: d.archetype.title, blurb: d.archetype.blurb } : null,
+        badges: (achievements.get(r.userId) ?? []).map(a => ACHIEVEMENTS.find(x => x.key === a.key)?.label ?? a.key),
+        twin: m.twin ? { name: m.twin.name, agree: m.twin.agree } : null,
+        nemesis: m.nemesis ? { name: m.nemesis.name, split: m.nemesis.split, youRight: m.nemesis.youRight, theyRight: m.nemesis.theyRight } : null,
+        beltWeeks: beltWeeks.get(r.userId) ?? [],
+      }
+    })
+
+    // ── Next week, once this one's final ──
+    const nextGames = complete
+      ? games.filter(g => g.week === week + 1 && !isVoid(g)).sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime())
+      : []
+    const nextWeek = nextGames.length ? {
+      week: week + 1,
+      games: nextGames.map(g => ({ away: g.away_team, home: g.home_team, kickoff: g.game_date, spread: g.spread ?? null, total: g.over_under ?? null, homeChance: homeWinChance(g) })),
+    } : null
+
+    // ── Injury report: key starters out or questionable for the games ahead ──
+    const hurtByTeam = keyInjuries((hurt ?? []) as Parameters<typeof keyInjuries>[0])
+    const aheadTeams = new Set((nextGames.length ? nextGames : wkGames.filter(g => !isFinal(g) && !isLive(g) && !isVoid(g)))
+      .flatMap(g => [g.away_team, g.home_team]))
+    const injuries = [...hurtByTeam.entries()]
+      .filter(([team]) => aheadTeams.has(team))
+      .flatMap(([team, list]) => list.map(p => ({ team, name: p.name, pos: p.pos, status: p.status })))
+      .sort((a, b) => Number(b.status === 'out') - Number(a.status === 'out') || Number(b.pos === 'QB') - Number(a.pos === 'QB'))
+
     // Chat, the roast and the latest poll
     const chat = (chatRows ?? []).map(m => ({ name: nameById.get(m.user_id) ?? 'Someone', text: String(m.message).slice(0, 200), at: m.created_at }))
     let roast: { week: number; text: string } | null = null
@@ -349,6 +439,11 @@ serve(async (req) => {
       chat,
       roast,
       poll,
+      board,
+      shame,
+      spotlights,
+      next_week: nextWeek,
+      injuries,
     })
   } catch (e) {
     return json({ error: String(e) }, 500)
