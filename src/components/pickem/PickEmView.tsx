@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PickemWelcome } from './PickemWelcome'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -2186,7 +2186,8 @@ function PicksBoard({
             const pts = ptsByUser.get(m.user_id)
 
             return (
-              <tr key={m.user_id} className={clsx('border-b border-field-700/50 last:border-0', isMe && 'bg-gold/[0.04]')}>
+            <Fragment key={m.user_id}>
+              <tr className={clsx('border-b border-field-700/50 last:border-0', isMe && 'bg-gold/[0.04]')}>
                 <td className={clsx(
                   'sticky left-0 z-10 px-3 py-2 whitespace-nowrap bg-field-800',
                   isMe && 'border-l-2 border-gold',
@@ -2238,7 +2239,7 @@ function PicksBoard({
                           {isWrong && <X className="w-3 h-3" />}
                         </div>
                       )}
-                      {/* Pick receipt — tap the quote to read it */}
+                      {/* Pick receipt — tap the quote; it opens in a row under this one */}
                       {visible && picked && receiptOf.has(`${game.id}:${m.user_id}`) && (() => {
                         const key = `${game.id}:${m.user_id}`
                         const open = openReceipt === key
@@ -2246,13 +2247,14 @@ function PicksBoard({
                           <button
                             onClick={() => setOpenReceipt(open ? null : key)}
                             title={receiptOf.get(key)}
+                            aria-expanded={open}
+                            aria-label={`${open ? 'Close' : 'Read'} ${displayName}'s receipt on ${picked}`}
                             className={clsx(
-                              'mt-1 mx-auto flex items-start gap-1 rounded px-1.5 py-0.5 text-[11px] text-left',
-                              open ? 'bg-field-700 text-field-100 max-w-[11rem] whitespace-normal' : 'text-field-400 hover:text-white',
+                              'mt-1 mx-auto flex items-center justify-center w-6 h-5 rounded',
+                              open ? 'bg-gold text-field-950' : 'text-gold hover:bg-gold/15',
                             )}
                           >
-                            <Quote className="w-3 h-3 shrink-0 mt-0.5 text-gold" />
-                            {open ? <span className="italic leading-snug">{receiptOf.get(key)}</span> : <span className="sr-only">Read their receipt</span>}
+                            <Quote className="w-3 h-3" />
                           </button>
                         )
                       })()}
@@ -2283,6 +2285,40 @@ function PicksBoard({
                   )
                 })}
               </tr>
+              {/* The open receipt: its own full-width row, held to the
+                  visible left edge so it reads however far the Board is
+                  scrolled — squeezed into a game column it wrapped a
+                  word a line */}
+              {openReceipt?.endsWith(`:${m.user_id}`) && (() => {
+                const game = sortedGames.find(g => openReceipt === `${g.id}:${m.user_id}`)
+                if (!game) return null
+                const picked = pickMap[game.id]?.[m.user_id]
+                const winner = winnerOf(game)
+                const result = winner == null ? null : picked === winner ? 'hit' : 'missed'
+                return (
+                  <tr className="border-b border-field-700/50 bg-field-900/70">
+                    <td colSpan={sortedGames.length + 2} className="p-0">
+                      <div className="sticky left-0 w-[min(28rem,calc(100vw-3rem))] flex items-start gap-2 px-3 py-2.5">
+                        <Quote className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-white italic leading-snug">{receiptOf.get(openReceipt)}</p>
+                          <p className="text-[11px] text-field-400 mt-0.5">
+                            {displayName} on <span className="font-bold text-field-200">{picked}</span>
+                            {' '}· {game.away_team} @ {game.home_team}
+                            {result && (
+                              <span className={clsx('font-bold', result === 'hit' ? 'text-nfl' : 'text-red-400')}> · {result === 'hit' ? 'Aged well' : 'Aged badly'}</span>
+                            )}
+                          </p>
+                        </div>
+                        <button onClick={() => setOpenReceipt(null)} aria-label="Close receipt" className="p-1 text-field-500 hover:text-white shrink-0">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })()}
+            </Fragment>
             )
           })}
           {sortedMembers.length === 0 && (
