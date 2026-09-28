@@ -652,6 +652,14 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     : !pendingPicks[tiebreakerGame.id] ? 'needs-pick'
     : null
 
+  // The tiebreaker card sits below every other game, so its own
+  // warning is easy to scroll past — the banner up top jumps to it
+  const goToTiebreaker = () => {
+    const target = document.getElementById(tiebreakerWarning === 'missing' ? 'tiebreaker-guess' : 'tiebreaker-card')
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (target instanceof HTMLInputElement) target.focus({ preventScroll: true })
+  }
+
   // Determine if the whole week is still open for picks
   const anyUnlocked = games.some((g: any) => !isGameLocked(g.game_date, weekDeadline, g.status))
 
@@ -973,6 +981,29 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
       {/* ── PICKS TAB ── */}
       {tab === 'picks' && (
         <div className="space-y-3">
+          {/* Once they've started picking — a blank guess loses every tie */}
+          {tiebreakerWarning && tiebreakerGame && pickedCount > 0 && (
+            <button
+              onClick={goToTiebreaker}
+              className="w-full flex items-center gap-3 text-left rounded-xl border border-gold/50 bg-gold/10 hover:bg-gold/15 px-3.5 py-3 transition-colors"
+            >
+              <Target className="w-5 h-5 text-gold shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="font-bold text-white text-sm">
+                  {tiebreakerWarning === 'missing' ? 'Your tiebreaker guess is missing' : "Your tiebreaker guess isn't saved"}
+                </div>
+                <div className="text-xs text-field-300 leading-snug">
+                  {tiebreakerWarning === 'missing'
+                    ? `Without one you lose every tie. Guess the combined score of ${tiebreakerGame.away_team} @ ${tiebreakerGame.home_team}.`
+                    : `Pick a winner in ${tiebreakerGame.away_team} @ ${tiebreakerGame.home_team} — the guess only saves with a pick.`}
+                </div>
+              </div>
+              <span className="btn-gold !px-3 !py-1.5 !text-xs shrink-0">
+                {tiebreakerWarning === 'missing' ? 'Add guess' : 'Pick winner'}
+              </span>
+            </button>
+          )}
+
           {lockedCount > 0 && lockedCount < totalGames && (
             <div className="flex items-center gap-2 text-xs text-gold/80 bg-gold/5 border border-gold/20 rounded-lg px-3 py-2">
               <Lock className="w-3.5 h-3.5 shrink-0" />
@@ -1009,7 +1040,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
           ))}
 
           {tiebreakerGame && (
-            <div className="mt-2">
+            <div id="tiebreaker-card" className="mt-2 scroll-mt-24">
               <div className="flex items-center gap-2 mb-2">
                 <Target className="w-4 h-4 text-gold" />
                 <span className="font-cond font-bold text-gold text-sm uppercase tracking-wider">Tiebreaker</span>
@@ -1045,7 +1076,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
               ) : (
                 <span className="text-field-500 flex items-center gap-1">
                   <Check className="w-3.5 h-3.5 text-nfl" />
-                  All picks saved · {pickedCount}/{totalGames}
+                  {tiebreakerWarning ? 'Picks saved' : 'All picks saved'} · {pickedCount}/{totalGames}
                 </span>
               )}
               {tiebreakerWarning && (
@@ -1355,7 +1386,9 @@ function GamePickCard({
             </p>
           )}
           <input
+            id="tiebreaker-guess"
             type="number"
+            inputMode="numeric"
             min={0}
             max={200}
             placeholder={odds?.totalPoints != null ? String(odds.totalPoints) : 'e.g. 47'}
