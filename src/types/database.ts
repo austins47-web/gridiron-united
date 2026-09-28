@@ -1383,6 +1383,7 @@ export interface Database {
         Returns: undefined
       }
       unpin_league_announcement: { Args: { p_league: string }; Returns: undefined }
+      league_tv_token: { Args: { p_league: string; p_reset?: boolean }; Returns: string }
       notify_league_member: {
         Args: { p_user: string; p_league: string; p_type: string; p_title: string; p_body?: string | null; p_data?: Json }
         Returns: undefined

@@ -7,6 +7,7 @@ import { buildSlotDefs } from '@/types/database'
 import { CfbPostseasonManager } from './CfbPostseasonManager'
 import { PickDeadlineSettings } from './PickDeadlineSettings'
 import { AiRecapSetting } from './AiRecapSetting'
+import { ShopTvSetting } from './ShopTvSetting'
 import type { League, Player, PlayerStatus, RosterSlotConfig } from '@/types/database'
 import {
   Shield, Users, Zap, TrendingUp, Trash2, Search,
@@ -171,6 +172,7 @@ export function CommissionerPanel() {
               initialTz={(activeLeague as any)?.pick_deadline_tz ?? null}
             />
             <AiRecapSetting leagueId={activeLeagueId!} />
+            <ShopTvSetting leagueId={activeLeagueId!} />
           </div>
         )
         : <ScoringEditor league={activeLeague!} onSaved={setActiveLeague} />

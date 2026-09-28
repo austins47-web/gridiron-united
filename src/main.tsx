@@ -42,6 +42,9 @@ const JoinPage = page(() => import('@/components/leagues/JoinPage'), 'JoinPage')
 const LeagueSettingsView = page(() => import('@/components/leagues/LeagueSettingsView'), 'LeagueSettingsView')
 const HomeView = page(() => import('@/components/home/HomeView'), 'HomeView')
 const NewsView = page(() => import('@/components/scores/NewsView'), 'NewsView')
+// The Shop TV board — no login, the league's TV code is the key
+const ShopTV = page(() => import('@/components/tv/ShopTV'), 'ShopTV')
+const ShopTVEntry = page(() => import('@/components/tv/ShopTV'), 'ShopTVEntry')
 
 // Once the app is idle, warm the pages people open most, so the first
 // tap on them is instant too
@@ -199,6 +202,8 @@ function App() {
               <Route path="trades" element={<LeagueWrapper><TradeCenter /></LeagueWrapper>} />
             </Route>
             <Route path="/join/:code" element={<JoinPage />} />
+            <Route path="/tv" element={<ShopTVEntry />} />
+            <Route path="/tv/:code" element={<ShopTV />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>

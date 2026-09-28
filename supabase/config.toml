@@ -13,3 +13,7 @@ verify_jwt = false
 # Calendar apps poll the feed without logging in; its token is the key
 [functions.calendar]
 verify_jwt = false
+
+# The Shop TV board: a TV can't sign in, so its 8-character code is the key
+[functions.shop-tv]
+verify_jwt = false
