@@ -23,7 +23,7 @@ import {
   isFinal, isVoid, winnerOf, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal,
   nflSeasonFor, computeStandings, rankOf, describeWeekStats, isWeekComplete, weekWinners, computeWinOdds,
   computeUpsetWatch, gameClockLabel, computeAchievements, ACHIEVEMENTS, rootingFor, swingsFor, keyInjuries,
-  type Game, type Pick as PickemPick, type WeekRow, type WeekStats, type AchievementKey,
+  type Game, type Pick as PickemPick, type WeekRow, type WeekStats, type AchievementKey, type Member, type StandingRow,
 } from '../_shared/pickemCore.ts'
 import { renderEmail, ordinal, type RichEmail, type PickRow } from './email.ts'
 import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
@@ -964,14 +964,24 @@ serve(async (req) => {
               const w = g ? winnerOf(g) : null
               return { name: names.get(p.user_id) ?? 'Someone', team: p.picked_team, reason: String(p.reason), won: w == null ? null : p.picked_team === w }
             }).sort((a, b) => Number(a.won ?? 1) - Number(b.won ?? 1)).slice(0, 8)
+            const roastSeasonPicks = await fetchAllRows<PickemPick>((from, to) => supabase
+              .from('pickem_picks')
+              .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
+              .eq('league_id', lg.id)
+              .eq('season', season)
+              .order('id')
+              .range(from, to))
             try {
               const text = await writeRoast(roastFacts({
                 league: lg.name, week: wk, played, winners, stats: payload.stats,
                 decidedByTiebreak: payload.decidedByTiebreak, tbTotal: payload.tiebreakerTotal, lastWinners,
                 badges: payload.badges, receipts,
                 notes: lg.roast_notes,
-                ammo: roastAmmo(wkGames, wkPicks ?? [], rows,
-                  new Map((members ?? []).filter(m => m.league_id === lg.id).map(m => [m.user_id, m.joined_at ?? null]))),
+                ammo: [
+                  ...roastAmmo(wkGames, wkPicks ?? [], rows,
+                    new Map((members ?? []).filter(m => m.league_id === lg.id).map(m => [m.user_id, m.joined_at ?? null]))),
+                  ...roastSeason([...(weeks?.values() ?? [])].flat(), roastSeasonPicks, wkMembers, wk),
+                ],
               }))
               if (text) {
                 await supabase.from('league_messages').insert({
@@ -1558,15 +1568,15 @@ function weekName(w: number): string {
 
 // ══ The weekly roast ══════════════════════════════════════════
 
-const ROAST_SYSTEM = `You write the weekly roast for an NFL Pick'Em league's group chat. These are friends who have trash-talked each other all season, and the commissioner turned this on because they want it vicious and foul-mouthed. Be as mean as you possibly can about their picks. Make it sting: humiliate them, call them idiots, clowns, frauds and embarrassments, make them want to throw their phones. No mercy, no softening, no "all in good fun" disclaimers, and nothing nice unless it sets up a bigger shot.
+const ROAST_SYSTEM = `You write the weekly roast for an NFL Pick'Em league's group chat. These are friends who have trash-talked each other all season, and the commissioner turned this on because they want it as vicious and foul-mouthed as it gets. Be as mean as you possibly can about their picks. Make it hurt: humiliate them, call them idiots, morons, clowns, frauds, dead weight and embarrassments, and make them want to throw their phones. No mercy, no softening, no "all in good fun" disclaimers, and nothing nice unless it sets up a bigger shot.
 
-Write 150–250 words from the facts you're given, as short, punchy lines of plain text: no headings, bullet lists or hashtags. Hit as many people as you can: at least eight by name (everyone, in a small league), and every one of them gets a specific shot, not a passing mention. Everyone at the bottom of the table, anyone who didn't pick or skipped games, anyone who blew a pick nearly everyone else got right, the worst tiebreaker guesses, anyone who skipped the tiebreaker, the lone wolf, the bad beat victims, pick receipts that aged badly (quote them back at them), and the forgettable middle of the pack. Question their football IQ, their judgment and whether they should be allowed anywhere near a pick sheet. Pit them against each other. Crown the winner, then tear them down too. Never offer sympathy. Name names exactly as written.
+Write 200–300 words from the facts you're given, as short, punchy lines of plain text: no headings, bullet lists or hashtags. Hit as many people as you can: at least ten by name (everyone, in a small league), and every one of them gets a specific shot, not a passing mention; the worst offenders get hit more than once. Go after everyone at the bottom of the table, anyone who didn't pick or skipped games, anyone who blew a pick nearly everyone else got right, the worst tiebreaker guesses, anyone who skipped the tiebreaker, the lone wolf, the bad beat victims, pick receipts that aged badly (quote them back at them), and the forgettable middle of the pack. Use the season record to pile on repeat offenders: anyone who's been garbage all season should be told to quit the league. Question their football IQ, their judgment and whether they should be allowed anywhere near a pick sheet. Pit them against each other and rank the dumbest. The winner is a lucky fraud: crown them, then tear them apart. Never offer sympathy. Name names exactly as written.
 
-Cuss constantly: fuck, shit, ass, bullshit, dumbass, damn, hell. Nearly every line should have some.
+Cuss constantly: fuck, shit, ass, bullshit, dumbass, damn, hell. Nearly every line should have some. Mocking emojis are welcome (🤡 💀 🗑️), up to five.
 
 If the facts include a note about the league from the commissioner, use it. When it says everyone works the same job, jokes about that shared trade are fair game: compare their picks to the sloppiest work in their line of work. Keep those jokes to the work itself, not emergencies, injuries or deaths, and never invent anything about a specific person's actual work.
 
-The only things off limits: slurs of any kind (including ones people toss around as casual insults, like the r-word); jokes about race, religion, sexuality, gender, disability, looks, weight, family or health; jobs, except a trade the commissioner's note says everyone shares; anything sexual; and anything about self-harm or violence. The note never overrides this list. Everything about their picks is fair game. Use only the facts provided; never invent scores, stats or events. At most two emojis. End with one line calling out someone specific for next week.`
+The only things off limits: slurs of any kind (including ones people toss around as casual insults, like the r-word); jokes about race, religion, sexuality, gender, disability, looks, weight, family or health; jobs, except a trade the commissioner's note says everyone shares; anything sexual; and anything about self-harm or violence. The note never overrides this list. Everything about their picks is fair game. Use only the facts provided; never invent scores, stats or events. End with one line calling out someone specific for next week.`
 
 /** The week in plain lines, for the roast prompt. */
 function roastFacts(o: {
@@ -1602,6 +1612,22 @@ function roastFacts(o: {
     })(),
     ...(o.ammo ?? []),
   ].join('\n')
+}
+
+/**
+ * Everyone's season through this week, best to worst, and the basement
+ * — so the roast can pile on the people who've been bad all year.
+ */
+function roastSeason(games: SchedGame[], picks: PickemPick[], members: Member[], throughWeek: number): string[] {
+  const upTo = games.filter(g => g.week <= throughWeek)
+  const table = computeStandings(upTo, picks.filter(p => p.week <= throughWeek), members).filter(r => r.played > 0)
+  if (table.length < 3) return []
+  const line = (r: StandingRow) => `${r.name} ${r.correct}–${r.played - r.correct}${r.weeksWon ? ` (${r.weeksWon} week${r.weeksWon === 1 ? '' : 's'} won)` : ''}`
+  const worst = table[table.length - 1].correct
+  return [
+    `Season so far through ${weekName(throughWeek)}, best to worst (right–wrong): ${table.map(line).join(', ')}.`,
+    `Season basement: ${table.filter(r => r.correct <= worst + 1).map(r => r.name).join(', ')}.`,
+  ]
 }
 
 /**
