@@ -235,14 +235,14 @@ serve(async (req) => {
   // ?roast=preview (POST {"facts": "..."}): what the roast writer makes of
   // a week's facts, posted nowhere — for trying out ROAST_SYSTEM
   if (url.searchParams.get('roast') === 'preview' && req.method === 'POST') {
-    const { facts } = await req.json().catch(() => ({ facts: null }))
+    const { facts, memory, week } = await req.json().catch(() => ({ facts: null }))
     if (typeof facts !== 'string' || !facts.trim()) {
       return new Response(JSON.stringify({ error: 'facts required' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
     }
-    let text: string | null
-    try { text = await writeRoast(facts.slice(0, 6000)) }
+    let out: { text: string; memory: RoastMemory } | null
+    try { out = await writeRoast(facts.slice(0, 8000), memory ?? null, Number(week) || 1) }
     catch (e) { return new Response(JSON.stringify({ error: String(e) }), { status: 502, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } }) }
-    return new Response(JSON.stringify({ roast: text }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
+    return new Response(JSON.stringify({ roast: out?.text ?? null, memory: out?.memory ?? null }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
   }
 
   // ?gazette=preview (POST {"facts": "..."}): a sample issue of the
@@ -397,6 +397,35 @@ serve(async (req) => {
       stillPickable(wkGames, now,
         (weekSettings ?? []).find(s => s.league_id === lg.id && s.season === season && s.week === wk)?.pick_deadline,
         lg)
+
+    // ?roast_memory=rebuild&league=<id>[&through=<week>]: build the roast's
+    // memory from the season's finished weeks, one at a time, as if each
+    // week had been roasted (nothing is posted). For a league that starts
+    // roasting mid-season, so the first roast already knows the history.
+    if (url.searchParams.get('roast_memory') === 'rebuild') {
+      const lg = (leagues ?? []).find(l => l.id === url.searchParams.get('league'))
+      const weeks = scheduleBySeason.get(season) ?? new Map<number, SchedGame[]>()
+      if (!lg || lg.league_type !== 'pickem') {
+        return new Response(JSON.stringify({ error: 'no such Pick\'Em league' }), { status: 404, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
+      }
+      const done = [...weeks.entries()].filter(([, g]) => g.length && isWeekComplete(g)).map(([w]) => w).sort((a, b) => a - b)
+      const through = Number(url.searchParams.get('through')) || done[done.length - 1] || 0
+      const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
+      const wkMembers = lgMembers.map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
+      const joinedAt = new Map<string, string | null>(lgMembers.map(m => [m.user_id, m.joined_at ?? null]))
+      let memory: RoastMemory | null = null
+      const log: { week: number; arcs: number; jokes: number; lines: number; roast?: string }[] = []
+      for (const wk of done.filter(w => w <= through)) {
+        const facts = await weekRoastFacts({ supabase, league: lg, season, week: wk, weeks, members: wkMembers, joinedAt })
+        if (!facts) continue
+        const out = await writeRoast(facts, memory, wk)
+        if (!out) continue
+        memory = out.memory
+        if (!dryRun) await saveRoastMemory(supabase, lg.id, season, wk, memory)
+        log.push({ week: wk, arcs: memory.arcs.length, jokes: memory.running_jokes.length, lines: memory.best_lines.length, roast: out.text })
+      }
+      return new Response(JSON.stringify({ ok: true, league: lg.name, weeks: log, memory }, null, 2), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
+    }
 
     const chatPosts: { league: string; week: number }[] = []
     const weeklyPolls: { league: string; week: number; options: string[] }[] = []
@@ -960,49 +989,20 @@ serve(async (req) => {
             .like('message', `${roastPrefix}%`)
             .limit(1)
           if (!roasted?.length) {
-            // Last week's winners, for the Belt storyline
-            const prevGames = weeks?.get(wk - 1) ?? []
-            let lastWinners: string[] | null = null
-            if (prevGames.length && isWeekComplete(prevGames)) {
-              const { data: prevPicks } = await supabase
-                .from('pickem_picks')
-                .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
-                .eq('league_id', lg.id)
-                .eq('season', season)
-                .eq('week', wk - 1)
-              lastWinners = weekWinners(computeWeek(prevGames, prevPicks ?? [], wkMembers)).map(w => w.name)
-            }
-            // Pick receipts — the reasons people gave, and how they aged (misses first)
-            const names = new Map(rows.map(r => [r.userId, r.name]))
-            const receipts = (wkPicks ?? []).filter(p => p.reason).map(p => {
-              const g = wkGames.find(x => x.id === p.game_id)
-              const w = g ? winnerOf(g) : null
-              return { name: names.get(p.user_id) ?? 'Someone', team: p.picked_team, reason: String(p.reason), won: w == null ? null : p.picked_team === w }
-            }).sort((a, b) => Number(a.won ?? 1) - Number(b.won ?? 1)).slice(0, 8)
-            const roastSeasonPicks = await fetchAllRows<PickemPick>((from, to) => supabase
-              .from('pickem_picks')
-              .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
-              .eq('league_id', lg.id)
-              .eq('season', season)
-              .order('id')
-              .range(from, to))
             try {
-              const text = await writeRoast(roastFacts({
-                league: lg.name, week: wk, played, winners, stats: payload.stats,
-                decidedByTiebreak: payload.decidedByTiebreak, tbTotal: payload.tiebreakerTotal, lastWinners,
-                badges: payload.badges, receipts,
-                notes: lg.roast_notes,
-                ammo: [
-                  ...roastAmmo(wkGames, wkPicks ?? [], rows,
-                    new Map((members ?? []).filter(m => m.league_id === lg.id).map(m => [m.user_id, m.joined_at ?? null]))),
-                  ...roastSeason([...(weeks?.values() ?? [])].flat(), roastSeasonPicks, wkMembers, wk),
-                ],
-              }))
-              if (text) {
+              const facts = await weekRoastFacts({
+                supabase, league: lg, season, week: wk, weeks: weeks ?? new Map(), members: wkMembers,
+                joinedAt: new Map<string, string | null>((members ?? []).filter(m => m.league_id === lg.id).map(m => [m.user_id, m.joined_at ?? null])),
+              })
+              // What it remembers of the weeks before this one
+              const mem = await loadRoastMemory(supabase, lg.id, season)
+              const out = facts ? await writeRoast(facts, mem?.memory ?? null, wk) : null
+              if (out) {
                 await supabase.from('league_messages').insert({
                   league_id: lg.id, user_id: null, is_system: true,
-                  message: roastPrefix + JSON.stringify({ week: wk, text }),
+                  message: roastPrefix + JSON.stringify({ week: wk, text: out.text }),
                 })
+                await saveRoastMemory(supabase, lg.id, season, wk, out.memory)
                 roasts++
               }
             } catch (e) {
@@ -1646,6 +1646,66 @@ function roastSeason(games: SchedGame[], picks: PickemPick[], members: Member[],
 }
 
 /**
+ * Everything the roast writer gets for one finished week of a league:
+ * the headlines, the per-person ammunition and the season so far. Null
+ * when nobody picked. The weekly roast and the memory rebuild both use it.
+ */
+async function weekRoastFacts(o: {
+  supabase: any
+  league: { id: string; name: string; roast_notes?: string | null }
+  season: number
+  week: number
+  weeks: Map<number, SchedGame[]>
+  members: Member[]
+  joinedAt: Map<string, string | null>
+}): Promise<string | null> {
+  const { supabase, league, season, week, weeks, members } = o
+  const wkGames = weeks.get(week) ?? []
+  const seasonPicks = await fetchAllRows<PickemPick>((from, to) => supabase
+    .from('pickem_picks')
+    .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
+    .eq('league_id', league.id)
+    .eq('season', season)
+    .order('id')
+    .range(from, to))
+  const wkPicks = seasonPicks.filter(p => p.week === week)
+  const rows = computeWeek(wkGames, wkPicks, members)
+  const played = rows.filter(r => r.submitted)
+  if (played.length === 0) return null
+  const top = played[0]
+  const winners = played.filter(r =>
+    r.correct === top.correct && (r.tiebreakerDiff ?? Infinity) === (top.tiebreakerDiff ?? Infinity))
+  const allGames = [...weeks.values()].flat()
+  const nameById = new Map(rows.map(r => [r.userId, r.name]))
+  const badges = [...computeAchievements(allGames.filter(g => g.week <= week), seasonPicks.filter(p => p.week <= week), members)]
+    .flatMap(([id, list]) => list
+      .filter(a => a.key !== 'champ' && a.weeks.includes(week))
+      .map(a => ({ name: nameById.get(id) ?? 'Someone', key: a.key })))
+  const prevGames = weeks.get(week - 1) ?? []
+  const lastWinners = prevGames.length && isWeekComplete(prevGames)
+    ? weekWinners(computeWeek(prevGames, seasonPicks.filter(p => p.week === week - 1), members)).map(w => w.name)
+    : null
+  // Pick receipts — the reasons people gave, and how they aged (misses first)
+  const receipts = wkPicks.filter(p => (p as { reason?: string | null }).reason).map(p => {
+    const g = wkGames.find(x => x.id === p.game_id)
+    const w = g ? winnerOf(g) : null
+    return { name: nameById.get(p.user_id) ?? 'Someone', team: p.picked_team, reason: String((p as { reason?: string | null }).reason), won: w == null ? null : p.picked_team === w }
+  }).sort((a, b) => Number(a.won ?? 1) - Number(b.won ?? 1)).slice(0, 8)
+
+  return roastFacts({
+    league: league.name, week, played, winners,
+    stats: computeWeekStats(wkGames, wkPicks, rows),
+    decidedByTiebreak: played.filter(r => r.correct === top.correct).length > winners.length,
+    tbTotal: tiebreakerTotal(wkGames), lastWinners, badges, receipts,
+    notes: league.roast_notes,
+    ammo: [
+      ...roastAmmo(wkGames, wkPicks, rows, o.joinedAt),
+      ...roastSeason(allGames, seasonPicks, members, week),
+    ],
+  })
+}
+
+/**
  * Who to call out, beyond the headlines: the bottom third, the middle
  * of the pack, anyone who didn't pick or skipped games, picks nearly
  * the whole league got right that someone still blew, and the worst
@@ -1708,12 +1768,94 @@ function roastAmmo(games: SchedGame[], picks: PickemPick[], rows: WeekRow[], joi
   return out
 }
 
+// ══ The roast's memory ════════════════════════════════════════
+// The roast remembers the season (league_roast_memory): storylines that
+// run across weeks, running jokes, and its best recent lines. It reads
+// the memory before writing and hands back an updated copy, so each week
+// can make callbacks ("<name>, again?") without repeating itself.
+
+export interface RoastMemory {
+  arcs: { title: string; people: string[]; since_week: number; last_week: number; status: 'building' | 'running' | 'over'; notes: string }[]
+  running_jokes: { about: string; joke: string; since_week: number }[]
+  best_lines: { week: number; about: string; line: string }[]
+}
+
+const EMPTY_MEMORY: RoastMemory = { arcs: [], running_jokes: [], best_lines: [] }
+
+const ROAST_MEMORY = `You also keep the league's memory from week to week. You're given it (MEMORY) with this week's facts, and you hand back an updated copy.
+
+Before writing: read the memory. Continue storylines this week's facts extend, and say how long they've been going ("week three of the crusade"). Escalate running jokes. Call back to what you said about someone before when they're back at it ("<name>, again?"), but only when the memory records the earlier time: never say someone did something again, or for the second week, unless the memory shows it. Never repeat a past line word for word. With an empty memory, this is the season's first roast, so nothing is "again" yet.
+
+After writing, hand back the updated memory:
+- arcs: storylines across weeks (a streak, a slump, a rivalry, a dynasty, a curse, a redemption), with the people in it, the week it started, the last week it moved, its status (building, running or over) and notes. Add new ones this week's facts start, advance the ones they continue, mark ended ones over, and drop any that ended more than two weeks ago. At most ten.
+- running_jokes: bits worth bringing back, and who they're about. At most eight.
+- best_lines: this week's three to five best lines from your roast, with who each was about, plus the ones already there from the last two weeks.
+The memory holds only facts from the weeks you've been given, never anything invented.`
+
+const ROAST_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['roast', 'memory'],
+  properties: {
+    roast: { type: 'string' },
+    memory: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['arcs', 'running_jokes', 'best_lines'],
+      properties: {
+        arcs: {
+          type: 'array',
+          items: {
+            type: 'object', additionalProperties: false,
+            required: ['title', 'people', 'since_week', 'last_week', 'status', 'notes'],
+            properties: {
+              title: { type: 'string' },
+              people: { type: 'array', items: { type: 'string' } },
+              since_week: { type: 'integer' },
+              last_week: { type: 'integer' },
+              status: { type: 'string', enum: ['building', 'running', 'over'] },
+              notes: { type: 'string' },
+            },
+          },
+        },
+        running_jokes: {
+          type: 'array',
+          items: {
+            type: 'object', additionalProperties: false, required: ['about', 'joke', 'since_week'],
+            properties: { about: { type: 'string' }, joke: { type: 'string' }, since_week: { type: 'integer' } },
+          },
+        },
+        best_lines: {
+          type: 'array',
+          items: {
+            type: 'object', additionalProperties: false, required: ['week', 'about', 'line'],
+            properties: { week: { type: 'integer' }, about: { type: 'string' }, line: { type: 'string' } },
+          },
+        },
+      },
+    },
+  },
+}
+
+/** Keeps the memory to size whatever comes back. */
+function trimMemory(m: RoastMemory, week: number): RoastMemory {
+  const arcs = [...(m.arcs ?? [])]
+    .filter(a => a.status !== 'over' || week - a.last_week <= 2)
+    .sort((a, b) => Number(a.status === 'over') - Number(b.status === 'over') || b.last_week - a.last_week)
+    .slice(0, 10)
+  return {
+    arcs,
+    running_jokes: (m.running_jokes ?? []).slice(0, 8),
+    best_lines: (m.best_lines ?? []).filter(l => week - l.week <= 2).slice(-15),
+  }
+}
+
 /**
- * Claude writes the roast from `facts`. Null when no API key is set
- * or the model declines; API errors throw (the caller retries on a
- * later pass).
+ * Claude writes the roast from `facts` and the league's memory, and
+ * hands back the updated memory. Null when no API key is set or the
+ * model declines; API errors throw (the caller retries on a later pass).
  */
-async function writeRoast(facts: string): Promise<string | null> {
+async function writeRoast(facts: string, memory: RoastMemory | null, week: number): Promise<{ text: string; memory: RoastMemory } | null> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) return null
   const client = new Anthropic({ apiKey })
@@ -1723,13 +1865,32 @@ async function writeRoast(facts: string): Promise<string | null> {
     // A refusal is retried on another model instead of losing the week's roast
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
-    output_config: { effort: 'low' },
-    system: ROAST_SYSTEM,
-    messages: [{ role: 'user', content: facts }],
+    output_config: { effort: 'medium', format: { type: 'json_schema', schema: ROAST_SCHEMA } },
+    system: `${ROAST_SYSTEM}\n\n${ROAST_MEMORY}`,
+    messages: [{
+      role: 'user',
+      content: `MEMORY:\n${JSON.stringify(memory ?? EMPTY_MEMORY)}\n\nTHIS WEEK:\n${facts}`,
+    }],
   })
   if (msg.stop_reason === 'refusal') return null
-  const text = msg.content.map(b => (b.type === 'text' ? b.text : '')).join('').trim()
-  return text || null
+  const raw = msg.content.map(b => (b.type === 'text' ? b.text : '')).join('').trim()
+  if (!raw) return null
+  const out = JSON.parse(raw) as { roast: string; memory: RoastMemory }
+  const text = String(out.roast ?? '').trim()
+  return text ? { text, memory: trimMemory(out.memory ?? EMPTY_MEMORY, week) } : null
+}
+
+async function loadRoastMemory(supabase: any, leagueId: string, season: number): Promise<{ memory: RoastMemory; through: number } | null> {
+  const { data } = await supabase.from('league_roast_memory').select('memory, through_week')
+    .eq('league_id', leagueId).eq('season', season).maybeSingle()
+  return data ? { memory: data.memory as RoastMemory, through: data.through_week as number } : null
+}
+
+async function saveRoastMemory(supabase: any, leagueId: string, season: number, week: number, memory: RoastMemory) {
+  await supabase.from('league_roast_memory').upsert(
+    { league_id: leagueId, season, memory, through_week: week, updated_at: new Date().toISOString() },
+    { onConflict: 'league_id,season' },
+  )
 }
 
 // ══ The Upfitter Gazette ══════════════════════════════════════
