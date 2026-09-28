@@ -306,6 +306,24 @@ export interface Database {
         Update: Partial<{ message_id: string; user_id: string; emoji: string; league_id: string; created_at: string }>
         Relationships: []
       }
+      league_polls: {
+        Row: LeaguePoll
+        Insert: Partial<LeaguePoll> & Pick<LeaguePoll, 'league_id' | 'question' | 'options'>
+        Update: Partial<LeaguePoll>
+        Relationships: []
+      }
+      league_poll_votes: {
+        Row: { poll_id: string; user_id: string; league_id: string; option_index: number; created_at: string }
+        Insert: { poll_id: string; user_id: string; league_id: string; option_index: number; created_at?: string }
+        Update: Partial<{ poll_id: string; user_id: string; league_id: string; option_index: number; created_at: string }>
+        Relationships: []
+      }
+      league_pins: {
+        Row: LeaguePin
+        Insert: Partial<LeaguePin> & Pick<LeaguePin, 'league_id' | 'message'>
+        Update: Partial<LeaguePin>
+        Relationships: []
+      }
       league_messages: {
         Row: LeagueMessage
         Insert: Partial<Omit<LeagueMessage, 'id' | 'created_at'>> & Pick<LeagueMessage, 'message'>
@@ -1356,6 +1374,15 @@ export interface Database {
         Args: { check_league_id: string }
         Returns: boolean
       }
+      create_league_poll: {
+        Args: { p_league: string; p_question: string; p_options: string[]; p_closes_at?: string | null; p_game?: string | null }
+        Returns: string
+      }
+      pin_league_announcement: {
+        Args: { p_league: string; p_message?: string | null; p_source?: string | null; p_post?: boolean; p_notify?: boolean }
+        Returns: undefined
+      }
+      unpin_league_announcement: { Args: { p_league: string }; Returns: undefined }
       recalc_league_scores: { Args: { p_league_id: string }; Returns: number }
       save_push_subscription: {
         Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_user_agent: string }
@@ -1635,6 +1662,8 @@ export type LeagueMessage = {
   edited_at?: string | null
   /** Set by the database when the sender deletes it (text is cleared). */
   deleted_at?: string | null
+  /** The game whose thread this is in (null: the main chat). */
+  game_id?: string | null
   // Joined
   profiles?: Profile
 }
@@ -1725,4 +1754,30 @@ export const DEFAULT_SCORING = {
   score_dst_pts_21_27: 0,
   score_dst_pts_28_34: -1,
   score_dst_pts_35_plus: -4,
+}
+
+/** A chat poll — posted as the message `POLL:<id>`. */
+export type LeaguePoll = {
+  id: string
+  league_id: string
+  /** Null: the Commish's weekly poll. */
+  created_by: string | null
+  question: string
+  options: string[]
+  closes_at: string | null
+  game_id: string | null
+  kind: string | null
+  season: number | null
+  week: number | null
+  created_at: string
+}
+
+/** The commissioner's pinned announcement (one per league). */
+export type LeaguePin = {
+  league_id: string
+  message: string
+  pinned_by: string | null
+  source_message_id: string | null
+  created_at: string
+  updated_at: string
 }

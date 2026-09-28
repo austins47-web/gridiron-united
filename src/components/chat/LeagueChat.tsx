@@ -1,13 +1,17 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { markChatRead } from '@/hooks/useUnreadChat'
 import { useAppStore } from '@/store/appStore'
 import { useAnchoredPortal } from '@/hooks/useAnchoredPortal'
+import { openPlayerCard } from '@/hooks/usePlayerCard'
+import { useLeaguePolls } from '@/hooks/useLeaguePolls'
+import { useGameThreads, useThreadGame, useThreadPicks } from '@/hooks/useGameThreads'
 import {
   Send, MessageSquare, Image as ImageIcon, Search, Loader2, ArrowLeftRight,
-  CornerUpLeft, Pencil, Trash2, Copy, SmilePlus, X,
+  CornerUpLeft, Pencil, Trash2, Copy, SmilePlus, X, BarChart3, Pin,
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -15,6 +19,9 @@ import { UserProfileModal } from './UserProfileModal'
 import { PickemWeekFinalCard, PICKEM_WEEK_FINAL_PATTERN, type PickemWeekFinalPayload } from './PickemWeekFinalCard'
 import { PickemRoastCard, PICKEM_ROAST_PATTERN, type PickemRoastPayload } from './PickemRoastCard'
 import { CommishReplyCard, COMMISH_REPLY_PREFIX, type CommishReplyPayload } from './CommishReplyCard'
+import { PollCard, PollComposer, POLL_PREFIX } from './Polls'
+import { PinnedBanner, PinComposer } from './PinnedAnnouncement'
+import { GameThreadStrip, GameThreadHeader } from './GameThreads'
 import { BeltIcon } from '@/components/pickem/Belt'
 import { useBeltHolders } from '@/hooks/useBeltHolders'
 
@@ -30,6 +37,8 @@ interface ChatMessage {
   reply_to_id?: string | null
   edited_at?: string | null
   deleted_at?: string | null
+  /** The game whose thread it's in (null: the main chat). */
+  game_id?: string | null
   profiles?: {
     username: string
     display_name: string | null
@@ -126,6 +135,7 @@ function snippet(m: ChatMessage): string {
   if (m.deleted_at) return 'Message deleted'
   if (m.message.startsWith('IMAGE:')) return '📷 Photo'
   if (m.message.startsWith('GIF:')) return 'GIF'
+  if (m.message.startsWith(POLL_PREFIX)) return '📊 Poll'
   if (m.is_system && PICKEM_WEEK_FINAL_PATTERN.test(m.message)) return "🏆 Pick'Em week final"
   if (m.is_system && PICKEM_ROAST_PATTERN.test(m.message)) return '🎙️ The Commish roast'
   if (m.is_system && m.message.startsWith(COMMISH_REPLY_PREFIX)) return '🎙️ The Commish'
@@ -191,8 +201,11 @@ function ReactionChips({ groups, align, onToggle, nameOf }: {
   )
 }
 
-/** Opens under a tapped message: react, reply, copy — and edit/delete your own. */
-function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit, onDelete, onClose }: {
+/**
+ * Opens under a tapped message: react, reply, copy — and edit/delete
+ * your own. The commissioner can pin any text message.
+ */
+function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit, onDelete, onClose, onPin }: {
   msg: ChatMessage
   isOwn: boolean
   align: Align
@@ -202,9 +215,12 @@ function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit,
   onEdit: () => void
   onDelete: () => void
   onClose: () => void
+  /** The commissioner pinning it for the league. */
+  onPin?: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
   const isText = !msg.is_system && !msg.message.startsWith('IMAGE:') && !msg.message.startsWith('GIF:')
+    && !msg.message.startsWith(POLL_PREFIX)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -248,6 +264,7 @@ function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit,
               <MenuButton icon={<CornerUpLeft className="w-3.5 h-3.5" />} label="Reply" onClick={onReply} />
               {isText && <MenuButton icon={<Copy className="w-3.5 h-3.5" />} label="Copy" onClick={copy} />}
               {isOwn && isText && <MenuButton icon={<Pencil className="w-3.5 h-3.5" />} label="Edit" onClick={onEdit} />}
+              {onPin && isText && !msg.deleted_at && <MenuButton icon={<Pin className="w-3.5 h-3.5" />} label="Pin" onClick={onPin} />}
               {isOwn && !msg.is_system && (
                 <MenuButton icon={<Trash2 className="w-3.5 h-3.5" />} label="Delete" danger onClick={() => setConfirming(true)} />
               )}
@@ -280,7 +297,7 @@ function MenuButton({ icon, label, onClick, danger = false }: {
 
 // ── Message bubble ────────────────────────────────────────────
 
-function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick, isNew, replyTo, onJump, onOpenMenu, beltHolder }: {
+function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick, isNew, replyTo, onJump, onOpenMenu, beltHolder, onOpenProfile, poll }: {
   msg: ChatMessage
   isOwn: boolean
   showAvatar: boolean
@@ -294,7 +311,20 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
   onOpenMenu: () => void
   /** Holds the Pick'Em belt — a gold belt next to their name. */
   beltHolder?: boolean
+  /** Tapping the sender's avatar or name (their profile or Pick'Em card). */
+  onOpenProfile?: () => void
+  /** The poll this message posted, rendered in place of its text. */
+  poll?: ReactNode
 }) {
+  // The Commish's weekly poll
+  if (msg.is_system && poll) {
+    return (
+      <div className={clsx('flex justify-center my-2 px-2', isNew && 'message-reveal')}>
+        {poll}
+      </div>
+    )
+  }
+
   // Trade completed card
   if (msg.is_system && msg.message.startsWith('TRADE_COMPLETED:')) {
     try {
@@ -393,7 +423,12 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
 
   return (
     <div className={clsx('group flex gap-2 items-end', isOwn ? 'flex-row-reverse' : 'flex-row')}>
-      <div className="w-7 shrink-0">
+      <button
+        onClick={showAvatar ? onOpenProfile : undefined}
+        tabIndex={showAvatar && onOpenProfile ? 0 : -1}
+        aria-label={showAvatar && onOpenProfile ? `Open ${isOwn ? 'your' : `${msg.profiles?.display_name || msg.profiles?.username || 'their'}'s`} profile` : undefined}
+        className={clsx('w-7 shrink-0 rounded-full', showAvatar && onOpenProfile ? 'cursor-pointer' : 'cursor-default')}
+      >
         {showAvatar && !isOwn && <MiniAvatar profile={msg.profiles} />}
         {showAvatar && isOwn && (
           myAvatarUrl ? (
@@ -406,20 +441,28 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
             </div>
           )
         )}
-      </div>
-      <div className={clsx('flex flex-col max-w-[75%]', isOwn ? 'items-end' : 'items-start')}>
+      </button>
+      <div className={clsx('flex flex-col', poll ? 'w-full max-w-[85%] sm:max-w-sm' : 'max-w-[75%]', isOwn ? 'items-end' : 'items-start')}>
         {showAvatar && (
           <div className={clsx('flex items-baseline gap-1.5 mb-1', isOwn ? 'flex-row-reverse' : 'flex-row')}>
-            <span className={clsx('text-xs font-bold', isOwn ? 'text-gold chat-sender-name-own' : 'text-field-200 chat-sender-name')}>
+            <button
+              onClick={onOpenProfile}
+              disabled={!onOpenProfile}
+              className={clsx('text-xs font-bold', onOpenProfile && 'hover:underline', isOwn ? 'text-gold chat-sender-name-own' : 'text-field-200 chat-sender-name')}
+            >
               {isOwn ? 'You' : (msg.profiles?.display_name || msg.profiles?.username || 'Unknown')}
-            </span>
+            </button>
             {beltHolder && <BeltIcon className="w-[16px] h-[10px] self-center" />}
             <span className="text-xs text-field-500 chat-time">{formatTime(msg.created_at)}</span>
           </div>
         )}
         {replyTo && <ReplyQuote original={replyTo} isOwn={isOwn} onJump={onJump} />}
-        <div className={clsx('flex items-center gap-1.5 max-w-full', isOwn ? 'flex-row-reverse' : 'flex-row')}>
-        {/* Tap a message for reactions, reply, edit, delete */}
+        <div className={clsx('flex items-center gap-1.5 max-w-full', poll && 'w-full', isOwn ? 'flex-row-reverse' : 'flex-row')}>
+        {/* A poll's options are buttons, so it keeps its own react button */}
+        {poll && !deleted ? (
+          <div className={clsx('min-w-0 flex-1 flex', isOwn ? 'justify-end' : 'justify-start', isNew && 'message-reveal')}>{poll}</div>
+        ) : (
+        /* Tap a message for reactions, reply, edit, delete */
         <div
           onClick={deleted ? undefined : onOpenMenu}
           className={clsx(
@@ -451,12 +494,16 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
             </>
           )}
         </div>
+        )}
         {/* Computers: a react button on hover (phones just tap the message) */}
         {!deleted && (
           <button
             onClick={onOpenMenu}
             aria-label="React or reply"
-            className="hidden sm:flex opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-full text-field-500 hover:text-gold hover:bg-field-700 transition-opacity shrink-0"
+            className={clsx(
+              'p-1 rounded-full text-field-500 hover:text-gold hover:bg-field-700 transition-opacity shrink-0',
+              poll ? 'flex self-end' : 'hidden sm:flex opacity-0 group-hover:opacity-100 focus:opacity-100',
+            )}
           >
             <SmilePlus className="w-4 h-4" />
           </button>
@@ -653,9 +700,32 @@ function MentionDropdownInner({ anchorRef, filtered, onSelect }: {
 // ── Main component ────────────────────────────────────────────
 
 export function LeagueChat() {
-  const { activeLeagueId, activeLeague, user, profile } = useAppStore()
+  const { activeLeagueId, activeLeague, user, profile, myMembership } = useAppStore()
   const beltHolders = useBeltHolders()
   const qc = useQueryClient()
+  const isPickem = activeLeague?.league_type === 'pickem'
+  const isCommissioner = !!myMembership?.is_commissioner
+
+  // ── Game threads (Pick'Em) ──────────────────────────────────
+  // ?game=<id> opens that game's thread; the main chat is everything
+  // without a game. Each has its own cache entry.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const threadId = isPickem ? searchParams.get('game') : null
+  const keyFor = useCallback((gameId: string | null | undefined) =>
+    ['league-chat', activeLeagueId, gameId ?? 'main'], [activeLeagueId])
+  const chatKey = keyFor(threadId)
+  const openThread = (gameId: string) => setSearchParams({ game: gameId })
+  const closeThread = () => setSearchParams({})
+  const threads = useGameThreads(activeLeagueId, isPickem && !threadId)
+  const threadGame = useThreadGame(threadId) as any
+  const threadKickedOff = !!threadGame && (threadGame.status === 'in_progress' || threadGame.status === 'final'
+    || new Date(threadGame.game_date).getTime() <= Date.now())
+  const threadPicks = useThreadPicks(activeLeagueId, threadId, threadKickedOff)
+
+  // ── Polls and the pinned announcement ───────────────────────
+  const { byId: polls, vote, loaded: pollsLoaded } = useLeaguePolls(activeLeagueId, user?.id)
+  const [composingPoll, setComposingPoll] = useState(false)
+  const [composingPin, setComposingPin] = useState(false)
 
   // Marks this league's chat as read the moment this page mounts —
   // clears the unread badge on the Chat nav tab (see useUnreadChat).
@@ -701,18 +771,21 @@ export function LeagueChat() {
   })
 
   // ── Fetch messages ──────────────────────────────────────────
+  // The newest 200 of this room (the main chat, or one game's thread)
   const { data: messages = [] } = useQuery({
-    queryKey: ['league-chat', activeLeagueId],
+    queryKey: chatKey,
     enabled: !!activeLeagueId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('league_messages')
         .select('*, profiles(username, display_name, avatar_url)')
         .eq('league_id', activeLeagueId!)
-        .order('created_at', { ascending: true })
+      q = threadId ? q.eq('game_id', threadId) : q.is('game_id', null)
+      const { data, error } = await q
+        .order('created_at', { ascending: false })
         .limit(200)
       if (error) throw error
-      return (data ?? []) as ChatMessage[]
+      return ((data ?? []) as ChatMessage[]).reverse()
     },
   })
 
@@ -770,12 +843,13 @@ export function LeagueChat() {
   const [flashId, setFlashId] = useState<string | null>(null)
   const closeMenu = useCallback(() => setMenuFor(null), [])
 
-  const jumpTo = (id: string) => {
+  const jumpTo = (id: string): boolean => {
     const el = document.getElementById(`chat-msg-${id}`)
-    if (!el) return
+    if (!el) return false
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     setFlashId(id)
     setTimeout(() => setFlashId(f => (f === id ? null : f)), 1600)
+    return true
   }
 
   const startReply = (m: ChatMessage) => {
@@ -806,7 +880,7 @@ export function LeagueChat() {
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', m.id)
     if (error) toast.error("Couldn't delete: " + error.message)
-    else qc.setQueryData<ChatMessage[]>(['league-chat', activeLeagueId], prev =>
+    else qc.setQueryData<ChatMessage[]>(chatKey, prev =>
       (prev ?? []).map(x => (x.id === m.id ? { ...x, message: '', deleted_at: new Date().toISOString() } : x)))
   }
 
@@ -821,6 +895,14 @@ export function LeagueChat() {
   // entire chat history animating in at once on load.
   const [justArrivedMsgId, setJustArrivedMsgId] = useState<string | null>(null)
   const prevTopMsgId = useRef<string | null>(null)
+  // Switching rooms isn't a new message — and lands at the bottom
+  useEffect(() => {
+    prevTopMsgId.current = null
+    setAutoScroll(true)
+    setReplyTo(null)
+    setEditing(null)
+    setMenuFor(null)
+  }, [threadId])
   useEffect(() => {
     const topId = messages.length > 0 ? messages[messages.length - 1].id : null
     if (topId && prevTopMsgId.current !== null && topId !== prevTopMsgId.current) {
@@ -847,10 +929,16 @@ export function LeagueChat() {
           .select('*, profiles(username, display_name, avatar_url)')
           .eq('id', payload.new.id)
           .single()
-        if (data) {
-          qc.setQueryData<ChatMessage[]>(['league-chat', activeLeagueId], prev =>
-            (prev ?? []).some(m => m.id === data.id) ? prev! : [...(prev ?? []), data as ChatMessage])
+        if (!data) return
+        const msg = data as ChatMessage
+        // Into its room — a thread that hasn't been opened loads fresh when it is
+        qc.setQueryData<ChatMessage[]>(keyFor(msg.game_id), prev =>
+          !prev || prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
+        if (msg.game_id) {
+          qc.setQueryData<{ game_id: string }[]>(['chat-thread-counts', activeLeagueId], prev =>
+            prev ? [...prev, { game_id: msg.game_id! }] : prev)
         }
+        if (msg.message.startsWith(POLL_PREFIX)) qc.invalidateQueries({ queryKey: ['league-polls', activeLeagueId] })
       })
       // Edits and deletes — keep the sender's profile already loaded
       .on('postgres_changes', {
@@ -859,8 +947,8 @@ export function LeagueChat() {
         filter: `league_id=eq.${activeLeagueId}`,
       }, (payload) => {
         const row = payload.new as ChatMessage
-        qc.setQueryData<ChatMessage[]>(['league-chat', activeLeagueId], prev =>
-          (prev ?? []).map(m => (m.id === row.id ? { ...m, ...row, profiles: m.profiles } : m)))
+        qc.setQueryData<ChatMessage[]>(keyFor(row.game_id), prev =>
+          prev?.map(m => (m.id === row.id ? { ...m, ...row, profiles: m.profiles } : m)))
       })
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public',
@@ -882,9 +970,23 @@ export function LeagueChat() {
         qc.setQueryData<ReactionRow[]>(['chat-reactions', activeLeagueId], prev =>
           (prev ?? []).filter(x => !(x.message_id === r.message_id && x.user_id === r.user_id && x.emoji === r.emoji)))
       })
+      // Poll votes (removals can't be filtered by league either)
+      .on('postgres_changes', {
+        event: '*', schema: 'public',
+        table: 'league_poll_votes',
+      }, (payload) => {
+        const r = (payload.new && 'league_id' in payload.new ? payload.new : payload.old) as { league_id?: string }
+        if (r.league_id && r.league_id !== activeLeagueId) return
+        qc.invalidateQueries({ queryKey: ['league-polls', activeLeagueId] })
+      })
+      .on('postgres_changes', {
+        event: '*', schema: 'public',
+        table: 'league_pins',
+        filter: `league_id=eq.${activeLeagueId}`,
+      }, () => { qc.invalidateQueries({ queryKey: ['league-pin', activeLeagueId] }) })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [activeLeagueId, qc])
+  }, [activeLeagueId, qc, keyFor])
 
   // ── Auto-scroll ─────────────────────────────────────────────
   useEffect(() => {
@@ -961,12 +1063,12 @@ export function LeagueChat() {
       setEditing(null)
       setText('')
       if (trimmed === target.message) return
-      qc.setQueryData<ChatMessage[]>(['league-chat', activeLeagueId], prev =>
+      qc.setQueryData<ChatMessage[]>(chatKey, prev =>
         (prev ?? []).map(m => (m.id === target.id ? { ...m, message: trimmed, edited_at: new Date().toISOString() } : m)))
       const { error } = await supabase.from('league_messages').update({ message: trimmed }).eq('id', target.id)
       if (error) {
         toast.error("Couldn't save the edit: " + error.message)
-        qc.invalidateQueries({ queryKey: ['league-chat', activeLeagueId] })
+        qc.invalidateQueries({ queryKey: chatKey })
       }
       return
     }
@@ -986,6 +1088,7 @@ export function LeagueChat() {
           message: trimmed,
           is_system: false,
           reply_to_id: answering?.id ?? null,
+          game_id: threadId,
         })
         .select('id')
         .single()
@@ -1057,6 +1160,7 @@ export function LeagueChat() {
           user_id: user.id,
           message: prefix + url,
           is_system: false,
+          game_id: threadId,
         })
       if (error) throw error
       setAutoScroll(true)
@@ -1127,27 +1231,92 @@ export function LeagueChat() {
     return m?.display_name || m?.username || 'Someone'
   }
 
+  // Names open a Pick'Em player's card (their season, badges, receipts);
+  // in fantasy leagues, their profile
+  const openByUsername = (username: string) => {
+    const handle = username.toLowerCase()
+    if (isPickem) {
+      if (handle === 'commish') return
+      const id = handle === myUsername?.toLowerCase() ? user?.id : members.find(m => m.username.toLowerCase() === handle)?.user_id
+      if (id) { openPlayerCard(id); return }
+    }
+    setProfileUsername(username)
+  }
+  const openSender = (msg: ChatMessage): (() => void) | undefined => {
+    if (isPickem) return msg.user_id ? () => openPlayerCard(msg.user_id!) : undefined
+    const handle = msg.user_id === user?.id ? myUsername : msg.profiles?.username
+    return handle ? () => setProfileUsername(handle) : undefined
+  }
+
+  // A poll message shows its poll — only the one its sender started
+  const pollFor = (msg: ChatMessage): ReactNode | undefined => {
+    if (!msg.message.startsWith(POLL_PREFIX) || msg.deleted_at) return undefined
+    const d = polls.get(msg.message.slice(POLL_PREFIX.length).trim())
+    if (!d) {
+      return pollsLoaded ? undefined : (
+        <div className="w-full max-w-sm h-40 rounded-2xl border border-field-700 bg-field-800 animate-pulse" />
+      )
+    }
+    if ((d.poll.created_by ?? null) !== (msg.is_system ? null : msg.user_id)) return undefined
+    return <PollCard data={d} myId={user?.id} nameOf={nameOf} onVote={i => vote(d.poll, i)} fromCommish={msg.is_system} />
+  }
+
+  const pinMessage = async (m: ChatMessage) => {
+    setMenuFor(null)
+    const { error } = await supabase.rpc('pin_league_announcement', { p_league: activeLeagueId, p_source: m.id })
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['league-pin', activeLeagueId] })
+    toast.success('Pinned for the whole league')
+  }
+
+  const threadName = threadGame ? `${threadGame.away_team} @ ${threadGame.home_team}` : 'this game'
+  const threadKickoff = threadGame?.game_date && new Date(threadGame.game_date).getTime() > Date.now() ? threadGame.game_date as string : null
+
   return (
     <div className="flex flex-col h-full min-h-0">
 
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-field-700 shrink-0">
-        <MessageSquare className="w-4 h-4 text-gold" />
-        <span className="font-cond font-bold text-sm uppercase tracking-wider text-white">League Chat</span>
-        <span className="text-field-500 text-xs ml-1">— {activeLeague?.name}</span>
-        <div className="ml-auto flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-nfl" />
-          <span className="text-xs text-field-400 font-bold">Live</span>
+      {/* Header — a game thread has the live score instead */}
+      {threadId ? (
+        <GameThreadHeader game={threadGame} picks={threadPicks} myId={user?.id} onBack={closeThread} />
+      ) : (
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-field-700 shrink-0">
+          <MessageSquare className="w-4 h-4 text-gold" />
+          <span className="font-cond font-bold text-sm uppercase tracking-wider text-white">League Chat</span>
+          <span className="text-field-500 text-xs ml-1 truncate">— {activeLeague?.name}</span>
+          <div className="ml-auto flex items-center gap-1.5 shrink-0">
+            {isCommissioner && (
+              <button
+                onClick={() => setComposingPin(true)}
+                title="Pin an announcement"
+                aria-label="Pin an announcement"
+                className="p-1 mr-1 rounded-lg text-field-400 hover:text-gold hover:bg-gold/10"
+              >
+                <Pin className="w-4 h-4" />
+              </button>
+            )}
+            <div className="w-1.5 h-1.5 rounded-full bg-nfl" />
+            <span className="text-xs text-field-400 font-bold">Live</span>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* This week's game threads */}
+      {isPickem && !threadId && (
+        <GameThreadStrip games={threads.games} counts={threads.counts} onOpen={openThread} />
+      )}
+
+      {/* The commissioner's pinned announcement */}
+      {!threadId && activeLeagueId && (
+        <PinnedBanner leagueId={activeLeagueId} isCommissioner={isCommissioner} onJump={jumpTo} className="mx-3 mt-2 shrink-0" />
+      )}
 
       {/* Messages */}
       <div className="chat-area flex-1 overflow-y-auto px-4 py-3 space-y-1.5 min-h-0" onScroll={handleScroll}>
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 text-center gap-2">
             <MessageSquare className="w-8 h-8 text-field-600" />
-            <p className="chat-empty text-field-400 text-sm">No messages yet</p>
-            <p className="chat-empty text-field-500 text-xs">Be the first to say something!</p>
+            <p className="chat-empty text-field-400 text-sm">{threadId ? `Nobody's talking about ${threadName} yet` : 'No messages yet'}</p>
+            <p className="chat-empty text-field-500 text-xs">{threadId ? 'Start the trash talk.' : 'Be the first to say something!'}</p>
           </div>
         )}
         {grouped.map(({ msg, isFirst }) => {
@@ -1156,7 +1325,8 @@ export function LeagueChat() {
           const groups = msg.deleted_at ? [] : (reactionsByMessage.get(msg.id) ?? [])
           const original = msg.reply_to_id ? (byId.get(msg.reply_to_id) ?? 'missing') : null
           // Cards (week final, trades) aren't tappable bubbles — they get a react button
-          const isCard = msg.is_system && (PICKEM_WEEK_FINAL_PATTERN.test(msg.message) || PICKEM_ROAST_PATTERN.test(msg.message) || msg.message.startsWith('TRADE_COMPLETED:'))
+          const isCard = msg.is_system && (PICKEM_WEEK_FINAL_PATTERN.test(msg.message) || PICKEM_ROAST_PATTERN.test(msg.message)
+            || msg.message.startsWith('TRADE_COMPLETED:') || msg.message.startsWith(POLL_PREFIX))
           return (
             <div
               key={msg.id}
@@ -1169,12 +1339,14 @@ export function LeagueChat() {
                 showAvatar={isFirst || !!original}
                 myUsername={myUsername}
                 myAvatarUrl={myAvatarUrl}
-                onMentionClick={setProfileUsername}
+                onMentionClick={openByUsername}
                 isNew={msg.id === justArrivedMsgId}
                 replyTo={original}
                 onJump={jumpTo}
                 onOpenMenu={() => setMenuFor(id => (id === msg.id ? null : msg.id))}
                 beltHolder={!!msg.user_id && beltHolders.has(msg.user_id)}
+                onOpenProfile={openSender(msg)}
+                poll={pollFor(msg)}
               />
               {(groups.length > 0 || isCard) && (
                 <div className={clsx('flex items-center gap-1', isCard && groups.length === 0 && 'justify-center')}>
@@ -1204,6 +1376,7 @@ export function LeagueChat() {
                   onEdit={() => startEdit(msg)}
                   onDelete={() => deleteMessage(msg)}
                   onClose={closeMenu}
+                  onPin={isCommissioner ? () => pinMessage(msg) : undefined}
                 />
               )}
             </div>
@@ -1266,7 +1439,7 @@ export function LeagueChat() {
             <input
               ref={inputRef}
               className="chat-input flex-1 bg-transparent text-sm text-white placeholder-field-500 outline-none min-w-0"
-              placeholder={editing ? "Edit your message…" : replyTo ? "Write a reply…" : "Message the league… (type @ to mention)"}
+              placeholder={editing ? "Edit your message…" : replyTo ? "Write a reply…" : threadId ? `Talk about ${threadName}…` : "Message the league… (type @ to mention)"}
               value={text}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
@@ -1293,6 +1466,16 @@ export function LeagueChat() {
               )}
             >
               {uploadingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+            </button>
+
+            <button
+              onClick={() => setComposingPoll(true)}
+              disabled={sending}
+              title="Start a poll"
+              aria-label="Start a poll"
+              className="shrink-0 p-1.5 rounded-lg text-field-400 hover:text-gold hover:bg-gold/10 transition-colors"
+            >
+              <BarChart3 className="w-4 h-4" />
             </button>
 
             <button
@@ -1327,7 +1510,20 @@ export function LeagueChat() {
         </div>
       </div>
 
-      {/* User profile modal — opens when @mention is clicked */}
+      {composingPoll && activeLeagueId && (
+        <PollComposer
+          leagueId={activeLeagueId}
+          gameId={threadId}
+          kickoff={threadKickoff}
+          onClose={() => setComposingPoll(false)}
+          onPosted={() => setAutoScroll(true)}
+        />
+      )}
+      {composingPin && activeLeagueId && (
+        <PinComposer leagueId={activeLeagueId} onClose={() => setComposingPin(false)} />
+      )}
+
+      {/* User profile modal — opens when a name or @mention is tapped (fantasy leagues) */}
       {profileUsername && (
         <UserProfileModal
           username={profileUsername}

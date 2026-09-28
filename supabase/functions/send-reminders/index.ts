@@ -371,6 +371,7 @@ serve(async (req) => {
         lg)
 
     const chatPosts: { league: string; week: number }[] = []
+    const weeklyPolls: { league: string; week: number; options: string[] }[] = []
     let roasts = 0
     const roastErrors: string[] = []
 
@@ -1074,6 +1075,50 @@ serve(async (req) => {
           }
         }
       }
+
+      // ══ 7b. THE COMMISH'S WEEKLY POLL → LEAGUE CHAT ══════════
+      // Once the next week's lines are in (up to four days before its
+      // first kickoff), the Commish asks every Pick'Em league which
+      // underdog wins outright: the week's four biggest underdogs (3+
+      // points), with voting closing at the first of their kickoffs.
+      // Once per league per week (league_polls' weekly index).
+      {
+        const wk = upcomingWeek(scheduleBySeason.get(season), now)
+        const wkGames = wk != null ? scheduleBySeason.get(season)?.get(wk) ?? [] : []
+        const firstKickoff = wkGames.length ? Math.min(...wkGames.map(g => new Date(g.game_date).getTime())) : NaN
+        const ahead = firstKickoff - now.getTime()
+        const dogs = wkGames
+          .filter(g => g.spread != null && Math.abs(g.spread) >= 3 && new Date(g.game_date).getTime() > now.getTime())
+          .sort((a, b) => Math.abs(b.spread!) - Math.abs(a.spread!))
+          .slice(0, 4)
+        if (wk != null && ahead > 3 * HOUR && ahead < 4 * 24 * HOUR && dogs.length >= 2) {
+          // spread is the home team's line: positive means the home team is the underdog
+          const options = dogs.map(g => {
+            const homeDog = g.spread! > 0
+            return `${homeDog ? g.home_team : g.away_team} +${Math.abs(g.spread!)} ${homeDog ? 'vs' : 'at'} ${homeDog ? g.away_team : g.home_team}`
+          })
+          const closesAt = new Date(Math.min(...dogs.map(g => new Date(g.game_date).getTime()))).toISOString()
+          const { data: asked } = await supabase
+            .from('league_polls').select('league_id')
+            .eq('kind', 'weekly_upset').eq('season', season).eq('week', wk)
+          const askedIn = new Set((asked ?? []).map(r => r.league_id))
+
+          for (const lg of leagues ?? []) {
+            if (lg.league_type !== 'pickem' || askedIn.has(lg.id)) continue
+            weeklyPolls.push({ league: lg.name, week: wk, options })
+            if (dryRun) continue
+            const { data: poll } = await supabase.from('league_polls').insert({
+              league_id: lg.id, created_by: null, kind: 'weekly_upset', season, week: wk,
+              question: `${weekTitle(wk)} upset watch: which underdog wins outright?`,
+              options, closes_at: closesAt,
+            }).select('id').maybeSingle()
+            if (!poll) continue
+            await supabase.from('league_messages').insert({
+              league_id: lg.id, user_id: null, is_system: true, message: 'POLL:' + poll.id,
+            })
+          }
+        }
+      }
     }
 
     // ══ 8. PICK'EM LIVE ALERTS — opt-in, phone only ══════════
@@ -1300,8 +1345,9 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       ok: true, dryRun, considered: reminders.length, sent, skipped, failed,
       chatPosts: chatPosts.length,
+      weeklyPolls: weeklyPolls.length,
       roasts, ...(roastErrors.length ? { roastErrors } : {}),
-      ...(dryRun ? { preview: results, nearMisses, chatPreview: chatPosts } : {}),
+      ...(dryRun ? { preview: results, nearMisses, chatPreview: chatPosts, pollPreview: weeklyPolls } : {}),
     }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
 
   } catch (e) {

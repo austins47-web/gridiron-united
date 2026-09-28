@@ -13,7 +13,7 @@ import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, computeWhoCanWin, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
-  computeWinOdds, computeUpsetWatch, computeBelt, computeBadBeats, computeAchievements, keyInjuries,
+  computeWinOdds, computeUpsetWatch, computeBelt, keyInjuries,
   type WeekRow, type InjuredStarter,
 } from './standings'
 import { WeekInProgress } from './WeekRecap'
@@ -22,14 +22,16 @@ import { StandingsTable } from './StandingsTable'
 import { WhoCanWinPanel } from './WhoCanWin'
 import { WinOddsPanel, UpsetWatchBanner, StakesPanel } from './WinOdds'
 import { BeltPanel, BeltIcon } from './Belt'
-import { PickemWrapped } from './PickemWrapped'
 import { useBeltHolders } from '@/hooks/useBeltHolders'
 import { SeasonAwardsPanel } from './SeasonAwards'
-import { SeasonCard } from './SeasonCard'
-import { computeSeasonAwards, computeSeasonProfiles, computePickDNA, computePickMatches } from './season'
+import { computeSeasonAwards } from './season'
+import { usePickemSeasonData, useLeagueMembersList } from '@/hooks/usePickemSeasonData'
+import { openPlayerCard } from '@/hooks/usePlayerCard'
+import { useThreadCounts } from '@/hooks/useGameThreads'
+import { PinnedBanner, PinComposer } from '@/components/chat/PinnedAnnouncement'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
-  TrendingDown, Home, Plane, Award, Quote
+  TrendingDown, Home, Plane, Award, Quote, MessageSquare, Pin
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -37,7 +39,6 @@ import { useNflOdds } from '@/hooks/useNflOdds'
 import { useNflStandings } from '@/hooks/useTeamStandings'
 import { CURRENT_SEASON } from '@/lib/season'
 import { playPickLock } from '@/lib/sound'
-import { fetchAll } from '@/lib/fetchAll'
 
 const TEAM_INFO: Record<string, { name: string }> = {
   ARI: { name: 'Arizona Cardinals' },
@@ -257,18 +258,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   })
 
   // League members for display
-  const { data: leagueMembers = [] } = useQuery({
-    queryKey: ['league-members-list', activeLeagueId],
-    enabled: !!activeLeagueId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('league_members')
-        .select('user_id, team_name, joined_at, profile:profiles(username, display_name, avatar_url, favorite_nfl_team)')
-        .eq('league_id', activeLeagueId!)
-      if (error) throw error
-      return data ?? []
-    },
-  })
+  const leagueMembers = useLeagueMembersList(activeLeagueId)
   const joinedAtByUser = useMemo(
     () => new Map(leagueMembers.map((m: any) => [m.user_id, m.joined_at as string | null])),
     [leagueMembers],
@@ -278,93 +268,27 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   // Standings are computed from picks joined to game results rather
   // than read from a maintained table, so they can't drift and new
   // members appear immediately at 0-0.
-  const { data: seasonGames = [] } = useQuery({
-    queryKey: ['pickem-season-games', CURRENT_SEASON],
-    enabled: !!activeLeagueId && tab === 'standings',
-    staleTime: 60_000,
-    // Live scores feed live Pick'Em standings (see standings.ts) —
-    // this needs to actually keep polling while the tab's open, same
-    // as the per-week `games` query above.
-    // Live scores move the standings — but only poll while games are on
-    refetchInterval: (q) => livePollInterval(q.state.data as any, 20_000),
-    queryFn: async () => {
-      // All columns: the pregame line and game stories feed Pick DNA,
-      // bad beats and Wrapped (and it still loads before they exist)
-      const { data, error } = await supabase
-        .from('nfl_games')
-        .select('*')
-        .eq('season', CURRENT_SEASON)
-      if (error) throw error
-      return data ?? []
-    },
-  })
-
-  const { data: seasonPicks = [] } = useQuery({
-    queryKey: ['pickem-season-picks', activeLeagueId],
-    enabled: !!activeLeagueId && tab === 'standings',
-    staleTime: 30_000,
-    queryFn: async () => {
-      // A season of picks passes the API's 1,000-row cap — page through
-      return (await fetchAll((from, to) => supabase
-        .from('pickem_picks')
-        .select('game_id, user_id, week, picked_team, tiebreaker_score')
-        .eq('league_id', activeLeagueId!)
-        .eq('season', CURRENT_SEASON)
-        .order('id')
-        .range(from, to)))
-    },
-  })
+  // (shared with the player card any name opens — see PlayerCardHost)
+  const { games: seasonGames, picks: seasonPicks } = usePickemSeasonData(activeLeagueId, tab === 'standings')
 
   const standings = useMemo(
     () => computeStandings(seasonGames as any, seasonPicks as any, leagueMembers as any),
     [seasonGames, seasonPicks, leagueMembers],
   )
 
-  // Season awards under the standings, and the season card a
-  // Standings row opens — both from the same season data.
-  const [seasonUserId, setSeasonUserId] = useState<string | null>(null)
+  // Season awards and the Belt under the standings (a row opens that
+  // player's card — see PlayerCardHost)
   const seasonAwards = useMemo(
     () => computeSeasonAwards(seasonGames as any, seasonPicks as any, leagueMembers as any),
     [seasonGames, seasonPicks, leagueMembers],
-  )
-  const seasonProfile = useMemo(
-    () => seasonUserId
-      ? computeSeasonProfiles(seasonGames as any, seasonPicks as any, leagueMembers as any)
-          .find(p => p.userId === seasonUserId) ?? null
-      : null,
-    [seasonUserId, seasonGames, seasonPicks, leagueMembers],
-  )
-  // How everyone picks (Season card, Wrapped), the belt's history, and
-  // the season's bad beats — all from the same season data
-  const pickDna = useMemo(
-    () => (tab === 'standings' ? computePickDNA(seasonGames as any, seasonPicks as any, leagueMembers as any) : null),
-    [tab, seasonGames, seasonPicks, leagueMembers],
   )
   const belt = useMemo(
     () => (tab === 'standings' ? computeBelt(seasonGames as any, seasonPicks as any, leagueMembers as any) : null),
     [tab, seasonGames, seasonPicks, leagueMembers],
   )
-  const seasonBeats = useMemo(
-    () => (tab === 'standings' ? computeBadBeats(seasonGames as any, seasonPicks as any) : []),
-    [tab, seasonGames, seasonPicks],
-  )
-  const achievements = useMemo(
-    () => (tab === 'standings' ? computeAchievements(seasonGames as any, seasonPicks as any, leagueMembers as any) : null),
-    [tab, seasonGames, seasonPicks, leagueMembers],
-  )
-  const seasonMatches = useMemo(
-    () => (seasonUserId ? computePickMatches(seasonGames as any, seasonPicks as any, leagueMembers as any, seasonUserId) : null),
-    [seasonUserId, seasonGames, seasonPicks, leagueMembers],
-  )
   const beltHolders = useBeltHolders()
-  const [wrappedUserId, setWrappedUserId] = useState<string | null>(null)
-  const wrappedProfile = useMemo(
-    () => wrappedUserId
-      ? computeSeasonProfiles(seasonGames as any, seasonPicks as any, leagueMembers as any)
-          .find(p => p.userId === wrappedUserId) ?? null
-      : null,
-    [wrappedUserId, seasonGames, seasonPicks, leagueMembers],
-  )
+  const threadCounts = useThreadCounts(activeLeagueId)
+  const [composingPin, setComposingPin] = useState(false)
 
   // ── This week's results, for the recap post ─────────────────
   const weekRows = useMemo(
@@ -767,6 +691,16 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
           <p className="text-field-400 text-sm">{activeLeague.name} · {CURRENT_SEASON} NFL Season</p>
         </div>
         <div className="flex items-center gap-2">
+          {isCommissioner && (
+            <button
+              onClick={() => setComposingPin(true)}
+              title="Pin an announcement for the league"
+              aria-label="Pin an announcement"
+              className="p-2 rounded-xl border border-field-700 bg-field-800 text-field-400 hover:text-gold hover:border-gold/50 transition-colors"
+            >
+              <Pin className="w-4 h-4" />
+            </button>
+          )}
           {pickedCount > 0 && (
             <div className={clsx(
               'flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-bold border',
@@ -780,6 +714,10 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
           )}
         </div>
       </div>
+
+      {/* The commissioner's pinned announcement */}
+      <PinnedBanner leagueId={activeLeagueId} isCommissioner={!!isCommissioner} dismissible />
+      {composingPin && <PinComposer leagueId={activeLeagueId} onClose={() => setComposingPin(false)} />}
 
       {/* Week selector dropdown + tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1120,6 +1058,8 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
               onReason={(val) => setReasons(r => ({ ...r, [game.id]: val }))}
               savedPick={savedPickByGame.get(game.id) ?? null}
               injuries={injuries}
+              threadCount={threadCounts.get(game.id) ?? 0}
+              onThread={() => navigate(`/app/chat?game=${game.id}`)}
             />
           ))}
 
@@ -1150,6 +1090,8 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
                 onReason={(val) => setReasons(r => ({ ...r, [tiebreakerGame.id]: val }))}
                 savedPick={savedPickByGame.get(tiebreakerGame.id) ?? null}
                 injuries={injuries}
+                threadCount={threadCounts.get(tiebreakerGame.id) ?? 0}
+                onThread={() => navigate(`/app/chat?game=${tiebreakerGame.id}`)}
               />
             </div>
           )}
@@ -1222,44 +1164,13 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
             thisWeekRows={weekRows}
             leagueCreatedAt={activeLeague?.created_at ?? null}
             joinedAtByUser={joinedAtByUser}
-            onSelect={setSeasonUserId}
+            onSelect={openPlayerCard}
             beltHolders={beltHolders}
           />
 
           {belt && <BeltPanel belt={belt} currentUserId={user?.id} />}
 
           <SeasonAwardsPanel data={seasonAwards} />
-
-          {seasonProfile && (
-            <SeasonCard
-              profile={seasonProfile}
-              totalPlayers={standings.length}
-              isYou={seasonProfile.userId === user?.id}
-              onClose={() => setSeasonUserId(null)}
-              dna={pickDna?.players.find(p => p.userId === seasonProfile.userId) ?? null}
-              leagueDna={pickDna?.league ?? null}
-              onWrapped={() => { setWrappedUserId(seasonProfile.userId); setSeasonUserId(null) }}
-              achievements={achievements?.get(seasonProfile.userId) ?? []}
-              matches={seasonMatches}
-            />
-          )}
-
-          {wrappedProfile && (
-            <PickemWrapped
-              profile={wrappedProfile}
-              dna={pickDna?.players.find(p => p.userId === wrappedProfile.userId) ?? null}
-              leagueDna={pickDna?.league ?? null}
-              worstBeat={seasonBeats.find(b => b.victims.includes(wrappedProfile.userId)) ?? null}
-              beltWeeks={belt?.lineage.filter(l => l.winners.some(w => w.userId === wrappedProfile.userId)).length ?? 0}
-              leagueName={activeLeague?.name ?? "Pick'Em"}
-              totalPlayers={standings.length}
-              throughWeek={belt?.week ?? null}
-              seasonOver={seasonAwards.final}
-              isYou={wrappedProfile.userId === user?.id}
-              onClose={() => setWrappedUserId(null)}
-              badges={achievements?.get(wrappedProfile.userId) ?? []}
-            />
-          )}
         </div>
       )}
 
@@ -1289,6 +1200,8 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
             week={week}
             onWeekChange={setWeek}
             beltHolders={beltHolders}
+            threadCounts={threadCounts}
+            onThread={id => navigate(`/app/chat?game=${id}`)}
           />
         </div>
       )}
@@ -1298,7 +1211,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
 
 function GamePickCard({
   game, pickedTeam, onPick, deadline, odds, recordsByAbbr, recordsArePreseason, isTiebreaker, tiebreakerScore, onTiebreakerScore, tiebreakerWarning,
-  reason, onReason, savedPick, injuries,
+  reason, onReason, savedPick, injuries, threadCount = 0, onThread,
 }: {
   game: any
   pickedTeam: string | undefined
@@ -1318,6 +1231,9 @@ function GamePickCard({
   savedPick?: { picked_team: string; spread_at_pick: number | null } | null
   /** Injured key players, by team (keyInjuries). */
   injuries?: Map<string, InjuredStarter[]>
+  /** This game's chat thread: how many messages, and opening it. */
+  threadCount?: number
+  onThread?: () => void
 }) {
   const locked = isGameLocked(game.game_date, deadline, game.status)
   // How the line has moved for the picked team since it was picked (+ = against it)
@@ -1361,8 +1277,18 @@ function GamePickCard({
 
   return (
     <div className={clsx('panel space-y-3', isTiebreaker && 'border-gold/30 bg-gold/[0.02]')}>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <span className="text-field-400 text-xs">{gameTime}</span>
+        {onThread && (
+          <button
+            onClick={onThread}
+            title="Talk about this game"
+            className="mr-auto flex items-center gap-1 rounded-full border border-field-700 px-2 py-0.5 text-[11px] font-bold text-field-400 hover:text-gold hover:border-gold/50 transition-colors"
+          >
+            <MessageSquare className="w-3 h-3" />
+            {threadCount > 0 ? threadCount : 'Thread'}
+          </button>
+        )}
         {postponed ? (
           <span className="text-xs text-field-300 font-bold">Postponed · doesn't count</span>
         ) : locked && !isFinal && (
@@ -1968,7 +1894,7 @@ function PicksChart({
 // pinned while the game columns scroll horizontally.
 
 function PicksBoard({
-  games, allPicks, leagueMembers, weekRows, userId, deadline, week, onWeekChange, beltHolders,
+  games, allPicks, leagueMembers, weekRows, userId, deadline, week, onWeekChange, beltHolders, threadCounts, onThread,
 }: {
   games: any[]
   allPicks: any[]
@@ -1979,6 +1905,9 @@ function PicksBoard({
   week: number
   onWeekChange: (week: number) => void
   beltHolders?: Set<string>
+  /** Messages in each game's chat thread. */
+  threadCounts?: Map<string, number>
+  onThread: (gameId: string) => void
 }) {
   const now = new Date()
 
@@ -2174,6 +2103,16 @@ function PicksBoard({
                     </div>
                   )}
                   {isLive && <div className="text-[9px] font-bold text-gold mt-0.5">LIVE</div>}
+                  {/* This game's chat thread */}
+                  <button
+                    onClick={() => onThread(game.id)}
+                    title={`Talk about ${game.away_team} @ ${game.home_team}`}
+                    aria-label={`Open the ${game.away_team} @ ${game.home_team} thread`}
+                    className="mt-1 mx-auto flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-bold text-field-500 hover:text-gold hover:bg-gold/10"
+                  >
+                    <MessageSquare className="w-3 h-3" />
+                    {(threadCounts?.get(game.id) ?? 0) > 0 && threadCounts!.get(game.id)}
+                  </button>
                 </th>
               )
             })}
@@ -2192,7 +2131,11 @@ function PicksBoard({
                   'sticky left-0 z-10 px-3 py-2 whitespace-nowrap bg-field-800',
                   isMe && 'border-l-2 border-gold',
                 )}>
-                  <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openPlayerCard(m.user_id)}
+                    title={`${displayName === 'You' ? 'Your' : `${displayName}'s`} season`}
+                    className="flex items-center gap-2 text-left group"
+                  >
                     <span className="text-field-500 text-[11px] w-3 shrink-0">{i + 1}</span>
                     <div className="w-6 h-6 rounded-full bg-field-700 flex items-center justify-center text-[10px] font-bold text-gold overflow-hidden shrink-0">
                       {m.profile?.avatar_url
@@ -2200,11 +2143,11 @@ function PicksBoard({
                         : displayName[0]?.toUpperCase()
                       }
                     </div>
-                    <span className={clsx('font-bold text-xs truncate max-w-[120px]', isMe ? 'text-gold' : 'text-white')}>
+                    <span className={clsx('font-bold text-xs truncate max-w-[120px] group-hover:underline', isMe ? 'text-gold' : 'text-white')}>
                       {displayName}
                     </span>
                     {beltHolders?.has(m.user_id) && <BeltIcon />}
-                  </div>
+                  </button>
                 </td>
                 <td className="text-center px-2 py-2 border-l border-field-700/60">
                   <span className="font-cond font-black text-white">{pts?.correct ?? 0}</span>

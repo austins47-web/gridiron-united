@@ -64,7 +64,7 @@ serve(async (req) => {
   // ── The question ───────────────────────────────────────────
   const { data: msg } = await admin
     .from('league_messages')
-    .select('id, league_id, user_id, message, created_at, is_system, deleted_at')
+    .select('id, league_id, user_id, message, created_at, is_system, deleted_at, game_id')
     .eq('id', messageId)
     .maybeSingle()
   if (!msg || msg.user_id !== user.id || msg.is_system || msg.deleted_at) return json({ error: 'not your message' }, 403)
@@ -227,7 +227,8 @@ serve(async (req) => {
   if (!text) text = "I'll sit this one out."
 
   const { error } = await admin.from('league_messages').insert({
-    league_id: league.id, user_id: null, is_system: true, reply_to_id: messageId,
+    // Answered where it was asked — the main chat or that game's thread
+    league_id: league.id, user_id: null, is_system: true, reply_to_id: messageId, game_id: msg.game_id ?? null,
     message: 'COMMISH_REPLY:' + JSON.stringify({ askedBy: asker, question: question.slice(0, 200), text }),
   })
   if (error) return json({ error: error.message }, 500)

@@ -1,20 +1,33 @@
-import type { ReactNode } from 'react'
-import { X, Trophy, Dna, Sparkles, Users, Swords, Medal } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { X, Trophy, Dna, Sparkles, Users, Swords, Medal, Quote } from 'lucide-react'
 import clsx from 'clsx'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { PickDNABars } from './PickDNA'
 import { AchievementGrid } from './Achievements'
+import { BeltIcon } from './Belt'
 import { ACHIEVEMENTS, type EarnedAchievement } from './standings'
 import type { SeasonProfile, TeamRecord, PickDNA, PickTraits, PickMatch } from './season'
+
+/** A pick with its one-line reason, public once the game kicks off. */
+export interface Receipt {
+  gameId: string
+  week: number
+  team: string
+  opponent: string
+  reason: string
+  /** Null while the game's undecided. */
+  result: 'hit' | 'missed' | null
+}
 
 /**
  * One player's Pick'Em season, opened from a Standings row (or "Your
  * season"). Record and rank match the Standings table; the pick-level
  * facts (underdog picks, boldest call, teams) count final games only.
  * With Pick DNA, it also shows how they pick and opens their Wrapped.
+ * Opened from any name in the league (PlayerCardHost).
  */
-export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueDna, onWrapped, achievements, matches }: {
+export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueDna, onWrapped, achievements, matches, belt, receipts }: {
   profile: SeasonProfile
   totalPlayers: number
   isYou: boolean
@@ -24,7 +37,11 @@ export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueD
   onWrapped?: () => void
   achievements?: EarnedAchievement[]
   matches?: { twin: PickMatch | null; nemesis: PickMatch | null } | null
+  /** Weeks they won the Belt, and their current reign (0 if they don't hold it). */
+  belt?: { weeks: number[]; reign: number } | null
+  receipts?: Receipt[]
 }) {
+  const [allReceipts, setAllReceipts] = useState(false)
   const s = profile.standing
   const losses = Math.max(0, s.played - s.correct)
   const u = profile.underdog
@@ -81,6 +98,26 @@ export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueD
             Underdog picks: games where most of the league (3+ players) picked the other side.
           </p>
 
+          {/* The Belt: holding it now, or the weeks they had it */}
+          {belt && belt.weeks.length > 0 && (
+            <div className={clsx(
+              'flex items-center gap-3 rounded-xl border px-3 py-2.5',
+              belt.reign > 0 ? 'border-gold/40 bg-gold/[0.08]' : 'border-field-700 bg-field-900/50',
+            )}>
+              <BeltIcon className="w-8 h-5" title="The Belt" />
+              <div className="min-w-0">
+                <p className="font-bold text-sm text-white">
+                  {belt.reign > 0
+                    ? `${isYou ? 'You hold' : 'Holds'} the Belt${belt.reign > 1 ? ` · ${belt.reign} weeks straight` : ''}`
+                    : `Held the Belt ${belt.weeks.length} week${belt.weeks.length === 1 ? '' : 's'}`}
+                </p>
+                <p className="text-xs text-field-400 truncate">
+                  Won {belt.weeks.map(w => (w >= 19 ? ['Wild Card', 'Divisional', 'Conf.', 'Super Bowl'][w - 19] : `W${w}`)).join(', ')}
+                </p>
+              </div>
+            </div>
+          )}
+
           {onWrapped && profile.standing.played > 0 && (
             <button onClick={onWrapped} className="btn-gold w-full justify-center !py-2.5">
               <Sparkles className="w-4 h-4" /> {isYou ? 'Play your Wrapped' : `Play ${profile.name}'s Wrapped`}
@@ -133,6 +170,40 @@ export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueD
                 <Medal className="w-3.5 h-3.5 text-gold" /> Badges · {achievements.length} of {ACHIEVEMENTS.length}
               </p>
               <AchievementGrid earned={achievements} />
+            </div>
+          )}
+
+          {/* Receipts: why they picked what they picked, and how it aged */}
+          {receipts && receipts.length > 0 && (
+            <div>
+              <p className="flex items-center gap-1.5 font-cond font-bold text-[11px] uppercase tracking-[0.16em] text-field-500 mb-1.5">
+                <Quote className="w-3.5 h-3.5 text-gold" /> Receipts · {receipts.length}
+                {receipts.some(r => r.result) && (
+                  <span className="normal-case tracking-normal font-sans text-field-400">
+                    {' '}· {receipts.filter(r => r.result === 'hit').length} of {receipts.filter(r => r.result).length} aged well
+                  </span>
+                )}
+              </p>
+              <div className="space-y-1.5">
+                {(allReceipts ? receipts : receipts.slice(0, 4)).map(r => (
+                  <div key={r.gameId} className="rounded-lg border border-field-700 bg-field-900/50 px-3 py-2">
+                    <p className="text-sm text-white italic leading-snug break-words">&ldquo;{r.reason}&rdquo;</p>
+                    <p className="mt-0.5 flex items-center gap-1 text-[11px] text-field-400">
+                      <TeamChip team={r.team} bare /> over {r.opponent} · W{r.week}
+                      {r.result && (
+                        <span className={clsx('font-bold', r.result === 'hit' ? 'text-nfl' : 'text-red-400')}>
+                          · {r.result === 'hit' ? 'Aged well' : 'Aged badly'}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {receipts.length > 4 && (
+                <button onClick={() => setAllReceipts(a => !a)} className="mt-1.5 text-xs font-bold text-gold hover:text-gold-light">
+                  {allReceipts ? 'Show fewer' : `Show all ${receipts.length}`}
+                </button>
+              )}
             </div>
           )}
 
