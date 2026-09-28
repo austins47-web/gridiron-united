@@ -1,7 +1,8 @@
-// ESPN game data → what nfl_games stores: the pregame line and a
-// final game's story. Pure (no Deno APIs), so it can be tested in Node.
+// ESPN game data → what we store: a game's betting line (nfl_games,
+// odds_cache) and a final game's story. Pure (no Deno APIs), so it can
+// be tested in Node. Used by sync-nfl-schedule and sync-odds.
 
-import { spreadHomeWinChance, type GameStory } from '../_shared/pickemCore.ts'
+import { spreadHomeWinChance, type GameStory } from './pickemCore.ts'
 
 export const num = (v: unknown): number | null => {
   const n = typeof v === 'number' ? v : Number(v)
@@ -15,19 +16,27 @@ const moneyline = (v: unknown): number | null => {
 const implied = (ml: number) => (ml < 0 ? -ml / (-ml + 100) : 100 / (ml + 100))
 
 /**
- * An ESPN odds object (scoreboard `odds[0]` or summary `pickcenter[0]`)
- * as the home team's pregame chance — both moneylines with the vig
- * removed, else the spread — plus the line and total. ESPN's `spread`
- * is the home team's line.
+ * An ESPN odds object (scoreboard `odds[0]` or summary `pickcenter[0]`):
+ * the home team's line (ESPN's `spread` is the home line), the total,
+ * both moneylines, and the home team's chance from the moneylines with
+ * the vig removed (else from the spread).
  */
-export function pregameLine(o: any): { pregame_home_wp: number | null; spread: number | null; over_under: number | null } {
+export function oddsLine(o: any): {
+  spread: number | null; overUnder: number | null; homeMl: number | null; awayMl: number | null; homeWp: number | null
+} {
   const spread = num(o?.spread)
-  const home = moneyline(o?.moneyline?.home?.close?.odds ?? o?.homeTeamOdds?.moneyLine)
-  const away = moneyline(o?.moneyline?.away?.close?.odds ?? o?.awayTeamOdds?.moneyLine)
-  const wp = home != null && away != null
-    ? implied(home) / (implied(home) + implied(away))
+  const homeMl = moneyline(o?.moneyline?.home?.close?.odds ?? o?.homeTeamOdds?.moneyLine)
+  const awayMl = moneyline(o?.moneyline?.away?.close?.odds ?? o?.awayTeamOdds?.moneyLine)
+  const homeWp = homeMl != null && awayMl != null
+    ? implied(homeMl) / (implied(homeMl) + implied(awayMl))
     : spread != null ? spreadHomeWinChance(spread) : null
-  return { pregame_home_wp: wp, spread, over_under: num(o?.overUnder) }
+  return { spread, overUnder: num(o?.overUnder), homeMl, awayMl, homeWp }
+}
+
+/** The pregame line as nfl_games stores it. */
+export function pregameLine(o: any): { pregame_home_wp: number | null; spread: number | null; over_under: number | null } {
+  const l = oddsLine(o)
+  return { pregame_home_wp: l.homeWp, spread: l.spread, over_under: l.overUnder }
 }
 
 /** How a final game was lost, from its ESPN summary (see GameStory). */
@@ -77,4 +86,3 @@ export function gameStory(d: any, g: { home_team: string; away_team: string; hom
     loserLedLate, decided,
   }
 }
-

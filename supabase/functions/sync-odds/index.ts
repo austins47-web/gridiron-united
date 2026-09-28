@@ -1,114 +1,36 @@
 // supabase/functions/sync-odds/index.ts
 //
-// Fetches NFL + CFB odds from The Odds API ONCE per invocation and
-// writes them to public.odds_cache. Meant to run on a cron (e.g.
-// every 2 hours), NOT to be called by the client.
+// NFL + college betting lines into public.odds_cache, from ESPN's
+// scoreboard (DraftKings' line) — this week and next for each. Runs on
+// a cron (every 3 hours); the client only ever reads odds_cache.
 //
-// This replaces client-side polling. Before this existed, every
-// open browser tab called The Odds API directly every 10-30 min —
-// usage scaled with concurrent users, not time, so a free-tier
-// 500/month quota was exhausted in days. One scheduled fetch here
-// means total usage is fixed (2 calls per run) no matter how many
-// people are using the site.
+// This used to call The Odds API, whose free plan is 500 credits a
+// month. Each run cost 6 (two sports × three markets), so at 8 runs a
+// day the month's credits were gone in about 10 days and odds_cache
+// sat stale for the rest of the month (last good update: Sept 20,
+// 2026). ESPN's scoreboard carries the same line — spread, total and
+// both moneylines — at no cost, and it's what sync-nfl-schedule
+// already reads.
+//
+// Keys match what the app looks up: NFL "AWAY@HOME" abbreviations,
+// college "Away@Home" by ESPN shortDisplayName (LiveScoresView). A game
+// that has kicked off has no line on the scoreboard any more, so it's
+// skipped — its last pregame line stays in the cache.
+//
+// ?dry=1 reports what would be written without writing.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { oddsLine } from '../_shared/espn.ts'
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
 
-// ── Same name maps as the old client hook, ported not rewritten ──
-const NFL_NAME_TO_ABBR: Record<string, string> = {
-  'Arizona Cardinals': 'ARI', 'Atlanta Falcons': 'ATL', 'Baltimore Ravens': 'BAL',
-  'Buffalo Bills': 'BUF', 'Carolina Panthers': 'CAR', 'Chicago Bears': 'CHI',
-  'Cincinnati Bengals': 'CIN', 'Cleveland Browns': 'CLE', 'Dallas Cowboys': 'DAL',
-  'Denver Broncos': 'DEN', 'Detroit Lions': 'DET', 'Green Bay Packers': 'GB',
-  'Houston Texans': 'HOU', 'Indianapolis Colts': 'IND', 'Jacksonville Jaguars': 'JAX',
-  'Kansas City Chiefs': 'KC', 'Los Angeles Chargers': 'LAC', 'Los Angeles Rams': 'LAR',
-  'Las Vegas Raiders': 'LV', 'Miami Dolphins': 'MIA', 'Minnesota Vikings': 'MIN',
-  'New England Patriots': 'NE', 'New Orleans Saints': 'NO', 'New York Giants': 'NYG',
-  'New York Jets': 'NYJ', 'Philadelphia Eagles': 'PHI', 'Pittsburgh Steelers': 'PIT',
-  'San Francisco 49ers': 'SF', 'Seattle Seahawks': 'SEA', 'Tampa Bay Buccaneers': 'TB',
-  'Tennessee Titans': 'TEN', 'Washington Commanders': 'WSH',
-}
-
-// ── CFB: The Odds API full name → ESPN shortDisplayName ───────
-const CFB_FULL_TO_SHORT: Record<string, string> = {
-  'Alabama Crimson Tide': 'Alabama', 'Auburn Tigers': 'Auburn',
-  'Georgia Bulldogs': 'Georgia', 'LSU Tigers': 'LSU',
-  'Tennessee Volunteers': 'Tennessee', 'Texas A&M Aggies': 'Texas A&M',
-  'Florida Gators': 'Florida', 'South Carolina Gamecocks': 'South Carolina',
-  'Ohio State Buckeyes': 'Ohio State', 'Michigan Wolverines': 'Michigan',
-  'Penn State Nittany Lions': 'Penn State', 'Michigan State Spartans': 'Michigan State',
-  'Iowa Hawkeyes': 'Iowa', 'Wisconsin Badgers': 'Wisconsin',
-  'Notre Dame Fighting Irish': 'Notre Dame', 'Texas Longhorns': 'Texas',
-  'Oklahoma Sooners': 'Oklahoma', 'Kansas State Wildcats': 'Kansas State',
-  'Baylor Bears': 'Baylor', 'TCU Horned Frogs': 'TCU',
-  'Oregon Ducks': 'Oregon', 'Washington Huskies': 'Washington',
-  'USC Trojans': 'USC', 'Utah Utes': 'Utah',
-  'Clemson Tigers': 'Clemson', 'Florida State Seminoles': 'Florida State',
-  'Miami Hurricanes': 'Miami', 'NC State Wolfpack': 'NC State',
-  'Colorado Buffaloes': 'Colorado', 'Boise State Broncos': 'Boise State',
-  'Ole Miss Rebels': 'Ole Miss', 'Mississippi State Bulldogs': 'Mississippi State',
-  'Arkansas Razorbacks': 'Arkansas', 'Kentucky Wildcats': 'Kentucky',
-  'Missouri Tigers': 'Missouri', 'Vanderbilt Commodores': 'Vanderbilt',
-  'Oklahoma State Cowboys': 'Oklahoma State', 'West Virginia Mountaineers': 'West Virginia',
-  'Iowa State Cyclones': 'Iowa State', 'Cincinnati Bearcats': 'Cincinnati',
-  'UCF Knights': 'UCF', 'Houston Cougars': 'Houston',
-  'BYU Cougars': 'BYU', 'Stanford Cardinal': 'Stanford',
-  'California Golden Bears': 'California', 'Arizona Wildcats': 'Arizona',
-  'Arizona State Sun Devils': 'Arizona State', 'Washington State Cougars': 'Washington State',
-  'Oregon State Beavers': 'Oregon State', 'UCLA Bruins': 'UCLA',
-  'Indiana Hoosiers': 'Indiana', 'Northwestern Wildcats': 'Northwestern',
-  'Minnesota Golden Gophers': 'Minnesota', 'Nebraska Cornhuskers': 'Nebraska',
-  'Purdue Boilermakers': 'Purdue', 'Illinois Fighting Illini': 'Illinois',
-  'Maryland Terrapins': 'Maryland', 'Rutgers Scarlet Knights': 'Rutgers',
-  'Duke Blue Devils': 'Duke', 'North Carolina Tar Heels': 'North Carolina',
-  'Virginia Cavaliers': 'Virginia', 'Virginia Tech Hokies': 'Virginia Tech',
-  'Pittsburgh Panthers': 'Pittsburgh', 'Georgia Tech Yellow Jackets': 'Georgia Tech',
-  'Wake Forest Demon Deacons': 'Wake Forest', 'Syracuse Orange': 'Syracuse',
-  'Boston College Eagles': 'Boston College', 'Louisville Cardinals': 'Louisville',
-  'Memphis Tigers': 'Memphis', 'Tulane Green Wave': 'Tulane',
-  'SMU Mustangs': 'SMU', 'Air Force Falcons': 'Air Force',
-  'Army Black Knights': 'Army', 'Navy Midshipmen': 'Navy',
-  'Liberty Flames': 'Liberty', 'James Madison Dukes': 'James Madison',
-  'Coastal Carolina Chanticleers': 'Coastal Carolina', 'Appalachian State Mountaineers': 'Appalachian State',
-  'Marshall Thundering Herd': 'Marshall', 'Old Dominion Monarchs': 'Old Dominion',
-  'Southern Miss Golden Eagles': 'Southern Miss', 'UTSA Roadrunners': 'UTSA',
-  'North Texas Mean Green': 'North Texas', 'Florida Atlantic Owls': 'FAU',
-  'Florida International Panthers': 'FIU', 'Middle Tennessee Blue Raiders': 'Middle Tennessee',
-  'Western Kentucky Hilltoppers': 'Western Kentucky', 'UAB Blazers': 'UAB',
-  'Georgia Southern Eagles': 'Georgia Southern', 'Troy Trojans': 'Troy',
-  'South Alabama Jaguars': 'South Alabama', 'Louisiana Ragin Cajuns': 'Louisiana',
-  'Texas State Bobcats': 'Texas State', 'New Mexico State Aggies': 'New Mexico State',
-  'Sam Houston Bearkats': 'Sam Houston', 'Jacksonville State Gamecocks': 'Jacksonville State',
-  'Kennesaw State Owls': 'Kennesaw State', 'Utah State Aggies': 'Utah State',
-  'Fresno State Bulldogs': 'Fresno State', 'San Diego State Aztecs': 'San Diego State',
-  'UNLV Rebels': 'UNLV', 'Nevada Wolf Pack': 'Nevada',
-  'Hawaii Rainbow Warriors': 'Hawaii', 'San Jose State Spartans': 'San Jose State',
-  'Wyoming Cowboys': 'Wyoming', 'New Mexico Lobos': 'New Mexico',
-  'Colorado State Rams': 'Colorado State', 'Tulsa Golden Hurricane': 'Tulsa',
-  'East Carolina Pirates': 'East Carolina', 'South Florida Bulls': 'South Florida',
-  'Temple Owls': 'Temple', 'Charlotte 49ers': 'Charlotte',
-  'Rice Owls': 'Rice', 'Louisiana Tech Bulldogs': 'Louisiana Tech',
-  'Western Michigan Broncos': 'Western Michigan', 'Central Michigan Chippewas': 'Central Michigan',
-  'Eastern Michigan Eagles': 'Eastern Michigan', 'Northern Illinois Huskies': 'Northern Illinois',
-  'Ball State Cardinals': 'Ball State', 'Bowling Green Falcons': 'Bowling Green',
-  'Buffalo Bulls': 'Buffalo', 'Kent State Golden Flashes': 'Kent State',
-  'Miami Ohio RedHawks': 'Miami (OH)', 'Ohio Bobcats': 'Ohio',
-  'Akron Zips': 'Akron', 'Toledo Rockets': 'Toledo',
-}
-
-// ── Odds math — same as the client hook ────────────────────────
-function moneylineToProb(odds: number): number {
-  if (odds > 0) return 100 / (odds + 100)
-  return Math.abs(odds) / (Math.abs(odds) + 100)
-}
-
-function fairProbs(homeOdds: number, awayOdds: number): [number, number] {
-  const homeRaw = moneylineToProb(homeOdds)
-  const awayRaw = moneylineToProb(awayOdds)
-  const total = homeRaw + awayRaw
-  return [Math.round((homeRaw / total) * 100), Math.round((awayRaw / total) * 100)]
-}
+// ESPN 403s requests without a browser-ish user agent (see sync-nfl-schedule)
+const ESPN_HEADERS = { 'User-Agent': 'Mozilla/5.0 (compatible; Gridiron-United/1.0)', Accept: 'application/json' }
+const BOARDS = {
+  NFL: 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?limit=40',
+  // groups=80: FBS
+  CFB: 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=300',
+} as const
 
 interface Row {
   game_key: string
@@ -121,136 +43,91 @@ interface Row {
   away_win_pct: number | null
   home_moneyline: number | null
   away_moneyline: number | null
+  updated_at: string
 }
 
-function parseOddsGames(
-  games: any[],
-  league: 'NFL' | 'CFB',
-  nameToKey: (name: string) => string | null,
-): Row[] {
-  const rows: Row[] = []
+async function board(url: string): Promise<any> {
+  const res = await fetch(url, { headers: ESPN_HEADERS })
+  if (!res.ok) throw new Error(`ESPN ${res.status} for ${url}`)
+  return res.json()
+}
 
-  for (const game of games) {
-    const homeKey = nameToKey(game.home_team)
-    const awayKey = nameToKey(game.away_team)
-    if (!homeKey || !awayKey) continue
+/** This week's scoreboard and next week's (by ESPN's own week number). */
+async function twoWeeks(base: string): Promise<any[]> {
+  const now = await board(base)
+  const week = now?.week?.number
+  const type = now?.season?.type
+  const year = now?.season?.year
+  const events = [...(now?.events ?? [])]
+  if (week && type && year) {
+    try {
+      const next = await board(`${base}&dates=${year}&seasontype=${type}&week=${week + 1}`)
+      events.push(...(next?.events ?? []))
+    } catch { /* past the last week of the season type — this week is enough */ }
+  }
+  return events
+}
 
-    let spread: number | null = null
-    let totalPoints: number | null = null
-    let homeML: number | null = null
-    let awayML: number | null = null
-
-    for (const bm of game.bookmakers ?? []) {
-      for (const market of bm.markets ?? []) {
-        if (market.key === 'spreads' && spread === null) {
-          const o = market.outcomes?.find((o: any) => nameToKey(o.name) === homeKey)
-          if (o) spread = o.point
-        }
-        if (market.key === 'totals' && totalPoints === null) {
-          // Over and Under outcomes share the same line — either
-          // one gives the real total, no team-name matching needed.
-          totalPoints = market.outcomes?.[0]?.point ?? null
-        }
-        if (market.key === 'h2h' && homeML === null) {
-          const ho = market.outcomes?.find((o: any) => nameToKey(o.name) === homeKey)
-          const ao = market.outcomes?.find((o: any) => nameToKey(o.name) === awayKey)
-          if (ho && ao) { homeML = ho.price; awayML = ao.price }
-        }
-        if (spread !== null && totalPoints !== null && homeML !== null) break
-      }
-      if (spread !== null && totalPoints !== null && homeML !== null) break
-    }
-
-    let homeWinPct: number | null = null
-    let awayWinPct: number | null = null
-    if (homeML !== null && awayML !== null) {
-      const [h, a] = fairProbs(homeML, awayML)
-      homeWinPct = h; awayWinPct = a
-    }
-
-    rows.push({
-      game_key: `${awayKey}@${homeKey}`,
-      league,
-      home_team: homeKey,
-      away_team: awayKey,
-      spread,
-      total_points: totalPoints,
-      home_win_pct: homeWinPct,
-      away_win_pct: awayWinPct,
-      home_moneyline: homeML,
-      away_moneyline: awayML,
+function rowsFrom(events: any[], league: 'NFL' | 'CFB', stamp: string): Row[] {
+  const rows = new Map<string, Row>()
+  for (const ev of events) {
+    const comp = ev?.competitions?.[0]
+    const odds = comp?.odds?.[0]
+    if (!comp || !odds) continue
+    const home = comp.competitors?.find((c: any) => c.homeAway === 'home')?.team
+    const away = comp.competitors?.find((c: any) => c.homeAway === 'away')?.team
+    const key = (t: any) => (league === 'NFL' ? t?.abbreviation : t?.shortDisplayName ?? t?.displayName)
+    const h = key(home), a = key(away)
+    if (!h || !a) continue
+    const l = oddsLine(odds)
+    if (l.spread == null && l.homeMl == null && l.overUnder == null) continue
+    const homePct = l.homeMl != null && l.awayMl != null && l.homeWp != null ? Math.round(l.homeWp * 100) : null
+    rows.set(`${a}@${h}`, {
+      game_key: `${a}@${h}`, league, home_team: h, away_team: a,
+      spread: l.spread, total_points: l.overUnder,
+      home_win_pct: homePct, away_win_pct: homePct == null ? null : 100 - homePct,
+      home_moneyline: l.homeMl, away_moneyline: l.awayMl,
+      updated_at: stamp,
     })
   }
-
-  return rows
+  return [...rows.values()]
 }
 
-// ── Handler ──────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
-
-  const apiKey = Deno.env.get('ODDS_API_KEY')
-  if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'ODDS_API_KEY not set' }), {
-      status: 500, headers: CORS,
-    })
-  }
+  const dryRun = new URL(req.url).searchParams.get('dry') === '1'
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  const base = 'https://api.the-odds-api.com/v4/sports'
-  const params = `?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`
-
   const errors: string[] = []
-  let rows: Row[] = []
-  let remaining: string | null = null
-
-  try {
-    // Exactly two calls per run, total — this is the entire point.
-    const [nflRes, cfbRes] = await Promise.all([
-      fetch(`${base}/americanfootball_nfl/odds/${params}`),
-      fetch(`${base}/americanfootball_ncaaf/odds/${params}`),
-    ])
-
-    // The Odds API returns remaining-quota in a response header —
-    // surface it so quota exhaustion shows up in logs before it
-    // silently starts returning 401s again.
-    remaining = nflRes.headers.get('x-requests-remaining')
-      ?? cfbRes.headers.get('x-requests-remaining')
-
-    if (nflRes.ok) {
-      const nflGames = await nflRes.json()
-      rows.push(...parseOddsGames(nflGames, 'NFL', (n) => NFL_NAME_TO_ABBR[n] ?? null))
-    } else {
-      errors.push(`NFL ${nflRes.status}: ${await nflRes.text()}`)
+  const stamp = new Date().toISOString()
+  const rows: Row[] = []
+  for (const league of ['NFL', 'CFB'] as const) {
+    try {
+      rows.push(...rowsFrom(await twoWeeks(BOARDS[league]), league, stamp))
+    } catch (e) {
+      errors.push(`${league}: ${String(e)}`)
     }
-
-    if (cfbRes.ok) {
-      const cfbGames = await cfbRes.json()
-      rows.push(...parseOddsGames(cfbGames, 'CFB', (n) => CFB_FULL_TO_SHORT[n] ?? null))
-    } else {
-      errors.push(`CFB ${cfbRes.status}: ${await cfbRes.text()}`)
-    }
-  } catch (e) {
-    errors.push(String(e))
   }
 
   let upserted = 0
-  if (rows.length) {
-    const { error } = await supabase
-      .from('odds_cache')
-      .upsert(rows, { onConflict: 'game_key' })
+  if (rows.length && !dryRun) {
+    const { error } = await supabase.from('odds_cache').upsert(rows, { onConflict: 'game_key' })
     if (error) errors.push(`upsert: ${error.message}`)
     else upserted = rows.length
   }
 
   return new Response(JSON.stringify({
     ok: errors.length === 0,
+    source: 'espn',
+    dryRun,
+    nfl: rows.filter(r => r.league === 'NFL').length,
+    cfb: rows.filter(r => r.league === 'CFB').length,
     upserted,
-    quotaRemaining: remaining,
+    sample: rows.slice(0, 3),
     errors,
   }, null, 2), { headers: CORS })
 })

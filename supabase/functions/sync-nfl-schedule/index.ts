@@ -54,7 +54,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { nflSeasonFor } from '../_shared/pickemCore.ts'
-import { num, pregameLine, gameStory } from './espn.ts'
+import { num, pregameLine, gameStory } from '../_shared/espn.ts'
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard'
