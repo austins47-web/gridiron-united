@@ -334,12 +334,17 @@ function GameTile({ g, big }: { g: TvGame; big: boolean }) {
         {side(g.away, g.awayScore, g.riders?.away)}
         {side(g.home, g.homeScore, g.riders?.home)}
       </div>
-      <div className="text-[18px] text-field-400 truncate">
-        {fav
-          ? <><span className="font-black text-white">{fav.team} {Math.round(fav.pct * 100)}%</span> to win</>
-          : final ? (winner ? `${winner} wins` : 'Tie')
-          : ''}
-        {!g.riders && g.state === 'pre' && <span> · {g.picked} picked, hidden till kickoff</span>}
+      <div className="flex items-center gap-3 text-[18px] text-field-400">
+        <span className="min-w-0 truncate">
+          {fav
+            ? <><span className="font-black text-white">{fav.team} {Math.round(fav.pct * 100)}%</span> to win</>
+            : final ? (winner ? `${winner} wins` : 'Tie')
+            : ''}
+        </span>
+        {/* Picks on a game that can still be picked stay hidden: just the count */}
+        {!g.riders && g.state === 'pre' && (
+          <span className="ml-auto shrink-0 whitespace-nowrap" title="Picks show at kickoff">🔒 {g.picked} picked</span>
+        )}
       </div>
     </div>
   )
@@ -438,7 +443,7 @@ function Ticker({ board }: { board: TvBoard }) {
       out.push(board.deadline ? `Picks lock ${kickoffLabel(board.deadline)}` : 'Picks lock at each kickoff')
     }
     if (board.belt) {
-      out.push(`🥋 ${board.belt.names.join(' & ')} ${board.belt.names.length > 1 ? 'share' : 'holds'} the Belt${board.belt.reign > 1 ? ` · ${board.belt.reign} weeks straight` : ''}`)
+      out.push(`The Belt: ${board.belt.names.join(' & ')}${board.belt.reign > 1 ? ` · ${board.belt.reign} weeks straight` : ''}`)
     }
     if (board.nextKickoff) {
       const g = board.games.find(x => x.kickoff === board.nextKickoff && x.state === 'pre')
