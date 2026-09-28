@@ -742,7 +742,9 @@ export function LeagueChat() {
   }, [activeLeagueId])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const areaRef = useRef<HTMLDivElement>(null)
+  /** Whether this room has had its first jump to the newest message. */
+  const landed = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const inputWrapRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -906,6 +908,7 @@ export function LeagueChat() {
   // Switching rooms isn't a new message — and lands at the bottom
   useEffect(() => {
     prevTopMsgId.current = null
+    landed.current = false
     setAutoScroll(true)
     setReplyTo(null)
     setEditing(null)
@@ -997,9 +1000,30 @@ export function LeagueChat() {
   }, [activeLeagueId, qc, keyFor])
 
   // ── Auto-scroll ─────────────────────────────────────────────
+  // Scrolls the message list itself, not the page. Opening a room jumps
+  // straight to the newest message and new ones glide in after that; it
+  // goes again a frame later because the list is still settling then.
+  const toBottom = useCallback((smooth: boolean) => {
+    const el = areaRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+  }, [])
   useEffect(() => {
-    if (autoScroll) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, autoScroll])
+    if (!autoScroll || messages.length === 0) return
+    const smooth = landed.current
+    landed.current = true
+    toBottom(smooth)
+    const frame = requestAnimationFrame(() => toBottom(smooth))
+    return () => cancelAnimationFrame(frame)
+  }, [messages, autoScroll, toBottom])
+  // A picture or GIF finishing loading pushes the newest message down;
+  // follow it if you were at the bottom
+  useEffect(() => {
+    const el = areaRef.current
+    if (!el || !autoScroll) return
+    const onLoad = () => toBottom(false)
+    el.addEventListener('load', onLoad, true)
+    return () => el.removeEventListener('load', onLoad, true)
+  }, [autoScroll, toBottom])
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget
@@ -1292,7 +1316,7 @@ export function LeagueChat() {
       )}
 
       {/* Messages */}
-      <div className="chat-area flex-1 overflow-y-auto px-4 py-3 space-y-1.5 min-h-0" onScroll={handleScroll}>
+      <div ref={areaRef} className="chat-area flex-1 overflow-y-auto px-4 py-3 space-y-1.5 min-h-0" onScroll={handleScroll}>
         {messagesFailed && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 text-center gap-2">
             <MessageSquare className="w-8 h-8 text-field-600" />
@@ -1373,12 +1397,11 @@ export function LeagueChat() {
             </div>
           )
         })}
-        <div ref={bottomRef} />
       </div>
 
       {/* Scroll hint */}
       {!autoScroll && (
-        <button onClick={() => { setAutoScroll(true); bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }}
+        <button onClick={() => { setAutoScroll(true); toBottom(true) }}
           className="chat-scroll-btn rise-in mx-4 mb-2 text-xs text-gold bg-gold/10 border border-gold/30 rounded-full px-3 py-1 font-bold hover:bg-gold/20 transition-colors">
           ↓ New messages
         </button>
@@ -1494,7 +1517,12 @@ export function LeagueChat() {
         </div>
 
         <div className="flex justify-between mt-1 px-1">
-          <span className="text-xs text-field-600">{editing ? "Enter to save · Esc to cancel" : "Enter to send · @ to mention · tap a message to react or reply"}</span>
+          {/* Keyboard hints are for a keyboard; on a phone it's one short line */}
+          <span className="text-xs text-field-600">
+            {editing
+              ? <><span className="hidden sm:inline">Enter to save · Esc to cancel</span><span className="sm:hidden">Editing your message</span></>
+              : <><span className="hidden sm:inline">Enter to send · </span>@ to mention · tap a message to react or reply</>}
+          </span>
           <span className={clsx('text-xs', text.length > 450 ? 'text-gold' : 'text-field-600')}>
             {text.length}/500
           </span>
