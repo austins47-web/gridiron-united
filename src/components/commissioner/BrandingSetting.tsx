@@ -1,51 +1,48 @@
 import { useRef, useState } from 'react'
-import { Palette, Upload, X, Loader2, Check } from 'lucide-react'
-import clsx from 'clsx'
+import { ImageIcon, Upload, X, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
-import { BRAND_PRESETS, DEFAULT_GOLD, brandVars } from '@/lib/brand'
 import { makeLogoPng, type CutoutResult } from '@/lib/logoCutout'
 
 /**
- * League branding: a logo and an accent color. The color replaces the
- * copper across the app while this league is active, and on the Shop
- * TV; the logo shows in the league switcher, Pick'Em, chat and the TV.
+ * The league's logo: the league switcher, Pick'Em, chat and the Shop TV
+ * show it. Every upload becomes a transparent PNG (logoCutout) and is
+ * saved right away. (Accent colors are each person's own now: Account →
+ * Appearance.)
  */
 export function BrandingSetting({ leagueId }: { leagueId: string }) {
   const qc = useQueryClient()
   const { activeLeague, myMembership, setActiveLeague } = useAppStore()
   const league = activeLeague?.id === leagueId ? activeLeague : null
   const [logo, setLogo] = useState<string | null>(league?.brand_logo_url ?? null)
-  const [color, setColor] = useState<string>(league?.brand_color ?? DEFAULT_GOLD)
-  const [uploading, setUploading] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
-
-  const savedLogo = league?.brand_logo_url ?? null
-  const savedColor = league?.brand_color ?? DEFAULT_GOLD
-  const dirty = logo !== savedLogo || color.toUpperCase() !== savedColor.toUpperCase()
-  const valid = /^#[0-9a-f]{6}$/i.test(color)
-  const preview = brandVars(valid ? color : DEFAULT_GOLD)
-
-  // Every logo becomes a PNG with its plain background taken out (logoCutout)
   const original = useRef<File | null>(null)
   const [outcome, setOutcome] = useState<CutoutResult['outcome'] | 'original' | null>(null)
 
+  async function saveLogo(url: string | null) {
+    const { error } = await supabase.from('leagues').update({ brand_logo_url: url }).eq('id', leagueId)
+    if (error) throw error
+    setLogo(url)
+    if (activeLeague?.id === leagueId) setActiveLeague({ ...activeLeague, brand_logo_url: url }, myMembership)
+    qc.invalidateQueries({ queryKey: ['my-leagues'] })
+  }
+
   async function process(file: File, removeBackground: boolean) {
-    setUploading(true)
+    setBusy(true)
     try {
       const res = await makeLogoPng(file, removeBackground)
       const path = `${leagueId}/logo-${Date.now()}.png`
       const { error } = await supabase.storage.from('league-logos').upload(path, res.blob, { contentType: 'image/png' })
       if (error) throw error
-      setLogo(supabase.storage.from('league-logos').getPublicUrl(path).data.publicUrl)
+      await saveLogo(supabase.storage.from('league-logos').getPublicUrl(path).data.publicUrl)
       setOutcome(removeBackground ? res.outcome : 'original')
     } catch (err) {
-      toast.error(`Couldn't upload: ${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Couldn't save the logo: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
-      setUploading(false)
+      setBusy(false)
     }
   }
 
@@ -59,44 +56,41 @@ export function BrandingSetting({ leagueId }: { leagueId: string }) {
     await process(file, true)
   }
 
-  async function save() {
-    if (!valid) { toast.error('Colors look like #CE7B45'); return }
-    setSaving(true)
-    const patch = {
-      brand_logo_url: logo,
-      // The default copper is stored as "no color", so a later default change reaches it
-      brand_color: color.toUpperCase() === DEFAULT_GOLD ? null : color.toUpperCase(),
+  async function remove() {
+    setBusy(true)
+    try {
+      await saveLogo(null)
+      setOutcome(null)
+      original.current = null
+    } catch (err) {
+      toast.error(`Couldn't remove it: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setBusy(false)
     }
-    const { error } = await supabase.from('leagues').update(patch).eq('id', leagueId)
-    setSaving(false)
-    if (error) { toast.error(`Couldn't save: ${error.message}`); return }
-    if (activeLeague?.id === leagueId) setActiveLeague({ ...activeLeague, ...patch }, myMembership)
-    qc.invalidateQueries({ queryKey: ['my-leagues'] })
-    toast.success('Branding saved')
   }
 
   return (
     <div className="rounded-xl border border-field-700 bg-field-900/50 p-4 space-y-4">
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-lg bg-gold/10 border border-gold/30 flex items-center justify-center shrink-0">
-          <Palette className="w-4 h-4 text-gold" />
+          <ImageIcon className="w-4 h-4 text-gold" />
         </div>
         <div className="min-w-0">
-          <h3 className="font-cond font-bold text-white tracking-wide text-base">League branding</h3>
+          <h3 className="font-cond font-bold text-white tracking-wide text-base">League logo</h3>
           <p className="text-field-400 text-sm">
-            Your logo and color, across the app while this league is open and on the Shop TV.
+            Shows in the league switcher, Pick&apos;Em, chat and on the Shop TV. Everyone picks their own
+            accent color on their Account page.
           </p>
         </div>
       </div>
 
-      {/* Logo */}
       <div className="flex items-center gap-4">
         {/* On a checkerboard, so you can see what's transparent */}
         <div
           className="w-20 h-20 rounded-xl border border-field-700 flex items-center justify-center overflow-hidden shrink-0"
           style={{ background: 'repeating-conic-gradient(#2a2a2a 0% 25%, #1a1a1a 0% 50%) 50% / 14px 14px' }}
         >
-          {uploading
+          {busy
             ? <Loader2 className="w-5 h-5 animate-spin text-field-400" />
             : logo
             ? <img src={logo} alt="League logo" className="w-full h-full object-contain" />
@@ -104,12 +98,12 @@ export function BrandingSetting({ leagueId }: { leagueId: string }) {
         </div>
         <div className="flex flex-wrap gap-2 min-w-0">
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={upload} />
-          <button onClick={() => fileRef.current?.click()} disabled={uploading} className="btn-ghost !py-1.5 !px-3 !text-xs">
-            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            {uploading ? 'Cleaning it up…' : logo ? 'Change logo' : 'Upload a logo'}
+          <button onClick={() => fileRef.current?.click()} disabled={busy} className="btn-ghost !py-1.5 !px-3 !text-xs">
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {busy ? 'Working on it…' : logo ? 'Change logo' : 'Upload a logo'}
           </button>
-          {logo && !uploading && (
-            <button onClick={() => { setLogo(null); setOutcome(null) }} className="btn-ghost !py-1.5 !px-3 !text-xs">
+          {logo && !busy && (
+            <button onClick={remove} className="btn-ghost !py-1.5 !px-3 !text-xs">
               <X className="w-3.5 h-3.5" /> Remove
             </button>
           )}
@@ -124,64 +118,10 @@ export function BrandingSetting({ leagueId }: { leagueId: string }) {
             ) : outcome === 'already' ? 'Already transparent, saved as a PNG.'
               : outcome === 'kept' ? "No plain background to remove, so it's kept as is (saved as a PNG)."
               : outcome === 'original' ? 'Using your original, background and all.'
-              : 'Any image works: the background is taken out automatically and it becomes a transparent PNG.'}
+              : 'Any image works: the background is taken out automatically and it becomes a transparent PNG. Saved as soon as it uploads.'}
           </p>
         </div>
       </div>
-
-      {/* Color */}
-      <div>
-        <p className="label">Accent color</p>
-        <div className="flex flex-wrap items-center gap-2">
-          {BRAND_PRESETS.map(p => (
-            <button
-              key={p.hex}
-              onClick={() => setColor(p.hex)}
-              title={p.name}
-              aria-label={p.name}
-              className={clsx(
-                'w-8 h-8 rounded-full border-2 flex items-center justify-center transition-transform hover:scale-110',
-                color.toUpperCase() === p.hex ? 'border-white' : 'border-transparent',
-              )}
-              style={{ background: p.hex }}
-            >
-              {color.toUpperCase() === p.hex && <Check className="w-4 h-4 text-white drop-shadow" />}
-            </button>
-          ))}
-          <label className="flex items-center gap-2 ml-1">
-            <input
-              id="brand-color-picker"
-              type="color"
-              value={valid ? color : DEFAULT_GOLD}
-              onChange={e => setColor(e.target.value.toUpperCase())}
-              className="w-8 h-8 rounded cursor-pointer bg-transparent border-0 p-0"
-              aria-label="Any color"
-            />
-            <input
-              id="brand-color-hex"
-              value={color}
-              onChange={e => setColor(e.target.value.trim().slice(0, 7))}
-              className="input !w-28 !py-1.5 font-mono text-sm uppercase"
-              aria-label="Color hex code"
-            />
-          </label>
-        </div>
-      </div>
-
-      {/* Preview, with the color adjusted the way the app will use it */}
-      <div
-        className="rounded-lg border border-field-700 bg-field-950 p-3 flex items-center gap-3"
-        style={preview as React.CSSProperties | undefined}
-      >
-        {logo && <img src={logo} alt="" className="w-8 h-8 object-contain" />}
-        <span className="font-cond font-black uppercase text-white">{league?.name ?? 'Your league'}</span>
-        <span className="ml-auto text-xs font-bold uppercase tracking-wider text-gold bg-gold/15 border border-gold/40 rounded px-2 py-0.5">Preview</span>
-        <span className="btn-gold !py-1 !px-2.5 !text-xs">Button</span>
-      </div>
-
-      <button onClick={save} disabled={!dirty || saving || !valid} className="btn-gold w-full justify-center disabled:opacity-40">
-        {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save branding
-      </button>
     </div>
   )
 }

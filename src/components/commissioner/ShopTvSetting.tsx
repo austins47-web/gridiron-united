@@ -3,10 +3,16 @@ import QRCode from 'qrcode'
 import { Tv, Copy, ExternalLink, RotateCcw, Loader2, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
+import { useQueryClient } from '@tanstack/react-query'
+import { useAppStore } from '@/store/appStore'
+import { DEFAULT_GOLD } from '@/lib/brand'
+import { ColorPicker } from '@/components/settings/ColorPicker'
 
 /**
  * Shop TV: the league's live board on a TV, at /tv/<code>. The code is
- * the key (a TV can't sign in); resetting it turns the old one off.
+ * the key (a TV can't sign in); resetting it turns the old one off. The
+ * TV has its own accent color (leagues.brand_color), separate from the one
+ * each person picks for themselves.
  */
 export function ShopTvSetting({ leagueId }: { leagueId: string }) {
   const [code, setCode] = useState<string | null>(null)
@@ -14,6 +20,23 @@ export function ShopTvSetting({ leagueId }: { leagueId: string }) {
   const [qr, setQr] = useState<string | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
   const [help, setHelp] = useState(false)
+
+  // The TV's color: saved on the league, picked up on the TV's next refresh
+  const qc = useQueryClient()
+  const { activeLeague, myMembership, setActiveLeague } = useAppStore()
+  const tvColor = activeLeague?.id === leagueId ? activeLeague.brand_color ?? null : null
+  const [savingColor, setSavingColor] = useState(false)
+  async function pickTvColor(hex: string) {
+    const value = hex.toUpperCase() === DEFAULT_GOLD ? null : hex.toUpperCase()
+    if (value === tvColor) return
+    setSavingColor(true)
+    const { error } = await supabase.from('leagues').update({ brand_color: value }).eq('id', leagueId)
+    setSavingColor(false)
+    if (error) { toast.error(`Couldn't save the TV color: ${error.message}`); return }
+    if (activeLeague?.id === leagueId) setActiveLeague({ ...activeLeague, brand_color: value }, myMembership)
+    qc.invalidateQueries({ queryKey: ['my-leagues'] })
+    toast.success('TV color saved. The TV picks it up within a minute.')
+  }
 
   const origin = window.location.origin
   const link = code ? `${origin}/tv/${code}` : null
@@ -103,6 +126,16 @@ export function ShopTvSetting({ leagueId }: { leagueId: string }) {
           )}
         </div>
       )}
+
+      {/* The TV's own accent color */}
+      <div className="pt-3 border-t border-field-700">
+        <div className="flex items-baseline justify-between gap-2 mb-1">
+          <span className="font-cond font-bold text-sm uppercase tracking-wider text-white">TV color</span>
+          {savingColor && <Loader2 className="w-3.5 h-3.5 animate-spin text-field-400" />}
+        </div>
+        <p className="text-field-400 text-xs mb-3">The accent on the Shop TV only. It doesn't change anyone's own color in the app.</p>
+        <ColorPicker value={tvColor} onPick={pickTvColor} disabled={savingColor} idPrefix="tv-color" />
+      </div>
     </div>
   )
 }

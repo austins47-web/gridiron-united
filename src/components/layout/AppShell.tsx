@@ -34,9 +34,9 @@ export function AppShell() {
   const cardOpen = usePlayerCard(s => s.userId) != null
   const [cardHost, setCardHost] = useState(false)
   useEffect(() => { if (cardOpen) setCardHost(true) }, [cardOpen])
-  // The active league's own accent color, everywhere the app uses gold
-  const brandColor = activeLeague?.brand_color ?? null
-  useEffect(() => { applyBrand(document.documentElement, brandColor) }, [brandColor])
+  // Your own accent color (Account → Appearance), everywhere the app uses gold
+  const accent = profile?.accent_color ?? null
+  useEffect(() => { applyBrand(document.documentElement, accent) }, [accent])
 
   // ── Global tabs — always visible ──────────────────────────
   const globalTabs = [

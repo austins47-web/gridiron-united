@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type 
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { supabase } from '@/lib/supabase'
-import { brandVars } from '@/lib/brand'
+import { brandVars, DEFAULT_GOLD } from '@/lib/brand'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from '@/components/pickem/Belt'
 
@@ -74,8 +74,8 @@ interface TvName { name: string; chance: number }
 
 interface TvBoard {
   league: string
-  /** The league's logo and accent color (Commish panel → League branding). */
-  brand?: { logo: string | null; color: string | null }
+  /** The league's logo, and the TV's own accent color (Commish panel → Shop TV). */
+  brand?: { logo: string | null; color?: string | null }
   week: number
   now: string
   started: boolean
@@ -250,8 +250,9 @@ export function ShopTV() {
         className="shrink-0 bg-field-950 text-white relative"
         style={{
           width: W, height: H, transform: `scale(${scale})`, transformOrigin: 'center',
-          // The league's own accent color, where it has one
-          ...(brandVars(board?.brand?.color) as CSSProperties | null ?? {}),
+          // The TV's own color (or the copper), set here so nobody's personal
+          // accent, which AppShell may have left on the page root, carries over
+          ...(brandVars(board?.brand?.color ?? DEFAULT_GOLD) as CSSProperties),
         }}
       >
         {status === 'gone' ? <Gone />

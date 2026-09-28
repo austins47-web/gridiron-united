@@ -411,6 +411,7 @@ serve(async (req) => {
 
     return json({
       league: league.name,
+      // brand_color is the TV's own accent (Commish panel → Shop TV)
       brand: { logo: league.brand_logo_url ?? null, color: league.brand_color ?? null },
       season,
       week,

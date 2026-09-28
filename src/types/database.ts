@@ -1428,6 +1428,8 @@ export type Profile = {
   bio: string | null
   favorite_nfl_team: string | null
   favorite_cfb_team: string | null
+  /** Their own accent color (Account → Appearance); null is the copper. */
+  accent_color?: string | null
   created_at: string
   updated_at: string
 }

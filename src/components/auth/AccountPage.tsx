@@ -6,6 +6,7 @@ import { ModalPortal } from '@/components/ui/ModalPortal'
 import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X, Sun, Moon, ImageIcon, Volume2, VolumeX, Bell } from 'lucide-react'
 import { AVATAR_PRESETS, presetToDataUrl } from './AvatarPresets'
 import { AccountNotifications } from '@/components/settings/NotificationSettings'
+import { AccentColorSetting } from '@/components/settings/AccentColorSetting'
 import { isSoundMuted, setSoundMuted, playPickLock } from '@/lib/sound'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -701,6 +702,8 @@ export function AccountPage() {
             )}
           </button>
         </div>
+
+        <AccentColorSetting />
       </div>
 
       {/* ── Sound ── */}
