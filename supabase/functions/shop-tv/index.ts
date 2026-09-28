@@ -17,8 +17,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  nflSeasonFor, isVoid, isFinal, isLive, nameOf, computeWeek, computeWinOdds, computeUpsetWatch, computeBelt,
-  computeStandings, weekWinners, isWeekComplete, homeWinChance, gameClockLabel,
+  nflSeasonFor, isVoid, isFinal, isLive, computeWeek, computeWinOdds, computeUpsetWatch, computeBelt,
+  computeStandings, weekWinners, isWeekComplete, homeWinChance, gameClockLabel, winnerOf,
+  computeWeekStats, describeWeekStats, computeWhoCanWin, computeBadBeats, computeAchievements, ACHIEVEMENTS,
   type Game, type Pick, type Member,
 } from '../_shared/pickemCore.ts'
 import { partsInZone, zonedTimeToUtc, stillPickable, weekDeadline } from '../_shared/pickLocks.ts'
@@ -31,7 +32,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
 })
 
-const GAME_COLS = 'id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker, pregame_home_wp, spread, over_under, live_home_wp, period, clock'
+const GAME_COLS = 'id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker, pregame_home_wp, spread, over_under, live_home_wp, period, clock, game_story'
 
 /**
  * The week the league is on: a week stays current until Tuesday 11:59 PM
@@ -55,22 +56,23 @@ function currentWeek(games: Game[], now: Date): number {
 }
 
 // A season of picks is a few pages; TVs poll every ~15s, so keep it briefly
-const seasonCache = new Map<string, { at: number; picks: Pick[] }>()
+type TvPick = Pick & { reason?: string | null }
+const seasonCache = new Map<string, { at: number; picks: TvPick[] }>()
 
-async function seasonPicks(admin: ReturnType<typeof createClient>, leagueId: string, season: number): Promise<Pick[]> {
+async function seasonPicks(admin: ReturnType<typeof createClient>, leagueId: string, season: number): Promise<TvPick[]> {
   const hit = seasonCache.get(leagueId)
   if (hit && Date.now() - hit.at < 120_000) return hit.picks
-  const picks: Pick[] = []
+  const picks: TvPick[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await admin
       .from('pickem_picks')
-      .select('game_id, user_id, week, picked_team, tiebreaker_score')
+      .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
       .eq('league_id', leagueId)
       .eq('season', season)
       .order('id')
       .range(from, from + 999)
     if (error) throw error
-    picks.push(...((data ?? []) as Pick[]))
+    picks.push(...((data ?? []) as TvPick[]))
     if (!data || data.length < 1000) break
   }
   seasonCache.set(leagueId, { at: Date.now(), picks })
@@ -89,7 +91,8 @@ serve(async (req) => {
   try {
     const now = new Date()
     const season = nflSeasonFor(now)
-    const [{ data: league }, { data: memberRows }, { data: gameRows }, { data: pin }] = await Promise.all([
+    const since = new Date(now.getTime() - 7 * 24 * 3600_000).toISOString()
+    const [{ data: league }, { data: memberRows }, { data: gameRows }, { data: pin }, { data: chatRows }, { data: roastRows }, { data: pollRows }] = await Promise.all([
       admin.from('leagues')
         .select('id, name, league_type, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz')
         .eq('id', tv.league_id).maybeSingle(),
@@ -98,6 +101,20 @@ serve(async (req) => {
         .eq('league_id', tv.league_id),
       admin.from('nfl_games').select(GAME_COLS).eq('season', season),
       admin.from('league_pins').select('message').eq('league_id', tv.league_id).maybeSingle(),
+      // The main chat's latest words (text only)
+      admin.from('league_messages')
+        .select('user_id, message, created_at')
+        .eq('league_id', tv.league_id).eq('is_system', false).is('game_id', null).is('deleted_at', null)
+        .not('message', 'like', 'IMAGE:%').not('message', 'like', 'GIF:%').not('message', 'like', 'POLL:%')
+        .order('created_at', { ascending: false }).limit(8),
+      admin.from('league_messages')
+        .select('message, created_at')
+        .eq('league_id', tv.league_id).eq('is_system', true).like('message', 'PICKEM_ROAST:%').gte('created_at', since)
+        .order('created_at', { ascending: false }).limit(1),
+      admin.from('league_polls')
+        .select('id, question, options, closes_at, created_by, created_at')
+        .eq('league_id', tv.league_id).gte('created_at', since)
+        .order('created_at', { ascending: false }).limit(1),
     ])
     if (!league || league.league_type !== 'pickem') return json({ error: 'not found' }, 404)
 
@@ -137,6 +154,7 @@ serve(async (req) => {
         kickoff: g.game_date,
         homeChance: isVoid(g) ? null : homeWinChance(g),
         spread: g.spread ?? null,
+        total: g.over_under ?? null,
         tiebreaker: !!g.is_tiebreaker,
         picked: on.length,
         riders: locked ? {
@@ -181,6 +199,123 @@ serve(async (req) => {
     const upsets = computeUpsetWatch(wkGames, visible).map(u =>
       `Upset watch: ${u.crowdPicks} of ${u.pickers} took ${u.crowd}, down ${u.dogScore}–${u.crowdScore} to ${u.dog} (${Math.round(u.chance * 100)}% to come back)`)
     const nextKickoff = wkGames.filter(g => !isFinal(g) && !isLive(g) && !isVoid(g) && new Date(g.game_date) > now)[0]?.game_date ?? null
+    const matchup = (g: Game) => `${g.away_team} @ ${g.home_team}`
+
+    // The week at a glance
+    const summary = {
+      final: wkGames.filter(g => isFinal(g)).length,
+      live: wkGames.filter(g => isLive(g)).length,
+      left: wkGames.filter(g => !isFinal(g) && !isLive(g) && !isVoid(g)).length,
+      right: played.reduce((n, r) => n + r.correct, 0),
+      wrong: played.reduce((n, r) => n + (r.played - r.correct), 0),
+    }
+
+    // The week's storylines, from locked picks only
+    const headlines = started
+      ? describeWeekStats(computeWeekStats(wkGames, visible, rows)).map(l => ({ label: l.label, headline: l.headline, detail: l.detail, team: l.team ?? null }))
+      : []
+
+    // The games that decide the week: each side's biggest winners
+    const withSwings = started && !complete
+      ? computeWinOdds(wkGames, wkPicks, rows, { isOpen, viewerId: '__league__', sims: 3000, swings: true })
+      : null
+    const top3 = (m: Map<string, number>) => [...m.entries()]
+      .sort((a, b) => b[1] - a[1]).slice(0, 3)
+      .map(([id, chance]) => ({ name: nameById.get(id) ?? 'Someone', chance }))
+    const stakes = (withSwings?.swings ?? [])
+      .filter(sw => !sw.settled && sw.stakes > 0.02)
+      .slice(0, 4)
+      .map(sw => ({
+        game: matchup(sw.game),
+        away: sw.game.away_team,
+        home: sw.game.home_team,
+        stakes: sw.stakes,
+        homeChance: sw.homeChance,
+        ifAway: top3(sw.ifAway),
+        ifHome: top3(sw.ifHome),
+      }))
+
+    // Who can still win (late in the week)
+    const who = started && !complete ? computeWhoCanWin(wkGames, wkPicks, rows, { isOpen, viewerId: '__league__' }) : null
+    const teamOf = new Map(wkGames.map(g => [g.id, g]))
+    const whoCanWin = who ? {
+      remaining: who.remaining,
+      rows: who.rows.filter(r => r.status !== 'out').map(r => ({
+        name: r.name,
+        status: r.status,
+        needs: r.needs.map(n => n.team),
+        tiebreaker: r.tiebreaker,
+      })),
+      out: who.rows.filter(r => r.status === 'out').length,
+    } : null
+
+    // Pick receipts on games that have locked, newest first
+    const receipts = wkPicks
+      .filter(p => p.reason && teamOf.has(p.game_id) && !isOpen(teamOf.get(p.game_id)!))
+      .map(p => {
+        const g = teamOf.get(p.game_id)!
+        const w = winnerOf(g)
+        return {
+          name: nameById.get(p.user_id) ?? 'Someone',
+          team: p.picked_team,
+          opponent: p.picked_team === g.home_team ? g.away_team : g.home_team,
+          reason: String(p.reason),
+          result: !isFinal(g) || w == null ? null : w === p.picked_team ? 'hit' : 'miss',
+          at: g.game_date,
+        }
+      })
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+      .slice(0, 8)
+
+    // The season's worst bad beats
+    const beats = computeBadBeats(seasonGames, allPicks)
+      .sort((a, b) => b.peak - a.peak)
+      .slice(0, 5)
+      .map(b => ({
+        week: b.week,
+        loser: b.loser, winner: b.winner, loserScore: b.loserScore, winnerScore: b.winnerScore,
+        peak: b.peak,
+        victims: b.victims.map(id => nameById.get(id) ?? 'Someone'),
+      }))
+
+    // Badges earned in the latest finished week
+    const achievements = computeAchievements(seasonGames, allPicks, members)
+    const lastDone = Math.max(0, ...[...achievements.values()].flat().flatMap(a => a.weeks))
+    const badges = lastDone
+      ? [...achievements.entries()].flatMap(([id, list]) => list
+          .flatMap(a => a.events.filter(e => e.week === lastDone).map(e => ({ key: a.key, e })))
+          .map(({ key, e }) => {
+            const def = ACHIEVEMENTS.find(x => x.key === key)
+            return { name: nameById.get(id) ?? 'Someone', label: def?.label ?? key, detail: e.detail }
+          }))
+      : []
+
+    // Season leaders
+    const leaders = {
+      bestRecord: seasonRows[0] ? { name: seasonRows[0].name, correct: seasonRows[0].correct, played: seasonRows[0].played } : null,
+      mostWeeks: [...seasonRows].sort((a, b) => b.weeksWon - a.weeksWon)[0]?.weeksWon
+        ? seasonRows.filter(r => r.weeksWon === Math.max(...seasonRows.map(x => x.weeksWon))).map(r => r.name)
+        : [],
+      weeksWon: Math.max(0, ...seasonRows.map(r => r.weeksWon)),
+      bestPct: [...seasonRows].filter(r => r.played >= 10).sort((a, b) => b.pct - a.pct)[0] ?? null,
+      basement: seasonRows.slice(-3).reverse().map(r => ({ name: r.name, correct: r.correct, played: r.played })),
+    }
+
+    // Chat, the roast and the latest poll
+    const chat = (chatRows ?? []).map(m => ({ name: nameById.get(m.user_id) ?? 'Someone', text: String(m.message).slice(0, 200), at: m.created_at }))
+    let roast: { week: number; text: string } | null = null
+    const raw = roastRows?.[0]?.message as string | undefined
+    if (raw) {
+      const m = raw.match(/^PICKEM_ROAST:\d+:(\d+):(.*)$/s)
+      try { if (m) roast = { week: Number(m[1]), text: String(JSON.parse(m[2]).text ?? '') } } catch { roast = null }
+    }
+    let poll: { question: string; options: { text: string; votes: number }[]; total: number; closesAt: string | null; commish: boolean } | null = null
+    const p0 = pollRows?.[0]
+    if (p0) {
+      const { data: votes } = await admin.from('league_poll_votes').select('option_index').eq('poll_id', p0.id)
+      const options = (p0.options as string[]).map((text, i) => ({ text, votes: (votes ?? []).filter(v => v.option_index === i).length }))
+      poll = { question: p0.question, options, total: (votes ?? []).length, closesAt: p0.closes_at, commish: p0.created_by == null }
+    }
 
     return json({
       league: league.name,
@@ -200,6 +335,20 @@ serve(async (req) => {
       belt: belt ? { names: belt.holders.map(h => h.name), reign: Math.max(...belt.holders.map(h => h.reign)) } : null,
       pin: pin?.message ?? null,
       upsets,
+      summary,
+      headlines,
+      stakes,
+      who_can_win: whoCanWin,
+      receipts,
+      beats,
+      badges,
+      badges_week: lastDone || null,
+      belt_lineage: belt?.lineage.map(l => ({ week: l.week, names: l.winners.map(w => w.name) })) ?? [],
+      belt_longest: belt?.longest ?? null,
+      leaders,
+      chat,
+      roast,
+      poll,
     })
   } catch (e) {
     return json({ error: String(e) }, 500)
