@@ -104,12 +104,12 @@ serve(async (req) => {
   const members = (memberRows ?? []) as Member[]
   if (!members.some(m => m.user_id === user.id)) return json({ error: 'not in this league' }, 403)
   const games = ((gameRows ?? []) as Game[]).filter(g => !isVoid(g))
-  const allPicks: Pick[] = []
+  const allPicks: (Pick & { reason?: string | null })[] = []
   for (let from = 0; ; from += 1000) {
     const { data } = await admin.from('pickem_picks')
-      .select('game_id, user_id, week, picked_team, tiebreaker_score')
+      .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
       .eq('league_id', league.id).eq('season', season).order('id').range(from, from + 999)
-    allPicks.push(...((data ?? []) as Pick[]))
+    allPicks.push(...((data ?? []) as (Pick & { reason?: string | null })[]))
     if (!data || data.length < 1000) break
   }
 
@@ -159,7 +159,11 @@ serve(async (req) => {
       const side = (t: string) => gp.filter(p => p.picked_team === t).map(p => nameById.get(p.user_id) ?? '?')
       const pickedBy = isOpen(g) ? 'picks hidden until kickoff'
         : `${g.away_team} picked by ${side(g.away_team).join(', ') || 'nobody'}; ${g.home_team} picked by ${side(g.home_team).join(', ') || 'nobody'}`
+      // Pick receipts go public with the picks, at kickoff
+      const receipts = isOpen(g) ? [] : gp.filter(p => (p as { reason?: string | null }).reason)
+        .map(p => `${nameById.get(p.user_id) ?? '?'} (${p.picked_team}): "${(p as { reason?: string | null }).reason}"`)
       return `- ${g.away_team} @ ${g.home_team}${g.is_tiebreaker ? ' (tiebreaker game)' : ''}: ${status}${line}. ${pickedBy}.`
+        + (receipts.length ? ` Pick receipts: ${receipts.join('; ')}.` : '')
     }),
   ]
   if (odds) {

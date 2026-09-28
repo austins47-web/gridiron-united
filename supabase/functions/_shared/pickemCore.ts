@@ -1353,33 +1353,49 @@ export const ACHIEVEMENTS: { key: AchievementKey; label: string; blurb: string }
   { key: 'ironMan',     label: 'Iron Man',       blurb: 'Every pick and tiebreaker in, four weeks straight' },
 ]
 
+export interface AchievementEvent {
+  week: number
+  /** When it was earned: the game's kickoff, or the week's last kickoff for a whole-week badge. */
+  date: string
+  /** What happened, e.g. "The only one of 18 to pick NO (NO 24–17 BAL)". */
+  detail: string
+}
+
 export interface EarnedAchievement {
   key: AchievementKey
   /** Weeks it was earned (a badge can be earned more than once). */
   weeks: number[]
+  /** Every time it was earned, oldest first. */
+  events: AchievementEvent[]
 }
+
+const weekList = (ws: number[]) =>
+  ws.length <= 1 ? `Week ${ws[0]}` : `Weeks ${ws.slice(0, -1).join(', ')} and ${ws[ws.length - 1]}`
 
 /**
  * Badges each player has earned, from finished weeks only (so nothing
- * is ever taken back). Week wins use the recap's rule (weekWinners);
- * favorites and underdogs the frozen pregame line; comebacks the game
- * story. Players with nothing earned are left out.
+ * is ever taken back), each time with when and what happened. Week
+ * wins use the recap's rule (weekWinners); favorites and underdogs the
+ * frozen pregame line; comebacks the game story. Players with nothing
+ * earned are left out.
  */
 export function computeAchievements(games: Game[], picks: Pick[], members: Member[]): Map<string, EarnedAchievement[]> {
   const played = games.filter(g => !isVoid(g))
   const weeks = [...new Set(played.map(g => g.week))].sort((a, b) => a - b)
     .filter(wk => isWeekComplete(played.filter(g => g.week === wk)))
 
-  const earned = new Map<string, Map<AchievementKey, number[]>>()
-  const award = (userId: string, key: AchievementKey, week: number) => {
+  const earned = new Map<string, Map<AchievementKey, AchievementEvent[]>>()
+  const award = (userId: string, key: AchievementKey, week: number, date: string, detail: string) => {
     if (!earned.has(userId)) earned.set(userId, new Map())
     const m = earned.get(userId)!
-    m.set(key, [...(m.get(key) ?? []), week])
+    m.set(key, [...(m.get(key) ?? []), { week, date, detail }])
   }
   const winRun = new Map<string, number>()
   const fullRun = new Map<string, number>()
+  const score = (g: Game, t: string) => (t === g.home_team ? g.home_score : g.away_score) ?? 0
+  const other = (g: Game, t: string) => (t === g.home_team ? g.away_team : g.home_team)
 
-  for (const wk of weeks) {
+  weeks.forEach((wk, wi) => {
     const wkGames = played.filter(g => g.week === wk)
     const wkPicks = picks.filter(p => p.week === wk)
     const rows = computeWeek(wkGames, wkPicks, members)
@@ -1392,6 +1408,9 @@ export function computeAchievements(games: Game[], picks: Pick[], members: Membe
     const allLined = lines.every(l => l != null)
     const favoritesRight = decided.filter((g, i) => lines[i] === winnerOf(g)).length
     const tb = wkGames.find(g => g.is_tiebreaker)
+    const tbTotal = tiebreakerTotal(wkGames)
+    // A whole-week badge is dated when the week's last game kicked off
+    const weekDate = wkGames.reduce((d, g) => (g.game_date > d ? g.game_date : d), '')
 
     for (const r of rows) {
       const id = r.userId
@@ -1401,45 +1420,109 @@ export function computeAchievements(games: Game[], picks: Pick[], members: Membe
       // Belt runs (every player's run resets on a week they didn't win)
       const run = winners.has(id) ? (winRun.get(id) ?? 0) + 1 : 0
       winRun.set(id, run)
-      if (run >= 1) award(id, 'champ', wk)
-      if (run === 2) award(id, 'defender', wk)
-      if (run === 3) award(id, 'dynasty', wk)
+      if (run >= 1) award(id, 'champ', wk, weekDate, `Won Week ${wk}, ${r.correct} of ${r.played} right`)
+      if (run === 2) award(id, 'defender', wk, weekDate, `Won ${weekList(weeks.slice(wi - 1, wi + 1))} back to back`)
+      if (run === 3) award(id, 'dynasty', wk, weekDate, `Won ${weekList(weeks.slice(wi - 2, wi + 1))} in a row`)
 
       // Every game and the tiebreaker picked
       const full = r.submitted && wkGames.every(g => pickOn(g)) && (!tb || r.tiebreakerGuess != null)
       const streak = full ? (fullRun.get(id) ?? 0) + 1 : 0
       fullRun.set(id, streak)
-      if (streak > 0 && streak % 4 === 0) award(id, 'ironMan', wk)
+      if (streak > 0 && streak % 4 === 0) {
+        award(id, 'ironMan', wk, weekDate, `Every pick and tiebreaker in, Weeks ${weeks[wi - 3]}–${wk}`)
+      }
       if (!r.submitted) continue
 
-      if (decided.length >= 10 && decided.every(g => pickOn(g) === winnerOf(g))) award(id, 'perfect', wk)
-      if (r.tiebreakerDiff === 0) award(id, 'sniper', wk)
+      if (decided.length >= 10 && decided.every(g => pickOn(g) === winnerOf(g))) {
+        award(id, 'perfect', wk, weekDate, `${decided.length} for ${decided.length} in Week ${wk}`)
+      }
+      if (r.tiebreakerDiff === 0 && tbTotal != null) {
+        award(id, 'sniper', wk, tb?.game_date ?? weekDate, `Guessed ${r.tiebreakerGuess} for the Week ${wk} tiebreaker, and the total was exactly ${tbTotal}`)
+      }
 
-      let dogsRight = 0
+      const dogs: string[] = []
       decided.forEach((g, i) => {
         const pick = pickOn(g)
         if (!pick) return
-        const w = winnerOf(g)
+        const w = winnerOf(g)!
+        const final = `${w} ${score(g, w)}–${score(g, other(g, w))} ${other(g, w)}`
         if (pick === w) {
           const backers = wkPicks.filter(p => p.game_id === g.id && p.picked_team === w).length
           const pickers = wkPicks.filter(p => p.game_id === g.id && (p.picked_team === g.home_team || p.picked_team === g.away_team)).length
-          if (backers === 1 && pickers >= 5) award(id, 'calledIt', wk)
-          if (lines[i] != null && lines[i] !== w) dogsRight++
+          if (backers === 1 && pickers >= 5) award(id, 'calledIt', wk, g.game_date, `The only one of ${pickers} to pick ${w} (${final})`)
+          if (lines[i] != null && lines[i] !== w) dogs.push(w)
           // A comeback from 10% or worse that most of the league didn't see coming
-          if ((g.game_story?.loserPeakWp ?? 0) >= 0.9 && backers * 2 < pickers) award(id, 'miracle', wk)
+          const peak = g.game_story?.loserPeakWp ?? 0
+          if (peak >= 0.9 && backers * 2 < pickers) {
+            award(id, 'miracle', wk, g.game_date,
+              `Picked ${w} (${backers === 1 ? `the only one of ${pickers}` : `only ${backers} of ${pickers} did`}), and they came back from ${Math.round((1 - peak) * 100)}% to win (${final})`)
+          }
         } else if (pick === g.game_story?.loser && (g.game_story.loserPeakWp ?? 0) >= 0.95) {
-          award(id, 'scarTissue', wk)
+          award(id, 'scarTissue', wk, g.game_date, `${pick} was ${Math.round(g.game_story.loserPeakWp! * 100)}% to win and lost (${final})`)
         }
       })
-      if (dogsRight >= 3) award(id, 'upsetArtist', wk)
-      if (allLined && decided.length > 0 && decided.every(g => pickOn(g)) && r.correct > favoritesRight) award(id, 'beatVegas', wk)
+      if (dogs.length >= 3) award(id, 'upsetArtist', wk, weekDate, `${dogs.length} underdog winners in Week ${wk}: ${dogs.join(', ')}`)
+      if (allLined && decided.length > 0 && decided.every(g => pickOn(g)) && r.correct > favoritesRight) {
+        award(id, 'beatVegas', wk, weekDate, `${r.correct} right in Week ${wk}; taking every favorite got ${favoritesRight}`)
+      }
     }
-  }
+  })
 
   const out = new Map<string, EarnedAchievement[]>()
   for (const [id, m] of earned) {
-    // Several in one week (two "Called It" games) count once for that week
-    out.set(id, ACHIEVEMENTS.filter(a => m.has(a.key)).map(a => ({ key: a.key, weeks: [...new Set(m.get(a.key)!)] })))
+    out.set(id, ACHIEVEMENTS.filter(a => m.has(a.key)).map(a => {
+      const events = m.get(a.key)!
+      // Several in one week (two "Called It" games) count as one week earned
+      return { key: a.key, weeks: [...new Set(events.map(e => e.week))], events }
+    }))
   }
+  return out
+}
+
+// ── Key injuries ─────────────────────────────────────────────
+
+/** players.team holds full names; games use abbreviations. */
+export const NFL_TEAM_ABBR: Record<string, string> = {
+  'Arizona Cardinals': 'ARI', 'Atlanta Falcons': 'ATL', 'Baltimore Ravens': 'BAL', 'Buffalo Bills': 'BUF',
+  'Carolina Panthers': 'CAR', 'Chicago Bears': 'CHI', 'Cincinnati Bengals': 'CIN', 'Cleveland Browns': 'CLE',
+  'Dallas Cowboys': 'DAL', 'Denver Broncos': 'DEN', 'Detroit Lions': 'DET', 'Green Bay Packers': 'GB',
+  'Houston Texans': 'HOU', 'Indianapolis Colts': 'IND', 'Jacksonville Jaguars': 'JAX', 'Kansas City Chiefs': 'KC',
+  'Los Angeles Chargers': 'LAC', 'Los Angeles Rams': 'LAR', 'Las Vegas Raiders': 'LV', 'Miami Dolphins': 'MIA',
+  'Minnesota Vikings': 'MIN', 'New England Patriots': 'NE', 'New Orleans Saints': 'NO', 'New York Giants': 'NYG',
+  'New York Jets': 'NYJ', 'Philadelphia Eagles': 'PHI', 'Pittsburgh Steelers': 'PIT', 'San Francisco 49ers': 'SF',
+  'Seattle Seahawks': 'SEA', 'Tampa Bay Buccaneers': 'TB', 'Tennessee Titans': 'TEN', 'Washington Commanders': 'WSH',
+}
+
+export interface InjuredStarter {
+  id: number
+  name: string
+  pos: string
+  status: 'out' | 'questionable'
+  /** When the status last changed (null if it predates tracking). */
+  changedAt: string | null
+}
+
+/** Enough fantasy points a game that a non-QB starter's absence matters to picking the game. */
+const KEY_PLAYER_PTS = 12
+
+/**
+ * Injured players who matter to picking a game, by team abbreviation:
+ * the starting QB, or a starter averaging KEY_PLAYER_PTS+ points —
+ * out (IR counts) or questionable. QBs first.
+ */
+export function keyInjuries(players: {
+  id: number; name: string; team: string | null; pos: string | null; status: string | null
+  depth_chart_rank: number | null; avg_pts: number | string | null; status_changed_at?: string | null
+}[]): Map<string, InjuredStarter[]> {
+  const out = new Map<string, InjuredStarter[]>()
+  for (const p of players) {
+    const team = p.team ? NFL_TEAM_ABBR[p.team] ?? (p.team.length <= 3 ? p.team : null) : null
+    if (!team || p.depth_chart_rank !== 1) continue
+    if (p.pos !== 'QB' && Number(p.avg_pts ?? 0) < KEY_PLAYER_PTS) continue
+    const status = p.status === 'out' || p.status === 'ir' ? 'out' : p.status === 'questionable' ? 'questionable' : null
+    if (!status) continue
+    out.set(team, [...(out.get(team) ?? []), { id: p.id, name: p.name, pos: p.pos ?? '', status, changedAt: p.status_changed_at ?? null }])
+  }
+  for (const list of out.values()) list.sort((a, b) => Number(b.pos === 'QB') - Number(a.pos === 'QB'))
   return out
 }

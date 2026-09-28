@@ -515,6 +515,12 @@ export interface Database {
           season: number
           sport: string
           tiebreaker_score: number | null
+          /** Pick receipt: why they picked it (≤140), public at kickoff. */
+          reason: string | null
+          /** The line when this team was picked (set by trigger). */
+          spread_at_pick: number | null
+          /** When this team was picked (set by trigger). */
+          picked_at: string | null
           updated_at: string | null
           user_id: string | null
           week: number
@@ -530,6 +536,7 @@ export interface Database {
           season?: number
           sport?: string
           tiebreaker_score?: number | null
+          reason?: string | null
           updated_at?: string | null
           user_id?: string | null
           week: number
@@ -1405,6 +1412,9 @@ export type Player = {
   adp: number
   status: PlayerStatus
   injury_note: string | null
+  /** When status last changed (trigger); null if it predates tracking. */
+  status_changed_at?: string | null
+  depth_chart_rank?: number | null
   is_rookie: boolean | null
   espn_athlete_id: number | null
   created_at: string

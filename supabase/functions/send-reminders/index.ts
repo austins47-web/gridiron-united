@@ -20,9 +20,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  isFinal, isVoid, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal,
+  isFinal, isVoid, winnerOf, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal,
   nflSeasonFor, computeStandings, rankOf, describeWeekStats, isWeekComplete, weekWinners, computeWinOdds,
-  computeUpsetWatch, gameClockLabel, computeAchievements, ACHIEVEMENTS, rootingFor, swingsFor,
+  computeUpsetWatch, gameClockLabel, computeAchievements, ACHIEVEMENTS, rootingFor, swingsFor, keyInjuries,
   type Game, type Pick as PickemPick, type WeekRow, type WeekStats, type AchievementKey,
 } from '../_shared/pickemCore.ts'
 import { renderEmail, ordinal, type RichEmail, type PickRow } from './email.ts'
@@ -146,6 +146,8 @@ const PUSH_LOOK: Record<string, PushLook> = {
   pickem_upset:      { icon: 'alive',      emoji: '🚨' },
   pickem_odds:       { icon: 'lead',       emoji: '📈' },
   pickem_stakes:     { icon: 'alive',      emoji: '📣' },
+  pickem_line:       { icon: 'reminder',   emoji: '📉' },
+  pickem_injury:     { icon: 'reminder',   emoji: '🩹' },
   on_the_clock:      { icon: 'draft',      emoji: '⏱️' },
   trade_offer:       { icon: 'trade',      emoji: '🤝' },
   trade_expiring:    { icon: 'trade',      emoji: '⌛' },
@@ -516,6 +518,75 @@ serve(async (req) => {
         }
       }
 
+      // ══ 1b. PICK'EM LINE MOVES & INJURY NEWS ══════════════════
+      // Picks on games still open (and more than 30 minutes from kickoff,
+      // so there's time to switch): a push when the line has moved 3+
+      // points against the team you picked since you picked it, or a
+      // key player on that team (keyInjuries: starting QB, or a starter
+      // averaging 12+) was ruled out after you picked. Once per pick
+      // (per player, for injuries). Phone only, under pick reminders.
+      const { data: injuredRows } = await supabase
+        .from('players')
+        .select('id, name, team, pos, status, depth_chart_rank, avg_pts, status_changed_at')
+        .eq('league', 'NFL')
+        .eq('depth_chart_rank', 1)
+        .neq('status', 'active')
+      const injuries = keyInjuries(injuredRows ?? [])
+      const line = (x: number) => (x === 0 ? 'a pick\'em' : x > 0 ? `+${x}` : `${x}`)
+      for (const lg of leagues ?? []) {
+        if (lg.league_type !== 'pickem') continue
+        for (const [wk, wkGames] of scheduleBySeason.get(season) ?? []) {
+          const open = pickable(lg, wk, wkGames)
+          const soon = wkGames.filter(g => {
+            const until = new Date(g.game_date).getTime() - now.getTime()
+            return open(g) && until > 30 * 60_000 && until < 7 * 24 * HOUR
+          })
+          if (soon.length === 0) continue
+          const { data: openPicks } = await supabase
+            .from('pickem_picks')
+            .select('game_id, user_id, picked_team, spread_at_pick, picked_at')
+            .eq('league_id', lg.id)
+            .eq('season', season)
+            .eq('week', wk)
+            .in('game_id', soon.map(g => g.id))
+          for (const p of openPicks ?? []) {
+            const g = soon.find(x => x.id === p.game_id)!
+            const to = reach(p.user_id, lg.id, 'notify_pickem_deadline')
+            if (!to?.push) continue
+            const lock = `Picks lock ${shortWhen(g.game_date, 'America/New_York')} ET.`
+            const notice = (eventType: string, dedupeKey: string, title: string, body: string) => reminders.push({
+              userId: p.user_id, email: null, push: true, pushOnly: true,
+              leagueId: lg.id, leagueName: lg.name, eventType, dedupeKey,
+              subject: title, heading: title, body,
+              pushTitle: title, pushBody: `${lg.name} · ${body}`,
+              pushTag: `${eventType}-${lg.id}-${g.id}`,
+              pushTtlSec: Math.max(600, Math.round((new Date(g.game_date).getTime() - now.getTime()) / 1000)),
+              pushActions: [{ action: 'picks', title: 'Review pick', path: `/app/pickem?week=${wk}` }],
+              ctaLabel: 'Review pick', ctaPath: `/app/pickem?week=${wk}`,
+            })
+
+            // The line, from the picked team's side: +3 → +7 is 4 points worse
+            if (g.spread != null && p.spread_at_pick != null) {
+              const side = (s: number) => (p.picked_team === g.home_team ? s : -s)
+              const then = side(p.spread_at_pick), current = side(g.spread)
+              if (current - then >= 3) {
+                notice('pickem_line', `line:${lg.id}:${season}:w${wk}:${g.id}:${p.user_id}:${p.picked_team}`,
+                  `The line moved against your ${p.picked_team} pick`,
+                  `${p.picked_team} was ${line(then)} when you picked, ${line(current)} now. ${lock}`)
+              }
+            }
+
+            // Injury news that broke after the pick was made
+            for (const inj of injuries.get(p.picked_team) ?? []) {
+              if (inj.status !== 'out' || !inj.changedAt || !p.picked_at || inj.changedAt <= p.picked_at) continue
+              notice('pickem_injury', `injury:${lg.id}:${season}:w${wk}:${g.id}:${p.user_id}:${inj.id}`,
+                `${inj.name} (${inj.pos}) is out`,
+                `You picked ${p.picked_team} in ${g.away_team} @ ${g.home_team}. ${lock}`)
+            }
+          }
+        }
+      }
+
       // ══ 2. DRAFT — starting soon / on the clock ══════════════
       const { data: draftStates } = await supabase
         .from('draft_state')
@@ -659,7 +730,7 @@ serve(async (req) => {
         const wkGames = scheduleBySeason.get(season)?.get(wk) ?? []
         const seasonPicks = await fetchAllRows((from, to) => supabase
           .from('pickem_picks')
-          .select('game_id, user_id, week, picked_team, tiebreaker_score')
+          .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
           .eq('league_id', leagueId).eq('season', season)
           .order('id').range(from, to))
         const wkPicks = seasonPicks.filter(p => p.week === wk)
@@ -790,7 +861,7 @@ serve(async (req) => {
 
         const { data: wkPicks } = await supabase
           .from('pickem_picks')
-          .select('game_id, user_id, week, picked_team, tiebreaker_score')
+          .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
           .eq('league_id', lg.id)
           .eq('season', season)
           .eq('week', wk)
@@ -815,7 +886,7 @@ serve(async (req) => {
         if (!posted) {
           const seasonPicks = await fetchAllRows<PickemPick>((from, to) => supabase
             .from('pickem_picks')
-            .select('game_id, user_id, week, picked_team, tiebreaker_score')
+            .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
             .eq('league_id', lg.id)
             .eq('season', season)
             .order('id')
@@ -866,17 +937,24 @@ serve(async (req) => {
             if (prevGames.length && isWeekComplete(prevGames)) {
               const { data: prevPicks } = await supabase
                 .from('pickem_picks')
-                .select('game_id, user_id, week, picked_team, tiebreaker_score')
+                .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
                 .eq('league_id', lg.id)
                 .eq('season', season)
                 .eq('week', wk - 1)
               lastWinners = weekWinners(computeWeek(prevGames, prevPicks ?? [], wkMembers)).map(w => w.name)
             }
+            // Pick receipts — the reasons people gave, and how they aged (misses first)
+            const names = new Map(rows.map(r => [r.userId, r.name]))
+            const receipts = (wkPicks ?? []).filter(p => p.reason).map(p => {
+              const g = wkGames.find(x => x.id === p.game_id)
+              const w = g ? winnerOf(g) : null
+              return { name: names.get(p.user_id) ?? 'Someone', team: p.picked_team, reason: String(p.reason), won: w == null ? null : p.picked_team === w }
+            }).sort((a, b) => Number(a.won ?? 1) - Number(b.won ?? 1)).slice(0, 8)
             try {
               const text = await writeRoast(roastFacts({
                 league: lg.name, week: wk, played, winners, stats: payload.stats,
                 decidedByTiebreak: payload.decidedByTiebreak, tbTotal: payload.tiebreakerTotal, lastWinners,
-                badges: payload.badges,
+                badges: payload.badges, receipts,
               }))
               if (text) {
                 await supabase.from('league_messages').insert({
@@ -944,7 +1022,7 @@ serve(async (req) => {
 
           const { data: wkPicks } = await supabase
             .from('pickem_picks')
-            .select('game_id, user_id, week, picked_team, tiebreaker_score')
+            .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
             .eq('league_id', lg.id)
             .eq('season', season)
             .eq('week', wk)
@@ -1034,7 +1112,7 @@ serve(async (req) => {
 
       const { data: wkPicks } = await supabase
         .from('pickem_picks')
-        .select('game_id, user_id, week, picked_team, tiebreaker_score')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
         .eq('league_id', lg.id)
         .eq('season', season)
         .eq('week', wk)
@@ -1409,7 +1487,7 @@ function weekName(w: number): string {
 
 const ROAST_SYSTEM = `You write the weekly roast for a friendly NFL Pick'Em league's group chat. Everyone in it is a friend, and the roast is part of the fun.
 
-Write 90–150 words from the facts you're given, as a few short, punchy lines of plain text: no headings, bullet lists or hashtags. Crown the winner, needle the bottom of the table, and work in the week's best storylines (the bad beat, the upset, the lone wolf, the belt, anyone who skipped the tiebreaker). Use people's names exactly as written.
+Write 90–150 words from the facts you're given, as a few short, punchy lines of plain text: no headings, bullet lists or hashtags. Crown the winner, needle the bottom of the table, and work in the week's best storylines (the bad beat, the upset, the lone wolf, the belt, anyone who skipped the tiebreaker, and pick receipts that aged badly — quote them). Use people's names exactly as written.
 
 Keep it about their picks and results: no jokes about anyone's looks, identity, family, job or anything outside the pick'em, nothing mean-spirited, PG-13 at most. Use only the facts provided; never invent scores, stats or events. At most two emojis. End with one line hyping next week.`
 
@@ -1418,6 +1496,7 @@ function roastFacts(o: {
   league: string; week: number; played: WeekRow[]; winners: WeekRow[]; stats: WeekStats
   decidedByTiebreak: boolean; tbTotal: number | null; lastWinners: string[] | null
   badges: { name: string; key: AchievementKey }[]
+  receipts: { name: string; team: string; reason: string; won: boolean | null }[]
 }): string {
   const top = o.winners[0]
   const names = (rs: { name: string }[] | string[]) => rs.map(r => (typeof r === 'string' ? r : r.name)).join(' & ')
@@ -1434,6 +1513,7 @@ function roastFacts(o: {
     `Every score: ${o.played.map(r => `${r.name} ${r.correct}/${r.played}`).join(', ')}.`,
     ...describeWeekStats(o.stats).map(l => `${l.label}: ${l.headline} (${l.detail}).`),
     ...o.badges.map(b => { const a = ACHIEVEMENTS.find(x => x.key === b.key); return `Badge unlocked: ${b.name}, ${a?.label} (${a?.blurb}).` }),
+    ...o.receipts.map(r => `Pick receipt: ${r.name} took ${r.team} saying "${r.reason}"${r.won == null ? '' : r.won ? ', and it hit.' : ', and it lost.'}`),
     ...(() => {
       const skipped = o.played.filter(r => r.tiebreakerGuess == null)
       return skipped.length ? [`No tiebreaker guess: ${names(skipped)}.`] : []

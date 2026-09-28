@@ -13,8 +13,8 @@ import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, computeWhoCanWin, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
-  computeWinOdds, computeUpsetWatch, computeBelt, computeBadBeats, computeAchievements,
-  type WeekRow,
+  computeWinOdds, computeUpsetWatch, computeBelt, computeBadBeats, computeAchievements, keyInjuries,
+  type WeekRow, type InjuredStarter,
 } from './standings'
 import { WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
@@ -29,7 +29,7 @@ import { SeasonCard } from './SeasonCard'
 import { computeSeasonAwards, computeSeasonProfiles, computePickDNA, computePickMatches } from './season'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
-  TrendingDown, Home, Plane, Award
+  TrendingDown, Home, Plane, Award, Quote
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -135,6 +135,8 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   })
   const [pendingPicks, setPendingPicks] = useState<Record<string, string>>({})
   const [tiebreakerScore, setTiebreakerScore] = useState<Record<string, string>>({})
+  // Pick receipts: an optional one-liner per pick, public at kickoff
+  const [reasons, setReasons] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   // Tracks the last snapshot of picks that's actually been saved (or
   // freshly loaded from the DB) — the auto-save effect below only
@@ -408,20 +410,46 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     [games],
   )
 
+  // Each saved pick, for the line it was made at (pick cards show the move since)
+  const savedPickByGame = useMemo(
+    () => new Map((myPicks as any[]).map(p => [p.game_id, { picked_team: p.picked_team as string, spread_at_pick: (p.spread_at_pick ?? null) as number | null }])),
+    [myPicks],
+  )
+
+  // Injured key players (starting QB, or a starter averaging 12+), for the pick cards
+  const { data: injuredPlayers = [] } = useQuery({
+    queryKey: ['key-injuries'],
+    staleTime: 30 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('players')
+        .select('id, name, team, pos, status, depth_chart_rank, avg_pts, status_changed_at')
+        .eq('league', 'NFL')
+        .eq('depth_chart_rank', 1)
+        .neq('status', 'active')
+      if (error) throw error
+      return data ?? []
+    },
+  })
+  const injuries = useMemo(() => keyInjuries(injuredPlayers as any), [injuredPlayers])
+
   // Sync picks into state
   useEffect(() => {
     const existing: Record<string, string> = {}
     const existingTb: Record<string, string> = {}
+    const existingReasons: Record<string, string> = {}
     myPicks.forEach((p: any) => {
       existing[p.game_id] = p.picked_team
       if (p.tiebreaker_score != null) existingTb[p.game_id] = String(p.tiebreaker_score)
+      if (p.reason) existingReasons[p.game_id] = p.reason
     })
     setPendingPicks(existing)
     setTiebreakerScore(existingTb)
+    setReasons(existingReasons)
     // This IS the current saved state (just loaded from — or just
     // confirmed against — the DB), so it's the correct baseline for
     // the auto-save effect to compare future changes against.
-    lastSavedRef.current = JSON.stringify({ existing, existingTb })
+    lastSavedRef.current = JSON.stringify({ existing, existingTb, existingReasons })
   }, [myPicks])
 
   // Auto-saves picks/tiebreaker guesses shortly after the user stops
@@ -429,14 +457,14 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   // Debounced so a run of quick clicks (or typing a multi-digit
   // tiebreaker guess) doesn't fire a separate write per keystroke.
   useEffect(() => {
-    const snapshot = JSON.stringify({ existing: pendingPicks, existingTb: tiebreakerScore })
+    const snapshot = JSON.stringify({ existing: pendingPicks, existingTb: tiebreakerScore, existingReasons: reasons })
     if (snapshot === lastSavedRef.current) return  // nothing genuinely changed
     if (Object.keys(pendingPicks).length === 0) return  // nothing to save yet
 
     const t = setTimeout(() => { savePicks() }, 900)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPicks, tiebreakerScore])
+  }, [pendingPicks, tiebreakerScore, reasons])
 
   // Sync deadline input when editor opens
   useEffect(() => {
@@ -513,6 +541,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
         season: CURRENT_SEASON,
         picked_team: team,
         tiebreaker_score: tiebreakerScore[gameId] ? parseInt(tiebreakerScore[gameId]) : null,
+        reason: reasons[gameId]?.trim().slice(0, 140) || null,
       }))
       const { error } = await supabase
         .from('pickem_picks')
@@ -1087,6 +1116,10 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
                 if (isGameLocked(game.game_date, weekDeadline, game.status)) return
                 setPendingPicks(p => ({ ...p, [game.id]: team }))
               }}
+              reason={reasons[game.id]}
+              onReason={(val) => setReasons(r => ({ ...r, [game.id]: val }))}
+              savedPick={savedPickByGame.get(game.id) ?? null}
+              injuries={injuries}
             />
           ))}
 
@@ -1113,6 +1146,10 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
                 tiebreakerScore={tiebreakerScore[tiebreakerGame.id] ?? ''}
                 onTiebreakerScore={(val) => setTiebreakerScore(s => ({ ...s, [tiebreakerGame.id]: val }))}
                 tiebreakerWarning={tiebreakerWarning}
+                reason={reasons[tiebreakerGame.id]}
+                onReason={(val) => setReasons(r => ({ ...r, [tiebreakerGame.id]: val }))}
+                savedPick={savedPickByGame.get(tiebreakerGame.id) ?? null}
+                injuries={injuries}
               />
             </div>
           )}
@@ -1261,6 +1298,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
 
 function GamePickCard({
   game, pickedTeam, onPick, deadline, odds, recordsByAbbr, recordsArePreseason, isTiebreaker, tiebreakerScore, onTiebreakerScore, tiebreakerWarning,
+  reason, onReason, savedPick, injuries,
 }: {
   game: any
   pickedTeam: string | undefined
@@ -1273,8 +1311,23 @@ function GamePickCard({
   tiebreakerScore?: string
   onTiebreakerScore?: (val: string) => void
   tiebreakerWarning?: 'missing' | 'needs-pick' | null
+  /** Pick receipt: why they picked it (optional), public at kickoff. */
+  reason?: string
+  onReason?: (val: string) => void
+  /** The pick as saved — its team and the line when it was made. */
+  savedPick?: { picked_team: string; spread_at_pick: number | null } | null
+  /** Injured key players, by team (keyInjuries). */
+  injuries?: Map<string, InjuredStarter[]>
 }) {
   const locked = isGameLocked(game.game_date, deadline, game.status)
+  // How the line has moved for the picked team since it was picked (+ = against it)
+  const lineMove = (() => {
+    if (locked || !pickedTeam || savedPick?.picked_team !== pickedTeam) return null
+    if (savedPick.spread_at_pick == null || game.spread == null) return null
+    const side = (s: number) => (pickedTeam === game.home_team ? s : -s)
+    const then = side(savedPick.spread_at_pick), now = side(game.spread)
+    return Math.abs(now - then) >= 1 ? { then, now } : null
+  })()
   const postponed = isVoid(game)
   const gameTime = game.game_date
     ? new Date(game.game_date).toLocaleString('en-US', {
@@ -1391,6 +1444,18 @@ function GamePickCard({
                   {recordsByAbbr.get(team)}
                 </span>
               )}
+              {!isFinal && (injuries?.get(team) ?? []).slice(0, 2).map(p => (
+                <span
+                  key={p.id}
+                  title={`${p.name} (${p.pos}) is ${p.status}`}
+                  className={clsx(
+                    'text-[10px] font-bold leading-tight rounded px-1 py-0.5 max-w-full truncate',
+                    p.status === 'out' ? 'bg-red-500/15 text-red-300' : 'bg-amber-500/15 text-amber-300',
+                  )}
+                >
+                  {p.status === 'out' ? 'OUT' : 'Q'} · {p.name.split(' ').slice(-1)[0]} ({p.pos})
+                </span>
+              ))}
 
               {/* Odds info — spread + win % */}
               {odds && !isFinal && (
@@ -1463,6 +1528,32 @@ function GamePickCard({
           )
         })}
       </div>
+
+      {lineMove && (
+        <p className={clsx('text-xs flex items-center gap-1', lineMove.now > lineMove.then ? 'text-red-300' : 'text-emerald-300')}>
+          {lineMove.now > lineMove.then ? <TrendingDown className="w-3.5 h-3.5 shrink-0" /> : <TrendingUp className="w-3.5 h-3.5 shrink-0" />}
+          Line on {pickedTeam} since you picked: {formatSpread(lineMove.then)} → <span className="font-bold">{formatSpread(lineMove.now)}</span>
+          <span className="text-field-500">· {lineMove.now > lineMove.then ? 'moved against you' : 'moved your way'}</span>
+        </p>
+      )}
+
+      {/* Pick receipt */}
+      {pickedTeam && onReason && !isVoid(game) && (
+        locked ? (
+          reason ? <p className="text-xs text-field-400 italic">Your receipt: &ldquo;{reason}&rdquo;</p> : null
+        ) : (
+          <div>
+            <input
+              value={reason ?? ''}
+              onChange={e => onReason(e.target.value.slice(0, 140))}
+              maxLength={140}
+              placeholder={`Why ${pickedTeam}? Add a receipt (optional)`}
+              className="input w-full !py-1.5 text-sm"
+            />
+            <p className="text-[11px] text-field-500 mt-1">Everyone sees it on the Board at kickoff.</p>
+          </div>
+        )
+      )}
 
       {isTiebreaker && onTiebreakerScore && (
         <div className="border-t border-field-700 pt-3 space-y-1">
@@ -1898,6 +1989,8 @@ function PicksBoard({
   // as wide as the table, its position kept in step with the table's
   // in both directions. Only rendered while the table overflows.
   const topScrollRef = useRef<HTMLDivElement>(null)
+  // The pick receipt open on the Board, as `${gameId}:${userId}`
+  const [openReceipt, setOpenReceipt] = useState<string | null>(null)
   const tableScrollRef = useRef<HTMLDivElement>(null)
   const [overflowWidth, setOverflowWidth] = useState<number | null>(null)
   const hasGames = games.length > 0
@@ -1989,9 +2082,12 @@ function PicksBoard({
   }
 
   const pickMap: Record<string, Record<string, string>> = {}
+  // Pick receipts, shown on the same reveal rule as the pick
+  const receiptOf = new Map<string, string>()
   allPicks.forEach((p: any) => {
     if (!pickMap[p.game_id]) pickMap[p.game_id] = {}
     pickMap[p.game_id][p.user_id] = p.picked_team
+    if (p.reason) receiptOf.set(`${p.game_id}:${p.user_id}`, p.reason)
   })
 
   const ptsByUser = new Map(weekRows.map(r => [r.userId, r]))
@@ -2142,6 +2238,24 @@ function PicksBoard({
                           {isWrong && <X className="w-3 h-3" />}
                         </div>
                       )}
+                      {/* Pick receipt — tap the quote to read it */}
+                      {visible && picked && receiptOf.has(`${game.id}:${m.user_id}`) && (() => {
+                        const key = `${game.id}:${m.user_id}`
+                        const open = openReceipt === key
+                        return (
+                          <button
+                            onClick={() => setOpenReceipt(open ? null : key)}
+                            title={receiptOf.get(key)}
+                            className={clsx(
+                              'mt-1 mx-auto flex items-start gap-1 rounded px-1.5 py-0.5 text-[11px] text-left',
+                              open ? 'bg-field-700 text-field-100 max-w-[11rem] whitespace-normal' : 'text-field-400 hover:text-white',
+                            )}
+                          >
+                            <Quote className="w-3 h-3 shrink-0 mt-0.5 text-gold" />
+                            {open ? <span className="italic leading-snug">{receiptOf.get(key)}</span> : <span className="sr-only">Read their receipt</span>}
+                          </button>
+                        )
+                      })()}
                       {/* Tiebreaker guess, under the pick — hidden on the
                           same reveal rule as the pick itself */}
                       {visible && picked && game.is_tiebreaker && (
