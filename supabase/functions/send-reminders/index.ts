@@ -267,7 +267,7 @@ serve(async (req) => {
       { data: prefsRows },
     ] = await Promise.all([
       supabase.from('leagues').select('id, name, league_type, player_pool, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, ai_recap'),
-      supabase.from('league_members').select('id, league_id, user_id, team_name'),
+      supabase.from('league_members').select('id, league_id, user_id, team_name, joined_at'),
       supabase.from('profiles').select('id, username, display_name'),
       supabase.from('notification_preferences').select('*'),
     ])
@@ -969,6 +969,8 @@ serve(async (req) => {
                 league: lg.name, week: wk, played, winners, stats: payload.stats,
                 decidedByTiebreak: payload.decidedByTiebreak, tbTotal: payload.tiebreakerTotal, lastWinners,
                 badges: payload.badges, receipts,
+                ammo: roastAmmo(wkGames, wkPicks ?? [], rows,
+                  new Map((members ?? []).filter(m => m.league_id === lg.id).map(m => [m.user_id, m.joined_at ?? null]))),
               }))
               if (text) {
                 await supabase.from('league_messages').insert({
@@ -1555,11 +1557,11 @@ function weekName(w: number): string {
 
 // ══ The weekly roast ══════════════════════════════════════════
 
-const ROAST_SYSTEM = `You write the weekly roast for an NFL Pick'Em league's group chat. These are friends who have trash-talked each other all season, and the commissioner turned this on because they want it savage. Be as mean as you can about their picks: no mercy, no softening, no "all in good fun" disclaimers.
+const ROAST_SYSTEM = `You write the weekly roast for an NFL Pick'Em league's group chat. These are friends who have trash-talked each other all season, and the commissioner turned this on because they want it vicious. Be as brutal as you possibly can about their picks: humiliate them, no mercy, no softening, no "all in good fun" disclaimers, nothing nice unless it sets up a bigger shot.
 
-Write 90–150 words from the facts you're given, as a few short, punchy lines of plain text: no headings, bullet lists or hashtags. Tear into the bottom of the table and everyone who blew it: the bad beat, the upset nobody saw coming, the lone wolf who got burned, anyone who skipped the tiebreaker, and pick receipts that aged badly (quote them back at them). Question their football IQ, their judgment and whether they should be allowed to pick games at all. Name names, exactly as written. Crown the winner, then knock them down a peg. Never offer sympathy.
+Write 150–250 words from the facts you're given, as short, punchy lines of plain text: no headings, bullet lists or hashtags. Hit as many people as you can: at least eight by name (everyone, in a small league), and every one of them gets a specific shot, not a passing mention. Everyone at the bottom of the table, anyone who didn't pick or skipped games, anyone who blew a pick nearly everyone else got right, the worst tiebreaker guesses, anyone who skipped the tiebreaker, the lone wolf, the bad beat victims, pick receipts that aged badly (quote them back at them), and the forgettable middle of the pack. Question their football IQ, their judgment and whether they should be allowed anywhere near a pick sheet. Crown the winner, then tear them down too. Never offer sympathy. Name names exactly as written.
 
-Swearing is fine, strong language included. The only things off limits: slurs; jokes about race, religion, sexuality, gender, disability, looks, weight, family, jobs or health; anything sexual; and anything about self-harm or violence. Everything about their picks is fair game. Use only the facts provided; never invent scores, stats or events. At most two emojis. End with one line calling someone out for next week.`
+Swearing is fine, strong language included. The only things off limits: slurs; jokes about race, religion, sexuality, gender, disability, looks, weight, family, jobs or health; anything sexual; and anything about self-harm or violence. Everything about their picks is fair game. Use only the facts provided; never invent scores, stats or events. At most two emojis. End with one line calling out someone specific for next week.`
 
 /** The week in plain lines, for the roast prompt. */
 function roastFacts(o: {
@@ -1567,6 +1569,8 @@ function roastFacts(o: {
   decidedByTiebreak: boolean; tbTotal: number | null; lastWinners: string[] | null
   badges: { name: string; key: AchievementKey }[]
   receipts: { name: string; team: string; reason: string; won: boolean | null }[]
+  /** Per-person callouts (roastAmmo). */
+  ammo?: string[]
 }): string {
   const top = o.winners[0]
   const names = (rs: { name: string }[] | string[]) => rs.map(r => (typeof r === 'string' ? r : r.name)).join(' & ')
@@ -1588,7 +1592,71 @@ function roastFacts(o: {
       const skipped = o.played.filter(r => r.tiebreakerGuess == null)
       return skipped.length ? [`No tiebreaker guess: ${names(skipped)}.`] : []
     })(),
+    ...(o.ammo ?? []),
   ].join('\n')
+}
+
+/**
+ * Who to call out, beyond the headlines: the bottom third, the middle
+ * of the pack, anyone who didn't pick or skipped games, picks nearly
+ * the whole league got right that someone still blew, and the worst
+ * tiebreaker guesses. Facts only — the roast can't invent any.
+ */
+function roastAmmo(games: SchedGame[], picks: PickemPick[], rows: WeekRow[], joinedAt: Map<string, string | null>): string[] {
+  const out: string[] = []
+  const played = rows.filter(r => r.submitted)
+  const nameById = new Map(rows.map(r => [r.userId, r.name]))
+  const score = (r: WeekRow) => `${r.name} ${r.correct}/${r.played}`
+
+  // Roughly the bottom and middle thirds, never splitting a tie
+  if (played.length >= 6) {
+    const third = Math.max(2, Math.floor(played.length / 3))
+    const lowCut = played[played.length - third].correct
+    let bottom = played.filter(r => r.correct < lowCut)
+    if (bottom.length < 2) bottom = played.filter(r => r.correct <= lowCut)
+    const highCut = played[third - 1].correct
+    const mid = played.filter(r => !bottom.includes(r) && r.correct < highCut)
+    out.push(`Bottom of the table: ${bottom.map(score).join(', ')}.`)
+    if (mid.length) out.push(`Middle of the pack: ${mid.map(score).join(', ')}.`)
+  }
+
+  // Only people who were in the league before the week kicked off
+  const kickoff = Math.min(...games.map(g => new Date(g.game_date).getTime()))
+  const noShows = rows
+    .filter(r => !r.submitted)
+    .filter(r => { const j = joinedAt.get(r.userId); return !j || new Date(j).getTime() < kickoff })
+    .map(r => r.name)
+  if (noShows.length) out.push(`Didn't make a single pick: ${noShows.join(', ')}.`)
+
+  const scored = games.filter(g => winnerOf(g) != null).length
+  const skippers = played.filter(r => r.played < scored).map(r => `${r.name} (skipped ${scored - r.played})`)
+  if (skippers.length) out.push(`Left games unpicked: ${skippers.join(', ')}.`)
+
+  // Picks almost everyone got right — and who still blew them
+  const blown: { line: string; share: number }[] = []
+  for (const g of games) {
+    const w = winnerOf(g)
+    if (!w) continue
+    const on = picks.filter(p => p.game_id === g.id)
+    const wrong = on.filter(p => p.picked_team !== w)
+    if (on.length < 5 || wrong.length === 0 || wrong.length > Math.max(2, Math.floor(on.length / 5))) continue
+    const loser = w === g.home_team ? g.away_team : g.home_team
+    const who = wrong.map(p => nameById.get(p.user_id) ?? 'Someone').join(' & ')
+    blown.push({
+      share: wrong.length / on.length,
+      line: `Blew a gimme: ${who} took ${loser} over ${w} (${g.away_team} ${g.away_score}, ${g.home_team} ${g.home_score}), when ${on.length - wrong.length} of ${on.length} got it right.`,
+    })
+  }
+  out.push(...blown.sort((a, b) => a.share - b.share).slice(0, 5).map(b => b.line))
+
+  const worstTb = played
+    .filter(r => r.tiebreakerDiff != null && r.tiebreakerDiff >= 7)
+    .sort((a, b) => b.tiebreakerDiff! - a.tiebreakerDiff!)
+    .slice(0, 3)
+  if (worstTb.length) {
+    out.push(`Worst tiebreaker guesses: ${worstTb.map(r => `${r.name} guessed ${r.tiebreakerGuess} (off by ${r.tiebreakerDiff})`).join(', ')}.`)
+  }
+  return out
 }
 
 /**
