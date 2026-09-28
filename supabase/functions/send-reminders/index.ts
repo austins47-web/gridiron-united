@@ -1081,41 +1081,52 @@ serve(async (req) => {
       // first kickoff), the Commish asks every Pick'Em league which
       // underdog wins outright: the week's four biggest underdogs (3+
       // points), with voting closing at the first of their kickoffs.
-      // Once per league per week (league_polls' weekly index).
+      // Once per league per week (league_polls' weekly index). Lines
+      // come from the schedule, or the odds cache (sync-odds reads next
+      // week's too) before the schedule has them.
       {
         const wk = upcomingWeek(scheduleBySeason.get(season), now)
         const wkGames = wk != null ? scheduleBySeason.get(season)?.get(wk) ?? [] : []
         const firstKickoff = wkGames.length ? Math.min(...wkGames.map(g => new Date(g.game_date).getTime())) : NaN
         const ahead = firstKickoff - now.getTime()
-        const dogs = wkGames
-          .filter(g => g.spread != null && Math.abs(g.spread) >= 3 && new Date(g.game_date).getTime() > now.getTime())
-          .sort((a, b) => Math.abs(b.spread!) - Math.abs(a.spread!))
-          .slice(0, 4)
-        if (wk != null && ahead > 3 * HOUR && ahead < 4 * 24 * HOUR && dogs.length >= 2) {
-          // spread is the home team's line: positive means the home team is the underdog
-          const options = dogs.map(g => {
-            const homeDog = g.spread! > 0
-            return `${homeDog ? g.home_team : g.away_team} +${Math.abs(g.spread!)} ${homeDog ? 'vs' : 'at'} ${homeDog ? g.away_team : g.home_team}`
-          })
-          const closesAt = new Date(Math.min(...dogs.map(g => new Date(g.game_date).getTime()))).toISOString()
-          const { data: asked } = await supabase
-            .from('league_polls').select('league_id')
-            .eq('kind', 'weekly_upset').eq('season', season).eq('week', wk)
-          const askedIn = new Set((asked ?? []).map(r => r.league_id))
-
-          for (const lg of leagues ?? []) {
-            if (lg.league_type !== 'pickem' || askedIn.has(lg.id)) continue
-            weeklyPolls.push({ league: lg.name, week: wk, options })
-            if (dryRun) continue
-            const { data: poll } = await supabase.from('league_polls').insert({
-              league_id: lg.id, created_by: null, kind: 'weekly_upset', season, week: wk,
-              question: `${weekTitle(wk)} upset watch: which underdog wins outright?`,
-              options, closes_at: closesAt,
-            }).select('id').maybeSingle()
-            if (!poll) continue
-            await supabase.from('league_messages').insert({
-              league_id: lg.id, user_id: null, is_system: true, message: 'POLL:' + poll.id,
+        // Posted in the morning (Eastern), not the moment Monday night ends
+        const morning = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hourCycle: 'h23' }).format(now)) >= 9
+        if (wk != null && ahead > 3 * HOUR && ahead < 4 * 24 * HOUR && morning) {
+          const { data: oddsRows } = await supabase.from('odds_cache').select('game_key, spread')
+          const cached = new Map<string, number | null>((oddsRows ?? []).map(r => [r.game_key as string, r.spread == null ? null : Number(r.spread)]))
+          // The home team's line: positive means the home team is the underdog
+          const lineOf = (g: SchedGame): number | null =>
+            g.spread ?? cached.get(`${g.away_team}@${g.home_team}`) ?? null
+          const dogs = wkGames
+            .map(g => ({ g, line: lineOf(g) }))
+            .filter(({ g, line }) => line != null && Number.isFinite(line) && Math.abs(line) >= 3 && new Date(g.game_date).getTime() > now.getTime())
+            .sort((a, b) => Math.abs(b.line!) - Math.abs(a.line!))
+            .slice(0, 4)
+          if (dogs.length >= 2) {
+            const options = dogs.map(({ g, line }) => {
+              const homeDog = line! > 0
+              return `${homeDog ? g.home_team : g.away_team} +${Math.abs(line!)} ${homeDog ? 'vs' : 'at'} ${homeDog ? g.away_team : g.home_team}`
             })
+            const closesAt = new Date(Math.min(...dogs.map(({ g }) => new Date(g.game_date).getTime()))).toISOString()
+            const { data: asked } = await supabase
+              .from('league_polls').select('league_id')
+              .eq('kind', 'weekly_upset').eq('season', season).eq('week', wk)
+            const askedIn = new Set((asked ?? []).map(r => r.league_id))
+
+            for (const lg of leagues ?? []) {
+              if (lg.league_type !== 'pickem' || askedIn.has(lg.id)) continue
+              weeklyPolls.push({ league: lg.name, week: wk, options })
+              if (dryRun) continue
+              const { data: poll } = await supabase.from('league_polls').insert({
+                league_id: lg.id, created_by: null, kind: 'weekly_upset', season, week: wk,
+                question: `${weekTitle(wk)} upset watch: which underdog wins outright?`,
+                options, closes_at: closesAt,
+              }).select('id').maybeSingle()
+              if (!poll) continue
+              await supabase.from('league_messages').insert({
+                league_id: lg.id, user_id: null, is_system: true, message: 'POLL:' + poll.id,
+              })
+            }
           }
         }
       }
