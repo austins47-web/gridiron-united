@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { supabase } from '@/lib/supabase'
 import { brandVars, DEFAULT_GOLD } from '@/lib/brand'
+import { weatherLabel, type GameWeather } from '@/lib/weather'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from '@/components/pickem/Belt'
 
@@ -37,6 +38,8 @@ interface TvGame {
   downDistance?: string | null
   redZone?: boolean
   lastPlay?: string | null
+  /** Stadium weather at kickoff (sync-odds). */
+  weather?: GameWeather | null
 }
 
 interface TvSpotlight {
@@ -220,6 +223,11 @@ export function ShopTV() {
         setStatus('ok')
         remember(code)
         if (data.games.some(g => g.state === 'live')) next = 15_000
+        // Close to a lock, check often so the reveal starts right on time
+        const lockAt = [data.deadline, data.nextKickoff]
+          .map(t => (t ? new Date(t).getTime() - Date.now() : Infinity))
+          .filter(ms => ms > -60_000)
+        if (lockAt.some(ms => ms < 4 * 60_000)) next = 10_000
       } catch {
         if (alive) setStatus(s => (s === 'loading' ? 'loading' : 'offline'))
         next = 20_000
@@ -235,6 +243,36 @@ export function ShopTV() {
     const t = setTimeout(() => window.location.reload(), 6 * 3600_000)
     return () => clearTimeout(t)
   }, [])
+
+  // The pick reveal: games whose picks just went public (they locked while
+  // this TV was watching) get revealed one by one. What's been seen is
+  // remembered per week, so a reload doesn't replay it and a TV turned on
+  // mid-week doesn't reveal what locked hours ago.
+  const [reveal, setReveal] = useState<TvGame[] | null>(null)
+  useEffect(() => {
+    if (!board) return
+    const key = `gu-tv-locked-${code}`
+    const locked = board.games.filter(g => g.riders && g.state !== 'void')
+    let seen: { week: number; ids: string[] } | null = null
+    try { seen = JSON.parse(localStorage.getItem(key) ?? 'null') } catch { return }
+    const store = (ids: string[]) => {
+      try { localStorage.setItem(key, JSON.stringify({ week: board.week, ids })) } catch { /* no storage: no reveals */ }
+    }
+    if (!seen || seen.week !== board.week) { store(locked.map(g => g.id)); return }
+    const fresh = locked.filter(g => !seen!.ids.includes(g.id) && Date.now() - new Date(g.kickoff).getTime() < 45 * 60_000)
+    store([...new Set([...seen.ids, ...locked.map(g => g.id)])])
+    if (fresh.length) setReveal(r => (r ? [...r, ...fresh.filter(f => !r.some(x => x.id === f.id))] : fresh))
+  }, [board, code])
+
+  // ?reveal=demo plays it once with this week's locked games (a preview)
+  const [params] = useSearchParams()
+  const demoed = useRef(false)
+  useEffect(() => {
+    if (!board || demoed.current || params.get('reveal') !== 'demo') return
+    demoed.current = true
+    const locked = board.games.filter(g => g.riders && g.state !== 'void').slice(0, 6)
+    if (locked.length) setReveal(locked)
+  }, [board, params])
 
   const goFull = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {})
@@ -258,6 +296,9 @@ export function ShopTV() {
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
           : <Board board={board} offline={status === 'offline'} />}
+        {board && reveal && reveal.length > 0 && (
+          <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
+        )}
         {status !== 'gone' && <FloatingReactions code={code} />}
       </div>
     </div>
@@ -499,6 +540,17 @@ function GameTile({ g, big, injuries }: { g: TvGame; big: boolean; injuries: Map
           {g.state === 'void' ? 'Postponed' : final ? 'Final' : live ? g.clock : kickoffLabel(g.kickoff)}
         </span>
         <span className="ml-auto flex items-center gap-1 shrink-0">
+          {/* Stadium weather, for the games still to come */}
+          {pre && (() => {
+            const wx = weatherLabel(g.weather)
+            if (!wx) return null
+            const alert = wx.alerts[0]
+            return (
+              <span className={clsx('text-[14px] whitespace-nowrap', alert ? 'text-amber-300' : 'text-field-400')} title={[wx.base, ...wx.alerts].join(' · ')}>
+                {wx.icon} {alert ?? wx.base}
+              </span>
+            )
+          })()}
           {redZone && <span className="rounded bg-red-600 text-white text-[12px] font-black px-1.5 py-0.5 tracking-wider">RED ZONE</span>}
           {g.tiebreaker && <span className="rounded bg-gold/15 text-gold text-[13px] font-black px-1.5 py-0.5 tracking-wider">TB</span>}
         </span>
@@ -750,6 +802,102 @@ function SpotlightCard({ p }: { p: TvSpotlight }) {
   )
 }
 
+/**
+ * Everyone's tiebreaker guess on a number line, with the tiebreaker
+ * game's combined score climbing it live. Only once the guesses are
+ * public (the game has locked). Players tied for first, the ones it
+ * decides, are gold; the closest of them right now gets a star; guesses
+ * the score has already passed are dimmed (it only goes up).
+ */
+function TiebreakerLine({ b }: { b: TvBoard }) {
+  const tb = b.games.find(g => g.tiebreaker)
+  const byId = new Map(b.week_table.map(r => [r.userId, r]))
+  const guesses = (b.board?.rows ?? [])
+    .filter(r => r.tiebreaker != null)
+    .map(r => ({ name: byId.get(r.userId)?.name ?? 'Someone', guess: r.tiebreaker as number, correct: byId.get(r.userId)?.correct ?? 0 }))
+  if (!tb || guesses.length === 0) return null
+
+  const started = tb.state === 'live' || tb.state === 'final'
+  const final = tb.state === 'final'
+  const total = (tb.awayScore ?? 0) + (tb.homeScore ?? 0)
+  const top = Math.max(...b.week_table.map(r => r.correct))
+  const contending = (c: number) => c === top
+
+  // One row per guess value, highest at the top
+  const groups = [...guesses.reduce((m, g) => m.set(g.guess, [...(m.get(g.guess) ?? []), g]), new Map<number, typeof guesses>())]
+    .map(([guess, people]) => ({ guess, people }))
+    .sort((a, b) => b.guess - a.guess)
+  const marks = [...groups.map(g => g.guess), ...(started ? [total] : []), ...(tb.total != null ? [tb.total] : [])]
+  const lo = Math.min(...marks) - 3, hi = Math.max(...marks) + 3
+  const H = 600, GAP = 30
+  const yOf = (v: number) => ((hi - v) / (hi - lo)) * H
+
+  // Labels at their value, nudged apart so none overlap
+  const ys = groups.map(g => yOf(g.guess))
+  for (let i = 1; i < ys.length; i++) ys[i] = Math.max(ys[i], ys[i - 1] + GAP)
+  const over = ys.length ? ys[ys.length - 1] - H : 0
+  if (over > 0) for (let i = 0; i < ys.length; i++) ys[i] -= over
+  for (let i = ys.length - 2; i >= 0; i--) ys[i] = Math.min(ys[i], ys[i + 1] - GAP)
+
+  const closest = started
+    ? Math.min(...guesses.filter(g => contending(g.correct)).map(g => Math.abs(g.guess - total)))
+    : null
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-cond font-black text-[24px] text-white">{tb.away} @ {tb.home}</span>
+        <span className={clsx('font-cond font-black text-[26px] tabular-nums', started ? 'text-gold' : 'text-field-400')}>
+          {started ? `${final ? 'Final' : 'Total'} ${total}` : 'Not started'}
+        </span>
+      </div>
+      <div className="relative" style={{ height: H }}>
+        {/* The axis */}
+        <span className="absolute left-[52px] top-0 bottom-0 w-[3px] bg-field-700 rounded" />
+        {/* Vegas' total */}
+        {tb.total != null && (
+          <div className="absolute left-0 right-0 flex items-center" style={{ top: yOf(tb.total) }}>
+            <span className="w-[44px] text-right text-[13px] font-bold text-field-500 -translate-y-1/2">O/U</span>
+            <span className="ml-3 flex-1 border-t-2 border-dashed border-field-600 -translate-y-1/2" />
+          </div>
+        )}
+        {/* The live total */}
+        {started && (
+          <div className="absolute left-0 right-0 flex items-center z-10 transition-[top] duration-1000" style={{ top: yOf(total) }}>
+            <span className="w-[44px] text-right font-cond font-black text-[20px] text-gold -translate-y-1/2 tabular-nums">{total}</span>
+            <span className="ml-3 flex-1 h-[4px] bg-gold rounded -translate-y-1/2 shadow-[0_0_14px_rgba(206,123,69,0.7)]" />
+          </div>
+        )}
+        {/* Guesses */}
+        {groups.map((g, i) => {
+          const passed = started && !final && g.guess < total
+          const lead = closest != null && g.people.some(p => contending(p.correct)) && Math.abs(g.guess - total) === closest
+          return (
+            <div key={g.guess}>
+              <span className="absolute left-[48px] w-[11px] h-[11px] rounded-full bg-field-400 -translate-y-1/2" style={{ top: yOf(g.guess) }} />
+              <div
+                className={clsx('absolute left-[70px] right-0 flex items-baseline gap-2 -translate-y-1/2 whitespace-nowrap', passed && 'opacity-35')}
+                style={{ top: ys[i] }}
+              >
+                <span className="font-cond font-black text-[21px] text-white tabular-nums w-9 text-right">{g.guess}</span>
+                <span className="min-w-0 truncate text-[18px]">
+                  {g.people.map((p, k) => (
+                    <span key={p.name} className={clsx(contending(p.correct) ? 'font-bold text-gold' : 'text-field-300')}>
+                      {k > 0 && ', '}{p.name}
+                    </span>
+                  ))}
+                </span>
+                {lead && <span className="text-gold text-[18px]">★</span>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-[14px] text-field-500"><span className="text-gold font-bold">Gold</span>: tied for first, where the tiebreaker decides it · ★ closest right now</p>
+    </div>
+  )
+}
+
 function panelsFor(b: TvBoard, spot: number): Panel[] {
   const out: Panel[] = []
   const names = (list: string[], max = 4) => list.length <= max ? list.join(', ') : `${list.slice(0, max).join(', ')} +${list.length - max}`
@@ -759,6 +907,13 @@ function panelsFor(b: TvBoard, spot: number): Panel[] {
     const p = spots[n % spots.length]
     return { key: `spot-${n % 2}`, title: '⭐ Player spotlight', body: <SpotlightCard p={p} /> }
   }
+
+  // The tiebreaker, first while that game's being played
+  const tbGame = b.games.find(g => g.tiebreaker)
+  const tbPanel: Panel | null = tbGame && (b.board?.rows ?? []).some(r => r.tiebreaker != null)
+    ? { key: 'tiebreaker', title: '🎯 Tiebreaker watch', body: <TiebreakerLine b={b} /> }
+    : null
+  if (tbPanel && tbGame?.state === 'live') out.push(tbPanel)
 
   if (b.shame && b.shame.rows.length) {
     const sh = b.shame
@@ -824,6 +979,8 @@ function panelsFor(b: TvBoard, spot: number): Panel[] {
       </div>
     ) })
   }
+  // Before or after that game, it takes its turn with the rest
+  if (tbPanel && tbGame?.state !== 'live') out.push(tbPanel)
   const first = spotlight(spot * 2)
   if (first) out.push(first)
   if (b.headlines?.length) {
@@ -1144,6 +1301,108 @@ function Takeover({ board }: { board: TvBoard }) {
   )
 }
 
+// ── The pick reveal ───────────────────────────────────────────
+// Full screen, the moment games lock: each one with how the shop picked
+// it, most lopsided first and the closest split last.
+const REVEAL_INTRO = 3500
+const REVEAL_GAME = 7000
+
+function RevealShow({ board, games, onDone }: { board: TvBoard; games: TvGame[]; onDone: () => void }) {
+  const share = (g: TvGame) => {
+    const a = g.riders?.away.length ?? 0, h = g.riders?.home.length ?? 0
+    return a + h ? Math.max(a, h) / (a + h) : 0
+  }
+  const order = useMemo(
+    () => [...games].sort((x, y) => share(y) - share(x) || new Date(x.kickoff).getTime() - new Date(y.kickoff).getTime()),
+    [games],
+  )
+  const [step, setStep] = useState(-1) // -1: the intro
+  const done = useRef(onDone)
+  done.current = onDone
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (step + 1 >= order.length) done.current()
+      else setStep(s => s + 1)
+    }, step < 0 ? REVEAL_INTRO : REVEAL_GAME)
+    return () => clearTimeout(t)
+  }, [step, order.length])
+
+  // The split bar grows in after each game appears
+  const [grow, setGrow] = useState(false)
+  useEffect(() => {
+    setGrow(false)
+    const t = setTimeout(() => setGrow(true), 450)
+    return () => clearTimeout(t)
+  }, [step])
+
+  if (step < 0) {
+    return (
+      <div className="absolute inset-0 z-30 bg-field-950 flex flex-col items-center justify-center text-center rise-in">
+        <p className="font-cond font-bold uppercase tracking-[0.35em] text-gold text-[34px]">{board.league} · {weekTitle(board.week)}</p>
+        <p className="font-cond font-black uppercase text-white text-[150px] leading-none mt-4">🔒 Picks are in</p>
+        <p className="text-field-300 text-[38px] mt-6">{order.length === 1 ? 'One game just locked' : `${order.length} games just locked`}. Here&apos;s how the shop picked.</p>
+      </div>
+    )
+  }
+
+  const g = order[Math.min(step, order.length - 1)]
+  const a = g.riders?.away ?? [], h = g.riders?.home ?? []
+  const n = a.length + h.length
+  const callout = n === 0 ? 'Nobody picked this one'
+    : a.length === 0 || h.length === 0 ? 'Unanimous'
+    : a.length === 1 ? `Only ${a[0]} took ${g.away}`
+    : h.length === 1 ? `Only ${h[0]} took ${g.home}`
+    : Math.abs(a.length - h.length) <= 1 ? 'The shop is split'
+    : null
+
+  const side = (team: string, people: string[], align: 'left' | 'right') => (
+    <div className={clsx('flex-1 min-w-0 flex flex-col', align === 'left' ? 'items-start text-left' : 'items-end text-right')}>
+      <div className={clsx('flex items-center gap-6', align === 'right' && 'flex-row-reverse')}>
+        <TeamLogo team={team} className="w-[190px] h-[190px]" />
+        <div>
+          <p className="font-cond font-black text-white text-[96px] leading-none">{team}</p>
+          <p className="font-cond font-black text-gold text-[52px] leading-tight tabular-nums">{people.length} {people.length === 1 ? 'pick' : 'picks'}</p>
+        </div>
+      </div>
+      <p className="mt-6 text-[26px] leading-snug text-field-200 max-w-[760px]">{people.join(', ') || '—'}</p>
+    </div>
+  )
+
+  return (
+    <div key={g.id} className="absolute inset-0 z-30 bg-field-950 flex flex-col px-24 py-16 rise-in">
+      <div className="flex items-baseline justify-between">
+        <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[28px]">🔒 Picks are in · {weekTitle(board.week)}</p>
+        <p className="font-cond font-bold text-field-400 text-[26px] tabular-nums">{step + 1} of {order.length}</p>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center gap-10">
+        <div className="flex items-start gap-12">
+          {side(g.away, a, 'left')}
+          <span className="font-cond font-black text-field-600 text-[60px] self-center">@</span>
+          {side(g.home, h, 'right')}
+        </div>
+
+        {n > 0 && (
+          <div className="flex h-[46px] rounded-full overflow-hidden bg-field-800">
+            <span className="bg-field-300 transition-[width] duration-[1200ms] ease-out" style={{ width: grow ? `${(a.length / n) * 100}%` : '0%' }} />
+            <span className="ml-auto bg-gold transition-[width] duration-[1200ms] ease-out" style={{ width: grow ? `${(h.length / n) * 100}%` : '0%' }} />
+          </div>
+        )}
+
+        {callout && (
+          <p className={clsx(
+            'text-center font-cond font-black uppercase text-[64px] leading-none transition-opacity duration-700',
+            grow ? 'opacity-100' : 'opacity-0',
+            callout === 'The shop is split' ? 'text-white' : 'text-gold',
+          )}>
+            {callout}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Reactions from phones ─────────────────────────────────────
 // Members tap an emoji in the app (send_tv_reaction); it's broadcast to
 // tv:<code> and floats up the screen with their name under it.
@@ -1177,7 +1436,7 @@ function FloatingReactions({ code }: { code: string }) {
   }, [code])
 
   return (
-    <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden">
+    <div className="absolute inset-0 z-40 pointer-events-none overflow-hidden">
       <style>{'@keyframes tv-float { 0% { transform: translate(0, 0) scale(.5); opacity: 0 } 10% { transform: translate(calc(var(--dx) * .1), -90px) scale(1); opacity: 1 } 75% { opacity: 1 } 100% { transform: translate(var(--dx), -960px) scale(1.12); opacity: 0 } }'}</style>
       {items.map(f => (
         <div

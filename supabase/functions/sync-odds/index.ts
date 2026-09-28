@@ -17,10 +17,15 @@
 // that has kicked off has no line on the scoreboard any more, so it's
 // skipped — its last pregame line stays in the cache.
 //
+// It also stores each upcoming NFL game's stadium weather at kickoff
+// (nfl_games.weather, see _shared/weather.ts) for the pick cards and
+// the Shop TV.
+//
 // ?dry=1 reports what would be written without writing.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { oddsLine } from '../_shared/espn.ts'
+import { weatherFor, type GameWeather } from '../_shared/weather.ts'
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
 
@@ -105,11 +110,36 @@ Deno.serve(async (req) => {
   const errors: string[] = []
   const stamp = new Date().toISOString()
   const rows: Row[] = []
+  let nflEvents: any[] = []
   for (const league of ['NFL', 'CFB'] as const) {
     try {
-      rows.push(...rowsFrom(await twoWeeks(BOARDS[league]), league, stamp))
+      const events = await twoWeeks(BOARDS[league])
+      if (league === 'NFL') nflEvents = events
+      rows.push(...rowsFrom(events, league, stamp))
     } catch (e) {
       errors.push(`${league}: ${String(e)}`)
+    }
+  }
+
+  // Stadium weather for the NFL games still to come
+  const weather: { event: string; game: string; venue: string; weather: GameWeather }[] = []
+  for (const ev of nflEvents) {
+    try {
+      const w = await weatherFor(ev, new Date())
+      const comp = ev?.competitions?.[0]
+      const team = (side: string) => comp?.competitors?.find((c: any) => c.homeAway === side)?.team?.abbreviation
+      const venue = [comp?.venue?.fullName, comp?.venue?.address?.city, comp?.venue?.address?.country].filter(Boolean).join(', ')
+      if (w) weather.push({ event: String(ev.id), game: `${team('away')}@${team('home')}`, venue, weather: w })
+    } catch (e) {
+      errors.push(`weather ${ev?.id}: ${String(e)}`)
+    }
+  }
+  let weathered = 0
+  if (!dryRun) {
+    for (const w of weather) {
+      const { error } = await supabase.from('nfl_games').update({ weather: w.weather }).eq('espn_event_id', w.event)
+      if (error) errors.push(`weather ${w.game}: ${error.message}`)
+      else weathered++
     }
   }
 
@@ -127,6 +157,8 @@ Deno.serve(async (req) => {
     nfl: rows.filter(r => r.league === 'NFL').length,
     cfb: rows.filter(r => r.league === 'CFB').length,
     upserted,
+    weathered,
+    weatherSample: weather.slice(0, 20).map(w => ({ game: w.game, venue: w.venue, ...w.weather })),
     sample: rows.slice(0, 3),
     errors,
   }, null, 2), { headers: CORS })

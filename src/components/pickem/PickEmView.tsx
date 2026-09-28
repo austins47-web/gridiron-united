@@ -30,6 +30,7 @@ import { openPlayerCard } from '@/hooks/usePlayerCard'
 import { useThreadCounts } from '@/hooks/useGameThreads'
 import { PinnedBanner, PinComposer } from '@/components/chat/PinnedAnnouncement'
 import { TvReactionFab } from '@/components/tv/TvReactions'
+import { weatherLabel } from '@/lib/weather'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
   TrendingDown, Home, Plane, Award, Quote, MessageSquare, Pin
@@ -1316,6 +1317,18 @@ function GamePickCard({
           </span>
         )}
       </div>
+
+      {/* Stadium weather at kickoff */}
+      {!isFinal && !postponed && (() => {
+        const wx = weatherLabel(game.weather)
+        if (!wx) return null
+        return (
+          <p className={clsx('-mt-1 text-xs flex flex-wrap items-center gap-x-2', wx.alerts.length ? 'text-amber-300' : 'text-field-400')}>
+            <span>{wx.icon} {wx.base}</span>
+            {wx.alerts.map(a => <span key={a} className="font-bold">{a}</span>)}
+          </p>
+        )
+      })()}
 
       <div className="grid grid-cols-2 gap-3">
         {[

@@ -34,9 +34,9 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 })
 
 /** The live situation columns sync-nfl-schedule writes (not part of the core Game). */
-type SituationGame = Game & { possession?: string | null; down_distance?: string | null; red_zone?: boolean | null; last_play?: string | null }
+type SituationGame = Game & { possession?: string | null; down_distance?: string | null; red_zone?: boolean | null; last_play?: string | null; weather?: unknown }
 
-const GAME_COLS = 'id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker, pregame_home_wp, spread, over_under, live_home_wp, period, clock, game_story, possession, down_distance, red_zone, last_play'
+const GAME_COLS = 'id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker, pregame_home_wp, spread, over_under, live_home_wp, period, clock, game_story, possession, down_distance, red_zone, last_play, weather'
 
 /**
  * The week the league is on: a week stays current until Tuesday 11:59 PM
@@ -166,6 +166,7 @@ serve(async (req) => {
         homeChance: isVoid(g) ? null : homeWinChance(g),
         spread: g.spread ?? null,
         total: g.over_under ?? null,
+        weather: (g as SituationGame).weather ?? null,
         tiebreaker: !!g.is_tiebreaker,
         picked: on.length,
         riders: locked ? {
