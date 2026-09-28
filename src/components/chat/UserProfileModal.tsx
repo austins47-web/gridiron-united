@@ -26,6 +26,8 @@ interface LeagueRecord {
   losses: number
   points_for: number
   is_commissioner: boolean
+  /** Pick'Em leagues have no team names or fantasy record to show. */
+  isPickem: boolean
 }
 
 // ── Avatar ────────────────────────────────────────────────────
@@ -73,7 +75,7 @@ export function UserProfileModal({ username, onClose }: {
       // Get leagues they're in
       const { data: theirLeagues } = await supabase
         .from('league_members')
-        .select('league_id, team_name, wins, losses, points_for, is_commissioner, league:leagues(id, name)')
+        .select('league_id, team_name, wins, losses, points_for, is_commissioner, league:leagues(id, name, league_type)')
         .eq('user_id', profile!.id)
 
       // Get leagues I'm in
@@ -94,6 +96,7 @@ export function UserProfileModal({ username, onClose }: {
           losses: m.losses,
           points_for: m.points_for,
           is_commissioner: m.is_commissioner,
+          isPickem: (m.league as any)?.league_type === 'pickem',
         }))
     },
   })
@@ -199,19 +202,21 @@ export function UserProfileModal({ username, onClose }: {
                       className="flex items-center justify-between bg-field-700 border border-field-600 rounded-lg px-3 py-2">
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold text-white">{l.team_name}</span>
+                          <span className="text-sm font-bold text-white">{l.isPickem ? l.name : l.team_name}</span>
                           {l.is_commissioner && (
                             <span className="text-xs bg-gold/20 text-gold border border-gold/30 px-1.5 py-0.5 rounded font-bold">
                               Commish
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-field-400">{l.name}</div>
+                        <div className="text-xs text-field-400">{l.isPickem ? "Pick'Em" : l.name}</div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm font-black text-white">{l.wins}–{l.losses}</div>
-                        <div className="text-xs text-field-500">{l.points_for.toFixed(1)} pts</div>
-                      </div>
+                      {!l.isPickem && (
+                        <div className="text-right">
+                          <div className="text-sm font-black text-white">{l.wins}–{l.losses}</div>
+                          <div className="text-xs text-field-500">{l.points_for.toFixed(1)} pts</div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

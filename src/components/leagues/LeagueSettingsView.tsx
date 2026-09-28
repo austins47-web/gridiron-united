@@ -28,8 +28,12 @@ export function LeagueSettingsView() {
     )
   }
 
+  // A Pick'Em league shows everyone by their display name, so there's no
+  // team name to set there
+  const isPickem = activeLeague.league_type === 'pickem'
+  const shown: Tab = isPickem && tab === 'team' ? 'preferences' : tab
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'team',        label: 'My Team',    icon: <User className="w-4 h-4" /> },
+    ...(isPickem ? [] : [{ id: 'team' as Tab, label: 'My Team', icon: <User className="w-4 h-4" /> }]),
     { id: 'preferences', label: 'Preferences', icon: <Palette className="w-4 h-4" /> },
     { id: 'league',      label: 'League Info', icon: <Trophy className="w-4 h-4" /> },
     { id: 'danger',      label: 'Leave',      icon: <LogOut className="w-4 h-4" /> },
@@ -54,7 +58,7 @@ export function LeagueSettingsView() {
             onClick={() => setTab(t.id)}
             className={clsx(
               'flex items-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors border-b-2 -mb-px whitespace-nowrap',
-              tab === t.id
+              shown === t.id
                 ? t.id === 'danger'
                   ? 'border-red-400 text-red-400'
                   : 'border-gold text-gold'
@@ -67,10 +71,10 @@ export function LeagueSettingsView() {
         ))}
       </div>
 
-      {tab === 'team'        && <TeamSettings />}
-      {tab === 'preferences' && <PreferencesSettings theme={theme} setTheme={setTheme} />}
-      {tab === 'league'      && <LeagueInfo />}
-      {tab === 'danger'      && <LeaveLeague />}
+      {shown === 'team'        && <TeamSettings />}
+      {shown === 'preferences' && <PreferencesSettings theme={theme} setTheme={setTheme} />}
+      {shown === 'league'      && <LeagueInfo />}
+      {shown === 'danger'      && <LeaveLeague />}
     </div>
   )
 }

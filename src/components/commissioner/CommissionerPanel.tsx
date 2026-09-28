@@ -14,13 +14,13 @@ import {
   Shield, Users, Zap, TrendingUp, Trash2, Search,
   Save, AlertCircle, ChevronDown, ChevronUp,
   Edit3, Check, X, Crown, Clock, Loader2, Lock,
-  GraduationCap, ArrowLeftRight, Vote,
+  GraduationCap, ArrowLeftRight, Vote, Tv,
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { CURRENT_SEASON } from '@/lib/season'
 
-type CommTab = 'scoring' | 'rosters' | 'players' | 'members' | 'league' | 'cfb_postseason' | 'trades'
+type CommTab = 'scoring' | 'rosters' | 'players' | 'members' | 'league' | 'cfb_postseason' | 'trades' | 'extras'
 
 // ─── Scoring row defaults ───────────────────────────────────────────
 const SCORING_SECTIONS = [
@@ -120,6 +120,7 @@ export function CommissionerPanel() {
         { id: 'league',  label: 'League',   icon: <Shield className="w-4 h-4" /> },
         { id: 'members', label: 'Members',  icon: <Crown className="w-4 h-4" /> },
         { id: 'scoring', label: 'Pick Deadline', icon: <Clock className="w-4 h-4" /> },
+        { id: 'extras',  label: 'Roast & TV', icon: <Tv className="w-4 h-4" /> },
       ]
     : [
         { id: 'scoring', label: 'Scoring', icon: <TrendingUp className="w-4 h-4" /> },
@@ -143,13 +144,13 @@ export function CommissionerPanel() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-field-700 pb-0">
+      <div className="flex gap-1 border-b border-field-700 pb-0 overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={clsx(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors border-b-2 -mb-px',
+              'flex items-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0',
               tab === t.id
                 ? 'border-gold text-gold'
                 : 'border-transparent text-field-400 hover:text-white',
@@ -164,19 +165,21 @@ export function CommissionerPanel() {
       {/* Tab Content */}
       {tab === 'scoring' && (isPickem
         ? (
-          <div className="space-y-6">
-            <PickDeadlineSettings
-              leagueId={activeLeagueId!}
-              initialLockType={(activeLeague as any)?.pick_lock_type ?? 'kickoff'}
-              initialDeadlineDay={(activeLeague as any)?.pick_deadline_day ?? 3}
-              initialDeadlineTime={(activeLeague as any)?.pick_deadline_time ?? '18:00'}
-              initialTz={(activeLeague as any)?.pick_deadline_tz ?? null}
-            />
-            <AiRecapSetting leagueId={activeLeagueId!} />
-            <ShopTvSetting leagueId={activeLeagueId!} />
-          </div>
+          <PickDeadlineSettings
+            leagueId={activeLeagueId!}
+            initialLockType={(activeLeague as any)?.pick_lock_type ?? 'kickoff'}
+            initialDeadlineDay={(activeLeague as any)?.pick_deadline_day ?? 3}
+            initialDeadlineTime={(activeLeague as any)?.pick_deadline_time ?? '18:00'}
+            initialTz={(activeLeague as any)?.pick_deadline_tz ?? null}
+          />
         )
         : <ScoringEditor league={activeLeague!} onSaved={setActiveLeague} />
+      )}
+      {tab === 'extras' && (
+        <div className="space-y-6">
+          <AiRecapSetting leagueId={activeLeagueId!} />
+          <ShopTvSetting leagueId={activeLeagueId!} />
+        </div>
       )}
       {tab === 'rosters' && <RosterEditor leagueId={activeLeagueId} league={activeLeague!} />}
       {tab === 'players' && <PlayerScoreEditor />}

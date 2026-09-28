@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
@@ -128,6 +128,19 @@ export function AccountPage() {
     favorite_nfl_team: profile?.favorite_nfl_team ?? '',
     favorite_cfb_team: profile?.favorite_cfb_team ?? '',
   })
+  // Opened straight from a link, the page renders before the profile has
+  // loaded, so fill the form when it arrives (once, and never over typing)
+  const formFilled = useRef(!!profile)
+  useEffect(() => {
+    if (!profile || formFilled.current) return
+    formFilled.current = true
+    setForm({
+      display_name:      profile.display_name      ?? '',
+      username:          profile.username          ?? '',
+      favorite_nfl_team: profile.favorite_nfl_team ?? '',
+      favorite_cfb_team: profile.favorite_cfb_team ?? '',
+    })
+  }, [profile])
   const [soundOn, setSoundOnState]    = useState(() => !isSoundMuted())
   const [saving, setSaving]           = useState(false)
   const [newPassword, setNewPassword] = useState('')
