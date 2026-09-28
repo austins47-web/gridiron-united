@@ -532,6 +532,20 @@ function GameTile({ g, big, injuries }: { g: TvGame; big: boolean; injuries: Map
   )
 }
 
+/** A team's logo; hides itself if the image can't load (the abbreviation still shows). */
+function TeamLogo({ team, className }: { team: string; className: string }) {
+  const src = teamLogoUrl({ abbr: team }, 'NFL')
+  if (!src) return null
+  return (
+    <img
+      src={src}
+      alt=""
+      className={clsx('object-contain shrink-0', className)}
+      onError={e => { e.currentTarget.style.display = 'none' }}
+    />
+  )
+}
+
 // ── The full Board: every player's pick on every game ─────────
 function PicksBoardView({ board }: { board: TvBoard }) {
   const b = board.board!
@@ -551,10 +565,14 @@ function PicksBoardView({ board }: { board: TvBoard }) {
           <span />
           <span className="text-center font-cond font-bold text-[14px] text-field-400 uppercase">Pts</span>
           {b.games.map(g => (
-            <span key={g.id} className={clsx('text-center font-cond font-black leading-tight text-[14px]', g.live ? 'text-gold' : 'text-field-300')}>
-              <span className={clsx('block', g.winner === g.away && 'text-white')}>{g.away}</span>
-              <span className={clsx('block', g.winner === g.home && 'text-white')}>{g.home}</span>
-              {g.live && <span className="block text-[10px] text-red-400">LIVE</span>}
+            <span key={g.id} className={clsx('flex flex-col items-center gap-0.5 font-cond font-black leading-none text-[13px]', g.live ? 'text-gold' : 'text-field-300')}>
+              {[g.away, g.home].map(t => (
+                <span key={t} className={clsx('flex items-center gap-1', g.winner && g.winner !== t && 'opacity-35', g.winner === t && 'text-white')}>
+                  <TeamLogo team={t} className="w-[22px] h-[22px]" />
+                  {t}
+                </span>
+              ))}
+              {g.live && <span className="text-[10px] text-red-400">LIVE</span>}
             </span>
           ))}
           {hasTb && <span className="text-center font-cond font-bold text-[14px] text-gold uppercase">TB</span>}
@@ -580,7 +598,7 @@ function PicksBoardView({ board }: { board: TvBoard }) {
                   <span
                     key={g.id}
                     className={clsx(
-                      'h-[80%] flex items-center justify-center rounded font-cond font-black text-[16px]',
+                      'h-[82%] flex items-center justify-center gap-1 rounded font-cond font-black text-[15px]',
                       pick == null ? 'text-field-700'
                         : pick === '?' ? 'text-field-600'
                         : right ? (g.final ? 'bg-emerald-500/25 text-emerald-200' : 'bg-emerald-500/10 text-emerald-300')
@@ -588,7 +606,12 @@ function PicksBoardView({ board }: { board: TvBoard }) {
                         : 'bg-field-800 text-field-100',
                     )}
                   >
-                    {pick == null ? '—' : pick === '?' ? '🔒' : pick}
+                    {pick == null ? '—' : pick === '?' ? '🔒' : (
+                      <>
+                        <TeamLogo team={pick} className="w-[24px] h-[24px]" />
+                        {pick}
+                      </>
+                    )}
                   </span>
                 )
               })}
