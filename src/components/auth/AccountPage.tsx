@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
 import { ModalPortal } from '@/components/ui/ModalPortal'
-import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X, Sun, Moon, ImageIcon, Volume2, VolumeX } from 'lucide-react'
+import { User, Camera, Shield, LogOut, Save, Trash2, AlertTriangle, X, Sun, Moon, ImageIcon, Volume2, VolumeX, Bell } from 'lucide-react'
 import { AVATAR_PRESETS, presetToDataUrl } from './AvatarPresets'
+import { AccountNotifications } from '@/components/settings/NotificationSettings'
 import { isSoundMuted, setSoundMuted, playPickLock } from '@/lib/sound'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -603,6 +604,15 @@ export function AccountPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── Notifications: phone + email, for every league ── */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Bell className="w-4 h-4 text-gold" />
+          <span className="font-cond font-black text-sm uppercase tracking-wider text-white">Notifications</span>
+        </div>
+        <AccountNotifications />
       </div>
 
       {/* ── Appearance ── */}
