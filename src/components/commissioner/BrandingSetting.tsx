@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { BRAND_PRESETS, DEFAULT_GOLD, brandVars } from '@/lib/brand'
+import { makeLogoPng, type CutoutResult } from '@/lib/logoCutout'
 
 /**
  * League branding: a logo and an accent color. The color replaces the
@@ -28,19 +29,34 @@ export function BrandingSetting({ leagueId }: { leagueId: string }) {
   const valid = /^#[0-9a-f]{6}$/i.test(color)
   const preview = brandVars(valid ? color : DEFAULT_GOLD)
 
+  // Every logo becomes a PNG with its plain background taken out (logoCutout)
+  const original = useRef<File | null>(null)
+  const [outcome, setOutcome] = useState<CutoutResult['outcome'] | 'original' | null>(null)
+
+  async function process(file: File, removeBackground: boolean) {
+    setUploading(true)
+    try {
+      const res = await makeLogoPng(file, removeBackground)
+      const path = `${leagueId}/logo-${Date.now()}.png`
+      const { error } = await supabase.storage.from('league-logos').upload(path, res.blob, { contentType: 'image/png' })
+      if (error) throw error
+      setLogo(supabase.storage.from('league-logos').getPublicUrl(path).data.publicUrl)
+      setOutcome(removeBackground ? res.outcome : 'original')
+    } catch (err) {
+      toast.error(`Couldn't upload: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   async function upload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) { toast.error('Choose an image file'); return }
-    if (file.size > 3 * 1024 * 1024) { toast.error('Keep the logo under 3MB'); return }
-    setUploading(true)
-    const ext = (file.name.split('.').pop() || 'png').toLowerCase()
-    const path = `${leagueId}/logo-${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('league-logos').upload(path, file, { contentType: file.type })
-    setUploading(false)
-    if (error) { toast.error(`Couldn't upload: ${error.message}`); return }
-    setLogo(supabase.storage.from('league-logos').getPublicUrl(path).data.publicUrl)
+    if (file.size > 10 * 1024 * 1024) { toast.error('Keep the logo under 10MB'); return }
+    original.current = file
+    await process(file, true)
   }
 
   async function save() {
@@ -75,23 +91,41 @@ export function BrandingSetting({ leagueId }: { leagueId: string }) {
 
       {/* Logo */}
       <div className="flex items-center gap-4">
-        <div className="w-20 h-20 rounded-xl border border-field-700 bg-field-950 flex items-center justify-center overflow-hidden shrink-0">
-          {logo
+        {/* On a checkerboard, so you can see what's transparent */}
+        <div
+          className="w-20 h-20 rounded-xl border border-field-700 flex items-center justify-center overflow-hidden shrink-0"
+          style={{ background: 'repeating-conic-gradient(#2a2a2a 0% 25%, #1a1a1a 0% 50%) 50% / 14px 14px' }}
+        >
+          {uploading
+            ? <Loader2 className="w-5 h-5 animate-spin text-field-400" />
+            : logo
             ? <img src={logo} alt="League logo" className="w-full h-full object-contain" />
-            : <span className="text-field-600 text-xs text-center px-2">No logo</span>}
+            : <span className="text-field-500 text-xs text-center px-2">No logo</span>}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 min-w-0">
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={upload} />
           <button onClick={() => fileRef.current?.click()} disabled={uploading} className="btn-ghost !py-1.5 !px-3 !text-xs">
             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            {logo ? 'Change logo' : 'Upload a logo'}
+            {uploading ? 'Cleaning it up…' : logo ? 'Change logo' : 'Upload a logo'}
           </button>
-          {logo && (
-            <button onClick={() => setLogo(null)} className="btn-ghost !py-1.5 !px-3 !text-xs">
+          {logo && !uploading && (
+            <button onClick={() => { setLogo(null); setOutcome(null) }} className="btn-ghost !py-1.5 !px-3 !text-xs">
               <X className="w-3.5 h-3.5" /> Remove
             </button>
           )}
-          <p className="w-full text-[11px] text-field-500">PNG with a transparent background looks best. Under 3MB.</p>
+          <p className="w-full text-[11px] text-field-500 leading-snug">
+            {outcome === 'removed' ? (
+              <>
+                Background removed and saved as a transparent PNG.{' '}
+                {original.current && (
+                  <button onClick={() => process(original.current!, false)} className="font-bold text-gold hover:underline">Use the original instead</button>
+                )}
+              </>
+            ) : outcome === 'already' ? 'Already transparent, saved as a PNG.'
+              : outcome === 'kept' ? "No plain background to remove, so it's kept as is (saved as a PNG)."
+              : outcome === 'original' ? 'Using your original, background and all.'
+              : 'Any image works: the background is taken out automatically and it becomes a transparent PNG.'}
+          </p>
         </div>
       </div>
 
