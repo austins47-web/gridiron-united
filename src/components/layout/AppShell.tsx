@@ -60,7 +60,9 @@ export function AppShell() {
   const isChat = location.pathname.startsWith('/app/chat')
 
   return (
-    <div className="min-h-screen flex flex-col">
+    // Chat is exactly one screen tall so its messages scroll inside it and
+    // the message box stays put; every other page grows and scrolls
+    <div className={clsx('flex flex-col', isChat ? 'h-[100dvh] overflow-hidden' : 'min-h-screen')}>
 
       {/* Global Pick'Em week-winner celebration — renders via a
           portal, so its position here doesn't matter, but it needs

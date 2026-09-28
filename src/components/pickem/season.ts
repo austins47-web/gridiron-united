@@ -109,8 +109,11 @@ export function computeSeasonProfiles(games: Game[], picks: Pick[], members: Mem
     const pct = (w: SeasonWeek) => w.correct / w.played
     const bestWeek = done.reduce<SeasonWeek | null>((b, w) =>
       !b || w.correct > b.correct || (w.correct === b.correct && pct(w) > pct(b)) ? w : b, null)
-    const toughestWeek = done.reduce<SeasonWeek | null>((b, w) =>
+    const lowest = done.reduce<SeasonWeek | null>((b, w) =>
       !b || pct(w) < pct(b) || (pct(w) === pct(b) && w.correct < b.correct) ? w : b, null)
+    // Every week the same (or only one played): there's no toughest one
+    const toughestWeek = lowest && bestWeek && lowest.correct === bestWeek.correct && pct(lowest) === pct(bestWeek)
+      ? null : lowest
 
     const underdog = { wins: 0, losses: 0 }
     let boldestCall: SeasonProfile['boldestCall'] = null

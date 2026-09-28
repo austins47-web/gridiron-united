@@ -47,6 +47,13 @@ interface ChatMessage {
   }
 }
 
+/**
+ * A message and its sender. The join is named because reactions are a
+ * second route from a message to profiles, and PostgREST refuses a bare
+ * profiles(...) when there's more than one (the chat went blank).
+ */
+const MESSAGE_SELECT = '*, profiles!league_messages_user_id_fkey(username, display_name, avatar_url)'
+
 interface Member {
   user_id: string
   username: string
@@ -773,13 +780,13 @@ export function LeagueChat() {
 
   // ── Fetch messages ──────────────────────────────────────────
   // The newest 200 of this room (the main chat, or one game's thread)
-  const { data: messages = [] } = useQuery({
+  const { data: messages = [], isPending: messagesPending, isError: messagesFailed, refetch: refetchMessages } = useQuery({
     queryKey: chatKey,
     enabled: !!activeLeagueId,
     queryFn: async () => {
       let q = supabase
         .from('league_messages')
-        .select('*, profiles(username, display_name, avatar_url)')
+        .select(MESSAGE_SELECT)
         .eq('league_id', activeLeagueId!)
       q = threadId ? q.eq('game_id', threadId) : q.is('game_id', null)
       const { data, error } = await q
@@ -927,7 +934,7 @@ export function LeagueChat() {
       }, async (payload) => {
         const { data } = await supabase
           .from('league_messages')
-          .select('*, profiles(username, display_name, avatar_url)')
+          .select(MESSAGE_SELECT)
           .eq('id', payload.new.id)
           .single()
         if (!data) return
@@ -1244,7 +1251,7 @@ export function LeagueChat() {
   const threadKickoff = threadGame?.game_date && new Date(threadGame.game_date).getTime() > Date.now() ? threadGame.game_date as string : null
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex-1 flex flex-col min-h-0">
 
       {/* Header — a game thread has the live score instead */}
       {threadId ? (
@@ -1286,7 +1293,17 @@ export function LeagueChat() {
 
       {/* Messages */}
       <div className="chat-area flex-1 overflow-y-auto px-4 py-3 space-y-1.5 min-h-0" onScroll={handleScroll}>
-        {messages.length === 0 && (
+        {messagesFailed && messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-32 text-center gap-2">
+            <MessageSquare className="w-8 h-8 text-field-600" />
+            <p className="chat-empty text-field-400 text-sm">Couldn't load the chat</p>
+            <button onClick={() => refetchMessages()} className="text-xs font-bold text-gold hover:text-gold-light">Try again</button>
+          </div>
+        )}
+        {messagesPending && (
+          <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 text-field-500 animate-spin" /></div>
+        )}
+        {!messagesPending && !messagesFailed && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 text-center gap-2">
             <MessageSquare className="w-8 h-8 text-field-600" />
             <p className="chat-empty text-field-400 text-sm">{threadId ? `Nobody's talking about ${threadName} yet` : 'No messages yet'}</p>

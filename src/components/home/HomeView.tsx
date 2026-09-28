@@ -444,9 +444,10 @@ function TeamCard({ team, index }: { team: TeamRow; index: number }) {
   const isActive = activeLeagueId === team.leagueId
   const preDraft = team.draftStatus === 'pre_draft'
   const winning = team.matchup && team.matchup.myScore > team.matchup.oppScore
+  const entry = myLeagues.find(l => l.league.id === team.leagueId)
+  const logo = entry?.league.brand_logo_url
 
   const open = () => {
-    const entry = myLeagues.find(l => l.league.id === team.leagueId)
     if (entry) {
       const { league, ...membership } = entry
       setActiveLeague(league, membership as any)
@@ -463,12 +464,21 @@ function TeamCard({ team, index }: { team: TeamRow; index: number }) {
         isActive && 'border-gold/40',
       )}
     >
-      <div className={clsx(
-        'w-10 h-10 rounded-lg flex items-center justify-center font-cond font-black text-lg shrink-0',
-        isActive ? 'bg-gold text-field-950' : 'bg-field-700 text-gold',
-      )}>
-        {team.leagueName[0]?.toUpperCase()}
-      </div>
+      {logo ? (
+        <div className={clsx(
+          'w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-field-700/60',
+          isActive && 'ring-1 ring-gold/60',
+        )}>
+          <img src={logo} alt="" className="w-8 h-8 object-contain" />
+        </div>
+      ) : (
+        <div className={clsx(
+          'w-10 h-10 rounded-lg flex items-center justify-center font-cond font-black text-lg shrink-0',
+          isActive ? 'bg-gold text-field-950' : 'bg-field-700 text-gold',
+        )}>
+          {team.leagueName[0]?.toUpperCase()}
+        </div>
+      )}
 
       <div className="flex-1 min-w-0">
         <div className="font-cond font-bold text-[12px] uppercase tracking-[0.16em] text-field-500 truncate flex items-center gap-1.5">

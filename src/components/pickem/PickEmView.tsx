@@ -2143,7 +2143,7 @@ function PicksBoard({
         <tbody>
           {sortedMembers.map((m, i) => {
             const isMe = m.user_id === userId
-            const displayName = isMe ? 'You' : (m.team_name || m.profile?.display_name || m.profile?.username || '?')
+            const displayName = isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?')
             const pts = ptsByUser.get(m.user_id)
 
             return (

@@ -46,7 +46,7 @@ export function WinOddsPanel({ odds, rows, week, currentUserId, beltHolders }: {
           return (
             <div
               key={r.userId}
-              className={clsx('grid grid-cols-[minmax(0,7.5rem)_1fr_auto] items-center gap-2.5 py-1', isYou && 'rounded-lg bg-gold/[0.06] -mx-2 px-2')}
+              className={clsx('grid grid-cols-[minmax(0,7.5rem)_1fr_auto] sm:grid-cols-[minmax(0,10.5rem)_1fr_auto] items-center gap-2.5 py-1', isYou && 'rounded-lg bg-gold/[0.06] -mx-2 px-2')}
               title={`${r.name}: ${(now * 100).toFixed(1)}% now, ${(then * 100).toFixed(1)}% at kickoff`}
             >
               <span className="flex items-center gap-1 min-w-0">
