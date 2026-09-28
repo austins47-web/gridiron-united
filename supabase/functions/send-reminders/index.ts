@@ -843,13 +843,21 @@ serve(async (req) => {
       }
     }
 
+    // Sections 7 and 8 ask computeWhoCanWin which games can still be
+    // re-picked: nobody's pick on those counts as settled yet
+    const pickable = (lg: NonNullable<typeof leagues>[number], wk: number, wkGames: SchedGame[]) =>
+      stillPickable(wkGames, now,
+        (weekSettings ?? []).find(s => s.league_id === lg.id && s.season === season && s.week === wk)?.pick_deadline,
+        lg)
+
     // ══ 7. PICK'EM "STILL ALIVE" — before the last game day ══
     // Two hours before the first kickoff of a week's last game day
     // (usually Monday night), phones get who can still win it — the
     // same computeWhoCanWin the Standings panel runs: "You can still
-    // win Week 3 · you need PHI and a tiebreaker total of 47 or less",
-    // or "You've clinched". Eliminated players aren't told. Phone
-    // only, once per player per week, under the weekly-recap toggle.
+    // win Week 3 · you need PHI", "…and a tiebreaker total of 47 or
+    // less" once guesses have locked, or "You've clinched". Eliminated
+    // players aren't told. Phone only, once per player per week,
+    // under the weekly-recap toggle.
     for (const lg of leagues ?? []) {
       if (lg.league_type !== 'pickem') continue
       for (const [wk, wkGames] of scheduleBySeason.get(season) ?? []) {
@@ -866,7 +874,7 @@ serve(async (req) => {
           .filter(m => m.league_id === lg.id)
           .map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
         const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
-        const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows)
+        const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows, { isOpen: pickable(lg, wk, wkGames) })
         if (!who) continue
         const aliveCount = who.rows.filter(r => r.status !== 'out').length
 
@@ -987,7 +995,7 @@ serve(async (req) => {
 
       // Clinch + tiebreaker sweat
       const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
-      const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows)
+      const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows, { isOpen: pickable(lg, wk, wkGames) })
       const tb = wkGames.find(g => g.is_tiebreaker)
       const tbLive = !!tb && tb.status === 'in_progress'
       const total = tb ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : 0
@@ -1277,6 +1285,27 @@ function nextPickemDeadline(
     if (!best || deadline.getTime() < best.deadline.getTime()) best = { week, deadline }
   }
   return best
+}
+
+/**
+ * Which of a week's games can still be picked in a league: the lock
+ * the Pick'Em page enforces (isGameLocked with resolveWeekDeadline in
+ * src/lib) — each game's own kickoff, or the week's deadline (per-week
+ * override, else the league rule) if that comes first.
+ */
+function stillPickable(
+  games: SchedGame[], now: Date, weekOverride: string | null | undefined,
+  lg: { pick_lock_type: string | null; pick_deadline_day: number | null; pick_deadline_time: string | null; pick_deadline_tz: string | null },
+): (g: Game) => boolean {
+  const firstKickoff = new Date(Math.min(...games.map(g => new Date(g.game_date).getTime())))
+  const deadline = weekOverride
+    ? new Date(weekOverride)
+    : lg.pick_lock_type === 'deadline' && lg.pick_deadline_day != null && lg.pick_deadline_time
+      ? weeklyDeadlineForWeek(firstKickoff, lg.pick_deadline_day, lg.pick_deadline_time, lg.pick_deadline_tz || 'UTC')
+      : null
+  return g => !isFinal(g) && g.status !== 'in_progress' && !isVoid(g)
+    && now.getTime() < new Date(g.game_date).getTime()
+    && (!deadline || now.getTime() < deadline.getTime())
 }
 
 /**

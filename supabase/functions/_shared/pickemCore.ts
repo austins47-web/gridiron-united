@@ -337,6 +337,22 @@ export interface WhoCanWin {
 /** Enumerating outcomes is 2^n — past this many games left it's too early to matter anyway. */
 const MAX_REMAINING = 6
 
+export interface WhoCanWinOptions {
+  /**
+   * Picks on this game can still be changed — it hasn't locked yet.
+   * Defaults to treating every pick as locked in.
+   */
+  isOpen?: (g: Game) => boolean
+  /**
+   * Who's looking. Other players' picks on open games stay hidden
+   * until kickoff, so with a viewer set only the viewer's own open
+   * picks are read — anything else would give them away through the
+   * panel. Without one (the server, telling each player about their
+   * own row) every player's own picks count as they stand.
+   */
+  viewerId?: string
+}
+
 /**
  * Plays out every result of the games still to finish and works out
  * who can still win the week — the same rule as WeekRecap: most
@@ -349,10 +365,22 @@ const MAX_REMAINING = 6
  * closest to), limited to totals the game can still reach from its
  * current score.
  *
+ * A pick on a game that hasn't locked isn't settled: anyone can still
+ * switch sides, so rivals are assumed able to take either team — and,
+ * while the tiebreaker game is open, to change their guess to
+ * anything. Each row is worked out from that player's side: their own
+ * picks as they stand (see viewerId), everyone else's open picks
+ * going whichever way makes the point. So a player is out only when
+ * no switch by anyone saves them, and has clinched only when nobody
+ * can catch them or tie them, whatever results and switches come.
+ *
  * Returns null when it isn't meaningful yet: nothing final, too many
  * games left, or the week's already over (the recap covers that).
  */
-export function computeWhoCanWin(games: Game[], picks: Pick[], rows: WeekRow[]): WhoCanWin | null {
+export function computeWhoCanWin(
+  games: Game[], picks: Pick[], rows: WeekRow[],
+  { isOpen = () => false, viewerId }: WhoCanWinOptions = {},
+): WhoCanWin | null {
   const playable = games.filter(g => !isVoid(g))
   const remaining = playable.filter(g => !isFinal(g))
   if (remaining.length === 0 || remaining.length > MAX_REMAINING) return null
@@ -369,56 +397,100 @@ export function computeWhoCanWin(games: Game[], picks: Pick[], rows: WeekRow[]):
   }).length]))
 
   // Tiebreaker: known once final; otherwise any total from where the
-  // game stands now upward is still possible.
+  // game stands now upward is still possible. Guesses lock with the
+  // tiebreaker game's pick.
   const tb = playable.find(g => g.is_tiebreaker)
   const tbKnown = tb && isFinal(tb) ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : null
   const tbFloor = tb && isLive(tb) ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : 0
+  const tbOpen = !!tb && isOpen(tb)
 
-  type Win = { mask: number; range: { min: number; max: number | null } | null }
-  const wins = new Map<string, Win[]>(players.map(r => [r.userId, []]))
+  const open = remaining.map(g => isOpen(g))
+  const openCount = open.filter(Boolean).length
   const outcomes = 1 << remaining.length
 
-  for (let mask = 0; mask < outcomes; mask++) {
-    const winner = (i: number) => (mask >> i) & 1 ? remaining[i].home_team : remaining[i].away_team
-    const totals = players.map(r => ({
-      r,
-      total: (base.get(r.userId) ?? 0) + remaining.filter((g, i) => pickOf.get(`${r.userId}:${g.id}`) === winner(i)).length,
-    }))
-    const best = Math.max(...totals.map(t => t.total))
-    const tied = totals.filter(t => t.total === best).map(t => t.r)
+  // Per outcome, each player's points from locked picks, and with
+  // their current picks on open games added
+  const tally = Array.from({ length: outcomes }, (_, mask) => new Map(players.map(r => {
+    let locked = base.get(r.userId) ?? 0
+    let current = locked
+    remaining.forEach((g, i) => {
+      const winner = (mask >> i) & 1 ? g.home_team : g.away_team
+      if (pickOf.get(`${r.userId}:${g.id}`) !== winner) return
+      current++
+      if (!open[i]) locked++
+    })
+    return [r.userId, { locked, current }]
+  })))
 
-    if (tied.length === 1) { wins.get(tied[0].userId)!.push({ mask, range: null }); continue }
+  type Range = { min: number; max: number | null }
 
-    const guessed = tied.filter(r => r.tiebreakerGuess != null)
+  // Where x can come out on top of players tied with them on picks,
+  // shared wins included: null at any total, a range of totals, or
+  // undefined if nowhere. Each distinct guess owns the totals it's
+  // closest to (midpoints shared), clipped to what's still reachable.
+  const tiebreakWin = (x: WeekRow, tied: WeekRow[]): Range | null | undefined => {
+    // Their guesses can still move anywhere, including out of x's way
+    if (tbOpen) return null
+    const guessed = [x, ...tied].filter(r => r.tiebreakerGuess != null)
     // Nobody tied has a guess: all of them share it, whatever the total
-    if (guessed.length === 0) { tied.forEach(r => wins.get(r.userId)!.push({ mask, range: null })); continue }
-
+    if (guessed.length === 0) return null
+    if (x.tiebreakerGuess == null) return undefined
+    const g = x.tiebreakerGuess
     if (tbKnown != null) {
       const diff = (r: WeekRow) => Math.abs((r.tiebreakerGuess as number) - tbKnown)
-      const closest = Math.min(...guessed.map(diff))
-      guessed.filter(r => diff(r) === closest).forEach(r => wins.get(r.userId)!.push({ mask, range: null }))
-      continue
+      return diff(x) === Math.min(...guessed.map(diff)) ? null : undefined
     }
-
-    // Each distinct guess owns the totals it's closest to (midpoints
-    // shared), clipped to what's still reachable.
     const values = [...new Set(guessed.map(r => r.tiebreakerGuess as number))].sort((a, b) => a - b)
-    for (const r of guessed) {
-      const g = r.tiebreakerGuess as number
-      const i = values.indexOf(g)
-      const lo = Math.max(i > 0 ? Math.ceil((values[i - 1] + g) / 2) : 0, tbFloor)
-      const hi = i < values.length - 1 ? Math.floor((g + values[i + 1]) / 2) : null
-      if (hi != null && hi < lo) continue
-      const coversAll = lo <= tbFloor && hi == null
-      wins.get(r.userId)!.push({ mask, range: coversAll ? null : { min: lo, max: hi } })
-    }
+    const i = values.indexOf(g)
+    const lo = Math.max(i > 0 ? Math.ceil((values[i - 1] + g) / 2) : 0, tbFloor)
+    const hi = i < values.length - 1 ? Math.floor((g + values[i + 1]) / 2) : null
+    if (hi != null && hi < lo) return undefined
+    return lo <= tbFloor && hi == null ? null : { min: lo, max: hi }
+  }
+
+  // x is strictly closer than every one of them at any total the game
+  // can still reach — a shared win isn't a clinch
+  const winsEveryTiebreak = (x: WeekRow, tied: WeekRow[]): boolean => {
+    if (tbOpen || x.tiebreakerGuess == null) return false
+    const g = x.tiebreakerGuess
+    return tied.every(r => {
+      const h = r.tiebreakerGuess
+      if (h == null) return true
+      if (tbKnown != null) return Math.abs(g - tbKnown) < Math.abs(h - tbKnown)
+      // Only totals from tbFloor up are left: x is closer past the midpoint
+      return h < g && 2 * tbFloor > g + h
+    })
   }
 
   const out: WhoCanWinRow[] = players.map(r => {
-    const w = wins.get(r.userId)!
+    const ownKnown = viewerId == null || r.userId === viewerId
+    const rivals = players.filter(p => p !== r)
+    const w: { mask: number; range: Range | null }[] = []
+    let sure = 0
+
+    for (let mask = 0; mask < outcomes; mask++) {
+      const t = tally[mask]
+      const mine = t.get(r.userId)!
+      const [myLow, myHigh] = ownKnown ? [mine.current, mine.current] : [mine.locked, mine.locked + openCount]
+      const theirs = rivals.map(p => ({ p, low: t.get(p.userId)!.locked, high: t.get(p.userId)!.locked + openCount }))
+
+      // Best case: their open picks all miss (and r's all hit, when unknown)
+      const topLow = Math.max(-1, ...theirs.map(o => o.low))
+      if (myHigh > topLow) w.push({ mask, range: null })
+      else if (myHigh === topLow) {
+        const range = tiebreakWin(r, theirs.filter(o => o.low === myHigh).map(o => o.p))
+        if (range !== undefined) w.push({ mask, range })
+      }
+
+      // Worst case: their open picks all hit (and r's all miss)
+      const topHigh = Math.max(-1, ...theirs.map(o => o.high))
+      if (myLow > topHigh
+        || (myLow === topHigh && winsEveryTiebreak(r, theirs.filter(o => o.high === myLow).map(o => o.p)))) sure++
+    }
+
     const status: WhoCanWinRow['status'] =
       w.length === 0 ? 'out'
-      : new Set(w.filter(x => x.range == null).map(x => x.mask)).size === outcomes ? 'clinched'
+      : sure === outcomes ? 'clinched'
       : 'alive'
     const needs = status !== 'alive' ? [] : remaining.flatMap((g, i) => {
       const teams = new Set(w.map(x => (x.mask >> i) & 1 ? g.home_team : g.away_team))

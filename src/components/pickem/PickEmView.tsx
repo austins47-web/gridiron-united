@@ -333,10 +333,15 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   )
   const weekComplete = useMemo(() => isWeekComplete(games as any), [games])
   // Late in a week (6 or fewer left): who can still take it, and what
-  // they need. Null early in the week and once it's final.
+  // they need. Null early in the week and once it's final. Games that
+  // haven't locked can still be re-picked, so nobody's pick on them
+  // counts as settled.
   const whoCanWin = useMemo(
-    () => computeWhoCanWin(games as any, allPicks as any, weekRows),
-    [games, allPicks, weekRows],
+    () => computeWhoCanWin(games as any, allPicks as any, weekRows, {
+      isOpen: (g) => !isGameLocked(g.game_date, weekDeadline, g.status),
+      viewerId: user?.id,
+    }),
+    [games, allPicks, weekRows, weekDeadline, user?.id],
   )
   const weekTbTotal  = useMemo(() => tiebreakerTotal(games as any), [games])
   const finishedCount = useMemo(
