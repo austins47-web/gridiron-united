@@ -9,3 +9,7 @@ verify_jwt = false
 
 [functions.ai-roster-analysis]
 verify_jwt = false
+
+# Calendar apps poll the feed without logging in; its token is the key
+[functions.calendar]
+verify_jwt = false

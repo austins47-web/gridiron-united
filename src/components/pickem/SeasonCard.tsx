@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
-import { X, Trophy, Dna, Sparkles } from 'lucide-react'
+import { X, Trophy, Dna, Sparkles, Users, Swords, Medal } from 'lucide-react'
 import clsx from 'clsx'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { PickDNABars } from './PickDNA'
-import type { SeasonProfile, TeamRecord, PickDNA, PickTraits } from './season'
+import { AchievementGrid } from './Achievements'
+import { ACHIEVEMENTS, type EarnedAchievement } from './standings'
+import type { SeasonProfile, TeamRecord, PickDNA, PickTraits, PickMatch } from './season'
 
 /**
  * One player's Pick'Em season, opened from a Standings row (or "Your
@@ -12,7 +14,7 @@ import type { SeasonProfile, TeamRecord, PickDNA, PickTraits } from './season'
  * facts (underdog picks, boldest call, teams) count final games only.
  * With Pick DNA, it also shows how they pick and opens their Wrapped.
  */
-export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueDna, onWrapped }: {
+export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueDna, onWrapped, achievements, matches }: {
   profile: SeasonProfile
   totalPlayers: number
   isYou: boolean
@@ -20,6 +22,8 @@ export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueD
   dna?: PickDNA | null
   leagueDna?: PickTraits | null
   onWrapped?: () => void
+  achievements?: EarnedAchievement[]
+  matches?: { twin: PickMatch | null; nemesis: PickMatch | null } | null
 }) {
   const s = profile.standing
   const losses = Math.max(0, s.played - s.correct)
@@ -92,6 +96,43 @@ export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueD
               <p className="font-cond font-black text-xl text-gold uppercase leading-tight mt-1">{dna.archetype.title}</p>
               <p className="text-xs text-field-400 mb-3">{dna.archetype.blurb}</p>
               <PickDNABars dna={dna} league={leagueDna} />
+            </div>
+          )}
+
+          {/* Who picks like them, and who never does */}
+          {(matches?.twin || matches?.nemesis) && (
+            <div className="grid grid-cols-2 gap-2">
+              {matches.twin && (
+                <div className="rounded-xl border border-field-700 bg-field-900/50 p-3 min-w-0">
+                  <p className="flex items-center gap-1.5 font-cond font-bold text-[11px] uppercase tracking-[0.16em] text-field-400">
+                    <Users className="w-3.5 h-3.5 text-gold" /> Twin
+                  </p>
+                  <p className="font-bold text-white truncate mt-1">{matches.twin.name}</p>
+                  <p className="text-xs text-field-400">Same pick {Math.round(matches.twin.agree * 100)}% of the time</p>
+                </div>
+              )}
+              {matches.nemesis && (
+                <div className="rounded-xl border border-field-700 bg-field-900/50 p-3 min-w-0">
+                  <p className="flex items-center gap-1.5 font-cond font-bold text-[11px] uppercase tracking-[0.16em] text-field-400">
+                    <Swords className="w-3.5 h-3.5 text-gold" /> Nemesis
+                  </p>
+                  <p className="font-bold text-white truncate mt-1">{matches.nemesis.name}</p>
+                  <p className="text-xs text-field-400">
+                    Split on {matches.nemesis.split} · {isYou ? "you're" : `${profile.name.split(' ')[0]}'s`}{' '}
+                    <span className="font-bold text-white">{matches.nemesis.youRight}–{matches.nemesis.theyRight}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Badges */}
+          {achievements && (
+            <div>
+              <p className="flex items-center gap-1.5 font-cond font-bold text-[11px] uppercase tracking-[0.16em] text-field-500 mb-1.5">
+                <Medal className="w-3.5 h-3.5 text-gold" /> Badges · {achievements.length} of {ACHIEVEMENTS.length}
+              </p>
+              <AchievementGrid earned={achievements} />
             </div>
           )}
 

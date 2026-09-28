@@ -11,6 +11,7 @@ import {
 } from '@/hooks/useNotificationPrefs'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { InstallGuide } from '@/components/ui/InstallGuide'
+import { CalendarFeed } from '@/components/pickem/CalendarFeed'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { CURRENT_SEASON } from '@/lib/season'
@@ -211,7 +212,7 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
     },
     {
       key: 'notify_live_alerts', label: 'Live game alerts',
-      desc: 'Phone only, while games are on: when you take the lead, clinch the week, or the tiebreaker total gets close to your guess',
+      desc: 'Phone only, while games are on: when you take the lead or clinch, your chance to win swings, an upset is brewing, who to root for before the big game, or the tiebreaker total gets close to your guess',
       show: isPickem,
     },
   ].filter(e => e.show)
@@ -242,6 +243,8 @@ function PreferencesSettings({ theme, setTheme }: { theme: 'dark' | 'light'; set
       </div>
 
       <PhoneNotifications push={push} />
+
+      {isPickem && <CalendarFeed />}
 
       {/* Reminders — what to be told about, by email and on phones */}
       <div className="panel space-y-4">

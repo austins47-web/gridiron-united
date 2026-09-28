@@ -1,6 +1,10 @@
-import { Percent, Siren } from 'lucide-react'
+import { Percent, Siren, Megaphone } from 'lucide-react'
 import clsx from 'clsx'
-import { gameClockLabel, type UpsetWatch, type WeekRow, type WinOdds } from './standings'
+import {
+  gameClockLabel, isLive, rootingFor, swingsFor,
+  type GameSwing, type UpsetWatch, type WeekRow, type WinOdds,
+} from './standings'
+import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from './Belt'
 
 const fmt = (p: number) =>
@@ -105,5 +109,84 @@ export function UpsetWatchBanner({ items }: { items: UpsetWatch[] }) {
         </div>
       ))}
     </div>
+  )
+}
+
+const stakesLabel = (s: number) => (s >= 0.25 ? 'Huge' : s >= 0.12 ? 'Big' : s >= 0.05 ? 'Some' : 'Little')
+
+const kickoffLabel = (iso: string) =>
+  new Date(iso).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+
+/**
+ * The games still to be played, ranked by how much they decide the
+ * week (GameSwing.stakes), each with who it matters to and — the
+ * Rooting Guide — which side you want and what each result does to
+ * your chance. Same simulations as the odds panel, split by result.
+ */
+export function StakesPanel({ swings, rows, currentUserId }: {
+  swings: GameSwing[]
+  rows: WeekRow[]
+  currentUserId?: string
+}) {
+  const nameOf = new Map(rows.map(r => [r.userId, r.userId === currentUserId ? 'you' : r.name]))
+  const shown = swings.filter(s => !s.settled).slice(0, 8)
+  if (shown.length === 0) return null
+  const top = Math.max(...shown.map(s => s.stakes), 0.01)
+
+  return (
+    <div className="panel !p-0 overflow-hidden">
+      <div className="px-4 py-3 border-b border-field-700 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 font-cond font-black text-sm uppercase tracking-[0.14em] text-white">
+          <Megaphone className="w-4 h-4 text-gold" /> Games That Decide It
+        </span>
+        <span className="text-field-500 text-[11px] shrink-0">& who to root for</span>
+      </div>
+      <div className="divide-y divide-field-700/40">
+        {shown.map(s => {
+          const g = s.game
+          const mine = currentUserId ? rootingFor(s, currentUserId) : null
+          const who = swingsFor(s)
+            .sort((a, b) => Math.abs((s.ifHome.get(b) ?? 0) - (s.ifAway.get(b) ?? 0)) - Math.abs((s.ifHome.get(a) ?? 0) - (s.ifAway.get(a) ?? 0)))
+          const live = isLive(g)
+          return (
+            <div key={g.id} className="px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Team abbr={g.away_team} />
+                <span className="text-field-500 text-xs">@</span>
+                <Team abbr={g.home_team} />
+                <span className={clsx('ml-1 text-[11px] truncate', live ? 'text-emerald-400 font-bold' : 'text-field-500')}>
+                  {live ? `${g.away_score ?? 0}–${g.home_score ?? 0} · ${gameClockLabel(g)}` : kickoffLabel(g.game_date)}
+                </span>
+                <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-field-400 shrink-0">{stakesLabel(s.stakes)} stakes</span>
+              </div>
+              <div className="mt-1.5 h-1.5 rounded-full bg-field-800" title={`Stakes ${Math.round(s.stakes * 100)}`}>
+                <div className="h-full rounded-r-[4px] rounded-l-full bg-gold" style={{ width: `${Math.max(3, (s.stakes / top) * 100)}%` }} />
+              </div>
+              <p className="mt-1.5 text-xs text-field-400">
+                {who.length === 0 ? "Won't move the week much"
+                  : `Matters to ${who.length === rows.filter(r => r.submitted).length ? 'everyone' : `${who.length} of you`}: `
+                    + who.slice(0, 4).map(id => nameOf.get(id) ?? 'someone').join(', ') + (who.length > 4 ? ` +${who.length - 4}` : '')}
+              </p>
+              {mine && (
+                <p className="mt-1 text-xs text-white">
+                  <span className="font-bold text-gold">Root for {mine.team}</span>
+                  <span className="text-field-300"> · your chance {fmt(mine.ifWin)} if they win, {fmt(mine.ifLose)} if not</span>
+                </p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function Team({ abbr }: { abbr: string }) {
+  const logo = teamLogoUrl({ abbr }, 'NFL')
+  return (
+    <span className="inline-flex items-center gap-1 shrink-0">
+      {logo && <img src={logo} alt="" className="w-4 h-4 object-contain" />}
+      <span className="font-cond font-black text-white text-sm">{abbr}</span>
+    </span>
   )
 }

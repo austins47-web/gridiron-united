@@ -22,10 +22,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   isFinal, isVoid, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal,
   nflSeasonFor, computeStandings, rankOf, describeWeekStats, isWeekComplete, weekWinners, computeWinOdds,
-  computeUpsetWatch, gameClockLabel, type Game, type WeekRow, type WeekStats,
+  computeUpsetWatch, gameClockLabel, computeAchievements, ACHIEVEMENTS, rootingFor, swingsFor,
+  type Game, type Pick as PickemPick, type WeekRow, type WeekStats, type AchievementKey,
 } from '../_shared/pickemCore.ts'
 import { renderEmail, ordinal, type RichEmail, type PickRow } from './email.ts'
 import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
+import { partsInZone, weeklyDeadlineForWeek, stillPickable } from '../_shared/pickLocks.ts'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0'
 
 const CORS = {
@@ -143,6 +145,7 @@ const PUSH_LOOK: Record<string, PushLook> = {
   pickem_tb:         { icon: 'tiebreaker', emoji: '🎯' },
   pickem_upset:      { icon: 'alive',      emoji: '🚨' },
   pickem_odds:       { icon: 'lead',       emoji: '📈' },
+  pickem_stakes:     { icon: 'alive',      emoji: '📣' },
   on_the_clock:      { icon: 'draft',      emoji: '⏱️' },
   trade_offer:       { icon: 'trade',      emoji: '🤝' },
   trade_expiring:    { icon: 'trade',      emoji: '⌛' },
@@ -805,6 +808,25 @@ serve(async (req) => {
         const winners = played.filter(r =>
           r.correct === top.correct && (r.tiebreakerDiff ?? Infinity) === (top.tiebreakerDiff ?? Infinity))
 
+        // Badges earned this week, beyond the win itself — from the whole
+        // season's picks (Belt Defender and Iron Man look back). Only
+        // worked out when the card is about to be posted.
+        let badges: { name: string; key: AchievementKey }[] = []
+        if (!posted) {
+          const seasonPicks = await fetchAllRows<PickemPick>((from, to) => supabase
+            .from('pickem_picks')
+            .select('game_id, user_id, week, picked_team, tiebreaker_score')
+            .eq('league_id', lg.id)
+            .eq('season', season)
+            .order('id')
+            .range(from, to))
+          const nameById = new Map(rows.map(r => [r.userId, r.name]))
+          badges = [...computeAchievements([...(weeks?.values() ?? [])].flat(), seasonPicks, wkMembers)]
+            .flatMap(([id, list]) => list
+              .filter(a => a.key !== 'champ' && a.weeks.includes(wk))
+              .map(a => ({ name: nameById.get(id) ?? 'Someone', key: a.key })))
+        }
+
         const payload = {
           season, week: wk,
           winners: winners.map(w => w.name),
@@ -814,6 +836,7 @@ serve(async (req) => {
           tiebreakerTotal: tiebreakerTotal(wkGames),
           winnerGuess: top.tiebreakerGuess,
           stats: computeWeekStats(wkGames, wkPicks ?? [], rows),
+          badges,
         }
         if (!posted) {
           chatPosts.push({ league: lg.name, week: wk })
@@ -853,6 +876,7 @@ serve(async (req) => {
               const text = await writeRoast(roastFacts({
                 league: lg.name, week: wk, played, winners, stats: payload.stats,
                 decidedByTiebreak: payload.decidedByTiebreak, tbTotal: payload.tiebreakerTotal, lastWinners,
+                badges: payload.badges,
               }))
               if (text) {
                 await supabase.from('league_messages').insert({
@@ -989,6 +1013,8 @@ serve(async (req) => {
     //   - win-odds swings (computeWinOdds, from your own view): you're
     //     now the favorite, a longshot come alive, or a crash — each
     //     once a week
+    //   - the big one: the hour before the highest-stakes game left
+    //     kicks off, who to root for and what it does to your chance
     // Runs on the regular pass and the live pass (?only=live, every 3
     // minutes), so alerts land soon after the score sync (every 2).
     for (const lg of leagues ?? []) {
@@ -1014,7 +1040,7 @@ serve(async (req) => {
         .eq('week', wk)
       const wkMembers = lgMembers.map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
       const finals = wkGames.filter(isFinal)
-      const liveAlert = (userId: string, kind: 'lead' | 'clinch' | 'tb' | 'upset' | 'odds', dedupeKey: string, title: string, body: string) => {
+      const liveAlert = (userId: string, kind: 'lead' | 'clinch' | 'tb' | 'upset' | 'odds' | 'stakes', dedupeKey: string, title: string, body: string) => {
         if (!optedIn.some(m => m.user_id === userId)) return
         const board = { action: 'board', title: 'Watch the Board', path: `/app/pickem?week=${wk}&tab=board` }
         const standings = { action: 'standings', title: 'Standings', path: `/app/pickem?week=${wk}&tab=standings` }
@@ -1112,6 +1138,27 @@ serve(async (req) => {
             `${lg.name} · ${pct(then)} at kickoff, ${now > 0 && now < 0.005 ? 'under 1%' : pct(now)} now.`)
         }
       }
+
+      // The week's biggest game still to kick off (by stakes, from nobody's
+      // view so no hidden pick counts): within the hour before kickoff,
+      // everyone it really moves hears who to root for
+      const leagueView = computeWinOdds(wkGames, wkPicks ?? [], rows, { isOpen: open, viewerId: '__league__', sims: 3000, swings: true })
+      const big = leagueView?.swings?.find(s => s.game.status === 'scheduled')
+      const minsToKick = big ? (new Date(big.game.game_date).getTime() - now.getTime()) / 60000 : Infinity
+      if (big && big.stakes >= 0.12 && minsToKick > 0 && minsToKick <= 60) {
+        const matters = swingsFor(big).length
+        const game = `${big.game.away_team} @ ${big.game.home_team}`
+        for (const m of optedIn) {
+          const mine = computeWinOdds(wkGames, wkPicks ?? [], rows, { isOpen: open, viewerId: m.user_id, sims: 3000, swings: true })
+          const s = mine?.swings?.find(x => x.game.id === big.game.id)
+          const r = s ? rootingFor(s, m.user_id) : null
+          if (!r || r.ifWin - r.ifLose < 0.05) continue
+          liveAlert(m.user_id, 'stakes', `stakes:${lg.id}:${season}:w${wk}:${big.game.id}`,
+            `Big one: ${game}`,
+            `${lg.name} · Root for ${r.team}. Your chance to win ${weekName(wk)}: ${pct(r.ifWin)} if they win, ${pct(r.ifLose)} if not.`
+              + (matters > 1 ? ` It swings the week for ${matters} of you.` : ''))
+        }
+      }
     }
 
     // ══ SEND ═════════════════════════════════════════════════
@@ -1185,78 +1232,6 @@ serve(async (req) => {
     })
   }
 })
-
-// ══ Timezone-aware weekly deadlines ═══════════════════════════
-// A weekly deadline is a WALL-CLOCK time in a zone ("Wednesdays at
-// 5pm Mountain"), not a fixed UTC offset — Mountain is UTC-6 in
-// summer and UTC-7 in winter. We resolve local -> UTC using the
-// offset actually in effect on that date, so the deadline stays at
-// the same local time across daylight saving.
-
-function offsetMs(date: Date, tz: string): number {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour12: false,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-  })
-  const p: Record<string, string> = {}
-  for (const part of dtf.formatToParts(date)) p[part.type] = part.value
-  const asUTC = Date.UTC(
-    Number(p.year), Number(p.month) - 1, Number(p.day),
-    Number(p.hour) % 24, Number(p.minute), Number(p.second),
-  )
-  return asUTC - date.getTime()
-}
-
-function zonedTimeToUtc(
-  year: number, month: number, day: number,
-  hour: number, minute: number, tz: string,
-): Date {
-  const naive = Date.UTC(year, month - 1, day, hour, minute, 0)
-  let ts = naive
-  for (let i = 0; i < 3; i++) {
-    const next = naive - offsetMs(new Date(ts), tz)
-    if (next === ts) break
-    ts = next
-  }
-  return new Date(ts)
-}
-
-function partsInZone(date: Date, tz: string) {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour12: false, weekday: 'short',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  })
-  const p: Record<string, string> = {}
-  for (const part of dtf.formatToParts(date)) p[part.type] = part.value
-  const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  return {
-    year: Number(p.year), month: Number(p.month), day: Number(p.day),
-    weekday: DOW.indexOf(p.weekday),
-  }
-}
-
-/**
- * The occurrence of a weekly rule that applies to a week: the latest
- * one at or before that week's first kickoff, looking back at most 6
- * days. A copy of weeklyDeadlineForWeek in src/lib/deadline.ts (see
- * there for why 6) — keep the two in step, or reminders and the
- * Pick'Em page will disagree about when a week locks.
- */
-function weeklyDeadlineForWeek(
-  firstKickoff: Date, day: number, time: string, tz: string,
-): Date | null {
-  const [h, m] = time.split(':').map(Number)
-  for (let back = 0; back <= 6; back++) {
-    const probe = new Date(firstKickoff.getTime() - back * 86400_000)
-    const pp = partsInZone(probe, tz)
-    if (pp.weekday !== day) continue
-    const candidate = zonedTimeToUtc(pp.year, pp.month, pp.day, h, m, tz)
-    if (candidate.getTime() <= firstKickoff.getTime()) return candidate
-  }
-  return null
-}
 
 // ══ Pick'Em weeks, from the schedule ═════════════════════════
 /** A schedule row — the full shared Game, so the Pick'Em core can score it. */
@@ -1382,27 +1357,6 @@ function nextPickemDeadline(
 }
 
 /**
- * Which of a week's games can still be picked in a league: the lock
- * the Pick'Em page enforces (isGameLocked with resolveWeekDeadline in
- * src/lib) — each game's own kickoff, or the week's deadline (per-week
- * override, else the league rule) if that comes first.
- */
-function stillPickable(
-  games: SchedGame[], now: Date, weekOverride: string | null | undefined,
-  lg: { pick_lock_type: string | null; pick_deadline_day: number | null; pick_deadline_time: string | null; pick_deadline_tz: string | null },
-): (g: Game) => boolean {
-  const firstKickoff = new Date(Math.min(...games.map(g => new Date(g.game_date).getTime())))
-  const deadline = weekOverride
-    ? new Date(weekOverride)
-    : lg.pick_lock_type === 'deadline' && lg.pick_deadline_day != null && lg.pick_deadline_time
-      ? weeklyDeadlineForWeek(firstKickoff, lg.pick_deadline_day, lg.pick_deadline_time, lg.pick_deadline_tz || 'UTC')
-      : null
-  return g => !isFinal(g) && g.status !== 'in_progress' && !isVoid(g)
-    && now.getTime() < new Date(g.game_date).getTime()
-    && (!deadline || now.getTime() < deadline.getTime())
-}
-
-/**
  * The week that just wrapped: every game final (the schedule already
  * leaves postponed games out, matching isWeekComplete), and the last one
  * kicked off within `maxAgeMs` (4 days by default) — so an offseason
@@ -1463,6 +1417,7 @@ Keep it about their picks and results: no jokes about anyone's looks, identity, 
 function roastFacts(o: {
   league: string; week: number; played: WeekRow[]; winners: WeekRow[]; stats: WeekStats
   decidedByTiebreak: boolean; tbTotal: number | null; lastWinners: string[] | null
+  badges: { name: string; key: AchievementKey }[]
 }): string {
   const top = o.winners[0]
   const names = (rs: { name: string }[] | string[]) => rs.map(r => (typeof r === 'string' ? r : r.name)).join(' & ')
@@ -1478,6 +1433,7 @@ function roastFacts(o: {
     `Last place: ${names(o.played.filter(r => r.correct === bottom.correct))}, ${bottom.correct}/${bottom.played}.`,
     `Every score: ${o.played.map(r => `${r.name} ${r.correct}/${r.played}`).join(', ')}.`,
     ...describeWeekStats(o.stats).map(l => `${l.label}: ${l.headline} (${l.detail}).`),
+    ...o.badges.map(b => { const a = ACHIEVEMENTS.find(x => x.key === b.key); return `Badge unlocked: ${b.name}, ${a?.label} (${a?.blurb}).` }),
     ...(() => {
       const skipped = o.played.filter(r => r.tiebreakerGuess == null)
       return skipped.length ? [`No tiebreaker guess: ${names(skipped)}.`] : []

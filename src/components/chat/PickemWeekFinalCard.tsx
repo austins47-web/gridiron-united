@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { Trophy, Target, ArrowRight } from 'lucide-react'
 import clsx from 'clsx'
-import type { WeekStats } from '@/components/pickem/standings'
+import { ACHIEVEMENTS, type WeekStats, type AchievementKey } from '@/components/pickem/standings'
+import { ACHIEVEMENT_ICONS } from '@/components/pickem/achievementIcons'
 import { buildStatTiles } from '@/components/pickem/weekStatTiles'
 
 /**
@@ -21,6 +22,8 @@ export interface PickemWeekFinalPayload {
   tiebreakerTotal: number | null
   winnerGuess: number | null
   stats: WeekStats
+  /** Badges earned this week (not the week win itself). Absent on older posts. */
+  badges?: { name: string; key: AchievementKey }[]
 }
 
 export const PICKEM_WEEK_FINAL_PATTERN = /^PICKEM_WEEK_FINAL:\d+:\d+:/
@@ -85,6 +88,25 @@ export function PickemWeekFinalCard({ data, timeLabel, isNew }: {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {data.badges && data.badges.length > 0 && (
+          <div className="border-t border-field-700 px-4 py-3">
+            <p className="font-cond font-bold text-[11px] uppercase tracking-[0.18em] text-field-400 mb-1.5">Unlocked this week</p>
+            <div className="flex flex-wrap gap-1.5">
+              {data.badges.map((b, i) => {
+                const Icon = ACHIEVEMENT_ICONS[b.key]
+                const label = ACHIEVEMENTS.find(a => a.key === b.key)?.label ?? b.key
+                return (
+                  <span key={i} className="inline-flex items-center gap-1 rounded-md border border-gold/35 bg-gold/[0.07] px-1.5 py-0.5 text-[11px]">
+                    {Icon && <Icon className="w-3 h-3 text-gold" />}
+                    <span className="font-bold text-white">{label}</span>
+                    <span className="text-field-400">· {b.name}</span>
+                  </span>
+                )
+              })}
+            </div>
           </div>
         )}
 

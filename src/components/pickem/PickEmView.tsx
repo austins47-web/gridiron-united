@@ -13,20 +13,20 @@ import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, computeWhoCanWin, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
-  computeWinOdds, computeUpsetWatch, computeBelt, computeBadBeats,
+  computeWinOdds, computeUpsetWatch, computeBelt, computeBadBeats, computeAchievements,
   type WeekRow,
 } from './standings'
 import { WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
 import { WhoCanWinPanel } from './WhoCanWin'
-import { WinOddsPanel, UpsetWatchBanner } from './WinOdds'
+import { WinOddsPanel, UpsetWatchBanner, StakesPanel } from './WinOdds'
 import { BeltPanel, BeltIcon } from './Belt'
 import { PickemWrapped } from './PickemWrapped'
 import { useBeltHolders } from '@/hooks/useBeltHolders'
 import { SeasonAwardsPanel } from './SeasonAwards'
 import { SeasonCard } from './SeasonCard'
-import { computeSeasonAwards, computeSeasonProfiles, computePickDNA } from './season'
+import { computeSeasonAwards, computeSeasonProfiles, computePickDNA, computePickMatches } from './season'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
   TrendingDown, Home, Plane, Award
@@ -346,6 +346,14 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     () => (tab === 'standings' ? computeBadBeats(seasonGames as any, seasonPicks as any) : []),
     [tab, seasonGames, seasonPicks],
   )
+  const achievements = useMemo(
+    () => (tab === 'standings' ? computeAchievements(seasonGames as any, seasonPicks as any, leagueMembers as any) : null),
+    [tab, seasonGames, seasonPicks, leagueMembers],
+  )
+  const seasonMatches = useMemo(
+    () => (seasonUserId ? computePickMatches(seasonGames as any, seasonPicks as any, leagueMembers as any, seasonUserId) : null),
+    [seasonUserId, seasonGames, seasonPicks, leagueMembers],
+  )
   const beltHolders = useBeltHolders()
   const [wrappedUserId, setWrappedUserId] = useState<string | null>(null)
   const wrappedProfile = useMemo(
@@ -380,6 +388,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
       ? computeWinOdds(games as any, allPicks as any, weekRows, {
           isOpen: (g) => !isGameLocked(g.game_date, weekDeadline, g.status),
           viewerId: user?.id,
+          swings: true,
         })
       : null),
     [tab, games, allPicks, weekRows, weekDeadline, user?.id],
@@ -1162,6 +1171,10 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
             <WinOddsPanel odds={winOdds} rows={weekRows} week={week} currentUserId={user?.id} beltHolders={beltHolders} />
           )}
 
+          {!weekComplete && winOdds?.swings && (
+            <StakesPanel swings={winOdds.swings} rows={weekRows} currentUserId={user?.id} />
+          )}
+
           {!weekComplete && whoCanWin && (
             <WhoCanWinPanel data={whoCanWin} currentUserId={user?.id} beltHolders={beltHolders} />
           )}
@@ -1189,6 +1202,8 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
               dna={pickDna?.players.find(p => p.userId === seasonProfile.userId) ?? null}
               leagueDna={pickDna?.league ?? null}
               onWrapped={() => { setWrappedUserId(seasonProfile.userId); setSeasonUserId(null) }}
+              achievements={achievements?.get(seasonProfile.userId) ?? []}
+              matches={seasonMatches}
             />
           )}
 
@@ -1205,6 +1220,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
               seasonOver={seasonAwards.final}
               isYou={wrappedProfile.userId === user?.id}
               onClose={() => setWrappedUserId(null)}
+              badges={achievements?.get(wrappedProfile.userId) ?? []}
             />
           )}
         </div>

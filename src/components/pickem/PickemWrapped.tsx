@@ -4,8 +4,9 @@ import { X, Share2, Trophy } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { teamLogoUrl } from '@/components/teams/teamIds'
-import { whenDecided, type BadBeat } from './standings'
+import { whenDecided, ACHIEVEMENTS, type BadBeat, type EarnedAchievement } from './standings'
 import { PickDNABars } from './PickDNA'
+import { ACHIEVEMENT_ICONS } from './achievementIcons'
 import type { SeasonProfile, PickDNA, PickTraits } from './season'
 
 interface Slide { key: string; bg: string; body: ReactNode }
@@ -21,9 +22,10 @@ const weekLabel = (w: number) =>
  * season's over. Built from the same season data as the Season card.
  */
 export function PickemWrapped({
-  profile, dna, leagueDna, worstBeat, beltWeeks, leagueName, totalPlayers, throughWeek, seasonOver, isYou, onClose,
+  profile, dna, leagueDna, worstBeat, beltWeeks, leagueName, totalPlayers, throughWeek, seasonOver, isYou, onClose, badges = [],
 }: {
   profile: SeasonProfile
+  badges?: EarnedAchievement[]
   dna: PickDNA | null
   leagueDna: PickTraits | null
   worstBeat: BadBeat | null
@@ -186,6 +188,30 @@ export function PickemWrapped({
     })
   }
 
+  if (badges.length > 0) {
+    slides.push({
+      key: 'badges', bg: 'from-gold/30 via-field-900 to-field-950',
+      body: (
+        <>
+          <Kicker>Badges earned</Kicker>
+          <Big>{badges.length}</Big>
+          <p className="text-field-300 mt-1">of {ACHIEVEMENTS.length}</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-xs">
+            {badges.map(b => {
+              const Icon = ACHIEVEMENT_ICONS[b.key]
+              return (
+                <span key={b.key} className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-sm text-white">
+                  <Icon className="w-4 h-4 text-gold" />
+                  {ACHIEVEMENTS.find(a => a.key === b.key)?.label}{b.weeks.length > 1 ? ` ×${b.weeks.length}` : ''}
+                </span>
+              )
+            })}
+          </div>
+        </>
+      ),
+    })
+  }
+
   slides.push({
     key: 'summary', bg: 'from-field-900 via-field-950 to-field-950',
     body: (
@@ -203,6 +229,7 @@ export function PickemWrapped({
             {call && <Stat label="Boldest call" value={`${call.team} over ${call.opponent}`} wide />}
             {profile.worstTeam && <Stat label="Nemesis" value={profile.worstTeam.team} />}
             {worstBeat && <Stat label="Worst beat" value={`${worstBeat.loser} at ${Math.round(worstBeat.peak * 100)}%`} />}
+            {badges.length > 0 && <Stat label="Badges" value={`${badges.length} of ${ACHIEVEMENTS.length}`} />}
           </div>
           <p className="text-[10px] text-field-500 mt-4">gridironunited.app</p>
         </div>

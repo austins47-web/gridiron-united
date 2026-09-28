@@ -347,7 +347,8 @@ export function computeWeekStats(games: Game[], picks: Pick[], rows: WeekRow[]):
     { correct: 0, played: 0 },
   )
 
-  const [beat] = computeBadBeats(games, picks)
+  // Not the upset's game — two tiles shouldn't tell the same story
+  const beat = computeBadBeats(games, picks).find(b => !(upset && b.winner === upset.winner && b.loser === upset.loser))
   const badBeat: WeekStats['badBeat'] = beat
     ? {
         loser: beat.loser, winner: beat.winner, loserScore: beat.loserScore, winnerScore: beat.winnerScore,
@@ -1020,11 +1021,32 @@ export function computeBelt(games: Game[], picks: Pick[], members: Member[]): Be
 
 // ── Chance to win the week ───────────────────────────────────
 
+/** How one unfinished game moves everyone's chance to win the week. */
+export interface GameSwing {
+  game: Game
+  /** Each player's chance to win the week if the home team wins, and if the away team does. */
+  ifHome: Map<string, number>
+  ifAway: Map<string, number>
+  /** The home team's chance to win this game, as simulated. */
+  homeChance: number
+  /**
+   * How much this game decides the week, 0–1: how far the result moves
+   * the chances around (half the total change across players), scaled
+   * by how open the game still is (a 50/50 game counts fully, a near
+   * certainty hardly at all).
+   */
+  stakes: number
+  /** One side too unlikely to say what it would do (under 20 simulated wins). */
+  settled: boolean
+}
+
 export interface WinOdds {
   /** Each player's chance to win the week right now, 0–1 (a shared win splits). */
   now: Map<string, number>
   /** The same before anything kicked off — what the arrows compare against. */
   kickoff: Map<string, number>
+  /** With `swings`: every unfinished game, most decisive first. */
+  swings?: GameSwing[]
 }
 
 /** Share of hidden picks assumed to go to the favorite (roughly how pick'em leagues pick). */
@@ -1053,12 +1075,18 @@ function mulberry32(seed: number) {
  * players, so with `viewerId` set only the viewer's own are read:
  * everyone else is assumed to take the favorite CHALK_RATE of the time
  * and to guess near the over/under — the odds can't give a pick away
- * (same idea as computeWhoCanWin's viewer). Returns null until a game
- * has kicked off, and once the week is over.
+ * (same idea as computeWhoCanWin's viewer). A viewerId that isn't a
+ * player hides every open pick. Returns null until a game has kicked
+ * off, and once the week is over.
+ *
+ * With `swings`, it also splits the same simulations by each unfinished
+ * game's result — who you should root for, and which games decide the
+ * week (GameSwing).
  */
 export function computeWinOdds(
   games: Game[], picks: Pick[], rows: WeekRow[],
-  { isOpen = () => false, viewerId, sims = 4000 }: { isOpen?: (g: Game) => boolean; viewerId?: string; sims?: number } = {},
+  { isOpen = () => false, viewerId, sims = 4000, swings = false }:
+    { isOpen?: (g: Game) => boolean; viewerId?: string; sims?: number; swings?: boolean } = {},
 ): WinOdds | null {
   const playable = games.filter(g => !isVoid(g))
   if (playable.length === 0 || playable.every(isFinal)) return null
@@ -1077,7 +1105,7 @@ export function computeWinOdds(
     known(r.userId, g) ? pickOf.get(`${r.userId}:${g.id}`) ?? null : undefined))
   const guessKnown = players.map(r => !tb || known(r.userId, tb))
 
-  const run = (atKickoff: boolean): Map<string, number> => {
+  const run = (atKickoff: boolean) => {
     const rand = mulberry32(playable.length * 7919 + (atKickoff ? 1 : 2))
     const normal = () => {
       const u = 1 - rand(), v = rand()
@@ -1089,12 +1117,29 @@ export function computeWinOdds(
     const tbNow = tb && !atKickoff ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : 0
     const tbLeft = tb && !atKickoff ? timeLeft(tb) : 1
 
+    // Credit split by each open game's result, when asked for
+    const split = swings && !atKickoff
+    const open = playable.map((_, i) => fixed[i] == null)
+    const byHome = split ? playable.map(() => new Array<number>(players.length).fill(0)) : []
+    const byAway = split ? playable.map(() => new Array<number>(players.length).fill(0)) : []
+    const homeWins = new Array<number>(playable.length).fill(0)
+
     const credit = new Array<number>(players.length).fill(0)
     const pts = new Array<number>(players.length).fill(0)
     const winner = new Array<string>(playable.length)
+    const give = (u: number, amount: number) => {
+      credit[u] += amount
+      if (!split) return
+      for (let i = 0; i < playable.length; i++) {
+        if (!open[i]) continue
+        if (winner[i] === playable[i].home_team) byHome[i][u] += amount
+        else byAway[i][u] += amount
+      }
+    }
     for (let s = 0; s < sims; s++) {
       for (let i = 0; i < playable.length; i++) {
         winner[i] = fixed[i] ?? (rand() < chance[i] ? playable[i].home_team : playable[i].away_team)
+        if (winner[i] === playable[i].home_team) homeWins[i]++
       }
       let best = -1
       for (let u = 0; u < players.length; u++) {
@@ -1109,7 +1154,7 @@ export function computeWinOdds(
       }
       const tied: number[] = []
       for (let u = 0; u < players.length; u++) if (pts[u] === best) tied.push(u)
-      if (tied.length === 1) { credit[tied[0]]++; continue }
+      if (tied.length === 1) { give(tied[0], 1); continue }
 
       // Tiebreaker: closest guess to a simulated total; no guess loses
       const total = !tb ? 0
@@ -1123,10 +1168,278 @@ export function computeWinOdds(
         return d
       })
       const share = tied.filter((_, k) => diffs[k] === closest)
-      for (const u of share) credit[u] += 1 / share.length
+      for (const u of share) give(u, 1 / share.length)
     }
-    return new Map(players.map((r, u) => [r.userId, credit[u] / sims]))
+
+    const odds = new Map(players.map((r, u) => [r.userId, credit[u] / sims]))
+    if (!split) return { odds }
+
+    const gameSwings: GameSwing[] = []
+    playable.forEach((g, i) => {
+      if (!open[i]) return
+      const nHome = homeWins[i], nAway = sims - homeWins[i]
+      const ifHome = new Map(players.map((r, u) => [r.userId, nHome ? byHome[i][u] / nHome : 0]))
+      const ifAway = new Map(players.map((r, u) => [r.userId, nAway ? byAway[i][u] / nAway : 0]))
+      const p = nHome / sims
+      const settled = Math.min(nHome, nAway) < 20
+      const moved = players.reduce((sum, r) => sum + Math.abs(ifHome.get(r.userId)! - ifAway.get(r.userId)!), 0) / 2
+      gameSwings.push({ game: g, ifHome, ifAway, homeChance: p, settled, stakes: settled ? 0 : moved * 4 * p * (1 - p) })
+    })
+    gameSwings.sort((a, b) => b.stakes - a.stakes)
+    return { odds, swings: gameSwings }
   }
 
-  return { now: run(false), kickoff: run(true) }
+  const current = run(false)
+  return { now: current.odds, kickoff: run(true).odds, ...(current.swings ? { swings: current.swings } : {}) }
+}
+
+/**
+ * One player's side of a game: whom to root for and what each result
+ * does to their chance to win the week. Null when the result barely
+ * matters to them (under a point either way) or can't be told yet.
+ */
+export function rootingFor(s: GameSwing, userId: string): { team: string; ifWin: number; ifLose: number } | null {
+  if (s.settled) return null
+  const h = s.ifHome.get(userId) ?? 0, a = s.ifAway.get(userId) ?? 0
+  if (Math.abs(h - a) < 0.01) return null
+  return h > a
+    ? { team: s.game.home_team, ifWin: h, ifLose: a }
+    : { team: s.game.away_team, ifWin: a, ifLose: h }
+}
+
+/** Players whose chance to win the week moves at least `min` on this game. */
+export function swingsFor(s: GameSwing, min = 0.05): string[] {
+  if (s.settled) return []
+  return [...s.ifHome.keys()].filter(id => Math.abs((s.ifHome.get(id) ?? 0) - (s.ifAway.get(id) ?? 0)) >= min)
+}
+
+// ── Pick DNA ──────────────────────────────────────────────────
+
+/** Each 0–1, null when there's nothing to measure yet. */
+export interface PickTraits {
+  /** Share of picks on the pregame favorite (games with a line). */
+  chalk: number | null
+  /** Share of picks against the league's majority (3+ pickers, not an even split). */
+  contrarian: number | null
+  /** Share of picks on the home team. */
+  homer: number | null
+  /** Share of your favorite team's games where you picked them. */
+  loyalty: number | null
+  /** Share of picks that were right. */
+  hitRate: number | null
+}
+
+export interface PickArchetype { key: string; title: string; blurb: string }
+
+export interface PickDNA extends PickTraits {
+  userId: string
+  name: string
+  /** Picks counted: final games with a winner. */
+  picks: number
+  favoriteTeam: string | null
+  loyaltyGames: number
+  /** Games they picked their team as the pregame underdog. */
+  loyalAsUnderdog: number
+  archetype: PickArchetype
+}
+
+/** Fewer decided picks than this and it's too early to call anyone anything. */
+const MIN_DNA_PICKS = 8
+
+/**
+ * How each player picks — favorites or underdogs, with or against the
+ * league, home teams, their own team — from final games only (their
+ * picks are public, and the favorite is the frozen pregame line).
+ * `league` averages players with enough picks to count.
+ */
+export function computePickDNA(games: Game[], picks: Pick[], members: Member[]): { players: PickDNA[]; league: PickTraits } {
+  const finals = games.filter(g => !isVoid(g) && isFinal(g) && winnerOf(g) != null)
+  const byGame = new Map<string, Pick[]>()
+  for (const p of picks) {
+    if (!byGame.has(p.game_id)) byGame.set(p.game_id, [])
+    byGame.get(p.game_id)!.push(p)
+  }
+  const ratio = (n: number, d: number) => (d > 0 ? n / d : null)
+
+  const players = members.map(m => {
+    const team = m.profile?.favorite_nfl_team ?? null
+    let n = 0, hits = 0, home = 0, favN = 0, fav = 0, crowdN = 0, against = 0, loyalN = 0, loyal = 0, loyalDog = 0
+    for (const g of finals) {
+      const all = (byGame.get(g.id) ?? []).filter(p => p.picked_team === g.home_team || p.picked_team === g.away_team)
+      const mine = all.find(p => p.user_id === m.user_id)
+      if (!mine) continue
+      const pick = mine.picked_team
+      n++
+      if (pick === winnerOf(g)) hits++
+      if (pick === g.home_team) home++
+      const pre = g.pregame_home_wp ?? (g.spread != null ? spreadHomeWinChance(g.spread) : null)
+      if (pre != null && pre !== 0.5) {
+        favN++
+        if (pick === (pre > 0.5 ? g.home_team : g.away_team)) fav++
+      }
+      const homeN = all.filter(p => p.picked_team === g.home_team).length
+      if (all.length >= 3 && homeN * 2 !== all.length) {
+        crowdN++
+        if (pick !== (homeN * 2 > all.length ? g.home_team : g.away_team)) against++
+      }
+      if (team && (g.home_team === team || g.away_team === team)) {
+        loyalN++
+        if (pick === team) {
+          loyal++
+          if (pre != null && pre !== 0.5 && (pre > 0.5 ? g.home_team : g.away_team) !== team) loyalDog++
+        }
+      }
+    }
+    return {
+      userId: m.user_id, name: nameOf(m), picks: n, favoriteTeam: team, loyaltyGames: loyalN, loyalAsUnderdog: loyalDog,
+      chalk: ratio(fav, favN), contrarian: ratio(against, crowdN), homer: ratio(home, n),
+      loyalty: ratio(loyal, loyalN), hitRate: ratio(hits, n),
+    }
+  })
+
+  const counted = players.filter(p => p.picks >= MIN_DNA_PICKS)
+  const avg = (k: keyof PickTraits) => {
+    const vals = counted.map(p => p[k]).filter((v): v is number => v != null)
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+  }
+  const league: PickTraits = {
+    chalk: avg('chalk'), contrarian: avg('contrarian'), homer: avg('homer'), loyalty: avg('loyalty'), hitRate: avg('hitRate'),
+  }
+
+  return {
+    players: players.map(p => ({ ...p, archetype: archetypeOf(p, league) })),
+    league,
+  }
+}
+
+function archetypeOf(p: Omit<PickDNA, 'archetype'>, league: PickTraits): PickArchetype {
+  if (p.picks < MIN_DNA_PICKS) return { key: 'rookie', title: 'Still Loading', blurb: 'Not enough finished picks to tell yet.' }
+  // Loyal even when their team was the underdog
+  if (p.loyalty === 1 && p.loyaltyGames >= 3 && p.loyalAsUnderdog >= 1) {
+    return { key: 'rideOrDie', title: 'Ride or Die', blurb: `Picked ${p.favoriteTeam} in all ${p.loyaltyGames} of their games, underdog or not.` }
+  }
+  if (p.contrarian != null && p.contrarian >= 0.35) {
+    return { key: 'contrarian', title: 'The Contrarian', blurb: 'Goes against the league more than anyone should.' }
+  }
+  if (p.chalk != null && p.chalk >= 0.85) return { key: 'chalk', title: 'Chalk Eater', blurb: 'Takes the favorite almost every time.' }
+  if (p.chalk != null && p.chalk <= 0.5) return { key: 'upset', title: 'Upset Hunter', blurb: 'Happily rides with the underdog.' }
+  if (p.hitRate != null && league.hitRate != null && p.hitRate >= league.hitRate + 0.08) {
+    return { key: 'sharp', title: 'The Sharp', blurb: 'Right more often than the rest of the league.' }
+  }
+  if (p.homer != null && p.homer >= 0.7) return { key: 'homebody', title: 'Homebody', blurb: 'Trusts the home crowd.' }
+  if (p.homer != null && p.homer <= 0.3) return { key: 'road', title: 'Road Warrior', blurb: 'Loves the team that traveled.' }
+  if (p.hitRate != null && p.hitRate <= 0.45) return { key: 'coinFlip', title: 'Coin Flipper', blurb: 'A coin would give you a run for it.' }
+  return { key: 'steady', title: 'Steady Hand', blurb: 'Right down the middle on everything.' }
+}
+
+// ── Achievements ─────────────────────────────────────────────
+
+export type AchievementKey =
+  | 'champ' | 'defender' | 'dynasty' | 'perfect' | 'sniper' | 'calledIt'
+  | 'beatVegas' | 'upsetArtist' | 'miracle' | 'scarTissue' | 'ironMan'
+
+/** Every badge, in the order they're shown. */
+export const ACHIEVEMENTS: { key: AchievementKey; label: string; blurb: string }[] = [
+  { key: 'champ',       label: 'Week Winner',    blurb: 'Won a week' },
+  { key: 'defender',    label: 'Belt Defender',  blurb: 'Won two weeks in a row' },
+  { key: 'dynasty',     label: 'Dynasty',        blurb: 'Won three weeks in a row' },
+  { key: 'perfect',     label: 'Perfect Week',   blurb: 'Every pick right in a week (10+ games)' },
+  { key: 'sniper',      label: 'Sniper',         blurb: 'Nailed the tiebreaker total exactly' },
+  { key: 'calledIt',    label: 'Called It',      blurb: 'The only one of 5+ pickers to take a winner' },
+  { key: 'beatVegas',   label: 'Beat Vegas',     blurb: 'More right in a week than taking every favorite' },
+  { key: 'upsetArtist', label: 'Upset Artist',   blurb: 'Three underdog winners in one week' },
+  { key: 'miracle',     label: 'Miracle Worker', blurb: 'Went against the crowd, and your pick won from 10% or worse' },
+  { key: 'scarTissue',  label: 'Scar Tissue',    blurb: 'Lost a pick that was 95%+ to win in the second half' },
+  { key: 'ironMan',     label: 'Iron Man',       blurb: 'Every pick and tiebreaker in, four weeks straight' },
+]
+
+export interface EarnedAchievement {
+  key: AchievementKey
+  /** Weeks it was earned (a badge can be earned more than once). */
+  weeks: number[]
+}
+
+/**
+ * Badges each player has earned, from finished weeks only (so nothing
+ * is ever taken back). Week wins use the recap's rule (weekWinners);
+ * favorites and underdogs the frozen pregame line; comebacks the game
+ * story. Players with nothing earned are left out.
+ */
+export function computeAchievements(games: Game[], picks: Pick[], members: Member[]): Map<string, EarnedAchievement[]> {
+  const played = games.filter(g => !isVoid(g))
+  const weeks = [...new Set(played.map(g => g.week))].sort((a, b) => a - b)
+    .filter(wk => isWeekComplete(played.filter(g => g.week === wk)))
+
+  const earned = new Map<string, Map<AchievementKey, number[]>>()
+  const award = (userId: string, key: AchievementKey, week: number) => {
+    if (!earned.has(userId)) earned.set(userId, new Map())
+    const m = earned.get(userId)!
+    m.set(key, [...(m.get(key) ?? []), week])
+  }
+  const winRun = new Map<string, number>()
+  const fullRun = new Map<string, number>()
+
+  for (const wk of weeks) {
+    const wkGames = played.filter(g => g.week === wk)
+    const wkPicks = picks.filter(p => p.week === wk)
+    const rows = computeWeek(wkGames, wkPicks, members)
+    const winners = new Set(weekWinners(rows).map(r => r.userId))
+    const decided = wkGames.filter(g => winnerOf(g) != null)
+    const lines = decided.map(g => {
+      const pre = g.pregame_home_wp ?? (g.spread != null ? spreadHomeWinChance(g.spread) : null)
+      return pre == null || pre === 0.5 ? null : pre > 0.5 ? g.home_team : g.away_team
+    })
+    const allLined = lines.every(l => l != null)
+    const favoritesRight = decided.filter((g, i) => lines[i] === winnerOf(g)).length
+    const tb = wkGames.find(g => g.is_tiebreaker)
+
+    for (const r of rows) {
+      const id = r.userId
+      const mine = wkPicks.filter(p => p.user_id === id)
+      const pickOn = (g: Game) => mine.find(p => p.game_id === g.id)?.picked_team
+
+      // Belt runs (every player's run resets on a week they didn't win)
+      const run = winners.has(id) ? (winRun.get(id) ?? 0) + 1 : 0
+      winRun.set(id, run)
+      if (run >= 1) award(id, 'champ', wk)
+      if (run === 2) award(id, 'defender', wk)
+      if (run === 3) award(id, 'dynasty', wk)
+
+      // Every game and the tiebreaker picked
+      const full = r.submitted && wkGames.every(g => pickOn(g)) && (!tb || r.tiebreakerGuess != null)
+      const streak = full ? (fullRun.get(id) ?? 0) + 1 : 0
+      fullRun.set(id, streak)
+      if (streak > 0 && streak % 4 === 0) award(id, 'ironMan', wk)
+      if (!r.submitted) continue
+
+      if (decided.length >= 10 && decided.every(g => pickOn(g) === winnerOf(g))) award(id, 'perfect', wk)
+      if (r.tiebreakerDiff === 0) award(id, 'sniper', wk)
+
+      let dogsRight = 0
+      decided.forEach((g, i) => {
+        const pick = pickOn(g)
+        if (!pick) return
+        const w = winnerOf(g)
+        if (pick === w) {
+          const backers = wkPicks.filter(p => p.game_id === g.id && p.picked_team === w).length
+          const pickers = wkPicks.filter(p => p.game_id === g.id && (p.picked_team === g.home_team || p.picked_team === g.away_team)).length
+          if (backers === 1 && pickers >= 5) award(id, 'calledIt', wk)
+          if (lines[i] != null && lines[i] !== w) dogsRight++
+          // A comeback from 10% or worse that most of the league didn't see coming
+          if ((g.game_story?.loserPeakWp ?? 0) >= 0.9 && backers * 2 < pickers) award(id, 'miracle', wk)
+        } else if (pick === g.game_story?.loser && (g.game_story.loserPeakWp ?? 0) >= 0.95) {
+          award(id, 'scarTissue', wk)
+        }
+      })
+      if (dogsRight >= 3) award(id, 'upsetArtist', wk)
+      if (allLined && decided.length > 0 && decided.every(g => pickOn(g)) && r.correct > favoritesRight) award(id, 'beatVegas', wk)
+    }
+  }
+
+  const out = new Map<string, EarnedAchievement[]>()
+  for (const [id, m] of earned) {
+    // Several in one week (two "Called It" games) count once for that week
+    out.set(id, ACHIEVEMENTS.filter(a => m.has(a.key)).map(a => ({ key: a.key, weeks: [...new Set(m.get(a.key)!)] })))
+  }
+  return out
 }

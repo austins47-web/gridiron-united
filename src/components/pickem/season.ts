@@ -10,7 +10,6 @@
 
 import {
   computeStandings, computeWeek, isFinal, isVoid, isWeekComplete, rankOf, winnerOf, computeBadBeats, nameOf,
-  spreadHomeWinChance,
   type Game, type Pick, type Member, type StandingRow, type BadBeat,
 } from './standings'
 
@@ -332,115 +331,54 @@ export function computeSeasonAwards(games: Game[], picks: Pick[], members: Membe
   return { final, awards, hallOfShame }
 }
 
-// ── Pick DNA ──────────────────────────────────────────────────
+// Pick DNA lives in the shared core (the Commish reads it too)
+export { computePickDNA, type PickDNA, type PickTraits, type PickArchetype } from './standings'
 
-/** Each 0–1, null when there's nothing to measure yet. */
-export interface PickTraits {
-  /** Share of picks on the pregame favorite (games with a line). */
-  chalk: number | null
-  /** Share of picks against the league's majority (3+ pickers, not an even split). */
-  contrarian: number | null
-  /** Share of picks on the home team. */
-  homer: number | null
-  /** Share of your favorite team's games where you picked them. */
-  loyalty: number | null
-  /** Share of picks that were right. */
-  hitRate: number | null
-}
+// ── Twins & Nemesis ───────────────────────────────────────────
 
-export interface PickArchetype { key: string; title: string; blurb: string }
-
-export interface PickDNA extends PickTraits {
+export interface PickMatch {
   userId: string
   name: string
-  /** Picks counted: final games with a winner. */
-  picks: number
-  favoriteTeam: string | null
-  loyaltyGames: number
-  archetype: PickArchetype
+  /** Final games you both picked. */
+  shared: number
+  /** Share of those you picked the same way, 0–1. */
+  agree: number
+  /** Games you picked differently, and who was right. */
+  split: number
+  youRight: number
+  theyRight: number
 }
 
-/** Fewer decided picks than this and it's too early to call anyone anything. */
-const MIN_DNA_PICKS = 8
+/** Fewer shared games than this and a match doesn't mean anything yet. */
+const MIN_SHARED = 10
 
 /**
- * How each player picks — favorites or underdogs, with or against the
- * league, home teams, their own team — from final games only (their
- * picks are public, and the favorite is the frozen pregame line).
- * `league` averages players with enough picks to count.
+ * For one player: the leaguemate who picks most like them (twin), the
+ * one they disagree with most (nemesis), and their record in the games
+ * they split. Final games only — every pick there is public.
  */
-export function computePickDNA(games: Game[], picks: Pick[], members: Member[]): { players: PickDNA[]; league: PickTraits } {
+export function computePickMatches(games: Game[], picks: Pick[], members: Member[], userId: string): { twin: PickMatch | null; nemesis: PickMatch | null } {
   const finals = games.filter(g => !isVoid(g) && isFinal(g) && winnerOf(g) != null)
-  const byGame = new Map<string, Pick[]>()
-  for (const p of picks) {
-    if (!byGame.has(p.game_id)) byGame.set(p.game_id, [])
-    byGame.get(p.game_id)!.push(p)
-  }
-  const ratio = (n: number, d: number) => (d > 0 ? n / d : null)
-
-  const players = members.map(m => {
-    const team = m.profile?.favorite_nfl_team ?? null
-    let n = 0, hits = 0, home = 0, favN = 0, fav = 0, crowdN = 0, against = 0, loyalN = 0, loyal = 0
+  const pickOf = new Map(picks.map(p => [`${p.user_id}:${p.game_id}`, p.picked_team]))
+  const matches: PickMatch[] = members.filter(m => m.user_id !== userId).map(m => {
+    let shared = 0, same = 0, youRight = 0, theyRight = 0
     for (const g of finals) {
-      const all = (byGame.get(g.id) ?? []).filter(p => p.picked_team === g.home_team || p.picked_team === g.away_team)
-      const mine = all.find(p => p.user_id === m.user_id)
-      if (!mine) continue
-      const pick = mine.picked_team
-      n++
-      if (pick === winnerOf(g)) hits++
-      if (pick === g.home_team) home++
-      const pre = g.pregame_home_wp ?? (g.spread != null ? spreadHomeWinChance(g.spread) : null)
-      if (pre != null && pre !== 0.5) {
-        favN++
-        if (pick === (pre > 0.5 ? g.home_team : g.away_team)) fav++
-      }
-      const homeN = all.filter(p => p.picked_team === g.home_team).length
-      if (all.length >= 3 && homeN * 2 !== all.length) {
-        crowdN++
-        if (pick !== (homeN * 2 > all.length ? g.home_team : g.away_team)) against++
-      }
-      if (team && (g.home_team === team || g.away_team === team)) {
-        loyalN++
-        if (pick === team) loyal++
-      }
+      const mine = pickOf.get(`${userId}:${g.id}`)
+      const theirs = pickOf.get(`${m.user_id}:${g.id}`)
+      if (!mine || !theirs) continue
+      shared++
+      if (mine === theirs) { same++; continue }
+      if (mine === winnerOf(g)) youRight++
+      else if (theirs === winnerOf(g)) theyRight++
     }
     return {
-      userId: m.user_id, name: nameOf(m), picks: n, favoriteTeam: team, loyaltyGames: loyalN,
-      chalk: ratio(fav, favN), contrarian: ratio(against, crowdN), homer: ratio(home, n),
-      loyalty: ratio(loyal, loyalN), hitRate: ratio(hits, n),
+      userId: m.user_id, name: nameOf(m), shared, agree: shared ? same / shared : 0,
+      split: shared - same, youRight, theyRight,
     }
-  })
+  }).filter(x => x.shared >= MIN_SHARED)
 
-  const counted = players.filter(p => p.picks >= MIN_DNA_PICKS)
-  const avg = (k: keyof PickTraits) => {
-    const vals = counted.map(p => p[k]).filter((v): v is number => v != null)
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
-  }
-  const league: PickTraits = {
-    chalk: avg('chalk'), contrarian: avg('contrarian'), homer: avg('homer'), loyalty: avg('loyalty'), hitRate: avg('hitRate'),
-  }
-
-  return {
-    players: players.map(p => ({ ...p, archetype: archetypeOf(p, league) })),
-    league,
-  }
-}
-
-function archetypeOf(p: Omit<PickDNA, 'archetype'>, league: PickTraits): PickArchetype {
-  if (p.picks < MIN_DNA_PICKS) return { key: 'rookie', title: 'Still Loading', blurb: 'Not enough finished picks to tell yet.' }
-  if (p.loyalty === 1 && p.loyaltyGames >= 3) {
-    return { key: 'rideOrDie', title: 'Ride or Die', blurb: `Picked ${p.favoriteTeam} in all ${p.loyaltyGames} of their games.` }
-  }
-  if (p.contrarian != null && p.contrarian >= 0.35) {
-    return { key: 'contrarian', title: 'The Contrarian', blurb: 'Goes against the league more than anyone should.' }
-  }
-  if (p.chalk != null && p.chalk >= 0.85) return { key: 'chalk', title: 'Chalk Eater', blurb: 'Takes the favorite almost every time.' }
-  if (p.chalk != null && p.chalk <= 0.5) return { key: 'upset', title: 'Upset Hunter', blurb: 'Happily rides with the underdog.' }
-  if (p.hitRate != null && league.hitRate != null && p.hitRate >= league.hitRate + 0.08) {
-    return { key: 'sharp', title: 'The Sharp', blurb: 'Right more often than the rest of the league.' }
-  }
-  if (p.homer != null && p.homer >= 0.7) return { key: 'homebody', title: 'Homebody', blurb: 'Trusts the home crowd.' }
-  if (p.homer != null && p.homer <= 0.3) return { key: 'road', title: 'Road Warrior', blurb: 'Loves the team that traveled.' }
-  if (p.hitRate != null && p.hitRate <= 0.45) return { key: 'coinFlip', title: 'Coin Flipper', blurb: 'A coin would give you a run for it.' }
-  return { key: 'steady', title: 'Steady Hand', blurb: 'Right down the middle on everything.' }
+  if (matches.length === 0) return { twin: null, nemesis: null }
+  const twin = [...matches].sort((a, b) => b.agree - a.agree || b.shared - a.shared)[0]
+  const nemesis = [...matches].sort((a, b) => a.agree - b.agree || b.split - a.split)[0]
+  return { twin, nemesis: nemesis.userId === twin.userId ? null : nemesis }
 }

@@ -14,6 +14,7 @@ import toast from 'react-hot-toast'
 import { UserProfileModal } from './UserProfileModal'
 import { PickemWeekFinalCard, PICKEM_WEEK_FINAL_PATTERN, type PickemWeekFinalPayload } from './PickemWeekFinalCard'
 import { PickemRoastCard, PICKEM_ROAST_PATTERN, type PickemRoastPayload } from './PickemRoastCard'
+import { CommishReplyCard, COMMISH_REPLY_PREFIX, type CommishReplyPayload } from './CommishReplyCard'
 import { BeltIcon } from '@/components/pickem/Belt'
 import { useBeltHolders } from '@/hooks/useBeltHolders'
 
@@ -42,6 +43,9 @@ interface Member {
   display_name: string | null
   avatar_url: string | null
 }
+
+/** Offered first in the @ mention list of a Pick'Em league's chat — see commish-chat. */
+const COMMISH_MENTION: Member = { user_id: '__commish__', username: 'Commish', display_name: 'The Commish', avatar_url: null }
 
 // ── Avatar ────────────────────────────────────────────────────
 
@@ -124,6 +128,7 @@ function snippet(m: ChatMessage): string {
   if (m.message.startsWith('GIF:')) return 'GIF'
   if (m.is_system && PICKEM_WEEK_FINAL_PATTERN.test(m.message)) return "🏆 Pick'Em week final"
   if (m.is_system && PICKEM_ROAST_PATTERN.test(m.message)) return '🎙️ The Commish roast'
+  if (m.is_system && m.message.startsWith(COMMISH_REPLY_PREFIX)) return '🎙️ The Commish'
   if (m.is_system && m.message.startsWith('TRADE_COMPLETED:')) return '🔁 Trade completed'
   return m.message.length > 90 ? m.message.slice(0, 87) + '…' : m.message
 }
@@ -348,6 +353,17 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
     try {
       const data = JSON.parse(msg.message.replace(PICKEM_ROAST_PATTERN, '')) as PickemRoastPayload
       return <PickemRoastCard data={data} timeLabel={formatTime(msg.created_at)} isNew={isNew} />
+    } catch { /* fall through */ }
+  }
+
+  // The Commish answering an @Commish question
+  if (msg.is_system && msg.message.startsWith(COMMISH_REPLY_PREFIX)) {
+    try {
+      const data = JSON.parse(msg.message.slice(COMMISH_REPLY_PREFIX.length)) as CommishReplyPayload
+      return (
+        <CommishReplyCard data={data} timeLabel={formatTime(msg.created_at)} isNew={isNew}
+          onJump={msg.reply_to_id ? () => onJump(msg.reply_to_id!) : undefined} />
+      )
     } catch { /* fall through */ }
   }
 
@@ -962,7 +978,7 @@ export function LeagueChat() {
     setReplyTo(null)
 
     try {
-      const { error } = await supabase
+      const { data: sent, error } = await supabase
         .from('league_messages')
         .insert({
           league_id: activeLeagueId,
@@ -971,8 +987,19 @@ export function LeagueChat() {
           is_system: false,
           reply_to_id: answering?.id ?? null,
         })
+        .select('id')
+        .single()
       if (error) throw error
       setAutoScroll(true)
+
+      // ── @Commish: Claude answers in the thread (commish-chat) ──
+      if (sent && activeLeague?.league_type === 'pickem' && /@commish\b/i.test(trimmed)) {
+        supabase.functions.invoke('commish-chat', { body: { messageId: sent.id } }).then(({ error: askErr }) => {
+          if (!askErr) return
+          const status = (askErr as { context?: { status?: number } }).context?.status
+          toast.error(status === 429 ? 'The Commish needs a breather. Try again in a bit.' : "The Commish couldn't answer that one")
+        })
+      }
 
       // ── Tell the person being replied to ────────────────────
       if (answering?.user_id && answering.user_id !== user.id && !answering.is_system) {
@@ -1200,7 +1227,7 @@ export function LeagueChat() {
           {/* @ mention dropdown — floats above the input */}
           {mentionQuery !== null && (
             <MentionDropdown
-              members={members}
+              members={activeLeague?.league_type === 'pickem' ? [COMMISH_MENTION, ...members] : members}
               query={mentionQuery}
               onSelect={selectMention}
               anchorRef={inputWrapRef as any}
