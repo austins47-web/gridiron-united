@@ -24,6 +24,36 @@ export interface Game {
   away_score: number | null
   status: string
   is_tiebreaker: boolean
+  // Written by sync-nfl-schedule from ESPN (see the 20260928 migration).
+  // Optional: older rows and narrow selects don't carry them.
+  /** Home team's chance to win before kickoff, frozen at kickoff. */
+  pregame_home_wp?: number | null
+  /** Home team's line: -3.5 = home favored by 3.5. */
+  spread?: number | null
+  over_under?: number | null
+  /** ESPN's live win probability for the home team. */
+  live_home_wp?: number | null
+  period?: number | null
+  clock?: string | null
+  game_story?: GameStory | null
+}
+
+/**
+ * How a final game was lost, from ESPN's play-by-play (written once by
+ * sync-nfl-schedule). Null team fields for a tie.
+ */
+export interface GameStory {
+  v: 1
+  winner: string | null
+  loser: string | null
+  /** The loser's best win chance in the second half, 0–1. */
+  loserPeakWp: number | null
+  peakPeriod: number | null
+  peakClock: string | null
+  /** The loser was ahead at some point in the 4th quarter or overtime. */
+  loserLedLate: boolean
+  /** The score that put the winner ahead for good. */
+  decided: { period: number; clock: string; team: string; text: string } | null
 }
 
 export interface Pick {
@@ -36,7 +66,7 @@ export interface Pick {
 
 export interface Member {
   user_id: string
-  profile?: { username?: string | null; display_name?: string | null; avatar_url?: string | null } | null
+  profile?: { username?: string | null; display_name?: string | null; avatar_url?: string | null; favorite_nfl_team?: string | null } | null
 }
 
 export interface WeekRow {
@@ -178,6 +208,11 @@ export interface WeekStats {
   split: { away: string; home: string; awayPicks: number; homePicks: number; winner: string | null } | null
   /** Whoever went against the league's majority most often. */
   loneWolf: { name: string; against: number; hits: number } | null
+  /** The pick that died hardest (see computeBadBeats). Absent on weeks posted before it existed. */
+  badBeat?: {
+    loser: string; winner: string; loserScore: number; winnerScore: number
+    peak: number; decided: GameStory['decided']; victims: string[]; pickers: number
+  } | null
   /** Every pick in the league this week, combined. */
   league: { correct: number; played: number }
 }
@@ -312,7 +347,16 @@ export function computeWeekStats(games: Game[], picks: Pick[], rows: WeekRow[]):
     { correct: 0, played: 0 },
   )
 
-  return { upset, underdog, lock, split, loneWolf, league }
+  const [beat] = computeBadBeats(games, picks)
+  const badBeat: WeekStats['badBeat'] = beat
+    ? {
+        loser: beat.loser, winner: beat.winner, loserScore: beat.loserScore, winnerScore: beat.winnerScore,
+        peak: beat.peak, decided: beat.decided, pickers: beat.pickers,
+        victims: beat.victims.map(id => nameById.get(id) ?? 'Someone'),
+      }
+    : null
+
+  return { upset, underdog, lock, split, loneWolf, badBeat, league }
 }
 
 // ── Who can still win the week ─────────────────────────────────
@@ -675,7 +719,7 @@ export function rankOf(rows: StandingRow[], index: number): number {
 // ── Week Stats in words ──────────────────────────────────────
 
 export interface WeekStatLine {
-  key: 'upset' | 'underdog' | 'lock' | 'split' | 'loneWolf' | 'league'
+  key: 'upset' | 'badBeat' | 'underdog' | 'lock' | 'split' | 'loneWolf' | 'league'
   label: string
   /** The team the line is about, for a logo. */
   team?: string
@@ -690,13 +734,22 @@ export interface WeekStatLine {
  * left out.
  */
 export function describeWeekStats(stats: WeekStats): WeekStatLine[] {
-  const { upset, underdog, lock, split, loneWolf, league } = stats
+  const { upset, underdog, lock, split, loneWolf, badBeat, league } = stats
   const lines: WeekStatLine[] = []
   if (upset) {
     lines.push({
       key: 'upset', label: 'Biggest Upset', team: upset.winner,
       headline: `${upset.winner} over ${upset.loser}`,
       detail: `${upset.wrong === upset.pickers && upset.pickers > 1 ? `All ${upset.pickers}` : `${upset.wrong} of ${upset.pickers}`} picked ${upset.loser} · ${upset.winnerScore}–${upset.loserScore}`,
+    })
+  }
+  if (badBeat) {
+    const who = badBeat.victims.length <= 2 ? badBeat.victims.join(' & ') : `${badBeat.victims.length} of ${badBeat.pickers}`
+    lines.push({
+      key: 'badBeat', label: 'Bad Beat', team: badBeat.loser,
+      headline: `${badBeat.loser} at ${Math.round(badBeat.peak * 100)}%`,
+      detail: `${who} had them · lost ${badBeat.loserScore}–${badBeat.winnerScore}`
+        + (badBeat.decided ? `, ${badBeat.winner} went ahead ${whenDecided(badBeat.decided)}` : ''),
     })
   }
   if (underdog) {
@@ -740,4 +793,340 @@ export function describeWeekStats(stats: WeekStats): WeekStatLine[] {
     })
   }
   return lines
+}
+
+/** "with 3:57 left", "in overtime", "in the 3rd quarter". */
+export function whenDecided(d: { period: number; clock: string }): string {
+  if (d.period > 4) return 'in overtime'
+  if (d.period === 4) return d.clock ? `with ${d.clock} left` : 'in the 4th quarter'
+  return `in the ${['1st', '2nd', '3rd'][d.period - 1] ?? `${d.period}th`} quarter`
+}
+
+// ── Win probability ──────────────────────────────────────────
+
+/** Standard normal CDF (Abramowitz & Stegun 7.1.26, error under 1.5e-7). */
+export function normalCdf(x: number): number {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2)
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592)
+    * t * Math.exp(-(x * x) / 2)
+  return x >= 0 ? (1 + y) / 2 : (1 - y) / 2
+}
+
+/** NFL results land about 13.5 points either side of the line. */
+const MARGIN_SD = 13.45
+
+/** The home team's chance to win from its line (-3.5 = favored by 3.5). */
+export const spreadHomeWinChance = (spread: number) => normalCdf(-spread / MARGIN_SD)
+
+/** The home team's chance before kickoff: the moneyline, else the spread, else a coin flip. */
+export function pregameHomeWinChance(g: Game): number {
+  if (g.pregame_home_wp != null) return g.pregame_home_wp
+  if (g.spread != null) return spreadHomeWinChance(g.spread)
+  return 0.5
+}
+
+/** How much of a game is left, 0–1. Overtime counts as nearly over. */
+export function timeLeft(g: Game): number {
+  if (isFinal(g)) return 0
+  if (!isLive(g)) return 1
+  const period = g.period ?? 1
+  const [m, s] = (g.clock ?? '').split(':').map(Number)
+  const secs = Number.isFinite(m) ? m * 60 + (Number.isFinite(s) ? s : 0) : 900
+  const left = period > 4 ? secs / 3600 : ((4 - period) * 900 + secs) / 3600
+  return Math.min(1, Math.max(0.005, left))
+}
+
+/**
+ * The home team's chance to win right now: settled once final, ESPN's
+ * live number while it's on (else Stern's score-and-clock model, the
+ * line playing out over the time left), the pregame line before.
+ */
+export function homeWinChance(g: Game): number {
+  if (isFinal(g)) {
+    const w = winnerOf(g)
+    return w == null ? 0.5 : w === g.home_team ? 1 : 0
+  }
+  if (!isLive(g)) return pregameHomeWinChance(g)
+  if (g.live_home_wp != null) return Math.min(1, Math.max(0, g.live_home_wp))
+  const left = timeLeft(g)
+  const margin = (g.home_score ?? 0) - (g.away_score ?? 0)
+  return normalCdf((margin - (g.spread ?? 0) * left) / (MARGIN_SD * Math.sqrt(left)))
+}
+
+/** "4:02 left in the 4th", "OT 6:10", "Q3 11:20". */
+export function gameClockLabel(g: Game): string {
+  const p = g.period ?? 0
+  if (p > 4) return `OT ${g.clock ?? ''}`.trim()
+  if (p === 4) return g.clock ? `${g.clock} left in the 4th` : '4th quarter'
+  return p ? `Q${p} ${g.clock ?? ''}`.trim() : 'Live'
+}
+
+// ── Bad beats ────────────────────────────────────────────────
+
+/** A pick "dies hard" when its team had at least this win chance in the second half, then lost. */
+export const BAD_BEAT_CHANCE = 0.75
+
+export interface BadBeat {
+  gameId: string
+  week: number
+  loser: string
+  winner: string
+  loserScore: number
+  winnerScore: number
+  /** The loser's best second-half win chance, 0–1. */
+  peak: number
+  decided: GameStory['decided']
+  /** Who picked the loser (user ids). */
+  victims: string[]
+  pickers: number
+}
+
+const secondsLeft = (d: GameStory['decided']) => {
+  if (!d) return Infinity
+  const [m, s] = d.clock.split(':').map(Number)
+  const clock = (Number.isFinite(m) ? m * 60 : 0) + (Number.isFinite(s) ? s : 0)
+  return d.period > 4 ? -1 : (4 - d.period) * 900 + clock
+}
+
+/**
+ * Picks that lost after their team was a big second-half favorite,
+ * one entry per game, worst first: highest peak, then the latest
+ * go-ahead score. Needs game_story, so games without one are skipped.
+ */
+export function computeBadBeats(games: Game[], picks: Pick[]): BadBeat[] {
+  const out: BadBeat[] = []
+  for (const g of games) {
+    const s = g.game_story
+    if (!isFinal(g) || !s?.loser || !s.winner || s.loserPeakWp == null || s.loserPeakWp < BAD_BEAT_CHANCE) continue
+    const gp = picks.filter(p => p.game_id === g.id && (p.picked_team === g.home_team || p.picked_team === g.away_team))
+    const victims = gp.filter(p => p.picked_team === s.loser).map(p => p.user_id)
+    if (victims.length === 0) continue
+    const score = (t: string) => (t === g.home_team ? g.home_score : g.away_score) ?? 0
+    out.push({
+      gameId: g.id, week: g.week, loser: s.loser, winner: s.winner,
+      loserScore: score(s.loser), winnerScore: score(s.winner),
+      peak: s.loserPeakWp, decided: s.decided, victims, pickers: gp.length,
+    })
+  }
+  return out.sort((a, b) => b.peak - a.peak || secondsLeft(a.decided) - secondsLeft(b.decided))
+}
+
+// ── Upset watch ──────────────────────────────────────────────
+
+export interface UpsetWatch {
+  game: Game
+  /** The team most of the league picked, now in trouble. */
+  crowd: string
+  dog: string
+  crowdPicks: number
+  pickers: number
+  crowdScore: number
+  dogScore: number
+  /** The crowd team's chance to still win, 0–1. */
+  chance: number
+}
+
+/**
+ * Live games in the 4th quarter or overtime where the team most of the
+ * league backed (at least `minPickers` of them and `share` of the
+ * pickers) is behind and under 50%, or under 30% however close.
+ * These games have kicked off, so the picks are public. Most-backed
+ * first.
+ */
+export function computeUpsetWatch(games: Game[], picks: Pick[], { minPickers = 4, share = 0.65 } = {}): UpsetWatch[] {
+  const out: UpsetWatch[] = []
+  for (const g of games) {
+    if (!isLive(g) || timeLeft(g) > 0.25) continue
+    const gp = picks.filter(p => p.game_id === g.id)
+    const home = gp.filter(p => p.picked_team === g.home_team).length
+    const away = gp.filter(p => p.picked_team === g.away_team).length
+    const pickers = home + away
+    const crowdIsHome = home >= away
+    const crowdPicks = Math.max(home, away)
+    if (crowdPicks < minPickers || crowdPicks / pickers < share) continue
+    const homeChance = homeWinChance(g)
+    const chance = crowdIsHome ? homeChance : 1 - homeChance
+    const crowdScore = (crowdIsHome ? g.home_score : g.away_score) ?? 0
+    const dogScore = (crowdIsHome ? g.away_score : g.home_score) ?? 0
+    if (!((crowdScore < dogScore && chance < 0.5) || chance < 0.3)) continue
+    out.push({
+      game: g, crowd: crowdIsHome ? g.home_team : g.away_team, dog: crowdIsHome ? g.away_team : g.home_team,
+      crowdPicks, pickers, crowdScore, dogScore, chance,
+    })
+  }
+  return out.sort((a, b) => b.crowdPicks - a.crowdPicks || a.chance - b.chance)
+}
+
+// ── The Belt ─────────────────────────────────────────────────
+
+/**
+ * A finished week's winners — the recap's rule: most correct, then
+ * closest tiebreaker guess, an exact tie on both shared. `rows` as
+ * computeWeek returns them (ranked).
+ */
+export function weekWinners(rows: WeekRow[]): WeekRow[] {
+  const played = rows.filter(r => r.submitted)
+  const top = played[0]
+  if (!top || top.played === 0) return []
+  return played.filter(r =>
+    r.correct === top.correct && (r.tiebreakerDiff ?? Infinity) === (top.tiebreakerDiff ?? Infinity))
+}
+
+export interface BeltHolder { userId: string; name: string; /** Straight weeks won, this one included. */ reign: number }
+
+export interface Belt {
+  /** Whoever won the latest finished week (more than one on a shared win). */
+  holders: BeltHolder[]
+  week: number
+  /** Every finished week's winners, oldest first. */
+  lineage: { week: number; winners: { userId: string; name: string }[] }[]
+  /** The longest run of straight weekly wins this season (2+). */
+  longest: { names: string[]; weeks: number } | null
+}
+
+/** The championship belt: the latest week's winner holds it until someone else wins a week. */
+export function computeBelt(games: Game[], picks: Pick[], members: Member[]): Belt | null {
+  const played = games.filter(g => !isVoid(g))
+  const weeks = [...new Set(played.map(g => g.week))].sort((a, b) => a - b)
+  const lineage: Belt['lineage'] = []
+  for (const wk of weeks) {
+    const wkGames = played.filter(g => g.week === wk)
+    if (!isWeekComplete(wkGames)) continue
+    const winners = weekWinners(computeWeek(wkGames, picks.filter(p => p.week === wk), members))
+    if (winners.length) lineage.push({ week: wk, winners: winners.map(w => ({ userId: w.userId, name: w.name })) })
+  }
+  if (lineage.length === 0) return null
+
+  const runOf = (userId: string, upTo: number) => {
+    let n = 0
+    for (let i = upTo; i >= 0 && lineage[i].winners.some(w => w.userId === userId); i--) n++
+    return n
+  }
+  const last = lineage.length - 1
+  const holders = lineage[last].winners.map(w => ({ ...w, reign: runOf(w.userId, last) }))
+
+  const best = new Map<string, { name: string; weeks: number }>()
+  lineage.forEach((l, i) => l.winners.forEach(w => {
+    const n = runOf(w.userId, i)
+    if (n > (best.get(w.userId)?.weeks ?? 0)) best.set(w.userId, { name: w.name, weeks: n })
+  }))
+  const top = Math.max(...[...best.values()].map(b => b.weeks))
+  const longest = top >= 2
+    ? { weeks: top, names: [...best.values()].filter(b => b.weeks === top).map(b => b.name) }
+    : null
+
+  return { holders, week: lineage[last].week, lineage, longest }
+}
+
+// ── Chance to win the week ───────────────────────────────────
+
+export interface WinOdds {
+  /** Each player's chance to win the week right now, 0–1 (a shared win splits). */
+  now: Map<string, number>
+  /** The same before anything kicked off — what the arrows compare against. */
+  kickoff: Map<string, number>
+}
+
+/** Share of hidden picks assumed to go to the favorite (roughly how pick'em leagues pick). */
+const CHALK_RATE = 0.68
+
+/** Small seeded PRNG, so the same inputs always give the same odds. */
+function mulberry32(seed: number) {
+  return () => {
+    seed = (seed + 0x6D2B79F5) | 0
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/**
+ * Plays out the rest of the week `sims` times and counts how often each
+ * player wins it, under the recap's rule (most correct, then closest
+ * tiebreaker guess, an exact tie splits).
+ *
+ * Every unfinished game goes by its win chance (homeWinChance: live
+ * win probability, else the pregame line), and the tiebreaker total
+ * lands around the over/under, scaled to the time left.
+ *
+ * Picks on games that haven't locked (`isOpen`) are hidden from other
+ * players, so with `viewerId` set only the viewer's own are read:
+ * everyone else is assumed to take the favorite CHALK_RATE of the time
+ * and to guess near the over/under — the odds can't give a pick away
+ * (same idea as computeWhoCanWin's viewer). Returns null until a game
+ * has kicked off, and once the week is over.
+ */
+export function computeWinOdds(
+  games: Game[], picks: Pick[], rows: WeekRow[],
+  { isOpen = () => false, viewerId, sims = 4000 }: { isOpen?: (g: Game) => boolean; viewerId?: string; sims?: number } = {},
+): WinOdds | null {
+  const playable = games.filter(g => !isVoid(g))
+  if (playable.length === 0 || playable.every(isFinal)) return null
+  if (!playable.some(g => isFinal(g) || isLive(g))) return null
+  const players = rows.filter(r => r.submitted)
+  if (players.length === 0) return null
+
+  const pickOf = new Map(picks.map(p => [`${p.user_id}:${p.game_id}`, p.picked_team]))
+  const known = (userId: string, g: Game) => viewerId == null || userId === viewerId || !isOpen(g)
+  const tb = playable.find(g => g.is_tiebreaker)
+  const ou = tb?.over_under ?? 44
+  const favorite = playable.map(g => (pregameHomeWinChance(g) >= 0.5 ? g.home_team : g.away_team))
+  const underdog = playable.map((g, i) => (favorite[i] === g.home_team ? g.away_team : g.home_team))
+  // Each player's pick per game: the team, null for no pick, undefined when hidden
+  const table = players.map(r => playable.map(g =>
+    known(r.userId, g) ? pickOf.get(`${r.userId}:${g.id}`) ?? null : undefined))
+  const guessKnown = players.map(r => !tb || known(r.userId, tb))
+
+  const run = (atKickoff: boolean): Map<string, number> => {
+    const rand = mulberry32(playable.length * 7919 + (atKickoff ? 1 : 2))
+    const normal = () => {
+      const u = 1 - rand(), v = rand()
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
+    }
+    // A final game's result is settled ('' for a tie: nobody's pick matches)
+    const fixed = playable.map(g => (!atKickoff && isFinal(g) ? winnerOf(g) ?? '' : null))
+    const chance = playable.map(g => (atKickoff ? pregameHomeWinChance(g) : homeWinChance(g)))
+    const tbNow = tb && !atKickoff ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : 0
+    const tbLeft = tb && !atKickoff ? timeLeft(tb) : 1
+
+    const credit = new Array<number>(players.length).fill(0)
+    const pts = new Array<number>(players.length).fill(0)
+    const winner = new Array<string>(playable.length)
+    for (let s = 0; s < sims; s++) {
+      for (let i = 0; i < playable.length; i++) {
+        winner[i] = fixed[i] ?? (rand() < chance[i] ? playable[i].home_team : playable[i].away_team)
+      }
+      let best = -1
+      for (let u = 0; u < players.length; u++) {
+        let n = 0
+        const row = table[u]
+        for (let i = 0; i < playable.length; i++) {
+          const pick = row[i] === undefined ? (rand() < CHALK_RATE ? favorite[i] : underdog[i]) : row[i]
+          if (pick === winner[i]) n++
+        }
+        pts[u] = n
+        if (n > best) best = n
+      }
+      const tied: number[] = []
+      for (let u = 0; u < players.length; u++) if (pts[u] === best) tied.push(u)
+      if (tied.length === 1) { credit[tied[0]]++; continue }
+
+      // Tiebreaker: closest guess to a simulated total; no guess loses
+      const total = !tb ? 0
+        : !atKickoff && isFinal(tb) ? tbNow
+        : tbNow + Math.max(0, Math.round(ou * tbLeft + normal() * 13 * Math.sqrt(tbLeft)))
+      let closest = Infinity
+      const diffs = tied.map(u => {
+        const guess = guessKnown[u] ? players[u].tiebreakerGuess : Math.round(ou + normal() * 6)
+        const d = guess == null ? Infinity : Math.abs(guess - total)
+        if (d < closest) closest = d
+        return d
+      })
+      const share = tied.filter((_, k) => diffs[k] === closest)
+      for (const u of share) credit[u] += 1 / share.length
+    }
+    return new Map(players.map((r, u) => [r.userId, credit[u] / sims]))
+  }
+
+  return { now: run(false), kickoff: run(true) }
 }

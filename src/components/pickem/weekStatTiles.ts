@@ -1,4 +1,4 @@
-import { Zap, Dog, Lock, Scale, Footprints, BarChart3, type LucideIcon } from 'lucide-react'
+import { Zap, Dog, Lock, Scale, Footprints, BarChart3, Skull, type LucideIcon } from 'lucide-react'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { describeWeekStats, type WeekStats, type WeekStatLine } from './standings'
 
@@ -18,7 +18,7 @@ export interface StatTileData {
 }
 
 const ICONS: Record<WeekStatLine['key'], LucideIcon> = {
-  upset: Zap, underdog: Dog, lock: Lock, split: Scale, loneWolf: Footprints, league: BarChart3,
+  upset: Zap, badBeat: Skull, underdog: Dog, lock: Lock, split: Scale, loneWolf: Footprints, league: BarChart3,
 }
 
 export function buildStatTiles(stats: WeekStats): StatTileData[] {

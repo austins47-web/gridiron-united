@@ -13,6 +13,9 @@ import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { UserProfileModal } from './UserProfileModal'
 import { PickemWeekFinalCard, PICKEM_WEEK_FINAL_PATTERN, type PickemWeekFinalPayload } from './PickemWeekFinalCard'
+import { PickemRoastCard, PICKEM_ROAST_PATTERN, type PickemRoastPayload } from './PickemRoastCard'
+import { BeltIcon } from '@/components/pickem/Belt'
+import { useBeltHolders } from '@/hooks/useBeltHolders'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -120,6 +123,7 @@ function snippet(m: ChatMessage): string {
   if (m.message.startsWith('IMAGE:')) return '📷 Photo'
   if (m.message.startsWith('GIF:')) return 'GIF'
   if (m.is_system && PICKEM_WEEK_FINAL_PATTERN.test(m.message)) return "🏆 Pick'Em week final"
+  if (m.is_system && PICKEM_ROAST_PATTERN.test(m.message)) return '🎙️ The Commish roast'
   if (m.is_system && m.message.startsWith('TRADE_COMPLETED:')) return '🔁 Trade completed'
   return m.message.length > 90 ? m.message.slice(0, 87) + '…' : m.message
 }
@@ -271,7 +275,7 @@ function MenuButton({ icon, label, onClick, danger = false }: {
 
 // ── Message bubble ────────────────────────────────────────────
 
-function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick, isNew, replyTo, onJump, onOpenMenu }: {
+function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick, isNew, replyTo, onJump, onOpenMenu, beltHolder }: {
   msg: ChatMessage
   isOwn: boolean
   showAvatar: boolean
@@ -283,6 +287,8 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
   replyTo?: ChatMessage | 'missing' | null
   onJump: (id: string) => void
   onOpenMenu: () => void
+  /** Holds the Pick'Em belt — a gold belt next to their name. */
+  beltHolder?: boolean
 }) {
   // Trade completed card
   if (msg.is_system && msg.message.startsWith('TRADE_COMPLETED:')) {
@@ -337,6 +343,14 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
     } catch { /* fall through */ }
   }
 
+  // The weekly roast — posted after the week-final card in leagues that opted in
+  if (msg.is_system && PICKEM_ROAST_PATTERN.test(msg.message)) {
+    try {
+      const data = JSON.parse(msg.message.replace(PICKEM_ROAST_PATTERN, '')) as PickemRoastPayload
+      return <PickemRoastCard data={data} timeLabel={formatTime(msg.created_at)} isNew={isNew} />
+    } catch { /* fall through */ }
+  }
+
   // Plain system message
   if (msg.is_system) {
     return (
@@ -383,6 +397,7 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
             <span className={clsx('text-xs font-bold', isOwn ? 'text-gold chat-sender-name-own' : 'text-field-200 chat-sender-name')}>
               {isOwn ? 'You' : (msg.profiles?.display_name || msg.profiles?.username || 'Unknown')}
             </span>
+            {beltHolder && <BeltIcon className="w-[16px] h-[10px] self-center" />}
             <span className="text-xs text-field-500 chat-time">{formatTime(msg.created_at)}</span>
           </div>
         )}
@@ -623,6 +638,7 @@ function MentionDropdownInner({ anchorRef, filtered, onSelect }: {
 
 export function LeagueChat() {
   const { activeLeagueId, activeLeague, user, profile } = useAppStore()
+  const beltHolders = useBeltHolders()
   const qc = useQueryClient()
 
   // Marks this league's chat as read the moment this page mounts —
@@ -1113,7 +1129,7 @@ export function LeagueChat() {
           const groups = msg.deleted_at ? [] : (reactionsByMessage.get(msg.id) ?? [])
           const original = msg.reply_to_id ? (byId.get(msg.reply_to_id) ?? 'missing') : null
           // Cards (week final, trades) aren't tappable bubbles — they get a react button
-          const isCard = msg.is_system && (PICKEM_WEEK_FINAL_PATTERN.test(msg.message) || msg.message.startsWith('TRADE_COMPLETED:'))
+          const isCard = msg.is_system && (PICKEM_WEEK_FINAL_PATTERN.test(msg.message) || PICKEM_ROAST_PATTERN.test(msg.message) || msg.message.startsWith('TRADE_COMPLETED:'))
           return (
             <div
               key={msg.id}
@@ -1131,6 +1147,7 @@ export function LeagueChat() {
                 replyTo={original}
                 onJump={jumpTo}
                 onOpenMenu={() => setMenuFor(id => (id === msg.id ? null : msg.id))}
+                beltHolder={!!msg.user_id && beltHolders.has(msg.user_id)}
               />
               {(groups.length > 0 || isCard) && (
                 <div className={clsx('flex items-center gap-1', isCard && groups.length === 0 && 'justify-center')}>

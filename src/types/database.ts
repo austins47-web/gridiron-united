@@ -1484,6 +1484,8 @@ export type League = ScoringRules & RosterSlotConfig & {
   season: number
   is_public: boolean
   invite_code: string
+  /** Pick'Em: post a Claude-written roast to chat after each week's final. */
+  ai_recap?: boolean
   created_at: string
   updated_at: string
 }

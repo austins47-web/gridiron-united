@@ -21,10 +21,12 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   isFinal, isVoid, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal,
-  nflSeasonFor, computeStandings, rankOf, describeWeekStats, type Game,
+  nflSeasonFor, computeStandings, rankOf, describeWeekStats, isWeekComplete, weekWinners, computeWinOdds,
+  computeUpsetWatch, gameClockLabel, type Game, type WeekRow, type WeekStats,
 } from '../_shared/pickemCore.ts'
 import { renderEmail, ordinal, type RichEmail, type PickRow } from './email.ts'
 import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
+import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -139,6 +141,8 @@ const PUSH_LOOK: Record<string, PushLook> = {
   pickem_lead:       { icon: 'lead',       emoji: '🔥' },
   pickem_clinch:     { icon: 'clinch',     emoji: '👑' },
   pickem_tb:         { icon: 'tiebreaker', emoji: '🎯' },
+  pickem_upset:      { icon: 'alive',      emoji: '🚨' },
+  pickem_odds:       { icon: 'lead',       emoji: '📈' },
   on_the_clock:      { icon: 'draft',      emoji: '⏱️' },
   trade_offer:       { icon: 'trade',      emoji: '🤝' },
   trade_expiring:    { icon: 'trade',      emoji: '⌛' },
@@ -224,6 +228,8 @@ serve(async (req) => {
   }
 
   const dryRun = url.searchParams.get('dry') === '1'
+  // ?only=live: just the Pick'Em live alerts (section 8), on their own faster cron
+  const liveOnly = url.searchParams.get('only') === 'live'
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -242,7 +248,7 @@ serve(async (req) => {
       { data: profiles },
       { data: prefsRows },
     ] = await Promise.all([
-      supabase.from('leagues').select('id, name, league_type, player_pool, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz'),
+      supabase.from('leagues').select('id, name, league_type, player_pool, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, ai_recap'),
       supabase.from('league_members').select('id, league_id, user_id, team_name'),
       supabase.from('profiles').select('id, username, display_name'),
       supabase.from('notification_preferences').select('*'),
@@ -329,7 +335,7 @@ serve(async (req) => {
     const season = nflSeasonFor(now)
     const hasCfbPool = (leagues ?? []).some(l => l.league_type !== 'pickem' && l.player_pool === 'cfb')
     const [{ data: nflGames }, { data: weekSettings }, { data: cfbGames }] = await Promise.all([
-      supabase.from('nfl_games').select('id, season, week, game_date, status, is_tiebreaker, home_team, away_team, home_score, away_score').eq('season', season),
+      supabase.from('nfl_games').select('id, season, week, game_date, status, is_tiebreaker, home_team, away_team, home_score, away_score, pregame_home_wp, spread, over_under, live_home_wp, period, clock, game_story').eq('season', season),
       supabase.from('pickem_week_settings').select('league_id, season, week, pick_deadline').eq('season', season),
       hasCfbPool
         ? supabase.from('cfb_games').select('id, season, week, game_date, status, is_tiebreaker, home_team, away_team, home_score, away_score').eq('season', season)
@@ -352,497 +358,6 @@ serve(async (req) => {
       weeks.set(g.week, [...(weeks.get(g.week) ?? []), g])
     }
 
-    // ══ 1. PICK'EM PICK REMINDERS ════════════════════════════
-    // Every reminder is about specific open games the member hasn't
-    // picked (or a missing tiebreaker guess) — someone who's picked
-    // everything never hears from this.
-    //
-    // Deadline leagues: one lock per week, the deadline the Pick'Em
-    // page shows (per-week override, else the league rule anchored to
-    // that week's first kickoff), at both lead times. Not the
-    // "current" week: a 48h reminder for a Thursday deadline goes out
-    // Tuesday, before the page rolls over.
-    //
-    // Kickoff leagues (each game locks at its own kickoff): the early
-    // lead time counts down to the week's first kickoff and covers the
-    // whole week; the final lead time counts down to the first kickoff
-    // of each game day (Thu, Sun, Mon …) and covers that day's games.
-    for (const lg of leagues ?? []) {
-      if (lg.league_type !== 'pickem') continue
-      const weeks = scheduleBySeason.get(season)
-      if (!weeks) continue
-
-      const onDeadline = lg.pick_lock_type === 'deadline' && lg.pick_deadline_day != null && !!lg.pick_deadline_time
-      const tz = onDeadline ? (lg.pick_deadline_tz || 'UTC') : 'America/New_York'
-
-      let locks: PickLock[] = []
-      if (onDeadline) {
-        const overrides = new Map<number, string>(
-          (weekSettings ?? [])
-            .filter(s => s.league_id === lg.id && s.season === season && s.pick_deadline)
-            .map(s => [s.week, s.pick_deadline]),
-        )
-        const upcoming = nextPickemDeadline(weeks, overrides, lg.pick_deadline_day, lg.pick_deadline_time, tz, now)
-        if (upcoming) {
-          locks = [{
-            week: upcoming.week, at: upcoming.deadline, key: null, weekStart: true,
-            games: openGames(weeks.get(upcoming.week) ?? [], now),
-          }]
-        }
-      } else {
-        locks = kickoffLocks(weeks, now)
-      }
-      // Lead times top out at 48h — nothing further out can fire yet
-      locks = locks.filter(l => hoursUntil(l.at.toISOString()) <= 48.5)
-      if (locks.length === 0) continue
-
-      for (const l of locks) {
-        nearMisses.push({
-          league: lg.name,
-          type: onDeadline ? 'pickem_deadline' : (l.weekStart ? 'pickem_first_kickoff' : 'pickem_game_day'),
-          week: l.week,
-          lockUtc: l.at.toISOString(),
-          lockLocal: formatInZone(l.at, tz),
-          openGames: l.games.length,
-          hoursUntil: Number(hoursUntil(l.at.toISOString()).toFixed(2)),
-          note: 'fires when hoursUntil is within 0.5 of a member lead time (default 24 or 2), for members with open picks',
-        })
-      }
-
-      const { data: picks } = await supabase
-        .from('pickem_picks')
-        .select('user_id, game_id, week, tiebreaker_score')
-        .eq('league_id', lg.id)
-        .eq('season', season)
-        .in('week', [...new Set(locks.map(l => l.week))])
-
-      for (const m of (members ?? []).filter(x => x.league_id === lg.id)) {
-        const pref = prefFor(m.user_id, lg.id)
-        const to = reach(m.user_id, lg.id, 'notify_pickem_deadline')
-        if (!to) continue
-        const mine = (picks ?? []).filter(p => p.user_id === m.user_id)
-
-        for (const l of locks) {
-          const hrs = hoursUntil(l.at.toISOString())
-          for (const [target, tag] of [[pref.lead_primary, 'p'], [pref.lead_secondary, 's']] as const) {
-            if (!inWindow(hrs, target)) continue
-            // The early reminder only runs ahead of a week's first lock,
-            // and covers every open game that week
-            if (tag === 'p' && !l.weekStart) continue
-            const scope = tag === 'p' ? openGames(weeks.get(l.week) ?? [], now) : l.games
-            const unpickedGames = scope
-              .filter(g => !mine.some(p => p.game_id === g.id))
-              .sort((x, y) => new Date(x.game_date).getTime() - new Date(y.game_date).getTime())
-            const unpicked = unpickedGames.length
-            const tb = scope.find(g => g.is_tiebreaker)
-            const tbMissing = !!tb && !mine.some(p => p.game_id === tb.id && p.tiebreaker_score != null)
-            if (unpicked === 0 && !tbMissing) continue
-
-            const copy = pickReminderCopy({
-              kind: onDeadline ? 'deadline' : tag === 'p' ? 'week' : 'day',
-              week: l.week, at: l.at, tz, hours: Math.round(hrs), leagueName: lg.name,
-              unpicked, tbMissing,
-              noneYet: !mine.some(p => p.week === l.week),
-            })
-            const kind = onDeadline ? 'deadline' : tag === 'p' ? 'week' : 'day'
-            const h = Math.round(hrs)
-            const day = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(l.at)
-            const shown = unpickedGames.slice(0, 6)
-            const rich: RichEmail | undefined = unpicked > 0 ? {
-              kind: 'picks',
-              games: shown.map((g): PickRow => ({ away: g.away_team, home: g.home_team, when: shortWhen(g.game_date, tz), tiebreaker: g.is_tiebreaker })),
-              more: unpicked - shown.length,
-              lockLabel: kind === 'week' ? `First kickoff in ${h}h` : `Locks in ${h}h`,
-              tbMissing,
-              tbGame: tb ? `${tb.away_team} @ ${tb.home_team}` : undefined,
-            } : undefined
-            reminders.push({
-              userId: m.user_id, ...to,
-              leagueId: lg.id, leagueName: lg.name,
-              eventType: 'pickem_deadline',
-              kicker: unpicked === 0 ? `Week ${l.week} · Tiebreaker`
-                : kind === 'day' ? `${day} · Week ${l.week}`
-                : kind === 'week' ? `Week ${l.week} kickoff`
-                : `Week ${l.week} deadline`,
-              preheader: unpicked > 0
-                ? `${unpicked} game${unpicked === 1 ? '' : 's'} still open — ${shown[0].away_team} @ ${shown[0].home_team} kicks off ${shortWhen(shown[0].game_date, tz)}.`
-                : `Add your tiebreaker guess before ${tb ? `${tb.away_team} @ ${tb.home_team}` : 'it'} kicks off.`,
-              rich,
-              // Push: when it locks, then the open games themselves
-              pushBody: [
-                `${lg.name} · ${kind === 'week' ? `First kickoff in ${h}h` : `Locks in ${h}h`}`,
-                ...shown.slice(0, 3).map(g => `${g.away_team} @ ${g.home_team} · ${shortWhen(g.game_date, tz)}`),
-                ...(unpicked > 3 ? [`+${unpicked - 3} more`] : []),
-                ...(tbMissing ? [unpicked > 0 ? 'Your tiebreaker guess is missing too' : 'No guess means you lose every tie'] : []),
-              ].join('\n'),
-              pushActions: [{ action: 'picks', title: unpicked > 0 ? 'Make picks' : 'Add guess', path: `/app/pickem?week=${l.week}` }],
-              pushBadge: unpicked || undefined,
-              // One reminder per league-week on the device: the 2h nudge
-              // replaces the earlier one, and it's dropped once picks lock
-              pushTag: `pickem-${lg.id}-w${l.week}`,
-              pushTtlSec: Math.max(600, Math.round((l.at.getTime() - now.getTime()) / 1000)),
-              dedupeKey: l.key
-                ? `pickem:${lg.id}:${season}:w${l.week}:${l.key}:${tag}`
-                : `pickem:${lg.id}:${season}:w${l.week}:${tag}`,
-              ...copy,
-              ctaPath: `/app/pickem?week=${l.week}`,
-              urgent: target <= 4,
-            })
-          }
-        }
-      }
-    }
-
-    // ══ 2. DRAFT — starting soon / on the clock ══════════════
-    const { data: draftStates } = await supabase
-      .from('draft_state')
-      .select('league_id, status, current_user_id, current_round, current_pick, pick_started_at')
-
-    for (const ds of draftStates ?? []) {
-      const lg: any = leagueById.get(ds.league_id)
-      if (!lg) continue
-
-      // On the clock — fires once per pick
-      if (ds.status === 'active' && ds.current_user_id) {
-        const to = reach(ds.current_user_id, lg.id, 'notify_on_the_clock')
-        if (to) {
-          {
-            reminders.push({
-              userId: ds.current_user_id, ...to,
-              leagueId: lg.id, leagueName: lg.name,
-              eventType: 'on_the_clock',
-              kicker: `Round ${ds.current_round} · Pick ${ds.current_pick}`,
-              preheader: `The draft is waiting on you — round ${ds.current_round}, pick ${ds.current_pick}.`,
-              dedupeKey: `clock:${lg.id}:r${ds.current_round}:p${ds.current_pick}`,
-              subject: `You're on the clock - ${lg.name}`,
-              heading: "You're on the clock",
-              body: `Round ${ds.current_round}, pick ${ds.current_pick}. Make your selection before the timer runs out.`,
-              ctaLabel: 'Draft now', ctaPath: '/app/draft',
-              pushActions: [{ action: 'draft', title: 'Draft now', path: '/app/draft' }],
-              pushSticky: true,
-              urgent: true,
-            })
-          }
-        }
-      }
-    }
-
-    // ══ 3. TRADES — new offers + expiring ════════════════════
-    const { data: trades } = await supabase
-      .from('trades')
-      .select('id, league_id, proposer_id, receiver_id, status, expires_at, created_at')
-      .eq('status', 'pending')
-
-    for (const t of trades ?? []) {
-      const lg: any = leagueById.get(t.league_id)
-      if (!lg || !t.receiver_id) continue
-      const to = reach(t.receiver_id, lg.id, 'notify_trades')
-      if (!to) continue
-
-      const proposer: any = profileById.get(t.proposer_id ?? '')
-      const who = proposer?.display_name || proposer?.username || 'A league member'
-
-      // New offer — within the last 20 minutes
-      const ageMin = (Date.now() - new Date(t.created_at).getTime()) / 60000
-      if (ageMin <= 20) {
-        reminders.push({
-          userId: t.receiver_id, ...to,
-          leagueId: lg.id, leagueName: lg.name,
-          eventType: 'trade_offer',
-          kicker: 'New trade offer',
-          preheader: `${who} wants to make a deal. Accept, counter, or decline.`,
-          dedupeKey: `trade:${t.id}:new`,
-          subject: `${who} sent you a trade - ${lg.name}`,
-          heading: `Trade offer from ${who}`,
-          body: 'Review the offer and accept, counter, or decline.',
-          ctaLabel: 'Review trade', ctaPath: '/app/trades',
-          pushActions: [{ action: 'trade', title: 'Review trade', path: '/app/trades' }],
-        })
-      }
-
-      // Expiring soon
-      if (t.expires_at) {
-        const hrs = hoursUntil(t.expires_at)
-        if (inWindow(hrs, 12, 0.3)) {
-          reminders.push({
-            userId: t.receiver_id, ...to,
-            leagueId: lg.id, leagueName: lg.name,
-            eventType: 'trade_expiring',
-            kicker: 'Expires in 12h',
-            preheader: `The offer from ${who} expires in about 12 hours.`,
-            dedupeKey: `trade:${t.id}:exp12`,
-            subject: `Trade from ${who} expires soon - ${lg.name}`,
-            heading: 'A trade offer is about to expire',
-            body: `The offer from ${who} expires in about 12 hours. Respond before it lapses.`,
-            ctaLabel: 'Review trade', ctaPath: '/app/trades',
-            pushActions: [{ action: 'trade', title: 'Review trade', path: '/app/trades' }],
-            urgent: true,
-          })
-        }
-      }
-    }
-
-    // ══ 4. LINEUP NOT SET ════════════════════════════════════
-    // Fires Sunday morning for this season's fantasy leagues with an
-    // empty roster. The week is the one kicking off today, from the
-    // schedule (college schedule for a college-only league).
-    const dow = now.getUTCDay()          // 0 = Sunday
-    const utcHour = now.getUTCHours()
-    if (dow === 0 && utcHour === 14) {   // ~9am ET Sunday
-      for (const lg of leagues ?? []) {
-        if (lg.league_type === 'pickem') continue
-        if (lg.draft_status === 'pre_draft') continue
-        if (lg.season !== season) continue
-        const wk = upcomingWeek(lg.player_pool === 'cfb' ? cfbWeeks : scheduleBySeason.get(season), now)
-        if (wk == null) continue
-
-        const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
-        const { data: rosters } = await supabase
-          .from('rosters')
-          .select('user_id')
-          .eq('league_id', lg.id)
-          .eq('week', 0)
-
-        const hasRoster = new Set((rosters ?? []).map(r => r.user_id))
-
-        for (const m of lgMembers) {
-          if (hasRoster.has(m.user_id)) continue
-          const to = reach(m.user_id, lg.id, 'notify_lineup')
-          if (!to) continue
-
-          reminders.push({
-            userId: m.user_id, ...to,
-            leagueId: lg.id, leagueName: lg.name,
-            eventType: 'lineup_empty',
-            kicker: `Week ${wk} · Kickoff today`,
-            preheader: `Week ${wk} kicks off today and nobody's in your lineup.`,
-            dedupeKey: `lineup:${lg.id}:${season}:w${wk}`,
-            subject: `Your lineup is empty - ${lg.name}`,
-            heading: 'You have no players started',
-            body: `Week ${wk} kicks off today and your lineup is empty. Set it before game time.`,
-            ctaLabel: 'Set lineup', ctaPath: '/app/roster',
-            pushActions: [{ action: 'lineup', title: 'Set lineup', path: '/app/roster' }],
-            urgent: true,
-          })
-        }
-      }
-    }
-
-    // The Pick'Em recap email's content: the week's winner, the top of
-    // the table, the Week Stats and the season picture — one set of
-    // numbers for the league, personalized per player by forUser().
-    const pickemRecap = async (leagueId: string, wk: number, lgMembers: { user_id: string }[]) => {
-      const seasonGames = [...(scheduleBySeason.get(season)?.values() ?? [])].flat()
-      const wkGames = scheduleBySeason.get(season)?.get(wk) ?? []
-      const seasonPicks = await fetchAllRows((from, to) => supabase
-        .from('pickem_picks')
-        .select('game_id, user_id, week, picked_team, tiebreaker_score')
-        .eq('league_id', leagueId).eq('season', season)
-        .order('id').range(from, to))
-      const wkPicks = seasonPicks.filter(p => p.week === wk)
-      const people = lgMembers.map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
-      const rows = computeWeek(wkGames, wkPicks, people)
-      const played = rows.filter(r => r.submitted)
-      if (played.length === 0) return null
-      const top = played[0]
-      const winners = played.filter(r => r.correct === top.correct && (r.tiebreakerDiff ?? Infinity) === (top.tiebreakerDiff ?? Infinity))
-      const placeOf = (r: typeof played[number]) => 1 + played.filter(o =>
-        o.correct > r.correct || (o.correct === r.correct && (o.tiebreakerDiff ?? Infinity) < (r.tiebreakerDiff ?? Infinity))).length
-      const total = Math.max(...played.map(r => r.played), 0)
-      const winnerNames = winners.map(w => w.name).join(' & ')
-      const stats = describeWeekStats(computeWeekStats(wkGames, wkPicks, rows))
-      const standings = computeStandings(seasonGames, seasonPicks, people)
-      const record = (c: number, pl: number) => `${c}–${Math.max(0, pl - c)}`
-
-      return {
-        forUser(userId: string) {
-          const me = played.find(r => r.userId === userId)
-          const won = !!me && winners.includes(me)
-          const si = standings.findIndex(r => r.userId === userId)
-          const leader = standings[0]
-          const rich: RichEmail = {
-            kind: 'recap',
-            weekLabel: weekTitle(wk),
-            winners: winners.map(w => w.name),
-            winnerLine: `${top.correct}/${total}${total ? ` · ${Math.round((top.correct / total) * 100)}%` : ''}`,
-            decidedByTiebreak: played.filter(r => r.correct === top.correct).length > winners.length,
-            you: me ? { correct: me.correct, played: me.played, place: placeOf(me), of: played.length, won } : undefined,
-            top: played.slice(0, 5).map(r => ({ place: placeOf(r), name: r.name, score: `${r.correct}/${r.played}`, you: r.userId === userId })),
-            stats,
-            season: si >= 0 && leader && leader.played > 0 ? {
-              place: rankOf(standings, si), of: standings.length,
-              record: record(standings[si].correct, standings[si].played),
-              leader: leader.name, leaderRecord: record(leader.correct, leader.played),
-              youLead: rankOf(standings, si) === 1,
-            } : undefined,
-          }
-          return {
-            rich,
-            subject: won ? `You won ${weekTitle(wk)}! - ${lgName(leagueId)}` : `${weekTitle(wk)} results: ${winnerNames} won - ${lgName(leagueId)}`,
-            heading: won ? (winners.length > 1 ? `You tied for ${weekTitle(wk)}` : `You won ${weekTitle(wk)}`) : `${winnerNames} won ${weekTitle(wk)}`,
-            body: won
-              ? `${me!.correct} of ${me!.played} right — the best in the league this week. Here's how it all shook out.`
-              : me ? `You went ${me.correct}/${me.played} and finished ${ordinal(placeOf(me))} of ${played.length}. Here's how the week shook out.`
-              : `Here's how the week shook out.`,
-            preheader: `${winnerNames} won with ${top.correct}/${total}.${me && !won ? ` You finished ${ordinal(placeOf(me))} of ${played.length}.` : ''} Plus the Week Stats.`,
-          }
-        },
-      }
-    }
-    const lgName = (id: string) => (leagueById.get(id) as any)?.name ?? ''
-
-    // ══ 5. WEEKLY RECAP — Tuesday morning ════════════════════
-    if (dow === 2 && utcHour === 14) {   // Tuesday ~9am ET
-      for (const lg of leagues ?? []) {
-        // Recaps the week that just wrapped, from the schedule — and
-        // skips a Tuesday with no freshly finished week (preseason,
-        // offseason) rather than recapping Week 1. Fantasy: this
-        // season's drafted leagues only. (Pick'Em leagues never draft,
-        // so their draft_status stays 'pre_draft' — that check used to
-        // skip every Pick'Em recap.) The season is in the key so next
-        // season's Week N isn't mistaken for this one's.
-        const isPickem = lg.league_type === 'pickem'
-        if (!isPickem && (lg.draft_status === 'pre_draft' || lg.season !== season)) continue
-        const wk = justFinishedWeek(
-          !isPickem && lg.player_pool === 'cfb' ? cfbWeeks : scheduleBySeason.get(season), now)
-        if (wk == null) continue
-        const recapKey = `recap:${lg.id}:${season}:w${wk}`
-        const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
-        // Pick'Em: the week's results, personalized per player (built
-        // only if someone here actually gets the email)
-        const recap = isPickem && lgMembers.some(m => reach(m.user_id, lg.id, 'notify_weekly_recap')?.email)
-          ? await pickemRecap(lg.id, wk, lgMembers)
-          : null
-
-        for (const m of lgMembers) {
-          const to = reach(m.user_id, lg.id, 'notify_weekly_recap')
-          // Phones already got the result the moment the week went final
-          // (section 6) — the Tuesday recap stays an email.
-          if (!to?.email) continue
-
-          const personal = recap?.forUser(m.user_id)
-          reminders.push({
-            userId: m.user_id, ...to, push: false,
-            leagueId: lg.id, leagueName: lg.name,
-            eventType: 'weekly_recap',
-            dedupeKey: recapKey,
-            subject: personal?.subject ?? `Week ${wk} wrapped - ${lg.name}`,
-            heading: personal?.heading ?? `Week ${wk} is in the books`,
-            body: personal?.body ?? 'See where you landed in the standings and how the rest of the league did.',
-            kicker: `${weekTitle(wk)} results`,
-            preheader: personal?.preheader,
-            rich: personal?.rich,
-            ctaLabel: 'See full standings',
-            ctaPath: isPickem ? `/app/pickem?week=${wk}&tab=standings` : '/app/leagues',
-          })
-        }
-      }
-    }
-
-    // ══ 6. PICK'EM WEEK FINAL → LEAGUE CHAT + PHONES ══════════
-    // As soon as a week goes final (every pass, not just recap day):
-    //   - posts the winner and Week Stats to the league's chat, once —
-    //     the season/week prefix is checked first; rendered by
-    //     PickemWeekFinalCard in the app
-    //   - pushes each player their own result to their phone
-    //     ("You won Week 3!" / "Week 3 final: Riley won · you went
-    //     12/16, 2nd of 8"), deduped per player through reminder_log
-    // Only for a week whose last game kicked off in the past 48h, so a
-    // deploy or a brand-new league doesn't backfill old weeks.
-    const chatPosts: { league: string; week: number }[] = []
-    for (const lg of leagues ?? []) {
-      if (lg.league_type !== 'pickem') continue
-      const weeks = scheduleBySeason.get(season)
-      const wk = justFinishedWeek(weeks, now, 48 * HOUR)
-      if (wk == null) continue
-
-      const prefix = `PICKEM_WEEK_FINAL:${season}:${wk}:`
-      const { data: already } = await supabase
-        .from('league_messages')
-        .select('id')
-        .eq('league_id', lg.id)
-        .eq('is_system', true)
-        .like('message', `${prefix}%`)
-        .limit(1)
-      const posted = !!already && already.length > 0
-
-      const { data: wkPicks } = await supabase
-        .from('pickem_picks')
-        .select('game_id, user_id, week, picked_team, tiebreaker_score')
-        .eq('league_id', lg.id)
-        .eq('season', season)
-        .eq('week', wk)
-      const wkMembers = (members ?? [])
-        .filter(m => m.league_id === lg.id)
-        .map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
-      const wkGames = weeks?.get(wk) ?? []
-
-      // Same winner rule as the app's WeekRecap: most correct, then
-      // closest tiebreaker guess; an exact tie on both is shared.
-      const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
-      const played = rows.filter(r => r.submitted)
-      if (played.length === 0) continue
-      const top = played[0]
-      const winners = played.filter(r =>
-        r.correct === top.correct && (r.tiebreakerDiff ?? Infinity) === (top.tiebreakerDiff ?? Infinity))
-
-      const payload = {
-        season, week: wk,
-        winners: winners.map(w => w.name),
-        correct: top.correct,
-        total: Math.max(...played.map(r => r.played), 0),
-        decidedByTiebreak: played.filter(r => r.correct === top.correct).length > winners.length,
-        tiebreakerTotal: tiebreakerTotal(wkGames),
-        winnerGuess: top.tiebreakerGuess,
-        stats: computeWeekStats(wkGames, wkPicks ?? [], rows),
-      }
-      if (!posted) {
-        chatPosts.push({ league: lg.name, week: wk })
-        if (!dryRun) {
-          await supabase.from('league_messages').insert({
-            league_id: lg.id, user_id: null, is_system: true,
-            message: prefix + JSON.stringify(payload),
-          })
-        }
-      }
-
-      const winnerNames = winners.map(w => w.name).join(' & ')
-      // The week's headline stat (usually the biggest upset) as a teaser
-      const teaser = describeWeekStats(payload.stats).find(l => l.key !== 'league')
-      for (const r of played) {
-        const to = reach(r.userId, lg.id, 'notify_weekly_recap')
-        if (!to?.push) continue
-        const won = winners.includes(r)
-        const place = 1 + played.filter(o =>
-          o.correct > r.correct ||
-          (o.correct === r.correct && (o.tiebreakerDiff ?? Infinity) < (r.tiebreakerDiff ?? Infinity))).length
-        const title = won
-          ? (winners.length > 1 ? `You tied for the ${weekName(wk)} win!` : `You won ${weekName(wk)}!`)
-          : `${weekName(wk)} final: ${winnerNames} won`
-        const body = [
-          `${lg.name} · You went ${r.correct}/${r.played}` + (won ? ' — best in the league' : `, ${ordinal(place)} of ${played.length}`),
-          ...(teaser ? [`${teaser.label}: ${teaser.headline}`] : []),
-        ].join('\n')
-        reminders.push({
-          userId: r.userId, email: null, push: true, pushOnly: true,
-          leagueId: lg.id, leagueName: lg.name,
-          eventType: 'pickem_week_final',
-          dedupeKey: `weekfinal:${lg.id}:${season}:w${wk}`,
-          subject: title, heading: title, body,
-          pushTitle: title, pushBody: body,
-          pushTag: `weekfinal-${lg.id}-w${wk}`,
-          // A win gets the trophy, and stays up on a computer until seen
-          pushLook: won ? WON_LOOK : undefined,
-          pushSticky: won,
-          pushActions: [
-            { action: 'board', title: 'See every pick', path: `/app/pickem?week=${wk}&tab=board` },
-            { action: 'chat', title: 'League chat', path: '/app/chat' },
-          ],
-          ctaLabel: 'See results', ctaPath: `/app/pickem?week=${wk}&tab=standings`,
-        })
-      }
-    }
-
     // Sections 7 and 8 ask computeWhoCanWin which games can still be
     // re-picked: nobody's pick on those counts as settled yet
     const pickable = (lg: NonNullable<typeof leagues>[number], wk: number, wkGames: SchedGame[]) =>
@@ -850,19 +365,425 @@ serve(async (req) => {
         (weekSettings ?? []).find(s => s.league_id === lg.id && s.season === season && s.week === wk)?.pick_deadline,
         lg)
 
-    // ══ 7. PICK'EM "STILL ALIVE" — before the last game day ══
-    // Two hours before the first kickoff of a week's last game day
-    // (usually Monday night), phones get who can still win it — the
-    // same computeWhoCanWin the Standings panel runs: "You can still
-    // win Week 3 · you need PHI", "…and a tiebreaker total of 47 or
-    // less" once guesses have locked, or "You've clinched". Eliminated
-    // players aren't told. Phone only, once per player per week,
-    // under the weekly-recap toggle.
-    for (const lg of leagues ?? []) {
-      if (lg.league_type !== 'pickem') continue
-      for (const [wk, wkGames] of scheduleBySeason.get(season) ?? []) {
-        const lastDay = lastGameDayKickoff(wkGames)
-        if (!lastDay || !inWindow(hoursUntil(lastDay.toISOString()), 2)) continue
+    const chatPosts: { league: string; week: number }[] = []
+    let roasts = 0
+    const roastErrors: string[] = []
+
+    // The live pass (?only=live, every few minutes) skips straight to
+    // section 8; everything else runs on the regular 15-minute pass
+    if (!liveOnly) {
+      // ══ 1. PICK'EM PICK REMINDERS ════════════════════════════
+      // Every reminder is about specific open games the member hasn't
+      // picked (or a missing tiebreaker guess) — someone who's picked
+      // everything never hears from this.
+      //
+      // Deadline leagues: one lock per week, the deadline the Pick'Em
+      // page shows (per-week override, else the league rule anchored to
+      // that week's first kickoff), at both lead times. Not the
+      // "current" week: a 48h reminder for a Thursday deadline goes out
+      // Tuesday, before the page rolls over.
+      //
+      // Kickoff leagues (each game locks at its own kickoff): the early
+      // lead time counts down to the week's first kickoff and covers the
+      // whole week; the final lead time counts down to the first kickoff
+      // of each game day (Thu, Sun, Mon …) and covers that day's games.
+      for (const lg of leagues ?? []) {
+        if (lg.league_type !== 'pickem') continue
+        const weeks = scheduleBySeason.get(season)
+        if (!weeks) continue
+
+        const onDeadline = lg.pick_lock_type === 'deadline' && lg.pick_deadline_day != null && !!lg.pick_deadline_time
+        const tz = onDeadline ? (lg.pick_deadline_tz || 'UTC') : 'America/New_York'
+
+        let locks: PickLock[] = []
+        if (onDeadline) {
+          const overrides = new Map<number, string>(
+            (weekSettings ?? [])
+              .filter(s => s.league_id === lg.id && s.season === season && s.pick_deadline)
+              .map(s => [s.week, s.pick_deadline]),
+          )
+          const upcoming = nextPickemDeadline(weeks, overrides, lg.pick_deadline_day, lg.pick_deadline_time, tz, now)
+          if (upcoming) {
+            locks = [{
+              week: upcoming.week, at: upcoming.deadline, key: null, weekStart: true,
+              games: openGames(weeks.get(upcoming.week) ?? [], now),
+            }]
+          }
+        } else {
+          locks = kickoffLocks(weeks, now)
+        }
+        // Lead times top out at 48h — nothing further out can fire yet
+        locks = locks.filter(l => hoursUntil(l.at.toISOString()) <= 48.5)
+        if (locks.length === 0) continue
+
+        for (const l of locks) {
+          nearMisses.push({
+            league: lg.name,
+            type: onDeadline ? 'pickem_deadline' : (l.weekStart ? 'pickem_first_kickoff' : 'pickem_game_day'),
+            week: l.week,
+            lockUtc: l.at.toISOString(),
+            lockLocal: formatInZone(l.at, tz),
+            openGames: l.games.length,
+            hoursUntil: Number(hoursUntil(l.at.toISOString()).toFixed(2)),
+            note: 'fires when hoursUntil is within 0.5 of a member lead time (default 24 or 2), for members with open picks',
+          })
+        }
+
+        const { data: picks } = await supabase
+          .from('pickem_picks')
+          .select('user_id, game_id, week, tiebreaker_score')
+          .eq('league_id', lg.id)
+          .eq('season', season)
+          .in('week', [...new Set(locks.map(l => l.week))])
+
+        for (const m of (members ?? []).filter(x => x.league_id === lg.id)) {
+          const pref = prefFor(m.user_id, lg.id)
+          const to = reach(m.user_id, lg.id, 'notify_pickem_deadline')
+          if (!to) continue
+          const mine = (picks ?? []).filter(p => p.user_id === m.user_id)
+
+          for (const l of locks) {
+            const hrs = hoursUntil(l.at.toISOString())
+            for (const [target, tag] of [[pref.lead_primary, 'p'], [pref.lead_secondary, 's']] as const) {
+              if (!inWindow(hrs, target)) continue
+              // The early reminder only runs ahead of a week's first lock,
+              // and covers every open game that week
+              if (tag === 'p' && !l.weekStart) continue
+              const scope = tag === 'p' ? openGames(weeks.get(l.week) ?? [], now) : l.games
+              const unpickedGames = scope
+                .filter(g => !mine.some(p => p.game_id === g.id))
+                .sort((x, y) => new Date(x.game_date).getTime() - new Date(y.game_date).getTime())
+              const unpicked = unpickedGames.length
+              const tb = scope.find(g => g.is_tiebreaker)
+              const tbMissing = !!tb && !mine.some(p => p.game_id === tb.id && p.tiebreaker_score != null)
+              if (unpicked === 0 && !tbMissing) continue
+
+              const copy = pickReminderCopy({
+                kind: onDeadline ? 'deadline' : tag === 'p' ? 'week' : 'day',
+                week: l.week, at: l.at, tz, hours: Math.round(hrs), leagueName: lg.name,
+                unpicked, tbMissing,
+                noneYet: !mine.some(p => p.week === l.week),
+              })
+              const kind = onDeadline ? 'deadline' : tag === 'p' ? 'week' : 'day'
+              const h = Math.round(hrs)
+              const day = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(l.at)
+              const shown = unpickedGames.slice(0, 6)
+              const rich: RichEmail | undefined = unpicked > 0 ? {
+                kind: 'picks',
+                games: shown.map((g): PickRow => ({ away: g.away_team, home: g.home_team, when: shortWhen(g.game_date, tz), tiebreaker: g.is_tiebreaker })),
+                more: unpicked - shown.length,
+                lockLabel: kind === 'week' ? `First kickoff in ${h}h` : `Locks in ${h}h`,
+                tbMissing,
+                tbGame: tb ? `${tb.away_team} @ ${tb.home_team}` : undefined,
+              } : undefined
+              reminders.push({
+                userId: m.user_id, ...to,
+                leagueId: lg.id, leagueName: lg.name,
+                eventType: 'pickem_deadline',
+                kicker: unpicked === 0 ? `Week ${l.week} · Tiebreaker`
+                  : kind === 'day' ? `${day} · Week ${l.week}`
+                  : kind === 'week' ? `Week ${l.week} kickoff`
+                  : `Week ${l.week} deadline`,
+                preheader: unpicked > 0
+                  ? `${unpicked} game${unpicked === 1 ? '' : 's'} still open — ${shown[0].away_team} @ ${shown[0].home_team} kicks off ${shortWhen(shown[0].game_date, tz)}.`
+                  : `Add your tiebreaker guess before ${tb ? `${tb.away_team} @ ${tb.home_team}` : 'it'} kicks off.`,
+                rich,
+                // Push: when it locks, then the open games themselves
+                pushBody: [
+                  `${lg.name} · ${kind === 'week' ? `First kickoff in ${h}h` : `Locks in ${h}h`}`,
+                  ...shown.slice(0, 3).map(g => `${g.away_team} @ ${g.home_team} · ${shortWhen(g.game_date, tz)}`),
+                  ...(unpicked > 3 ? [`+${unpicked - 3} more`] : []),
+                  ...(tbMissing ? [unpicked > 0 ? 'Your tiebreaker guess is missing too' : 'No guess means you lose every tie'] : []),
+                ].join('\n'),
+                pushActions: [{ action: 'picks', title: unpicked > 0 ? 'Make picks' : 'Add guess', path: `/app/pickem?week=${l.week}` }],
+                pushBadge: unpicked || undefined,
+                // One reminder per league-week on the device: the 2h nudge
+                // replaces the earlier one, and it's dropped once picks lock
+                pushTag: `pickem-${lg.id}-w${l.week}`,
+                pushTtlSec: Math.max(600, Math.round((l.at.getTime() - now.getTime()) / 1000)),
+                dedupeKey: l.key
+                  ? `pickem:${lg.id}:${season}:w${l.week}:${l.key}:${tag}`
+                  : `pickem:${lg.id}:${season}:w${l.week}:${tag}`,
+                ...copy,
+                ctaPath: `/app/pickem?week=${l.week}`,
+                urgent: target <= 4,
+              })
+            }
+          }
+        }
+      }
+
+      // ══ 2. DRAFT — starting soon / on the clock ══════════════
+      const { data: draftStates } = await supabase
+        .from('draft_state')
+        .select('league_id, status, current_user_id, current_round, current_pick, pick_started_at')
+
+      for (const ds of draftStates ?? []) {
+        const lg: any = leagueById.get(ds.league_id)
+        if (!lg) continue
+
+        // On the clock — fires once per pick
+        if (ds.status === 'active' && ds.current_user_id) {
+          const to = reach(ds.current_user_id, lg.id, 'notify_on_the_clock')
+          if (to) {
+            {
+              reminders.push({
+                userId: ds.current_user_id, ...to,
+                leagueId: lg.id, leagueName: lg.name,
+                eventType: 'on_the_clock',
+                kicker: `Round ${ds.current_round} · Pick ${ds.current_pick}`,
+                preheader: `The draft is waiting on you — round ${ds.current_round}, pick ${ds.current_pick}.`,
+                dedupeKey: `clock:${lg.id}:r${ds.current_round}:p${ds.current_pick}`,
+                subject: `You're on the clock - ${lg.name}`,
+                heading: "You're on the clock",
+                body: `Round ${ds.current_round}, pick ${ds.current_pick}. Make your selection before the timer runs out.`,
+                ctaLabel: 'Draft now', ctaPath: '/app/draft',
+                pushActions: [{ action: 'draft', title: 'Draft now', path: '/app/draft' }],
+                pushSticky: true,
+                urgent: true,
+              })
+            }
+          }
+        }
+      }
+
+      // ══ 3. TRADES — new offers + expiring ════════════════════
+      const { data: trades } = await supabase
+        .from('trades')
+        .select('id, league_id, proposer_id, receiver_id, status, expires_at, created_at')
+        .eq('status', 'pending')
+
+      for (const t of trades ?? []) {
+        const lg: any = leagueById.get(t.league_id)
+        if (!lg || !t.receiver_id) continue
+        const to = reach(t.receiver_id, lg.id, 'notify_trades')
+        if (!to) continue
+
+        const proposer: any = profileById.get(t.proposer_id ?? '')
+        const who = proposer?.display_name || proposer?.username || 'A league member'
+
+        // New offer — within the last 20 minutes
+        const ageMin = (Date.now() - new Date(t.created_at).getTime()) / 60000
+        if (ageMin <= 20) {
+          reminders.push({
+            userId: t.receiver_id, ...to,
+            leagueId: lg.id, leagueName: lg.name,
+            eventType: 'trade_offer',
+            kicker: 'New trade offer',
+            preheader: `${who} wants to make a deal. Accept, counter, or decline.`,
+            dedupeKey: `trade:${t.id}:new`,
+            subject: `${who} sent you a trade - ${lg.name}`,
+            heading: `Trade offer from ${who}`,
+            body: 'Review the offer and accept, counter, or decline.',
+            ctaLabel: 'Review trade', ctaPath: '/app/trades',
+            pushActions: [{ action: 'trade', title: 'Review trade', path: '/app/trades' }],
+          })
+        }
+
+        // Expiring soon
+        if (t.expires_at) {
+          const hrs = hoursUntil(t.expires_at)
+          if (inWindow(hrs, 12, 0.3)) {
+            reminders.push({
+              userId: t.receiver_id, ...to,
+              leagueId: lg.id, leagueName: lg.name,
+              eventType: 'trade_expiring',
+              kicker: 'Expires in 12h',
+              preheader: `The offer from ${who} expires in about 12 hours.`,
+              dedupeKey: `trade:${t.id}:exp12`,
+              subject: `Trade from ${who} expires soon - ${lg.name}`,
+              heading: 'A trade offer is about to expire',
+              body: `The offer from ${who} expires in about 12 hours. Respond before it lapses.`,
+              ctaLabel: 'Review trade', ctaPath: '/app/trades',
+              pushActions: [{ action: 'trade', title: 'Review trade', path: '/app/trades' }],
+              urgent: true,
+            })
+          }
+        }
+      }
+
+      // ══ 4. LINEUP NOT SET ════════════════════════════════════
+      // Fires Sunday morning for this season's fantasy leagues with an
+      // empty roster. The week is the one kicking off today, from the
+      // schedule (college schedule for a college-only league).
+      const dow = now.getUTCDay()          // 0 = Sunday
+      const utcHour = now.getUTCHours()
+      if (dow === 0 && utcHour === 14) {   // ~9am ET Sunday
+        for (const lg of leagues ?? []) {
+          if (lg.league_type === 'pickem') continue
+          if (lg.draft_status === 'pre_draft') continue
+          if (lg.season !== season) continue
+          const wk = upcomingWeek(lg.player_pool === 'cfb' ? cfbWeeks : scheduleBySeason.get(season), now)
+          if (wk == null) continue
+
+          const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
+          const { data: rosters } = await supabase
+            .from('rosters')
+            .select('user_id')
+            .eq('league_id', lg.id)
+            .eq('week', 0)
+
+          const hasRoster = new Set((rosters ?? []).map(r => r.user_id))
+
+          for (const m of lgMembers) {
+            if (hasRoster.has(m.user_id)) continue
+            const to = reach(m.user_id, lg.id, 'notify_lineup')
+            if (!to) continue
+
+            reminders.push({
+              userId: m.user_id, ...to,
+              leagueId: lg.id, leagueName: lg.name,
+              eventType: 'lineup_empty',
+              kicker: `Week ${wk} · Kickoff today`,
+              preheader: `Week ${wk} kicks off today and nobody's in your lineup.`,
+              dedupeKey: `lineup:${lg.id}:${season}:w${wk}`,
+              subject: `Your lineup is empty - ${lg.name}`,
+              heading: 'You have no players started',
+              body: `Week ${wk} kicks off today and your lineup is empty. Set it before game time.`,
+              ctaLabel: 'Set lineup', ctaPath: '/app/roster',
+              pushActions: [{ action: 'lineup', title: 'Set lineup', path: '/app/roster' }],
+              urgent: true,
+            })
+          }
+        }
+      }
+
+      // The Pick'Em recap email's content: the week's winner, the top of
+      // the table, the Week Stats and the season picture — one set of
+      // numbers for the league, personalized per player by forUser().
+      const pickemRecap = async (leagueId: string, wk: number, lgMembers: { user_id: string }[]) => {
+        const seasonGames = [...(scheduleBySeason.get(season)?.values() ?? [])].flat()
+        const wkGames = scheduleBySeason.get(season)?.get(wk) ?? []
+        const seasonPicks = await fetchAllRows((from, to) => supabase
+          .from('pickem_picks')
+          .select('game_id, user_id, week, picked_team, tiebreaker_score')
+          .eq('league_id', leagueId).eq('season', season)
+          .order('id').range(from, to))
+        const wkPicks = seasonPicks.filter(p => p.week === wk)
+        const people = lgMembers.map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
+        const rows = computeWeek(wkGames, wkPicks, people)
+        const played = rows.filter(r => r.submitted)
+        if (played.length === 0) return null
+        const top = played[0]
+        const winners = played.filter(r => r.correct === top.correct && (r.tiebreakerDiff ?? Infinity) === (top.tiebreakerDiff ?? Infinity))
+        const placeOf = (r: typeof played[number]) => 1 + played.filter(o =>
+          o.correct > r.correct || (o.correct === r.correct && (o.tiebreakerDiff ?? Infinity) < (r.tiebreakerDiff ?? Infinity))).length
+        const total = Math.max(...played.map(r => r.played), 0)
+        const winnerNames = winners.map(w => w.name).join(' & ')
+        const stats = describeWeekStats(computeWeekStats(wkGames, wkPicks, rows))
+        const standings = computeStandings(seasonGames, seasonPicks, people)
+        const record = (c: number, pl: number) => `${c}–${Math.max(0, pl - c)}`
+
+        return {
+          forUser(userId: string) {
+            const me = played.find(r => r.userId === userId)
+            const won = !!me && winners.includes(me)
+            const si = standings.findIndex(r => r.userId === userId)
+            const leader = standings[0]
+            const rich: RichEmail = {
+              kind: 'recap',
+              weekLabel: weekTitle(wk),
+              winners: winners.map(w => w.name),
+              winnerLine: `${top.correct}/${total}${total ? ` · ${Math.round((top.correct / total) * 100)}%` : ''}`,
+              decidedByTiebreak: played.filter(r => r.correct === top.correct).length > winners.length,
+              you: me ? { correct: me.correct, played: me.played, place: placeOf(me), of: played.length, won } : undefined,
+              top: played.slice(0, 5).map(r => ({ place: placeOf(r), name: r.name, score: `${r.correct}/${r.played}`, you: r.userId === userId })),
+              stats,
+              season: si >= 0 && leader && leader.played > 0 ? {
+                place: rankOf(standings, si), of: standings.length,
+                record: record(standings[si].correct, standings[si].played),
+                leader: leader.name, leaderRecord: record(leader.correct, leader.played),
+                youLead: rankOf(standings, si) === 1,
+              } : undefined,
+            }
+            return {
+              rich,
+              subject: won ? `You won ${weekTitle(wk)}! - ${lgName(leagueId)}` : `${weekTitle(wk)} results: ${winnerNames} won - ${lgName(leagueId)}`,
+              heading: won ? (winners.length > 1 ? `You tied for ${weekTitle(wk)}` : `You won ${weekTitle(wk)}`) : `${winnerNames} won ${weekTitle(wk)}`,
+              body: won
+                ? `${me!.correct} of ${me!.played} right — the best in the league this week. Here's how it all shook out.`
+                : me ? `You went ${me.correct}/${me.played} and finished ${ordinal(placeOf(me))} of ${played.length}. Here's how the week shook out.`
+                : `Here's how the week shook out.`,
+              preheader: `${winnerNames} won with ${top.correct}/${total}.${me && !won ? ` You finished ${ordinal(placeOf(me))} of ${played.length}.` : ''} Plus the Week Stats.`,
+            }
+          },
+        }
+      }
+      const lgName = (id: string) => (leagueById.get(id) as any)?.name ?? ''
+
+      // ══ 5. WEEKLY RECAP — Tuesday morning ════════════════════
+      if (dow === 2 && utcHour === 14) {   // Tuesday ~9am ET
+        for (const lg of leagues ?? []) {
+          // Recaps the week that just wrapped, from the schedule — and
+          // skips a Tuesday with no freshly finished week (preseason,
+          // offseason) rather than recapping Week 1. Fantasy: this
+          // season's drafted leagues only. (Pick'Em leagues never draft,
+          // so their draft_status stays 'pre_draft' — that check used to
+          // skip every Pick'Em recap.) The season is in the key so next
+          // season's Week N isn't mistaken for this one's.
+          const isPickem = lg.league_type === 'pickem'
+          if (!isPickem && (lg.draft_status === 'pre_draft' || lg.season !== season)) continue
+          const wk = justFinishedWeek(
+            !isPickem && lg.player_pool === 'cfb' ? cfbWeeks : scheduleBySeason.get(season), now)
+          if (wk == null) continue
+          const recapKey = `recap:${lg.id}:${season}:w${wk}`
+          const lgMembers = (members ?? []).filter(m => m.league_id === lg.id)
+          // Pick'Em: the week's results, personalized per player (built
+          // only if someone here actually gets the email)
+          const recap = isPickem && lgMembers.some(m => reach(m.user_id, lg.id, 'notify_weekly_recap')?.email)
+            ? await pickemRecap(lg.id, wk, lgMembers)
+            : null
+
+          for (const m of lgMembers) {
+            const to = reach(m.user_id, lg.id, 'notify_weekly_recap')
+            // Phones already got the result the moment the week went final
+            // (section 6) — the Tuesday recap stays an email.
+            if (!to?.email) continue
+
+            const personal = recap?.forUser(m.user_id)
+            reminders.push({
+              userId: m.user_id, ...to, push: false,
+              leagueId: lg.id, leagueName: lg.name,
+              eventType: 'weekly_recap',
+              dedupeKey: recapKey,
+              subject: personal?.subject ?? `Week ${wk} wrapped - ${lg.name}`,
+              heading: personal?.heading ?? `Week ${wk} is in the books`,
+              body: personal?.body ?? 'See where you landed in the standings and how the rest of the league did.',
+              kicker: `${weekTitle(wk)} results`,
+              preheader: personal?.preheader,
+              rich: personal?.rich,
+              ctaLabel: 'See full standings',
+              ctaPath: isPickem ? `/app/pickem?week=${wk}&tab=standings` : '/app/leagues',
+            })
+          }
+        }
+      }
+
+      // ══ 6. PICK'EM WEEK FINAL → LEAGUE CHAT + PHONES ══════════
+      // As soon as a week goes final (every pass, not just recap day):
+      //   - posts the winner and Week Stats to the league's chat, once —
+      //     the season/week prefix is checked first; rendered by
+      //     PickemWeekFinalCard in the app
+      //   - pushes each player their own result to their phone
+      //     ("You won Week 3!" / "Week 3 final: Riley won · you went
+      //     12/16, 2nd of 8"), deduped per player through reminder_log
+      // Only for a week whose last game kicked off in the past 48h, so a
+      // deploy or a brand-new league doesn't backfill old weeks.
+      for (const lg of leagues ?? []) {
+        if (lg.league_type !== 'pickem') continue
+        const weeks = scheduleBySeason.get(season)
+        const wk = justFinishedWeek(weeks, now, 48 * HOUR)
+        if (wk == null) continue
+
+        const prefix = `PICKEM_WEEK_FINAL:${season}:${wk}:`
+        const { data: already } = await supabase
+          .from('league_messages')
+          .select('id')
+          .eq('league_id', lg.id)
+          .eq('is_system', true)
+          .like('message', `${prefix}%`)
+          .limit(1)
+        const posted = !!already && already.length > 0
 
         const { data: wkPicks } = await supabase
           .from('pickem_picks')
@@ -873,48 +794,182 @@ serve(async (req) => {
         const wkMembers = (members ?? [])
           .filter(m => m.league_id === lg.id)
           .map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
-        const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
-        const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows, { isOpen: pickable(lg, wk, wkGames) })
-        if (!who) continue
-        const aliveCount = who.rows.filter(r => r.status !== 'out').length
+        const wkGames = weeks?.get(wk) ?? []
 
-        for (const r of who.rows) {
-          if (r.status === 'out') continue
+        // Same winner rule as the app's WeekRecap: most correct, then
+        // closest tiebreaker guess; an exact tie on both is shared.
+        const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
+        const played = rows.filter(r => r.submitted)
+        if (played.length === 0) continue
+        const top = played[0]
+        const winners = played.filter(r =>
+          r.correct === top.correct && (r.tiebreakerDiff ?? Infinity) === (top.tiebreakerDiff ?? Infinity))
+
+        const payload = {
+          season, week: wk,
+          winners: winners.map(w => w.name),
+          correct: top.correct,
+          total: Math.max(...played.map(r => r.played), 0),
+          decidedByTiebreak: played.filter(r => r.correct === top.correct).length > winners.length,
+          tiebreakerTotal: tiebreakerTotal(wkGames),
+          winnerGuess: top.tiebreakerGuess,
+          stats: computeWeekStats(wkGames, wkPicks ?? [], rows),
+        }
+        if (!posted) {
+          chatPosts.push({ league: lg.name, week: wk })
+          if (!dryRun) {
+            await supabase.from('league_messages').insert({
+              league_id: lg.id, user_id: null, is_system: true,
+              message: prefix + JSON.stringify(payload),
+            })
+          }
+        }
+
+        // The roast (commissioner opt-in), posted after the final card.
+        // Retried on later passes if Claude couldn't be reached.
+        if (lg.ai_recap && !dryRun) {
+          const roastPrefix = `PICKEM_ROAST:${season}:${wk}:`
+          const { data: roasted } = await supabase
+            .from('league_messages')
+            .select('id')
+            .eq('league_id', lg.id)
+            .eq('is_system', true)
+            .like('message', `${roastPrefix}%`)
+            .limit(1)
+          if (!roasted?.length) {
+            // Last week's winners, for the Belt storyline
+            const prevGames = weeks?.get(wk - 1) ?? []
+            let lastWinners: string[] | null = null
+            if (prevGames.length && isWeekComplete(prevGames)) {
+              const { data: prevPicks } = await supabase
+                .from('pickem_picks')
+                .select('game_id, user_id, week, picked_team, tiebreaker_score')
+                .eq('league_id', lg.id)
+                .eq('season', season)
+                .eq('week', wk - 1)
+              lastWinners = weekWinners(computeWeek(prevGames, prevPicks ?? [], wkMembers)).map(w => w.name)
+            }
+            try {
+              const text = await writeRoast(roastFacts({
+                league: lg.name, week: wk, played, winners, stats: payload.stats,
+                decidedByTiebreak: payload.decidedByTiebreak, tbTotal: payload.tiebreakerTotal, lastWinners,
+              }))
+              if (text) {
+                await supabase.from('league_messages').insert({
+                  league_id: lg.id, user_id: null, is_system: true,
+                  message: roastPrefix + JSON.stringify({ week: wk, text }),
+                })
+                roasts++
+              }
+            } catch (e) {
+              roastErrors.push(`${lg.name} ${weekName(wk)}: ${e instanceof Anthropic.APIError ? `${e.status} ${e.message}` : String(e)}`)
+            }
+          }
+        }
+
+        const winnerNames = winners.map(w => w.name).join(' & ')
+        // The week's headline stat (usually the biggest upset) as a teaser
+        const teaser = describeWeekStats(payload.stats).find(l => l.key !== 'league')
+        for (const r of played) {
           const to = reach(r.userId, lg.id, 'notify_weekly_recap')
           if (!to?.push) continue
-          let title: string, body: string
-          if (r.status === 'clinched') {
-            title = `You've clinched ${weekName(wk)}!`
-            body = `${lg.name} · Nobody can catch you, whatever happens.`
-          } else {
-            title = `You can still win ${weekName(wk)}`
-            const teams = r.needs.map(n => n.team).join(' + ')
-            const tb = r.tiebreaker ? `a tiebreaker total ${describeTiebreakerRange(r.tiebreaker)}` : ''
-            body = `${lg.name} · ` + (
-              teams && tb ? `You need ${teams} and ${tb}.`
-              : teams ? `You need ${teams}.`
-              : tb ? `You need ${tb}.`
-              : `${aliveCount} players are still alive, and you've got a few ways to win.`
-            )
-          }
+          const won = winners.includes(r)
+          const place = 1 + played.filter(o =>
+            o.correct > r.correct ||
+            (o.correct === r.correct && (o.tiebreakerDiff ?? Infinity) < (r.tiebreakerDiff ?? Infinity))).length
+          const title = won
+            ? (winners.length > 1 ? `You tied for the ${weekName(wk)} win!` : `You won ${weekName(wk)}!`)
+            : `${weekName(wk)} final: ${winnerNames} won`
+          const body = [
+            `${lg.name} · You went ${r.correct}/${r.played}` + (won ? ' — best in the league' : `, ${ordinal(place)} of ${played.length}`),
+            ...(teaser ? [`${teaser.label}: ${teaser.headline}`] : []),
+          ].join('\n')
           reminders.push({
             userId: r.userId, email: null, push: true, pushOnly: true,
             leagueId: lg.id, leagueName: lg.name,
-            eventType: 'pickem_alive',
-            // Clinching shares the live alert's key (section 8), so a
-            // player who clinched is only told once, whichever sees it first
-            dedupeKey: r.status === 'clinched'
-              ? `clinch:${lg.id}:${season}:w${wk}`
-              : `alive:${lg.id}:${season}:w${wk}`,
+            eventType: 'pickem_week_final',
+            dedupeKey: `weekfinal:${lg.id}:${season}:w${wk}`,
             subject: title, heading: title, body,
             pushTitle: title, pushBody: body,
-            pushTag: `alive-${lg.id}-w${wk}`,
-            pushTtlSec: 2 * 3600,
-            pushLook: r.status === 'clinched' ? PUSH_LOOK.pickem_clinch : undefined,
-            pushSticky: r.status === 'clinched',
-            pushActions: [{ action: 'board', title: 'Watch the Board', path: `/app/pickem?week=${wk}&tab=board` }],
-            ctaLabel: 'Standings', ctaPath: `/app/pickem?week=${wk}&tab=standings`,
+            pushTag: `weekfinal-${lg.id}-w${wk}`,
+            // A win gets the trophy, and stays up on a computer until seen
+            pushLook: won ? WON_LOOK : undefined,
+            pushSticky: won,
+            pushActions: [
+              { action: 'board', title: 'See every pick', path: `/app/pickem?week=${wk}&tab=board` },
+              { action: 'chat', title: 'League chat', path: '/app/chat' },
+            ],
+            ctaLabel: 'See results', ctaPath: `/app/pickem?week=${wk}&tab=standings`,
           })
+        }
+      }
+
+      // ══ 7. PICK'EM "STILL ALIVE" — before the last game day ══
+      // Two hours before the first kickoff of a week's last game day
+      // (usually Monday night), phones get who can still win it — the
+      // same computeWhoCanWin the Standings panel runs: "You can still
+      // win Week 3 · you need PHI", "…and a tiebreaker total of 47 or
+      // less" once guesses have locked, or "You've clinched". Eliminated
+      // players aren't told. Phone only, once per player per week,
+      // under the weekly-recap toggle.
+      for (const lg of leagues ?? []) {
+        if (lg.league_type !== 'pickem') continue
+        for (const [wk, wkGames] of scheduleBySeason.get(season) ?? []) {
+          const lastDay = lastGameDayKickoff(wkGames)
+          if (!lastDay || !inWindow(hoursUntil(lastDay.toISOString()), 2)) continue
+
+          const { data: wkPicks } = await supabase
+            .from('pickem_picks')
+            .select('game_id, user_id, week, picked_team, tiebreaker_score')
+            .eq('league_id', lg.id)
+            .eq('season', season)
+            .eq('week', wk)
+          const wkMembers = (members ?? [])
+            .filter(m => m.league_id === lg.id)
+            .map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
+          const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
+          const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows, { isOpen: pickable(lg, wk, wkGames) })
+          if (!who) continue
+          const aliveCount = who.rows.filter(r => r.status !== 'out').length
+
+          for (const r of who.rows) {
+            if (r.status === 'out') continue
+            const to = reach(r.userId, lg.id, 'notify_weekly_recap')
+            if (!to?.push) continue
+            let title: string, body: string
+            if (r.status === 'clinched') {
+              title = `You've clinched ${weekName(wk)}!`
+              body = `${lg.name} · Nobody can catch you, whatever happens.`
+            } else {
+              title = `You can still win ${weekName(wk)}`
+              const teams = r.needs.map(n => n.team).join(' + ')
+              const tb = r.tiebreaker ? `a tiebreaker total ${describeTiebreakerRange(r.tiebreaker)}` : ''
+              body = `${lg.name} · ` + (
+                teams && tb ? `You need ${teams} and ${tb}.`
+                : teams ? `You need ${teams}.`
+                : tb ? `You need ${tb}.`
+                : `${aliveCount} players are still alive, and you've got a few ways to win.`
+              )
+            }
+            reminders.push({
+              userId: r.userId, email: null, push: true, pushOnly: true,
+              leagueId: lg.id, leagueName: lg.name,
+              eventType: 'pickem_alive',
+              // Clinching shares the live alert's key (section 8), so a
+              // player who clinched is only told once, whichever sees it first
+              dedupeKey: r.status === 'clinched'
+                ? `clinch:${lg.id}:${season}:w${wk}`
+                : `alive:${lg.id}:${season}:w${wk}`,
+              subject: title, heading: title, body,
+              pushTitle: title, pushBody: body,
+              pushTag: `alive-${lg.id}-w${wk}`,
+              pushTtlSec: 2 * 3600,
+              pushLook: r.status === 'clinched' ? PUSH_LOOK.pickem_clinch : undefined,
+              pushSticky: r.status === 'clinched',
+              pushActions: [{ action: 'board', title: 'Watch the Board', path: `/app/pickem?week=${wk}&tab=board` }],
+              ctaLabel: 'Standings', ctaPath: `/app/pickem?week=${wk}&tab=standings`,
+            })
+          }
         }
       }
     }
@@ -929,8 +984,13 @@ serve(async (req) => {
     //   - tiebreaker sweat, only for players whose every path to
     //     winning runs through the tiebreaker: once when the live
     //     total gets within 7 of your guess, once when it passes it
-    // Every pass (15 min), so alerts land within a few minutes of the
-    // score sync picking up the result.
+    //   - upset siren: late in a game, the team most of the league
+    //     picked is going down (computeUpsetWatch) — once per game
+    //   - win-odds swings (computeWinOdds, from your own view): you're
+    //     now the favorite, a longshot come alive, or a crash — each
+    //     once a week
+    // Runs on the regular pass and the live pass (?only=live, every 3
+    // minutes), so alerts land soon after the score sync (every 2).
     for (const lg of leagues ?? []) {
       if (lg.league_type !== 'pickem') continue
       const weeks = scheduleBySeason.get(season)
@@ -954,7 +1014,7 @@ serve(async (req) => {
         .eq('week', wk)
       const wkMembers = lgMembers.map(m => ({ user_id: m.user_id, profile: profileById.get(m.user_id) ?? null }))
       const finals = wkGames.filter(isFinal)
-      const liveAlert = (userId: string, kind: 'lead' | 'clinch' | 'tb', dedupeKey: string, title: string, body: string) => {
+      const liveAlert = (userId: string, kind: 'lead' | 'clinch' | 'tb' | 'upset' | 'odds', dedupeKey: string, title: string, body: string) => {
         if (!optedIn.some(m => m.user_id === userId)) return
         const board = { action: 'board', title: 'Watch the Board', path: `/app/pickem?week=${wk}&tab=board` }
         const standings = { action: 'standings', title: 'Standings', path: `/app/pickem?week=${wk}&tab=standings` }
@@ -995,7 +1055,8 @@ serve(async (req) => {
 
       // Clinch + tiebreaker sweat
       const rows = computeWeek(wkGames, wkPicks ?? [], wkMembers)
-      const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows, { isOpen: pickable(lg, wk, wkGames) })
+      const open = pickable(lg, wk, wkGames)
+      const who = computeWhoCanWin(wkGames, wkPicks ?? [], rows, { isOpen: open })
       const tb = wkGames.find(g => g.is_tiebreaker)
       const tbLive = !!tb && tb.status === 'in_progress'
       const total = tb ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : 0
@@ -1017,6 +1078,38 @@ serve(async (req) => {
           liveAlert(r.userId, 'tb', `tbpass:${lg.id}:${season}:w${wk}`,
             `${game} is at ${total}`,
             `${lg.name} · That's past your tiebreaker guess of ${guess}.`)
+        }
+      }
+
+      // Upset siren — the game's kicked off, so the picks are public
+      for (const u of computeUpsetWatch(wkGames, wkPicks ?? [])) {
+        const score = u.dogScore > u.crowdScore
+          ? `${u.dog} leads ${u.dogScore}–${u.crowdScore}`
+          : `${u.crowd} ${u.crowdScore}–${u.dogScore}`
+        for (const m of optedIn) {
+          liveAlert(m.user_id, 'upset', `upset:${lg.id}:${season}:w${wk}:${u.game.id}`,
+            `Upset alert: ${u.dog} over ${u.crowd}?`,
+            `${lg.name} · ${u.crowdPicks} of ${u.pickers} of you picked ${u.crowd}. ${score}, ${gameClockLabel(u.game)} · ${u.crowd} down to ${Math.round(u.chance * 100)}%.`)
+        }
+      }
+
+      // Win-odds swings, from each player's own view (hidden picks stay hidden)
+      const pct = (x: number) => `${Math.round(x * 100)}%`
+      for (const m of optedIn) {
+        const odds = computeWinOdds(wkGames, wkPicks ?? [], rows, { isOpen: open, viewerId: m.user_id, sims: 3000 })
+        const now = odds?.now.get(m.user_id)
+        const then = odds?.kickoff.get(m.user_id)
+        if (now == null || then == null) continue
+        const key = (kind: string) => `odds${kind}:${lg.id}:${season}:w${wk}`
+        if (now >= 0.5 && then < 0.5) {
+          liveAlert(m.user_id, 'odds', key('fav'), `You're the favorite to win ${weekName(wk)}`,
+            `${lg.name} · ${pct(now)} to win it now, up from ${pct(then)} at kickoff.`)
+        } else if (then <= 0.1 && now >= 0.3) {
+          liveAlert(m.user_id, 'odds', key('long'), `Your longshot is alive`,
+            `${lg.name} · ${pct(then)} to win ${weekName(wk)} at kickoff, ${pct(now)} now.`)
+        } else if (then >= 0.25 && now <= 0.05) {
+          liveAlert(m.user_id, 'odds', key('crash'), `Your ${weekName(wk)} chances crashed`,
+            `${lg.name} · ${pct(then)} at kickoff, ${now > 0 && now < 0.005 ? 'under 1%' : pct(now)} now.`)
         }
       }
     }
@@ -1082,6 +1175,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       ok: true, dryRun, considered: reminders.length, sent, skipped, failed,
       chatPosts: chatPosts.length,
+      roasts, ...(roastErrors.length ? { roastErrors } : {}),
       ...(dryRun ? { preview: results, nearMisses, chatPreview: chatPosts } : {}),
     }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
 
@@ -1355,6 +1449,64 @@ function weekTitle(w: number): string {
 function weekName(w: number): string {
   return w === 19 ? 'Wild Card weekend' : w === 20 ? 'the Divisional round'
     : w === 21 ? 'Championship weekend' : w === 22 ? 'the Super Bowl' : `Week ${w}`
+}
+
+// ══ The weekly roast ══════════════════════════════════════════
+
+const ROAST_SYSTEM = `You write the weekly roast for a friendly NFL Pick'Em league's group chat. Everyone in it is a friend, and the roast is part of the fun.
+
+Write 90–150 words from the facts you're given, as a few short, punchy lines of plain text: no headings, bullet lists or hashtags. Crown the winner, needle the bottom of the table, and work in the week's best storylines (the bad beat, the upset, the lone wolf, the belt, anyone who skipped the tiebreaker). Use people's names exactly as written.
+
+Keep it about their picks and results: no jokes about anyone's looks, identity, family, job or anything outside the pick'em, nothing mean-spirited, PG-13 at most. Use only the facts provided; never invent scores, stats or events. At most two emojis. End with one line hyping next week.`
+
+/** The week in plain lines, for the roast prompt. */
+function roastFacts(o: {
+  league: string; week: number; played: WeekRow[]; winners: WeekRow[]; stats: WeekStats
+  decidedByTiebreak: boolean; tbTotal: number | null; lastWinners: string[] | null
+}): string {
+  const top = o.winners[0]
+  const names = (rs: { name: string }[] | string[]) => rs.map(r => (typeof r === 'string' ? r : r.name)).join(' & ')
+  const bottom = o.played[o.played.length - 1]
+  const belt = !o.lastWinners ? 'The Belt: first one of the season.'
+    : o.winners.some(w => o.lastWinners!.includes(w.name)) ? `The Belt: defended by ${names(o.winners)} (won last week too).`
+    : `The Belt: ${names(o.winners)} took it from ${o.lastWinners.join(' & ')}.`
+  return [
+    `League: ${o.league}. ${weekName(o.week)} is final.`,
+    `Winner: ${names(o.winners)}, ${top.correct}/${top.played} correct`
+      + (o.decidedByTiebreak && o.tbTotal != null ? `, won on the tiebreaker (guessed ${top.tiebreakerGuess}, actual total ${o.tbTotal}).` : '.'),
+    belt,
+    `Last place: ${names(o.played.filter(r => r.correct === bottom.correct))}, ${bottom.correct}/${bottom.played}.`,
+    `Every score: ${o.played.map(r => `${r.name} ${r.correct}/${r.played}`).join(', ')}.`,
+    ...describeWeekStats(o.stats).map(l => `${l.label}: ${l.headline} (${l.detail}).`),
+    ...(() => {
+      const skipped = o.played.filter(r => r.tiebreakerGuess == null)
+      return skipped.length ? [`No tiebreaker guess: ${names(skipped)}.`] : []
+    })(),
+  ].join('\n')
+}
+
+/**
+ * Claude writes the roast from `facts`. Null when no API key is set
+ * or the model declines; API errors throw (the caller retries on a
+ * later pass).
+ */
+async function writeRoast(facts: string): Promise<string | null> {
+  const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
+  if (!apiKey) return null
+  const client = new Anthropic({ apiKey })
+  const msg = await client.beta.messages.create({
+    model: 'claude-opus-5',
+    max_tokens: 16000,
+    // A refusal is retried on another model instead of losing the week's roast
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: { effort: 'low' },
+    system: ROAST_SYSTEM,
+    messages: [{ role: 'user', content: facts }],
+  })
+  if (msg.stop_reason === 'refusal') return null
+  const text = msg.content.map(b => (b.type === 'text' ? b.text : '')).join('').trim()
+  return text || null
 }
 
 /** First kickoff of a week's last game day (days in Eastern time). */

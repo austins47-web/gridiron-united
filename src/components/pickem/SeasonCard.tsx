@@ -1,20 +1,25 @@
 import type { ReactNode } from 'react'
-import { X, Trophy } from 'lucide-react'
+import { X, Trophy, Dna, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { teamLogoUrl } from '@/components/teams/teamIds'
-import type { SeasonProfile, TeamRecord } from './season'
+import { PickDNABars } from './PickDNA'
+import type { SeasonProfile, TeamRecord, PickDNA, PickTraits } from './season'
 
 /**
  * One player's Pick'Em season, opened from a Standings row (or "Your
  * season"). Record and rank match the Standings table; the pick-level
  * facts (underdog picks, boldest call, teams) count final games only.
+ * With Pick DNA, it also shows how they pick and opens their Wrapped.
  */
-export function SeasonCard({ profile, totalPlayers, isYou, onClose }: {
+export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueDna, onWrapped }: {
   profile: SeasonProfile
   totalPlayers: number
   isYou: boolean
   onClose: () => void
+  dna?: PickDNA | null
+  leagueDna?: PickTraits | null
+  onWrapped?: () => void
 }) {
   const s = profile.standing
   const losses = Math.max(0, s.played - s.correct)
@@ -71,6 +76,24 @@ export function SeasonCard({ profile, totalPlayers, isYou, onClose }: {
           <p className="text-[11px] text-field-500 -mt-2">
             Underdog picks: games where most of the league (3+ players) picked the other side.
           </p>
+
+          {onWrapped && profile.standing.played > 0 && (
+            <button onClick={onWrapped} className="btn-gold w-full justify-center !py-2.5">
+              <Sparkles className="w-4 h-4" /> {isYou ? 'Play your Wrapped' : `Play ${profile.name}'s Wrapped`}
+            </button>
+          )}
+
+          {/* How they pick */}
+          {dna && leagueDna && dna.picks > 0 && (
+            <div className="rounded-xl border border-field-700 bg-field-900/50 p-3">
+              <p className="flex items-center gap-1.5 font-cond font-bold text-[11px] uppercase tracking-[0.16em] text-field-400">
+                <Dna className="w-3.5 h-3.5 text-gold" /> Pick DNA
+              </p>
+              <p className="font-cond font-black text-xl text-gold uppercase leading-tight mt-1">{dna.archetype.title}</p>
+              <p className="text-xs text-field-400 mb-3">{dna.archetype.blurb}</p>
+              <PickDNABars dna={dna} league={leagueDna} />
+            </div>
+          )}
 
           {/* Boldest call + best/worst team */}
           {(call || profile.bestTeam || profile.worstTeam) && (

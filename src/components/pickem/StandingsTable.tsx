@@ -3,9 +3,10 @@ import clsx from 'clsx'
 import { rankOf, type StandingRow, type WeekRow } from './standings'
 import { useFlipList } from '@/hooks/useFlipList'
 import { tierLabel, isFoundingMember } from '@/lib/prestige'
+import { BeltIcon } from './Belt'
 
 export function StandingsTable({
-  rows, currentUserId, thisWeekRows, leagueCreatedAt, joinedAtByUser, onSelect,
+  rows, currentUserId, thisWeekRows, leagueCreatedAt, joinedAtByUser, onSelect, beltHolders,
 }: {
   rows: StandingRow[]
   currentUserId?: string
@@ -14,6 +15,8 @@ export function StandingsTable({
   joinedAtByUser?: Map<string, string | null>
   /** Opens that player's season card. */
   onSelect?: (userId: string) => void
+  /** Who holds the Pick'Em belt. */
+  beltHolders?: Set<string>
 }) {
   // Rows are already sorted by rank (rankOf/computeStandings does
   // that upstream) — this just animates the reorder whenever that
@@ -140,6 +143,7 @@ export function StandingsTable({
                       {isYou && (
                         <span className="text-[11px] font-bold uppercase tracking-wider text-gold shrink-0">you</span>
                       )}
+                      {beltHolders?.has(r.userId) && <BeltIcon />}
                       {r.streak >= 2 && (
                         <span title={`${r.streak} weekly wins in a row`} className="flex items-center gap-0.5 text-[11px] font-bold text-gold shrink-0">
                           <Flame className="w-3 h-3" />{r.streak}

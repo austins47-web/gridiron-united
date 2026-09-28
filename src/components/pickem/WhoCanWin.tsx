@@ -2,6 +2,7 @@ import { Swords, Crown, Target } from 'lucide-react'
 import clsx from 'clsx'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { describeTiebreakerRange, type WhoCanWin, type WhoCanWinRow } from './standings'
+import { BeltIcon } from './Belt'
 
 /**
  * "Who can still win" — shown on the Standings tab late in a week
@@ -10,7 +11,7 @@ import { describeTiebreakerRange, type WhoCanWin, type WhoCanWinRow } from './st
  * the tiebreaker total they need when every path runs through one.
  * See computeWhoCanWin for how outcomes are played out.
  */
-export function WhoCanWinPanel({ data, currentUserId }: { data: WhoCanWin; currentUserId?: string }) {
+export function WhoCanWinPanel({ data, currentUserId, beltHolders }: { data: WhoCanWin; currentUserId?: string; beltHolders?: Set<string> }) {
   const alive = data.rows.filter(r => r.status !== 'out')
   const out = data.rows.filter(r => r.status === 'out')
 
@@ -40,6 +41,7 @@ export function WhoCanWinPanel({ data, currentUserId }: { data: WhoCanWin; curre
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className={clsx('font-bold truncate', isYou ? 'text-gold' : 'text-white')}>{r.name}</span>
                   {isYou && <span className="text-[11px] font-bold uppercase tracking-wider text-gold shrink-0">you</span>}
+                  {beltHolders?.has(r.userId) && <BeltIcon />}
                   {r.status === 'clinched' && (
                     <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-field-950 bg-gold rounded px-1.5 py-0.5 shrink-0">
                       <Crown className="w-3 h-3" /> Clinched

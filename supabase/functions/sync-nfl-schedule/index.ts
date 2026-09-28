@@ -27,6 +27,19 @@
 // else sets it, so without this a new season or the playoffs would
 // have no tiebreaker.
 //
+// Odds and win probability ride along (Pick'Em's live win-the-week
+// odds, upset siren and Pick DNA read them):
+//   - pregame_home_wp / spread / over_under from ESPN's DraftKings
+//     line, kept current until kickoff and then frozen — ESPN drops
+//     the line once a game ends, and "who was the favorite" has to
+//     survive that
+//   - live_home_wp / period / clock while a game is on
+//   - game_story once it's final: how it was lost (the loser's best
+//     second-half win chance, the score that decided it), from ESPN's
+//     game summary. Up to STORY_BATCH games per run; a game final
+//     before this existed also gets its pregame line from the summary.
+//     Backfill a past week with ?week=N.
+//
 // Query params:
 //   ?week=N       sync one week only (1–22)
 //   ?full=1       sync every week, regular season + playoffs (backfill)
@@ -41,9 +54,13 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { nflSeasonFor } from '../_shared/pickemCore.ts'
+import { num, pregameLine, gameStory } from './espn.ts'
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard'
+const SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary'
+/** Game summaries fetched per run — a full week, so a backfill finishes in one call. */
+const STORY_BATCH = 16
 
 // ESPN 403s bare/default-user-agent requests. Every other ESPN call
 // in this codebase (the sportsdata proxy) already sends this — this
@@ -131,6 +148,15 @@ serve(async (req) => {
   const errors: string[] = []
   let totalUpserted = 0
 
+  // The line stored so far — it freezes once a game kicks off
+  const { data: stored } = await supabase
+    .from('nfl_games')
+    .select('espn_event_id, pregame_home_wp, spread, over_under')
+    .eq('season', season)
+    .in('week', targets.map(t => t.appWeek))
+  type Line = { pregame_home_wp: number | null; spread: number | null; over_under: number | null }
+  const storedLine = new Map<string, Line>((stored ?? []).map((r: Line & { espn_event_id: string }) => [String(r.espn_event_id), r]))
+
   // Fetch every week in parallel — 18 requests to ESPN, not 18
   // sequential round trips.
   const fetched = await Promise.all(
@@ -172,6 +198,15 @@ serve(async (req) => {
       seenTeamsThisWeek.add(homeAbbr)
       seenTeamsThisWeek.add(awayAbbr)
 
+      const status = mapStatus(comp.status?.type?.name ?? ev.status?.type?.name ?? '')
+      const live = status === 'in_progress'
+      // ESPN's current line until kickoff (or while it has none); after
+      // that, the one stored before the game started
+      const line = pregameLine(comp.odds?.[0])
+      const kept = storedLine.get(String(ev.id))
+      const keep = kept?.pregame_home_wp != null && (status !== 'scheduled' || line.pregame_home_wp == null)
+      const prob = comp.situation?.lastPlay?.probability?.homeWinPercentage
+
       rows.push({
         espn_event_id: String(ev.id),
         season,
@@ -181,7 +216,13 @@ serve(async (req) => {
         away_team: awayAbbr,
         home_score: home.score != null ? Number(home.score) : null,
         away_score: away.score != null ? Number(away.score) : null,
-        status: mapStatus(comp.status?.type?.name ?? ev.status?.type?.name ?? ''),
+        status,
+        pregame_home_wp: keep ? kept.pregame_home_wp : line.pregame_home_wp,
+        spread: keep ? kept.spread : line.spread,
+        over_under: keep ? kept.over_under : line.over_under,
+        live_home_wp: live && typeof prob === 'number' ? prob : null,
+        period: live ? num(comp.status?.period) : null,
+        clock: live ? comp.status?.displayClock ?? null : null,
       })
     }
 
@@ -213,10 +254,42 @@ serve(async (req) => {
     }
   }
 
+  // Game stories for games that went final (and, for games final before
+  // stories existed, the pregame line ESPN keeps in the summary)
+  let stories = 0
+  if (!dryRun) {
+    const { data: needStory } = await supabase
+      .from('nfl_games')
+      .select('id, espn_event_id, home_team, away_team, home_score, away_score, pregame_home_wp')
+      .eq('season', season)
+      .in('week', targets.map(t => t.appWeek))
+      .eq('status', 'final')
+      .is('game_story', null)
+      .limit(STORY_BATCH)
+    for (const g of needStory ?? []) {
+      try {
+        const res = await fetch(`${SUMMARY}?event=${g.espn_event_id}`, { headers: ESPN_HEADERS })
+        if (!res.ok) { errors.push(`story ${g.espn_event_id}: ESPN ${res.status}`); continue }
+        const d = await res.json()
+        const update: Record<string, unknown> = { game_story: gameStory(d, g) }
+        if (g.pregame_home_wp == null) {
+          const line = pregameLine(d.pickcenter?.[0])
+          if (line.pregame_home_wp != null) Object.assign(update, line)
+        }
+        const { error: stErr } = await supabase.from('nfl_games').update(update).eq('id', g.id)
+        if (stErr) errors.push(`story ${g.espn_event_id}: ${stErr.message}`)
+        else stories++
+      } catch (e) {
+        errors.push(`story ${g.espn_event_id}: ${String(e)}`)
+      }
+    }
+  }
+
   return new Response(JSON.stringify({
     ok: errors.length === 0,
     dryRun,
     season,
+    stories,
     mode: oneWeek ? 'single-week' : fullSync ? 'full' : 'light',
     weeks: targets.map(t => t.appWeek),
     weeksSynced: targets.length,

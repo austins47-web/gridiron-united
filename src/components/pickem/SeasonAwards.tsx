@@ -1,10 +1,11 @@
-import { Award, Crown, Medal, Flame, Star, Zap, Dog, Target, Sparkles, Skull, type LucideIcon } from 'lucide-react'
+import { Award, Crown, Medal, Flame, Star, Zap, Dog, Target, Sparkles, Skull, HeartCrack, type LucideIcon } from 'lucide-react'
 import clsx from 'clsx'
+import { whenDecided } from './standings'
 import type { SeasonAwards } from './season'
 
 const ICONS: Record<string, LucideIcon> = {
   champion: Crown, weeksWon: Medal, streak: Flame, bestWeek: Star,
-  boldestCall: Zap, underdog: Dog, tiebreaker: Target, whisperer: Sparkles, jinx: Skull,
+  boldestCall: Zap, underdog: Dog, tiebreaker: Target, whisperer: Sparkles, jinx: Skull, heartbreak: HeartCrack,
 }
 
 /**
@@ -51,7 +52,35 @@ export function SeasonAwardsPanel({ data, bare = false }: { data: SeasonAwards; 
     </div>
   )
 
-  if (bare) return list
+  const shame = data.hallOfShame.length > 0 && (
+    <div className="mt-4">
+      <p className="flex items-center gap-1.5 font-cond font-bold text-[11px] uppercase tracking-[0.16em] text-field-400 mb-1.5">
+        <Skull className="w-3.5 h-3.5 text-field-400" /> Hall of Shame
+      </p>
+      <ol className="divide-y divide-field-700/50 rounded-xl border border-field-700/60 bg-field-900/50">
+        {data.hallOfShame.map((b, i) => (
+          <li key={b.gameId} className="flex items-start gap-3 px-3 py-2">
+            <span className="font-cond font-black text-field-500 w-4 text-right shrink-0">{i + 1}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-white">
+                <span className="font-cond font-black">{b.loser}</span> at{' '}
+                <span className="font-cond font-black text-gold">{Math.round(b.peak * 100)}%</span>
+                <span className="text-field-400"> · lost {b.loserScore}–{b.winnerScore}
+                  {b.decided ? `, ${b.winner} went ahead ${whenDecided(b.decided)}` : ''} · Wk {b.week}</span>
+              </p>
+              <p className="text-xs text-field-500 truncate">
+                {b.victimNames.length <= 3
+                  ? b.victimNames.join(', ')
+                  : `${b.victimNames.slice(0, 3).join(', ')} +${b.victimNames.length - 3} more`} had them
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+
+  if (bare) return <>{list}{shame}</>
 
   return (
     <div className="panel">
@@ -67,6 +96,7 @@ export function SeasonAwardsPanel({ data, bare = false }: { data: SeasonAwards; 
         </span>
       </div>
       {list}
+      {shame}
     </div>
   )
 }

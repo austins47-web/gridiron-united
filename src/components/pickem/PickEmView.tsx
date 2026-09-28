@@ -13,15 +13,20 @@ import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, computeWhoCanWin, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
+  computeWinOdds, computeUpsetWatch, computeBelt, computeBadBeats,
   type WeekRow,
 } from './standings'
 import { WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
 import { WhoCanWinPanel } from './WhoCanWin'
+import { WinOddsPanel, UpsetWatchBanner } from './WinOdds'
+import { BeltPanel, BeltIcon } from './Belt'
+import { PickemWrapped } from './PickemWrapped'
+import { useBeltHolders } from '@/hooks/useBeltHolders'
 import { SeasonAwardsPanel } from './SeasonAwards'
 import { SeasonCard } from './SeasonCard'
-import { computeSeasonAwards, computeSeasonProfiles } from './season'
+import { computeSeasonAwards, computeSeasonProfiles, computePickDNA } from './season'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
   TrendingDown, Home, Plane, Award
@@ -256,7 +261,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('league_members')
-        .select('user_id, team_name, joined_at, profile:profiles(username, display_name, avatar_url)')
+        .select('user_id, team_name, joined_at, profile:profiles(username, display_name, avatar_url, favorite_nfl_team)')
         .eq('league_id', activeLeagueId!)
       if (error) throw error
       return data ?? []
@@ -281,9 +286,11 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     // Live scores move the standings — but only poll while games are on
     refetchInterval: (q) => livePollInterval(q.state.data as any, 20_000),
     queryFn: async () => {
+      // All columns: the pregame line and game stories feed Pick DNA,
+      // bad beats and Wrapped (and it still loads before they exist)
       const { data, error } = await supabase
         .from('nfl_games')
-        .select('id, week, game_date, home_team, away_team, home_score, away_score, status, is_tiebreaker')
+        .select('*')
         .eq('season', CURRENT_SEASON)
       if (error) throw error
       return data ?? []
@@ -325,6 +332,29 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
       : null,
     [seasonUserId, seasonGames, seasonPicks, leagueMembers],
   )
+  // How everyone picks (Season card, Wrapped), the belt's history, and
+  // the season's bad beats — all from the same season data
+  const pickDna = useMemo(
+    () => (tab === 'standings' ? computePickDNA(seasonGames as any, seasonPicks as any, leagueMembers as any) : null),
+    [tab, seasonGames, seasonPicks, leagueMembers],
+  )
+  const belt = useMemo(
+    () => (tab === 'standings' ? computeBelt(seasonGames as any, seasonPicks as any, leagueMembers as any) : null),
+    [tab, seasonGames, seasonPicks, leagueMembers],
+  )
+  const seasonBeats = useMemo(
+    () => (tab === 'standings' ? computeBadBeats(seasonGames as any, seasonPicks as any) : []),
+    [tab, seasonGames, seasonPicks],
+  )
+  const beltHolders = useBeltHolders()
+  const [wrappedUserId, setWrappedUserId] = useState<string | null>(null)
+  const wrappedProfile = useMemo(
+    () => wrappedUserId
+      ? computeSeasonProfiles(seasonGames as any, seasonPicks as any, leagueMembers as any)
+          .find(p => p.userId === wrappedUserId) ?? null
+      : null,
+    [wrappedUserId, seasonGames, seasonPicks, leagueMembers],
+  )
 
   // ── This week's results, for the recap post ─────────────────
   const weekRows = useMemo(
@@ -343,6 +373,18 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     }),
     [games, allPicks, weekRows, weekDeadline, user?.id],
   )
+  // Live: everyone's chance to win the week, and crowd picks in trouble.
+  // Same hidden-pick handling as whoCanWin.
+  const winOdds = useMemo(
+    () => (tab === 'standings'
+      ? computeWinOdds(games as any, allPicks as any, weekRows, {
+          isOpen: (g) => !isGameLocked(g.game_date, weekDeadline, g.status),
+          viewerId: user?.id,
+        })
+      : null),
+    [tab, games, allPicks, weekRows, weekDeadline, user?.id],
+  )
+  const upsetWatch = useMemo(() => computeUpsetWatch(games as any, allPicks as any), [games, allPicks])
   const weekTbTotal  = useMemo(() => tiebreakerTotal(games as any), [games])
   const finishedCount = useMemo(
     () => (games as any[]).filter(isFinal).length,
@@ -1114,8 +1156,14 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
             <WeekInProgress finished={finishedCount} total={games.filter((g: any) => !isVoid(g)).length} live={liveCount} />
           ) : null}
 
+          {!weekComplete && <UpsetWatchBanner items={upsetWatch} />}
+
+          {!weekComplete && winOdds && (
+            <WinOddsPanel odds={winOdds} rows={weekRows} week={week} currentUserId={user?.id} beltHolders={beltHolders} />
+          )}
+
           {!weekComplete && whoCanWin && (
-            <WhoCanWinPanel data={whoCanWin} currentUserId={user?.id} />
+            <WhoCanWinPanel data={whoCanWin} currentUserId={user?.id} beltHolders={beltHolders} />
           )}
 
           <StandingsTable
@@ -1125,7 +1173,10 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
             leagueCreatedAt={activeLeague?.created_at ?? null}
             joinedAtByUser={joinedAtByUser}
             onSelect={setSeasonUserId}
+            beltHolders={beltHolders}
           />
+
+          {belt && <BeltPanel belt={belt} currentUserId={user?.id} />}
 
           <SeasonAwardsPanel data={seasonAwards} />
 
@@ -1135,6 +1186,25 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
               totalPlayers={standings.length}
               isYou={seasonProfile.userId === user?.id}
               onClose={() => setSeasonUserId(null)}
+              dna={pickDna?.players.find(p => p.userId === seasonProfile.userId) ?? null}
+              leagueDna={pickDna?.league ?? null}
+              onWrapped={() => { setWrappedUserId(seasonProfile.userId); setSeasonUserId(null) }}
+            />
+          )}
+
+          {wrappedProfile && (
+            <PickemWrapped
+              profile={wrappedProfile}
+              dna={pickDna?.players.find(p => p.userId === wrappedProfile.userId) ?? null}
+              leagueDna={pickDna?.league ?? null}
+              worstBeat={seasonBeats.find(b => b.victims.includes(wrappedProfile.userId)) ?? null}
+              beltWeeks={belt?.lineage.filter(l => l.winners.some(w => w.userId === wrappedProfile.userId)).length ?? 0}
+              leagueName={activeLeague?.name ?? "Pick'Em"}
+              totalPlayers={standings.length}
+              throughWeek={belt?.week ?? null}
+              seasonOver={seasonAwards.final}
+              isYou={wrappedProfile.userId === user?.id}
+              onClose={() => setWrappedUserId(null)}
             />
           )}
         </div>
@@ -1154,16 +1224,20 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
 
       {/* ── BOARD TAB ── */}
       {tab === 'board' && (
-        <PicksBoard
-          games={games}
-          allPicks={allPicks}
-          leagueMembers={leagueMembers}
-          weekRows={weekRows}
-          userId={user?.id}
-          deadline={weekDeadline}
-          week={week}
-          onWeekChange={setWeek}
-        />
+        <div className="space-y-3">
+          <UpsetWatchBanner items={upsetWatch} />
+          <PicksBoard
+            games={games}
+            allPicks={allPicks}
+            leagueMembers={leagueMembers}
+            weekRows={weekRows}
+            userId={user?.id}
+            deadline={weekDeadline}
+            week={week}
+            onWeekChange={setWeek}
+            beltHolders={beltHolders}
+          />
+        </div>
       )}
     </div>
   )
@@ -1787,7 +1861,7 @@ function PicksChart({
 // pinned while the game columns scroll horizontally.
 
 function PicksBoard({
-  games, allPicks, leagueMembers, weekRows, userId, deadline, week, onWeekChange,
+  games, allPicks, leagueMembers, weekRows, userId, deadline, week, onWeekChange, beltHolders,
 }: {
   games: any[]
   allPicks: any[]
@@ -1797,6 +1871,7 @@ function PicksBoard({
   deadline: string | null
   week: number
   onWeekChange: (week: number) => void
+  beltHolders?: Set<string>
 }) {
   const now = new Date()
 
@@ -2015,6 +2090,7 @@ function PicksBoard({
                     <span className={clsx('font-bold text-xs truncate max-w-[120px]', isMe ? 'text-gold' : 'text-white')}>
                       {displayName}
                     </span>
+                    {beltHolders?.has(m.user_id) && <BeltIcon />}
                   </div>
                 </td>
                 <td className="text-center px-2 py-2 border-l border-field-700/60">

@@ -6,6 +6,7 @@ import { useDeleteLeague } from '@/hooks/useLeague'
 import { buildSlotDefs } from '@/types/database'
 import { CfbPostseasonManager } from './CfbPostseasonManager'
 import { PickDeadlineSettings } from './PickDeadlineSettings'
+import { AiRecapSetting } from './AiRecapSetting'
 import type { League, Player, PlayerStatus, RosterSlotConfig } from '@/types/database'
 import {
   Shield, Users, Zap, TrendingUp, Trash2, Search,
@@ -160,13 +161,18 @@ export function CommissionerPanel() {
 
       {/* Tab Content */}
       {tab === 'scoring' && (isPickem
-        ? <PickDeadlineSettings
-            leagueId={activeLeagueId!}
-            initialLockType={(activeLeague as any)?.pick_lock_type ?? 'kickoff'}
-            initialDeadlineDay={(activeLeague as any)?.pick_deadline_day ?? 3}
-            initialDeadlineTime={(activeLeague as any)?.pick_deadline_time ?? '18:00'}
-            initialTz={(activeLeague as any)?.pick_deadline_tz ?? null}
-          />
+        ? (
+          <div className="space-y-6">
+            <PickDeadlineSettings
+              leagueId={activeLeagueId!}
+              initialLockType={(activeLeague as any)?.pick_lock_type ?? 'kickoff'}
+              initialDeadlineDay={(activeLeague as any)?.pick_deadline_day ?? 3}
+              initialDeadlineTime={(activeLeague as any)?.pick_deadline_time ?? '18:00'}
+              initialTz={(activeLeague as any)?.pick_deadline_tz ?? null}
+            />
+            <AiRecapSetting leagueId={activeLeagueId!} />
+          </div>
+        )
         : <ScoringEditor league={activeLeague!} onSaved={setActiveLeague} />
       )}
       {tab === 'rosters' && <RosterEditor leagueId={activeLeagueId} league={activeLeague!} />}

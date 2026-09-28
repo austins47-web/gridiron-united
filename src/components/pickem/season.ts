@@ -9,8 +9,9 @@
 // ══════════════════════════════════════════════════════════════
 
 import {
-  computeStandings, computeWeek, isFinal, isVoid, isWeekComplete, rankOf, winnerOf,
-  type Game, type Pick, type Member, type StandingRow,
+  computeStandings, computeWeek, isFinal, isVoid, isWeekComplete, rankOf, winnerOf, computeBadBeats, nameOf,
+  spreadHomeWinChance,
+  type Game, type Pick, type Member, type StandingRow, type BadBeat,
 } from './standings'
 
 export interface SeasonWeek {
@@ -187,7 +188,11 @@ export interface SeasonAwards {
   /** The season's last week (the Super Bowl) is final. */
   final: boolean
   awards: SeasonAward[]
+  /** The season's worst bad beats, worst first (at most 5). */
+  hallOfShame: ShameEntry[]
 }
+
+export type ShameEntry = BadBeat & { victimNames: string[] }
 
 /** Awards across the league — each left out until someone's earned it. */
 export function computeSeasonAwards(games: Game[], picks: Pick[], members: Member[]): SeasonAwards {
@@ -308,5 +313,134 @@ export function computeSeasonAwards(games: Game[], picks: Pick[], members: Membe
     })
   }
 
-  return { final, awards }
+  // Bad beats: whoever got burned the most, and the season's worst
+  const beats = computeBadBeats(games, picks)
+  const nameById = new Map(members.map(m => [m.user_id, nameOf(m)]))
+  const burned = new Map<string, number>()
+  for (const b of beats) for (const v of b.victims) burned.set(v, (burned.get(v) ?? 0) + 1)
+  const mostBurned = Math.max(0, ...burned.values())
+  if (mostBurned >= 2) {
+    awards.push({
+      key: 'heartbreak', label: 'Heartbreak Kid',
+      names: [...burned].filter(([, n]) => n === mostBurned).map(([id]) => nameById.get(id) ?? 'Someone'),
+      headline: `${mostBurned} bad beats`,
+      detail: 'Picks that lost after a 75%+ second-half chance',
+    })
+  }
+  const hallOfShame = beats.slice(0, 5).map(b => ({ ...b, victimNames: b.victims.map(id => nameById.get(id) ?? 'Someone') }))
+
+  return { final, awards, hallOfShame }
+}
+
+// ── Pick DNA ──────────────────────────────────────────────────
+
+/** Each 0–1, null when there's nothing to measure yet. */
+export interface PickTraits {
+  /** Share of picks on the pregame favorite (games with a line). */
+  chalk: number | null
+  /** Share of picks against the league's majority (3+ pickers, not an even split). */
+  contrarian: number | null
+  /** Share of picks on the home team. */
+  homer: number | null
+  /** Share of your favorite team's games where you picked them. */
+  loyalty: number | null
+  /** Share of picks that were right. */
+  hitRate: number | null
+}
+
+export interface PickArchetype { key: string; title: string; blurb: string }
+
+export interface PickDNA extends PickTraits {
+  userId: string
+  name: string
+  /** Picks counted: final games with a winner. */
+  picks: number
+  favoriteTeam: string | null
+  loyaltyGames: number
+  archetype: PickArchetype
+}
+
+/** Fewer decided picks than this and it's too early to call anyone anything. */
+const MIN_DNA_PICKS = 8
+
+/**
+ * How each player picks — favorites or underdogs, with or against the
+ * league, home teams, their own team — from final games only (their
+ * picks are public, and the favorite is the frozen pregame line).
+ * `league` averages players with enough picks to count.
+ */
+export function computePickDNA(games: Game[], picks: Pick[], members: Member[]): { players: PickDNA[]; league: PickTraits } {
+  const finals = games.filter(g => !isVoid(g) && isFinal(g) && winnerOf(g) != null)
+  const byGame = new Map<string, Pick[]>()
+  for (const p of picks) {
+    if (!byGame.has(p.game_id)) byGame.set(p.game_id, [])
+    byGame.get(p.game_id)!.push(p)
+  }
+  const ratio = (n: number, d: number) => (d > 0 ? n / d : null)
+
+  const players = members.map(m => {
+    const team = m.profile?.favorite_nfl_team ?? null
+    let n = 0, hits = 0, home = 0, favN = 0, fav = 0, crowdN = 0, against = 0, loyalN = 0, loyal = 0
+    for (const g of finals) {
+      const all = (byGame.get(g.id) ?? []).filter(p => p.picked_team === g.home_team || p.picked_team === g.away_team)
+      const mine = all.find(p => p.user_id === m.user_id)
+      if (!mine) continue
+      const pick = mine.picked_team
+      n++
+      if (pick === winnerOf(g)) hits++
+      if (pick === g.home_team) home++
+      const pre = g.pregame_home_wp ?? (g.spread != null ? spreadHomeWinChance(g.spread) : null)
+      if (pre != null && pre !== 0.5) {
+        favN++
+        if (pick === (pre > 0.5 ? g.home_team : g.away_team)) fav++
+      }
+      const homeN = all.filter(p => p.picked_team === g.home_team).length
+      if (all.length >= 3 && homeN * 2 !== all.length) {
+        crowdN++
+        if (pick !== (homeN * 2 > all.length ? g.home_team : g.away_team)) against++
+      }
+      if (team && (g.home_team === team || g.away_team === team)) {
+        loyalN++
+        if (pick === team) loyal++
+      }
+    }
+    return {
+      userId: m.user_id, name: nameOf(m), picks: n, favoriteTeam: team, loyaltyGames: loyalN,
+      chalk: ratio(fav, favN), contrarian: ratio(against, crowdN), homer: ratio(home, n),
+      loyalty: ratio(loyal, loyalN), hitRate: ratio(hits, n),
+    }
+  })
+
+  const counted = players.filter(p => p.picks >= MIN_DNA_PICKS)
+  const avg = (k: keyof PickTraits) => {
+    const vals = counted.map(p => p[k]).filter((v): v is number => v != null)
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+  }
+  const league: PickTraits = {
+    chalk: avg('chalk'), contrarian: avg('contrarian'), homer: avg('homer'), loyalty: avg('loyalty'), hitRate: avg('hitRate'),
+  }
+
+  return {
+    players: players.map(p => ({ ...p, archetype: archetypeOf(p, league) })),
+    league,
+  }
+}
+
+function archetypeOf(p: Omit<PickDNA, 'archetype'>, league: PickTraits): PickArchetype {
+  if (p.picks < MIN_DNA_PICKS) return { key: 'rookie', title: 'Still Loading', blurb: 'Not enough finished picks to tell yet.' }
+  if (p.loyalty === 1 && p.loyaltyGames >= 3) {
+    return { key: 'rideOrDie', title: 'Ride or Die', blurb: `Picked ${p.favoriteTeam} in all ${p.loyaltyGames} of their games.` }
+  }
+  if (p.contrarian != null && p.contrarian >= 0.35) {
+    return { key: 'contrarian', title: 'The Contrarian', blurb: 'Goes against the league more than anyone should.' }
+  }
+  if (p.chalk != null && p.chalk >= 0.85) return { key: 'chalk', title: 'Chalk Eater', blurb: 'Takes the favorite almost every time.' }
+  if (p.chalk != null && p.chalk <= 0.5) return { key: 'upset', title: 'Upset Hunter', blurb: 'Happily rides with the underdog.' }
+  if (p.hitRate != null && league.hitRate != null && p.hitRate >= league.hitRate + 0.08) {
+    return { key: 'sharp', title: 'The Sharp', blurb: 'Right more often than the rest of the league.' }
+  }
+  if (p.homer != null && p.homer >= 0.7) return { key: 'homebody', title: 'Homebody', blurb: 'Trusts the home crowd.' }
+  if (p.homer != null && p.homer <= 0.3) return { key: 'road', title: 'Road Warrior', blurb: 'Loves the team that traveled.' }
+  if (p.hitRate != null && p.hitRate <= 0.45) return { key: 'coinFlip', title: 'Coin Flipper', blurb: 'A coin would give you a run for it.' }
+  return { key: 'steady', title: 'Steady Hand', blurb: 'Right down the middle on everything.' }
 }
