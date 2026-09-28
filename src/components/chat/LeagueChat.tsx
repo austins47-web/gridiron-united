@@ -1104,39 +1104,9 @@ export function LeagueChat() {
         })
       }
 
-      // ── Tell the person being replied to ────────────────────
-      if (answering?.user_id && answering.user_id !== user.id && !answering.is_system) {
-        const who = profile?.display_name || profile?.username || 'Someone'
-        await supabase.from('notifications').insert({
-          user_id: answering.user_id,
-          league_id: activeLeagueId,
-          type: 'mention',
-          title: `${who} replied to you`,
-          body: trimmed.length > 60 ? trimmed.slice(0, 57) + '…' : trimmed,
-          is_read: false,
-          data: { league_id: activeLeagueId },
-        })
-      }
-
-      // ── Notify mentioned users ──────────────────────────────
-      const mentionHandles = [...trimmed.matchAll(/@(\w+)/g)].map(m => m[1].toLowerCase())
-      if (mentionHandles.length > 0) {
-        const mentionedMembers = members.filter(m =>
-          mentionHandles.includes(m.username.toLowerCase())
-        )
-        const senderName = profile?.display_name || profile?.username || 'Someone'
-        for (const m of mentionedMembers) {
-          await supabase.from('notifications').insert({
-            user_id: m.user_id,
-            league_id: activeLeagueId,
-            type: 'mention',
-            title: `${senderName} mentioned you`,
-            body: trimmed.length > 60 ? trimmed.slice(0, 57) + '…' : trimmed,
-            is_read: false,
-            data: { league_id: activeLeagueId },
-          })
-        }
-      }
+      // Whoever's replied to or @mentioned is notified by the database
+      // (league_messages_notify) — the browser can't write other
+      // people's notifications
     } catch (e: any) {
       setText(trimmed)
       setReplyTo(answering)

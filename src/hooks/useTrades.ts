@@ -27,6 +27,8 @@ async function postTradeChat(leagueId: string, userId: string, message: string) 
 }
 
 // ── Helper: send notification to a user ──────────────────────
+// Through notify_league_member: the browser can only write your own
+// notifications, so direct inserts for anyone else were rejected.
 async function sendNotification(params: {
   userId: string
   leagueId: string
@@ -35,15 +37,16 @@ async function sendNotification(params: {
   body: string
   data?: { [key: string]: Json }
 }) {
-  await supabase.from('notifications').insert({
-    user_id: params.userId,
-    league_id: params.leagueId,
-    type: params.type,
-    title: params.title,
-    body: params.body,
-    is_read: false,
-    data: params.data ?? {},
+  const { error } = await supabase.rpc('notify_league_member', {
+    p_user: params.userId,
+    p_league: params.leagueId,
+    p_type: params.type,
+    p_title: params.title,
+    p_body: params.body,
+    p_data: params.data ?? {},
   })
+  // A missed notification shouldn't undo the trade action around it
+  if (error) console.warn('Notification not sent:', error.message)
 }
 
 // ── Helper: fetch fresh league trade settings from DB ─────────

@@ -1383,6 +1383,10 @@ export interface Database {
         Returns: undefined
       }
       unpin_league_announcement: { Args: { p_league: string }; Returns: undefined }
+      notify_league_member: {
+        Args: { p_user: string; p_league: string; p_type: string; p_title: string; p_body?: string | null; p_data?: Json }
+        Returns: undefined
+      }
       recalc_league_scores: { Args: { p_league_id: string }; Returns: number }
       save_push_subscription: {
         Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_user_agent: string }
