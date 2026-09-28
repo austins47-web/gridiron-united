@@ -105,7 +105,7 @@ serve(async (req) => {
       admin.from('league_messages')
         .select('user_id, message, created_at')
         .eq('league_id', tv.league_id).eq('is_system', false).is('game_id', null).is('deleted_at', null)
-        .not('message', 'like', 'IMAGE:%').not('message', 'like', 'GIF:%').not('message', 'like', 'POLL:%')
+        .not('message', 'like', 'IMAGE:%').not('message', 'like', 'GIF:%').not('message', 'like', 'POLL:%').gte('created_at', since)
         .order('created_at', { ascending: false }).limit(8),
       admin.from('league_messages')
         .select('message, created_at')
