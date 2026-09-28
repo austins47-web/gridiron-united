@@ -37,7 +37,7 @@ export function BrandingSetting({ leagueId }: { leagueId: string }) {
     setUploading(true)
     const ext = (file.name.split('.').pop() || 'png').toLowerCase()
     const path = `${leagueId}/logo-${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('league-logos').upload(path, file, { contentType: file.type, upsert: true })
+    const { error } = await supabase.storage.from('league-logos').upload(path, file, { contentType: file.type })
     setUploading(false)
     if (error) { toast.error(`Couldn't upload: ${error.message}`); return }
     setLogo(supabase.storage.from('league-logos').getPublicUrl(path).data.publicUrl)
