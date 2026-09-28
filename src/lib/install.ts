@@ -59,8 +59,12 @@ export async function promptInstall(): Promise<boolean> {
  *   prompt           one-tap install available
  *   ios-safari       iPhone/iPad Safari — Share → Add to Home Screen
  *   ios-other        Chrome/Firefox/Edge on iPhone — their Share menu
- *   in-app           Instagram/Facebook/etc. browser — open in Safari/Chrome first
- *   android-manual   Android browser without the one-tap install
+ *   in-app           Instagram/Facebook/etc. browser, or any Android app's
+ *                    built-in web view — open in Safari/Chrome first
+ *   android-manual   Android browser without the one-tap install. Could
+ *                    be Chrome's preview window from a link in Messages,
+ *                    Gmail or Discord: its UA is Chrome's, but its menu
+ *                    has no install option, so the guide covers that too
  *   desktop          a computer
  */
 export type InstallPlatform =
@@ -71,12 +75,24 @@ export function installPlatform(): InstallPlatform {
   if (isStandalone() || installedThisVisit) return 'installed'
   const ua = navigator.userAgent
   if (/FBAN|FBAV|Instagram|Line\/|Snapchat|TikTok|musical_ly|Twitter|LinkedInApp/i.test(ua)) return 'in-app'
+  // Android WebView (an app showing the page itself) marks its UA "; wv)"
+  if (/Android.*; wv\)/.test(ua)) return 'in-app'
   if (deferred) return 'prompt'
   if (isIos()) return /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua) ? 'ios-other' : 'ios-safari'
-  if (/Android/i.test(ua)) return 'android-manual'
+  if (isAndroid()) return 'android-manual'
   return 'desktop'
 }
 
+export const isAndroid = () =>
+  typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
+
 /** A phone or tablet (where the home-screen app matters most). */
 export const isMobileDevice = () =>
-  typeof navigator !== 'undefined' && (isIos() || /Android/i.test(navigator.userAgent))
+  typeof navigator !== 'undefined' && (isIos() || isAndroid())
+
+/**
+ * A link that opens the app in Chrome itself from an Android app's
+ * built-in browser (Facebook, Instagram …), which can't install it.
+ */
+export const openInChromeUrl = () =>
+  `intent://${window.location.host}/app#Intent;scheme=https;package=com.android.chrome;end`

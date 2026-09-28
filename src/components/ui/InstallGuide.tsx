@@ -2,11 +2,11 @@ import { useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import {
   X, Share, PlusSquare, Bell, Zap, Radio, Download, MoreHorizontal, MoreVertical,
-  Check, Copy, Smartphone, ChevronRight,
+  Check, Copy, Smartphone, ChevronRight, ExternalLink,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { ModalPortal } from '@/components/ui/ModalPortal'
-import { promptInstall, isMobileDevice } from '@/lib/install'
+import { promptInstall, isMobileDevice, isAndroid, openInChromeUrl } from '@/lib/install'
 import { useInstallPlatform } from '@/hooks/useInstallPlatform'
 
 // ══════════════════════════════════════════════════════════════
@@ -151,15 +151,27 @@ export function InstallGuide({ onClose }: { onClose: () => void }) {
 
           {platform === 'android-manual' && (
             <Steps>
-              <Step n={1} title={<>Tap the <b>menu</b></>} note="The ⋮ in the top-right corner of the browser.">
+              <Step
+                n={1}
+                title={<>Make sure you&apos;re in <b>Chrome</b> itself</>}
+                note="Got here from a link in Messages, Gmail or Discord? That opens a preview window with no install option — tap ⋮ and choose Open in Chrome."
+              >
+                <MockMenuRow icon={<ExternalLink className="w-4 h-4" />} label="Open in Chrome" />
+              </Step>
+              <Step n={2} title={<>Tap the <b>menu</b></>} note="The ⋮ in the top-right corner of Chrome.">
                 <div className="inline-flex items-center gap-2 rounded-lg bg-field-900 border border-field-700 px-3 py-2 text-xs text-field-300">
                   gridironunited.app <MoreVertical className="w-4 h-4 text-gold" />
                 </div>
               </Step>
-              <Step n={2} title={<>Tap <b>Install app</b> or <b>Add to Home screen</b></>}>
-                <MockMenuRow icon={<Smartphone className="w-4 h-4" />} label="Install app" />
+              <Step n={3} title={<>Tap <b>Add to Home screen</b> or <b>Install app</b></>}>
+                <MockMenuRow icon={<Smartphone className="w-4 h-4" />} label="Add to Home screen" />
               </Step>
-              <Step n={3} title={<>Tap <b>Install</b>, then open Gridiron from your home screen</>} last>
+              <Step
+                n={4}
+                title={<>Choose <b>Install</b>, then open Gridiron from your home screen</>}
+                note="Not Create shortcut — a shortcut just opens a Chrome tab."
+                last
+              >
                 <MockHomeIcon />
               </Step>
             </Steps>
@@ -270,22 +282,30 @@ function MockHomeIcon() {
 
 function InAppBrowser() {
   const [copied, setCopied] = useState(false)
+  const android = isAndroid()
+  const browser = android ? 'Chrome' : 'Safari'
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(window.location.origin + '/app')
       setCopied(true)
     } catch { toast.error("Couldn't copy — open the menu and choose Open in browser") }
   }
+  const Menu = android ? MoreVertical : MoreHorizontal
   return (
     <div className="space-y-3">
       <p className="text-sm text-field-300">
         This in-app browser can&apos;t add apps to your home screen. Open Gridiron in{' '}
-        <b className="text-white">Safari</b> (iPhone) or <b className="text-white">Chrome</b> (Android) first:
-        tap the <MoreHorizontal className="w-4 h-4 inline -mt-0.5 text-gold" /> menu and choose{' '}
+        <b className="text-white">{browser}</b> first: tap the{' '}
+        <Menu className="w-4 h-4 inline -mt-0.5 text-gold" /> menu and choose{' '}
         <b className="text-gold">Open in browser</b>.
       </p>
+      {android && (
+        <a href={openInChromeUrl()} className="btn-gold w-full justify-center !py-2.5">
+          <ExternalLink className="w-3.5 h-3.5" /> Open in Chrome
+        </a>
+      )}
       <button onClick={copy} className={clsx('btn-ghost w-full justify-center !py-2.5', copied && '!border-emerald-500/50 !text-emerald-400')}>
-        {copied ? <><Check className="w-3.5 h-3.5" /> Link copied — paste it in Safari</> : <><Copy className="w-3.5 h-3.5" /> Copy the link instead</>}
+        {copied ? <><Check className="w-3.5 h-3.5" /> Link copied — paste it in {browser}</> : <><Copy className="w-3.5 h-3.5" /> Copy the link instead</>}
       </button>
     </div>
   )
