@@ -526,7 +526,6 @@ function PicksBoardView({ board }: { board: TvBoard }) {
   const rows = board.week_table
   const hasTb = b.games.some(g => g.tiebreaker)
   const cols = `270px 76px repeat(${b.games.length}, minmax(0, 1fr))${hasTb ? ' 64px' : ''}`
-  const rowH = Math.min(44, Math.floor(800 / Math.max(rows.length, 1)))
 
   return (
     <div className="w-[1468px] shrink-0 flex flex-col rounded-2xl border-2 border-field-800 bg-field-900 overflow-hidden">
@@ -534,8 +533,8 @@ function PicksBoardView({ board }: { board: TvBoard }) {
         <p className="font-cond font-black uppercase text-white text-[28px] tracking-wide">The Board</p>
         <p className="font-cond font-bold uppercase tracking-wider text-field-400 text-[15px]">Every pick · 🔒 shows at kickoff</p>
       </div>
-      <div className="flex-1 min-h-0 px-3 py-1.5">
-        <div className="grid items-end gap-x-1 pb-1 border-b border-field-800" style={{ gridTemplateColumns: cols }}>
+      <div className="flex-1 min-h-0 flex flex-col px-3 py-1.5">
+        <div className="shrink-0 grid items-end gap-x-1 pb-1 border-b border-field-800" style={{ gridTemplateColumns: cols }}>
           <span />
           <span className="text-center font-cond font-bold text-[14px] text-field-400 uppercase">Pts</span>
           {b.games.map(g => (
@@ -550,7 +549,7 @@ function PicksBoardView({ board }: { board: TvBoard }) {
         {rows.map(r => {
           const cells = byUser.get(r.userId)?.cells ?? {}
           return (
-            <div key={r.userId} className={clsx('grid items-center gap-x-1', r.winner && 'bg-gold/10 rounded-md')} style={{ gridTemplateColumns: cols, height: rowH }}>
+            <div key={r.userId} className={clsx('flex-1 min-h-0 max-h-[44px] grid items-center gap-x-1', r.winner && 'bg-gold/10 rounded-md')} style={{ gridTemplateColumns: cols }}>
               <span className="flex items-center gap-2 min-w-0">
                 <span className="w-6 text-right font-cond font-black text-[18px] text-field-400 tabular-nums">{r.rank}</span>
                 <span className="truncate text-[19px] font-bold text-white">{r.name}</span>
