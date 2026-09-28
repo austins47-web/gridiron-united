@@ -1527,6 +1527,8 @@ export type League = ScoringRules & RosterSlotConfig & {
   invite_code: string
   /** Pick'Em: post a Claude-written roast to chat after each week's final. */
   ai_recap?: boolean
+  /** The commissioner's note about the league, for the weekly roast. */
+  roast_notes?: string | null
   created_at: string
   updated_at: string
 }

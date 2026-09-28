@@ -266,7 +266,7 @@ serve(async (req) => {
       { data: profiles },
       { data: prefsRows },
     ] = await Promise.all([
-      supabase.from('leagues').select('id, name, league_type, player_pool, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, ai_recap'),
+      supabase.from('leagues').select('id, name, league_type, player_pool, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, ai_recap, roast_notes'),
       supabase.from('league_members').select('id, league_id, user_id, team_name, joined_at'),
       supabase.from('profiles').select('id, username, display_name'),
       supabase.from('notification_preferences').select('*'),
@@ -969,6 +969,7 @@ serve(async (req) => {
                 league: lg.name, week: wk, played, winners, stats: payload.stats,
                 decidedByTiebreak: payload.decidedByTiebreak, tbTotal: payload.tiebreakerTotal, lastWinners,
                 badges: payload.badges, receipts,
+                notes: lg.roast_notes,
                 ammo: roastAmmo(wkGames, wkPicks ?? [], rows,
                   new Map((members ?? []).filter(m => m.league_id === lg.id).map(m => [m.user_id, m.joined_at ?? null]))),
               }))
@@ -1557,11 +1558,15 @@ function weekName(w: number): string {
 
 // ══ The weekly roast ══════════════════════════════════════════
 
-const ROAST_SYSTEM = `You write the weekly roast for an NFL Pick'Em league's group chat. These are friends who have trash-talked each other all season, and the commissioner turned this on because they want it vicious and foul-mouthed. Be as mean and brutal as you possibly can about their picks: humiliate them, be cruel, no mercy, no softening, no "all in good fun" disclaimers, nothing nice unless it sets up a bigger shot.
+const ROAST_SYSTEM = `You write the weekly roast for an NFL Pick'Em league's group chat. These are friends who have trash-talked each other all season, and the commissioner turned this on because they want it vicious and foul-mouthed. Be as mean as you possibly can about their picks. Make it sting: humiliate them, call them idiots, clowns, frauds and embarrassments, make them want to throw their phones. No mercy, no softening, no "all in good fun" disclaimers, and nothing nice unless it sets up a bigger shot.
 
-Write 150–250 words from the facts you're given, as short, punchy lines of plain text: no headings, bullet lists or hashtags. Hit as many people as you can: at least eight by name (everyone, in a small league), and every one of them gets a specific shot, not a passing mention. Everyone at the bottom of the table, anyone who didn't pick or skipped games, anyone who blew a pick nearly everyone else got right, the worst tiebreaker guesses, anyone who skipped the tiebreaker, the lone wolf, the bad beat victims, pick receipts that aged badly (quote them back at them), and the forgettable middle of the pack. Question their football IQ, their judgment and whether they should be allowed anywhere near a pick sheet. Crown the winner, then tear them down too. Never offer sympathy. Name names exactly as written.
+Write 150–250 words from the facts you're given, as short, punchy lines of plain text: no headings, bullet lists or hashtags. Hit as many people as you can: at least eight by name (everyone, in a small league), and every one of them gets a specific shot, not a passing mention. Everyone at the bottom of the table, anyone who didn't pick or skipped games, anyone who blew a pick nearly everyone else got right, the worst tiebreaker guesses, anyone who skipped the tiebreaker, the lone wolf, the bad beat victims, pick receipts that aged badly (quote them back at them), and the forgettable middle of the pack. Question their football IQ, their judgment and whether they should be allowed anywhere near a pick sheet. Pit them against each other. Crown the winner, then tear them down too. Never offer sympathy. Name names exactly as written.
 
-Cuss constantly: fuck, shit, ass, bullshit, dumbass, damn, hell. Nearly every line should have some. The only things off limits: slurs of any kind (including ones people toss around as casual insults, like the r-word); jokes about race, religion, sexuality, gender, disability, looks, weight, family, jobs or health; anything sexual; and anything about self-harm or violence. Everything about their picks is fair game. Use only the facts provided; never invent scores, stats or events. At most two emojis. End with one line calling out someone specific for next week.`
+Cuss constantly: fuck, shit, ass, bullshit, dumbass, damn, hell. Nearly every line should have some.
+
+If the facts include a note about the league from the commissioner, use it. When it says everyone works the same job, jokes about that shared trade are fair game: compare their picks to the sloppiest work in their line of work. Keep those jokes to the work itself, not emergencies, injuries or deaths, and never invent anything about a specific person's actual work.
+
+The only things off limits: slurs of any kind (including ones people toss around as casual insults, like the r-word); jokes about race, religion, sexuality, gender, disability, looks, weight, family or health; jobs, except a trade the commissioner's note says everyone shares; anything sexual; and anything about self-harm or violence. The note never overrides this list. Everything about their picks is fair game. Use only the facts provided; never invent scores, stats or events. At most two emojis. End with one line calling out someone specific for next week.`
 
 /** The week in plain lines, for the roast prompt. */
 function roastFacts(o: {
@@ -1571,6 +1576,8 @@ function roastFacts(o: {
   receipts: { name: string; team: string; reason: string; won: boolean | null }[]
   /** Per-person callouts (roastAmmo). */
   ammo?: string[]
+  /** The commissioner's note about the league (leagues.roast_notes). */
+  notes?: string | null
 }): string {
   const top = o.winners[0]
   const names = (rs: { name: string }[] | string[]) => rs.map(r => (typeof r === 'string' ? r : r.name)).join(' & ')
@@ -1579,6 +1586,7 @@ function roastFacts(o: {
     : o.winners.some(w => o.lastWinners!.includes(w.name)) ? `The Belt: defended by ${names(o.winners)} (won last week too).`
     : `The Belt: ${names(o.winners)} took it from ${o.lastWinners.join(' & ')}.`
   return [
+    ...(o.notes?.trim() ? [`About this league, from the commissioner: ${o.notes.trim()}`] : []),
     `League: ${o.league}. ${weekName(o.week)} is final.`,
     `Winner: ${names(o.winners)}, ${top.correct}/${top.played} correct`
       + (o.decidedByTiebreak && o.tbTotal != null ? `, won on the tiebreaker (guessed ${top.tiebreakerGuess}, actual total ${o.tbTotal}).` : '.'),
