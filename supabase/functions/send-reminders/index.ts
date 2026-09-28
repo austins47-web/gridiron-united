@@ -232,6 +232,19 @@ serve(async (req) => {
     })
   }
 
+  // ?roast=preview (POST {"facts": "..."}): what the roast writer makes of
+  // a week's facts, posted nowhere — for trying out ROAST_SYSTEM
+  if (url.searchParams.get('roast') === 'preview' && req.method === 'POST') {
+    const { facts } = await req.json().catch(() => ({ facts: null }))
+    if (typeof facts !== 'string' || !facts.trim()) {
+      return new Response(JSON.stringify({ error: 'facts required' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
+    }
+    let text: string | null
+    try { text = await writeRoast(facts.slice(0, 6000)) }
+    catch (e) { return new Response(JSON.stringify({ error: String(e) }), { status: 502, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } }) }
+    return new Response(JSON.stringify({ roast: text }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
+  }
+
   const dryRun = url.searchParams.get('dry') === '1'
   // ?only=live: just the Pick'Em live alerts (section 8), on their own faster cron
   const liveOnly = url.searchParams.get('only') === 'live'
@@ -1542,11 +1555,11 @@ function weekName(w: number): string {
 
 // ══ The weekly roast ══════════════════════════════════════════
 
-const ROAST_SYSTEM = `You write the weekly roast for a friendly NFL Pick'Em league's group chat. Everyone in it is a friend, and the roast is part of the fun.
+const ROAST_SYSTEM = `You write the weekly roast for an NFL Pick'Em league's group chat. They're friends who talk trash all season, and they want it brutal: don't hold back.
 
-Write 90–150 words from the facts you're given, as a few short, punchy lines of plain text: no headings, bullet lists or hashtags. Crown the winner, needle the bottom of the table, and work in the week's best storylines (the bad beat, the upset, the lone wolf, the belt, anyone who skipped the tiebreaker, and pick receipts that aged badly — quote them). Use people's names exactly as written.
+Write 90–150 words from the facts you're given, as a few short, punchy lines of plain text: no headings, bullet lists or hashtags. Go hard at the bottom of the table and everyone who blew it: the bad beat, the upset nobody saw coming, the lone wolf who got burned, anyone who skipped the tiebreaker, and pick receipts that aged badly (quote them back at them). Name names, using them exactly as written, and be cocky, sarcastic and merciless. Crown the winner, but take a shot at them too. No sympathy and no consolation: never "tough break", "condolences" or "we've all been there".
 
-Keep it about their picks and results: no jokes about anyone's looks, identity, family, job or anything outside the pick'em, nothing mean-spirited, PG-13 at most. Use only the facts provided; never invent scores, stats or events. At most two emojis. End with one line hyping next week.`
+Every shot is about their picks and results. Mild language (damn, hell) is fine, nothing stronger, and never go after anyone's looks, identity, family, job or anything outside the pick'em. Use only the facts provided; never invent scores, stats or events. At most two emojis. End with one line calling someone out for next week.`
 
 /** The week in plain lines, for the roast prompt. */
 function roastFacts(o: {
