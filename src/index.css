@@ -951,6 +951,14 @@
 [data-theme="light"] .chat-avatar-fallback span {
   color: #374151 !important;
 }
+/* Read receipts: the ring separates stacked avatars, in the chat's own color */
+[data-theme="light"] .chat-seen-avatar {
+  --tw-ring-color: #f0f2f7 !important;
+}
+[data-theme="light"] span.chat-seen-avatar {
+  background-color: #e5e7eb !important;
+  color: #374151 !important;
+}
 
 /* Empty state */
 [data-theme="light"] .chat-empty {

@@ -132,6 +132,8 @@ function MessageText({ text, myUsername, onMentionClick }: {
 const REACTIONS = ['🔥', '😂', '👍', '❤️', '😮', '💀', '🏈', '🗑️']
 
 interface ReactionRow { message_id: string; user_id: string; emoji: string }
+/** How far one member has read in one room ('main' or a game id). */
+interface ReadRow { user_id: string; room: string; read_at: string }
 interface ReactionGroup { emoji: string; users: string[]; mine: boolean }
 type Align = 'left' | 'right' | 'center'
 
@@ -205,6 +207,44 @@ function ReactionChips({ groups, align, onToggle, nameOf }: {
           <span className="font-bold tabular-nums">{g.users.length}</span>
         </button>
       ))}
+    </div>
+  )
+}
+
+/** "A, B and C" */
+const listNames = (names: string[]) =>
+  names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+
+/**
+ * Read receipts: the avatars of everyone whose last read in this room is
+ * this message. Tap for their names.
+ */
+function SeenBy({ readers }: { readers: Member[] }) {
+  const [open, setOpen] = useState(false)
+  const names = readers.map(r => r.display_name || r.username || 'Someone')
+  const shown = readers.slice(0, 6)
+  const label = `Seen by ${listNames(names)}`
+  return (
+    <div className="flex flex-col items-end mt-0.5 pr-1">
+      <button
+        onClick={() => setOpen(o => !o)}
+        title={label}
+        aria-label={label}
+        aria-expanded={open}
+        className="flex items-center -space-x-1 rounded-full px-1 py-0.5 hover:bg-field-800/60 transition-colors"
+      >
+        {shown.map(r => r.avatar_url
+          ? <img key={r.user_id} src={r.avatar_url} alt="" className="chat-seen-avatar w-4 h-4 rounded-full object-cover ring-1 ring-field-900" />
+          : (
+            <span key={r.user_id} className="chat-seen-avatar w-4 h-4 rounded-full bg-field-700 ring-1 ring-field-900 flex items-center justify-center text-[8px] font-black text-field-300">
+              {(r.display_name || r.username || '?')[0].toUpperCase()}
+            </span>
+          ))}
+        {readers.length > shown.length && (
+          <span className="!ml-0 pl-1.5 text-[10px] font-bold text-field-500 tabular-nums">+{readers.length - shown.length}</span>
+        )}
+      </button>
+      {open && <p className="text-[11px] text-field-500 text-right max-w-[85%] leading-snug">{label}</p>}
     </div>
   )
 }
@@ -799,6 +839,22 @@ export function LeagueChat() {
     },
   })
 
+  // ── Read receipts ───────────────────────────────────────────
+  // How far everyone has read, per room (league_chat_reads)
+  const room = threadId ?? 'main'
+  const { data: readRows = [] } = useQuery({
+    queryKey: ['chat-reads', activeLeagueId],
+    enabled: !!activeLeagueId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('league_chat_reads')
+        .select('user_id, room, read_at')
+        .eq('league_id', activeLeagueId!)
+      if (error) throw error
+      return (data ?? []) as ReadRow[]
+    },
+  })
+
   // ── Reactions ───────────────────────────────────────────────
   const { data: reactionRows = [] } = useQuery({
     queryKey: ['chat-reactions', activeLeagueId],
@@ -990,6 +1046,18 @@ export function LeagueChat() {
         if (r.league_id && r.league_id !== activeLeagueId) return
         qc.invalidateQueries({ queryKey: ['league-polls', activeLeagueId] })
       })
+      // Read receipts moving as people read
+      .on('postgres_changes', {
+        event: '*', schema: 'public',
+        table: 'league_chat_reads',
+        filter: `league_id=eq.${activeLeagueId}`,
+      }, (payload) => {
+        const r = payload.new as Partial<ReadRow>
+        if (!r.user_id || !r.room || !r.read_at) return
+        const row: ReadRow = { user_id: r.user_id, room: r.room, read_at: r.read_at }
+        qc.setQueryData<ReadRow[]>(['chat-reads', activeLeagueId], prev =>
+          [...(prev ?? []).filter(x => !(x.user_id === row.user_id && x.room === row.room)), row])
+      })
       .on('postgres_changes', {
         event: '*', schema: 'public',
         table: 'league_pins',
@@ -1024,6 +1092,45 @@ export function LeagueChat() {
     el.addEventListener('load', onLoad, true)
     return () => el.removeEventListener('load', onLoad, true)
   }, [autoScroll, toBottom])
+
+  // Your read receipt: the newest message in the room, once you're at the
+  // bottom of it with the app in front of you
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState === 'visible')
+  useEffect(() => {
+    const onChange = () => setPageVisible(document.visibilityState === 'visible')
+    document.addEventListener('visibilitychange', onChange)
+    return () => document.removeEventListener('visibilitychange', onChange)
+  }, [])
+  const markedAt = useRef<Record<string, number>>({})
+  const newestAt = messages.length > 0 ? messages[messages.length - 1].created_at : null
+  useEffect(() => {
+    if (!activeLeagueId || !user || !newestAt || !autoScroll || !pageVisible) return
+    const at = Date.parse(newestAt)
+    if ((markedAt.current[room] ?? 0) >= at) return
+    markedAt.current[room] = at
+    supabase.rpc('mark_chat_read', { p_league: activeLeagueId, p_room: room, p_at: newestAt })
+      .then(({ error }) => { if (error) delete markedAt.current[room] })
+  }, [activeLeagueId, user, room, newestAt, autoScroll, pageVisible])
+
+  // Each member's avatar goes under the last message here they've read —
+  // not under their own (sending it says they've seen it), and never
+  // yours (you know what you've read)
+  const seenBy = useMemo(() => {
+    const out = new Map<string, Member[]>()
+    for (const r of readRows) {
+      if (r.room !== room || r.user_id === user?.id) continue
+      const who = members.find(m => m.user_id === r.user_id)
+      if (!who) continue
+      const readAt = Date.parse(r.read_at)
+      let last: ChatMessage | null = null
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (Date.parse(messages[i].created_at) <= readAt) { last = messages[i]; break }
+      }
+      if (!last || last.user_id === r.user_id) continue
+      out.set(last.id, [...(out.get(last.id) ?? []), who])
+    }
+    return out
+  }, [readRows, room, members, messages, user?.id])
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget
@@ -1370,6 +1477,7 @@ export function LeagueChat() {
                   </div>
                 </div>
               )}
+              {seenBy.has(msg.id) && <SeenBy readers={seenBy.get(msg.id)!} />}
               {isCard && menuFor !== msg.id && (
                 <div className="flex justify-center -mt-0.5">
                   <button

@@ -318,6 +318,13 @@ export interface Database {
         Update: Partial<{ poll_id: string; user_id: string; league_id: string; option_index: number; created_at: string }>
         Relationships: []
       }
+      /** Read receipts: how far each member has read in each room ('main' or a game id). */
+      league_chat_reads: {
+        Row: { league_id: string; user_id: string; room: string; read_at: string; updated_at: string }
+        Insert: { league_id: string; user_id: string; room: string; read_at: string; updated_at?: string }
+        Update: Partial<{ read_at: string; updated_at: string }>
+        Relationships: []
+      }
       league_pins: {
         Row: LeaguePin
         Insert: Partial<LeaguePin> & Pick<LeaguePin, 'league_id' | 'message'>
@@ -1383,6 +1390,8 @@ export interface Database {
         Returns: undefined
       }
       unpin_league_announcement: { Args: { p_league: string }; Returns: undefined }
+      /** Moves your read receipt forward in a room (never back). */
+      mark_chat_read: { Args: { p_league: string; p_room: string; p_at: string }; Returns: undefined }
       league_tv_token: { Args: { p_league: string; p_reset?: boolean }; Returns: string }
       league_has_tv: { Args: { p_league: string }; Returns: boolean }
       send_tv_reaction: { Args: { p_league: string; p_emoji: string }; Returns: undefined }
