@@ -17,7 +17,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  nflSeasonFor, isVoid, isFinal, isLive, computeWeek, computeWinOdds, computeUpsetWatch, computeBelt,
+  nflSeasonFor, isVoid, isFinal, isLive, computeWeek, computeWinOdds, recentSlateLabel, computeUpsetWatch, computeBelt,
   computeStandings, weekWinners, isWeekComplete, homeWinChance, gameClockLabel, winnerOf,
   computeWeekStats, describeWeekStats, computeWhoCanWin, computeBadBeats, computeAchievements, ACHIEVEMENTS,
   computePickDNA, computePickMatches, keyInjuries,
@@ -143,7 +143,7 @@ serve(async (req) => {
 
     // ── The week ────────────────────────────────────────────
     const rows = computeWeek(wkGames, wkPicks, members)
-    const odds = computeWinOdds(wkGames, wkPicks, rows, { isOpen, viewerId: '__league__', sims: 3000 })
+    const odds = computeWinOdds(wkGames, wkPicks, rows, { isOpen, viewerId: '__league__', sims: 3000, recent: true })
     const complete = wkGames.length > 0 && isWeekComplete(wkGames)
     const started = wkGames.some(g => isLive(g) || isFinal(g))
     const winners = complete ? weekWinners(rows).map(r => r.name) : []
@@ -189,7 +189,11 @@ serve(async (req) => {
       played: r.played,
       rank: 1 + played.filter(o => o.correct > r.correct).length,
       chance: odds?.now.get(r.userId) ?? null,
-      kickoffChance: odds?.kickoff.get(r.userId) ?? null,
+      // The arrow: which way it's going since the games on now kicked off
+      trendFrom: odds?.recent?.get(r.userId) ?? null,
+      // TV pages loaded before trendFrom existed draw their arrow from
+      // this (they reload every 6 hours); drop it after a day or so
+      kickoffChance: odds?.recent?.get(r.userId) ?? null,
       belt: beltIds.has(r.userId),
       winner: winners.includes(r.name),
     }))
@@ -426,6 +430,7 @@ serve(async (req) => {
       nextKickoff,
       games: tiles,
       week_table: weekTable,
+      trend_label: odds?.recentGames ? recentSlateLabel(odds.recentGames) : null,
       season_table: seasonTable,
       belt: belt ? { names: belt.holders.map(h => h.name), reign: Math.max(...belt.holders.map(h => h.reign)) } : null,
       pin: pin?.message ?? null,

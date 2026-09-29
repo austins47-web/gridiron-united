@@ -1,7 +1,7 @@
 import { Percent, Siren, Megaphone } from 'lucide-react'
 import clsx from 'clsx'
 import {
-  gameClockLabel, isLive, rootingFor, swingsFor,
+  gameClockLabel, isLive, rootingFor, swingsFor, recentSlateLabel, recentSlateName,
   type GameSwing, type UpsetWatch, type WeekRow, type WinOdds,
 } from './standings'
 import { teamLogoUrl } from '@/components/teams/teamIds'
@@ -13,7 +13,8 @@ const fmt = (p: number) =>
 /**
  * Everyone's chance to win the week, live — computeWinOdds plays the
  * rest of the week out 4,000 times. Arrows compare with the same odds
- * before anything kicked off. A single-series bar list: one gold hue,
+ * just before the games on now kicked off (or the last slate, between
+ * games), so they show which way it's going. A single-series bar list: one gold hue,
  * the number always printed beside the bar.
  */
 export function WinOddsPanel({ odds, rows, week, currentUserId, beltHolders }: {
@@ -25,7 +26,7 @@ export function WinOddsPanel({ odds, rows, week, currentUserId, beltHolders }: {
 }) {
   const list = rows
     .filter(r => r.submitted)
-    .map(r => ({ r, now: odds.now.get(r.userId) ?? 0, then: odds.kickoff.get(r.userId) ?? 0 }))
+    .map(r => ({ r, now: odds.now.get(r.userId) ?? 0, then: (odds.recent ?? odds.kickoff).get(r.userId) ?? 0 }))
     .sort((a, b) => b.now - a.now || b.then - a.then || a.r.name.localeCompare(b.r.name))
   const alive = list.filter(x => x.now > 0)
   const out = list.filter(x => x.now === 0)
@@ -36,7 +37,7 @@ export function WinOddsPanel({ odds, rows, week, currentUserId, beltHolders }: {
         <span className="flex items-center gap-2 font-cond font-black text-sm uppercase tracking-[0.14em] text-white">
           <Percent className="w-4 h-4 text-gold" /> Chance to Win Week {week}
         </span>
-        <span className="text-field-500 text-[11px] shrink-0">▲▼ since kickoff</span>
+        <span className="text-field-500 text-[11px] shrink-0">▲▼ {recentSlateLabel(odds.recentGames ?? [])}</span>
       </div>
 
       <div className="px-4 py-2 space-y-1.5">
@@ -47,7 +48,7 @@ export function WinOddsPanel({ odds, rows, week, currentUserId, beltHolders }: {
             <div
               key={r.userId}
               className={clsx('grid grid-cols-[minmax(0,7.5rem)_1fr_auto] sm:grid-cols-[minmax(0,10.5rem)_1fr_auto] items-center gap-2.5 py-1', isYou && 'rounded-lg bg-gold/[0.06] -mx-2 px-2')}
-              title={`${r.name}: ${(now * 100).toFixed(1)}% now, ${(then * 100).toFixed(1)}% at kickoff`}
+              title={`${r.name}: ${(now * 100).toFixed(1)}% now, ${(then * 100).toFixed(1)}% before ${recentSlateName(odds.recentGames ?? [])}`}
             >
               <span className="flex items-center gap-1 min-w-0">
                 <span className={clsx('text-sm font-bold truncate', isYou ? 'text-gold' : 'text-white')}>{isYou ? 'You' : r.name}</span>

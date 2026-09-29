@@ -67,7 +67,8 @@ interface TvRow {
   played: number
   rank: number
   chance?: number | null
-  kickoffChance?: number | null
+  /** Chance just before the games on now kicked off — the arrow. */
+  trendFrom?: number | null
   weeksWon?: number
   belt: boolean
   winner?: boolean
@@ -90,6 +91,8 @@ interface TvBoard {
   nextKickoff: string | null
   games: TvGame[]
   week_table: TvRow[]
+  /** What the arrows measure: "since PHI-CHI kicked off". */
+  trend_label?: string | null
   season_table: TvRow[]
   belt: { names: string[]; reign: number } | null
   pin: string | null
@@ -704,12 +707,17 @@ function StandingsPanel({ board, rows, week }: { board: TvBoard; rows: TvRow[]; 
       ) : (
         <div className="px-5 py-3 border-b-2 border-field-800 flex items-baseline justify-between">
           <p className="font-cond font-black uppercase text-white text-[28px] tracking-wide">{week ? 'This week' : 'Season'}</p>
-          {withChance && <p className="font-cond font-bold uppercase tracking-wider text-field-400 text-[15px]">Chance to win</p>}
+          {withChance && (
+            <div className="text-right leading-tight">
+              <p className="font-cond font-bold uppercase tracking-wider text-field-400 text-[15px]">Chance to win</p>
+              {board.trend_label && <p className="font-cond font-bold uppercase tracking-wider text-field-500 text-[12px]">▲▼ {board.trend_label}</p>}
+            </div>
+          )}
         </div>
       )}
       <div className="flex-1 min-h-0 flex flex-col px-2 py-1.5">
         {shown.map(r => {
-          const delta = r.chance != null && r.kickoffChance != null ? r.chance - r.kickoffChance : 0
+          const delta = r.chance != null && r.trendFrom != null ? r.chance - r.trendFrom : 0
           return (
             <div key={r.userId} className={clsx('flex-1 max-h-[46px] min-h-0 flex items-center gap-2 px-2 rounded-lg', r.winner && 'bg-gold/15')}>
               <span className="w-7 text-right font-cond font-black text-[21px] text-field-400 tabular-nums">{r.rank}</span>

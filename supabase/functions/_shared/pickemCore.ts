@@ -1043,10 +1043,48 @@ export interface GameSwing {
 export interface WinOdds {
   /** Each player's chance to win the week right now, 0–1 (a shared win splits). */
   now: Map<string, number>
-  /** The same before anything kicked off — what the arrows compare against. */
+  /** The same before anything kicked off. */
   kickoff: Map<string, number>
+  /**
+   * With `recent`: the same just before `recentGames` kicked off — what
+   * the ▲▼ arrows compare against, so they show which way things are
+   * going now rather than since the week began.
+   */
+  recent?: Map<string, number>
+  /** The games on now (with the rest of their slate), or the last slate played. */
+  recentGames?: Game[]
   /** With `swings`: every unfinished game, most decisive first. */
   swings?: GameSwing[]
+}
+
+/** Kickoffs this close together are one slate (Sunday's 4:05 and 4:25). */
+const SLATE_MS = 90 * 60_000
+
+/**
+ * The games the odds arrows measure: the ones on now plus any from the
+ * same slate already over, or with nothing on, the last slate played.
+ */
+export function recentSlate(games: Game[]): Game[] {
+  const ko = (g: Game) => new Date(g.game_date).getTime()
+  const started = games.filter(g => !isVoid(g) && (isLive(g) || isFinal(g)))
+  if (started.length === 0) return []
+  const live = started.filter(isLive)
+  const from = (live.length ? Math.min(...live.map(ko)) : Math.max(...started.map(ko))) - SLATE_MS
+  return started.filter(g => ko(g) >= from)
+}
+
+/** The recent slate by name: "PHI-CHI", "these games", "the last games". */
+export function recentSlateName(slate: Game[]): string {
+  if (slate.length === 0) return 'kickoff'
+  if (slate.length === 1) return `${slate[0].away_team}-${slate[0].home_team}`
+  return slate.some(isLive) ? 'these games' : 'the last games'
+}
+
+/** The arrows' caption: "since PHI-CHI kicked off", "from the last games". */
+export function recentSlateLabel(slate: Game[]): string {
+  if (slate.length === 0) return 'since kickoff'
+  const name = recentSlateName(slate)
+  return slate.some(isLive) ? `since ${name} kicked off` : `from ${name}`
 }
 
 /** Share of hidden picks assumed to go to the favorite (roughly how pick'em leagues pick). */
@@ -1085,8 +1123,8 @@ function mulberry32(seed: number) {
  */
 export function computeWinOdds(
   games: Game[], picks: Pick[], rows: WeekRow[],
-  { isOpen = () => false, viewerId, sims = 4000, swings = false }:
-    { isOpen?: (g: Game) => boolean; viewerId?: string; sims?: number; swings?: boolean } = {},
+  { isOpen = () => false, viewerId, sims = 4000, swings = false, recent = false }:
+    { isOpen?: (g: Game) => boolean; viewerId?: string; sims?: number; swings?: boolean; recent?: boolean } = {},
 ): WinOdds | null {
   const playable = games.filter(g => !isVoid(g))
   if (playable.length === 0 || playable.every(isFinal)) return null
@@ -1105,20 +1143,25 @@ export function computeWinOdds(
     known(r.userId, g) ? pickOf.get(`${r.userId}:${g.id}`) ?? null : undefined))
   const guessKnown = players.map(r => !tb || known(r.userId, tb))
 
-  const run = (atKickoff: boolean) => {
-    const rand = mulberry32(playable.length * 7919 + (atKickoff ? 1 : 2))
+  // `unplayed(g)`: play the week as if g hadn't kicked off yet (its
+  // pregame chance, no score) — every game for the kickoff odds, the
+  // recent slate's for the arrows, none for now
+  const run = (unplayed: (g: Game) => boolean, split: boolean) => {
+    // One seed for every run and a draw for every game, settled or not, so
+    // two runs differ by what happened on the field and not by the dice
+    const rand = mulberry32(playable.length * 7919 + 2)
     const normal = () => {
       const u = 1 - rand(), v = rand()
       return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
     }
     // A final game's result is settled ('' for a tie: nobody's pick matches)
-    const fixed = playable.map(g => (!atKickoff && isFinal(g) ? winnerOf(g) ?? '' : null))
-    const chance = playable.map(g => (atKickoff ? pregameHomeWinChance(g) : homeWinChance(g)))
-    const tbNow = tb && !atKickoff ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : 0
-    const tbLeft = tb && !atKickoff ? timeLeft(tb) : 1
+    const fixed = playable.map(g => (!unplayed(g) && isFinal(g) ? winnerOf(g) ?? '' : null))
+    const chance = playable.map(g => (unplayed(g) ? pregameHomeWinChance(g) : homeWinChance(g)))
+    const tbFresh = !tb || unplayed(tb)
+    const tbNow = tb && !tbFresh ? (tb.home_score ?? 0) + (tb.away_score ?? 0) : 0
+    const tbLeft = tb && !tbFresh ? timeLeft(tb) : 1
 
     // Credit split by each open game's result, when asked for
-    const split = swings && !atKickoff
     const open = playable.map((_, i) => fixed[i] == null)
     const byHome = split ? playable.map(() => new Array<number>(players.length).fill(0)) : []
     const byAway = split ? playable.map(() => new Array<number>(players.length).fill(0)) : []
@@ -1138,7 +1181,8 @@ export function computeWinOdds(
     }
     for (let s = 0; s < sims; s++) {
       for (let i = 0; i < playable.length; i++) {
-        winner[i] = fixed[i] ?? (rand() < chance[i] ? playable[i].home_team : playable[i].away_team)
+        const roll = rand()
+        winner[i] = fixed[i] ?? (roll < chance[i] ? playable[i].home_team : playable[i].away_team)
         if (winner[i] === playable[i].home_team) homeWins[i]++
       }
       let best = -1
@@ -1158,7 +1202,7 @@ export function computeWinOdds(
 
       // Tiebreaker: closest guess to a simulated total; no guess loses
       const total = !tb ? 0
-        : !atKickoff && isFinal(tb) ? tbNow
+        : !tbFresh && isFinal(tb) ? tbNow
         : tbNow + Math.max(0, Math.round(ou * tbLeft + normal() * 13 * Math.sqrt(tbLeft)))
       let closest = Infinity
       const diffs = tied.map(u => {
@@ -1189,8 +1233,16 @@ export function computeWinOdds(
     return { odds, swings: gameSwings }
   }
 
-  const current = run(false)
-  return { now: current.odds, kickoff: run(true).odds, ...(current.swings ? { swings: current.swings } : {}) }
+  const current = run(() => false, swings)
+  const out: WinOdds = { now: current.odds, kickoff: run(() => true, false).odds }
+  if (current.swings) out.swings = current.swings
+  if (recent) {
+    const slate = recentSlate(playable)
+    const inSlate = new Set(slate.map(g => g.id))
+    out.recent = run(g => inSlate.has(g.id), false).odds
+    out.recentGames = slate
+  }
+  return out
 }
 
 /**

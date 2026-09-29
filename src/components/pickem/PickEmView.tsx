@@ -317,6 +317,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
           isOpen: (g) => !isGameLocked(g.game_date, weekDeadline, g.status),
           viewerId: user?.id,
           swings: true,
+          recent: true,
         })
       : null),
     [tab, games, allPicks, weekRows, weekDeadline, user?.id],
