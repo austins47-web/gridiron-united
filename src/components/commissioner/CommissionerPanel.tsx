@@ -143,14 +143,22 @@ export function CommissionerPanel() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-field-700 pb-0 overflow-x-auto">
+      {/* Tabs. A Pick'Em league's four all fit on a phone (icon over
+          label, in a grid) so none hides off the edge; a fantasy league's
+          seven scroll sideways */}
+      <div className={clsx(
+        'border-b border-field-700 pb-0',
+        TABS.length <= 4 ? 'grid grid-cols-4 sm:flex sm:gap-1' : 'flex gap-1 overflow-x-auto',
+      )}>
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={clsx(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0',
+              'flex items-center font-bold transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0',
+              TABS.length <= 4
+                ? 'flex-col sm:flex-row justify-center gap-1 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2.5 text-[12px] sm:text-sm'
+                : 'gap-2 px-4 py-2.5 text-sm',
               tab === t.id
                 ? 'border-gold text-gold'
                 : 'border-transparent text-field-400 hover:text-white',
