@@ -23,6 +23,7 @@ const HEADER = 92
 const TICKER = 56
 
 type Moment = HolidaySceneSpec['moments'][number]
+type Colors = [string, string]
 
 /** How long each moment runs. */
 const MOMENT_MS: Record<Moment, number> = {
@@ -252,18 +253,29 @@ function Moments({ theme }: { theme: HolidayTheme }) {
   }, [theme.key, theme.scene.moments])
 
   if (!playing) return null
-  const id = playing.id
-  switch (playing.kind) {
-    case 'bats': return <Bats key={id} />
-    case 'ghost': return <Ghost key={id} />
-    case 'sleigh': return <Sleigh key={id} />
-    case 'turkey': return <Turkey key={id} />
-    case 'fireworks': return <Fireworks key={id} theme={theme} />
-    case 'flyover': return <Flyover key={id} theme={theme} />
-    case 'football': return <Football key={id} />
-    case 'spotlight': return <Spotlights key={id} />
+  return <PlayMoment key={playing.id} kind={playing.kind} colors={theme.colors} />
+}
+
+/**
+ * One moment across the TV: a theme's, or one the commissioner plays
+ * from the remote (with or without a theme on). Runs MOMENT_MS[kind].
+ */
+export function PlayMoment({ kind, colors }: { kind: Moment; colors: Colors }) {
+  switch (kind) {
+    case 'bats': return <Bats />
+    case 'ghost': return <Ghost />
+    case 'sleigh': return <Sleigh />
+    case 'turkey': return <Turkey />
+    case 'fireworks': return <Fireworks colors={colors} />
+    case 'flyover': return <Flyover colors={colors} />
+    case 'football': return <Football />
+    case 'spotlight': return <Spotlights />
   }
 }
+
+/** The CSS the moments run on, for a PlayMoment outside a HolidayScene. */
+export const MOMENT_CSS = SCENE_CSS
+export { MOMENT_MS }
 
 function Bats() {
   const flock = useMemo(() => Array.from({ length: 9 }, (_, i) => ({
@@ -334,8 +346,8 @@ function Football() {
   )
 }
 
-function Flyover({ theme }: { theme: HolidayTheme }) {
-  const trails = [theme.colors[1] ?? '#b91c1c', '#f8fafc', theme.colors[0]]
+function Flyover({ colors }: { colors: Colors }) {
+  const trails = [colors[1] ?? '#b91c1c', '#f8fafc', colors[0]]
   return (
     <div className="absolute" style={{ top: 250, left: 0, animation: `hs-across-right ${MOMENT_MS.flyover}ms linear forwards` }}>
       {[0, 1, 2].map(i => (
@@ -348,9 +360,9 @@ function Flyover({ theme }: { theme: HolidayTheme }) {
   )
 }
 
-function Fireworks({ theme }: { theme: HolidayTheme }) {
+function Fireworks({ colors: [c1, c2] }: { colors: Colors }) {
   const bursts = useMemo(() => {
-    const colors = [theme.colors[0], theme.colors[1], '#fde68a', '#ffffff']
+    const colors = [c1, c2, '#fde68a', '#ffffff']
     return Array.from({ length: 5 }, (_, b) => ({
       x: 260 + ((b * 397) % (W - 520)),
       y: 180 + ((b * 211) % 380),
@@ -362,7 +374,7 @@ function Fireworks({ theme }: { theme: HolidayTheme }) {
         return { tx: Math.cos(a) * r, ty: Math.sin(a) * r + 40 }
       }),
     }))
-  }, [theme.colors])
+  }, [c1, c2])
   return (
     <>
       {bursts.map((b, i) => (
@@ -436,7 +448,7 @@ function NewYearCountdown({ theme }: { theme: HolidayTheme }) {
         <span key={left} className="font-cond font-black text-[420px] leading-none text-gold" style={{ animation: 'hs-pop .9s ease-out forwards', textShadow: `0 0 60px ${theme.colors[0]}` }}>{left}</span>
       ) : (
         <>
-          <Fireworks theme={theme} />
+          <Fireworks colors={theme.colors} />
           <p className="font-cond font-black uppercase text-[150px] leading-none text-white" style={{ animation: 'hs-pop 1s ease-out forwards' }}>Happy New Year</p>
           <p className="font-cond font-black text-[220px] leading-none text-gold" style={{ textShadow: `0 0 60px ${theme.colors[0]}` }}>{year}</p>
         </>

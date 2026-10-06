@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Tv, Send, Undo2 } from 'lucide-react'
+import { Tv, Send, Undo2, Gamepad2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { useAppStore } from '@/store/appStore'
 import clsx from 'clsx'
 import { TV_REACTIONS, TV_MESSAGE_MAX, useTvReactions } from '@/hooks/useTvReactions'
 
@@ -102,6 +104,7 @@ function TvMessageBox({ say, unsend }: {
  */
 export function TvReactionButton({ variant = 'chat' }: { variant?: 'chat' | 'header' }) {
   const { enabled, send, say, unsend } = useTvReactions()
+  const isCommissioner = useAppStore(s => !!s.myMembership?.is_commissioner)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -131,6 +134,15 @@ export function TvReactionButton({ variant = 'chat' }: { variant?: 'chat' | 'hea
           <p className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-field-400">On the Shop TV</p>
           <ReactionGrid send={send} />
           <TvMessageBox say={say} unsend={unsend} />
+          {isCommissioner && (
+            <Link
+              to="/app/commissioner?tab=extras"
+              onClick={() => setOpen(false)}
+              className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-bold text-gold hover:bg-gold/20"
+            >
+              <Gamepad2 className="w-3.5 h-3.5" /> TV remote
+            </Link>
+          )}
         </div>
       )}
     </div>

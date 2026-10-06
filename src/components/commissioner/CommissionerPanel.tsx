@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/appStore'
 import { supabase } from '@/lib/supabase'
@@ -21,6 +22,7 @@ import toast from 'react-hot-toast'
 import { CURRENT_SEASON } from '@/lib/season'
 
 type CommTab = 'scoring' | 'rosters' | 'players' | 'members' | 'league' | 'cfb_postseason' | 'trades' | 'extras'
+const COMM_TABS: CommTab[] = ['scoring', 'rosters', 'players', 'members', 'league', 'cfb_postseason', 'trades', 'extras']
 
 // ─── Scoring row defaults ───────────────────────────────────────────
 const SCORING_SECTIONS = [
@@ -90,7 +92,12 @@ const SCORING_SECTIONS = [
 // ─── Main Component ─────────────────────────────────────────────────
 export function CommissionerPanel() {
   const { activeLeague, activeLeagueId, myMembership, setActiveLeague } = useAppStore()
-  const [tab, setTab] = useState<CommTab>('scoring')
+  // ?tab=extras opens on a tab (the TV popup links the remote there)
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState<CommTab>(() => {
+    const asked = searchParams.get('tab') as CommTab | null
+    return asked && COMM_TABS.includes(asked) ? asked : 'scoring'
+  })
 
   const isCommissioner = myMembership?.is_commissioner
   const isPickem = activeLeague?.league_type === 'pickem'

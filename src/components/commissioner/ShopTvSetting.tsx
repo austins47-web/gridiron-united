@@ -8,6 +8,7 @@ import { useAppStore } from '@/store/appStore'
 import { DEFAULT_GOLD } from '@/lib/brand'
 import { ColorPicker } from '@/components/settings/ColorPicker'
 import { HOLIDAY_CHOICES } from '@/lib/holiday'
+import { TvRemote } from './TvRemote'
 import clsx from 'clsx'
 
 /**
@@ -95,6 +96,9 @@ export function ShopTvSetting({ leagueId }: { leagueId: string }) {
           </p>
         </div>
       </div>
+
+      {/* Put something on the TV right now */}
+      <TvRemote leagueId={leagueId} />
 
       {!code ? (
         <button onClick={() => get()} disabled={busy} className="btn-gold w-full justify-center">

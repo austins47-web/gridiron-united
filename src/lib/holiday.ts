@@ -124,6 +124,19 @@ function previewChoice(): HolidayKey | 'off' | null {
   }
 }
 
+/** What can cross the Shop TV: a theme's moments, or any of them from the commissioner's remote. */
+export type TvMoment = HolidaySceneSpec['moments'][number]
+export const TV_MOMENTS: { kind: TvMoment; label: string; emoji: string }[] = [
+  { kind: 'fireworks', label: 'Fireworks', emoji: '🎆' },
+  { kind: 'spotlight', label: 'Spotlights', emoji: '🔦' },
+  { kind: 'football', label: 'Football', emoji: '🏈' },
+  { kind: 'flyover', label: 'Flyover', emoji: '✈️' },
+  { kind: 'bats', label: 'Bats', emoji: '🦇' },
+  { kind: 'ghost', label: 'Ghost', emoji: '👻' },
+  { kind: 'turkey', label: 'Turkey', emoji: '🦃' },
+  { kind: 'sleigh', label: 'Sleigh', emoji: '🛷' },
+]
+
 /** Every theme, for the commissioner's picker. */
 export const HOLIDAY_CHOICES: { key: HolidayKey; label: string; emoji: string }[] =
   KEYS.map(key => { const t = themeOf(key, null); return { key, label: t.label, emoji: t.emoji } })

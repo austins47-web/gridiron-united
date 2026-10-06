@@ -6,9 +6,9 @@ import { brandVars, DEFAULT_GOLD } from '@/lib/brand'
 import { weatherLabel, type GameWeather } from '@/lib/weather'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from '@/components/pickem/Belt'
-import { useHolidayTheme, type HolidayTheme } from '@/lib/holiday'
+import { useHolidayTheme, TV_MOMENTS, type HolidayTheme, type TvMoment } from '@/lib/holiday'
 import { HolidayPill, HolidayParticles } from '@/components/ui/Holiday'
-import { HolidayScene } from './HolidayScene'
+import { HolidayScene, PlayMoment, MOMENT_CSS, MOMENT_MS } from './HolidayScene'
 import { ACHIEVEMENTS } from '@/components/pickem/standings'
 import { ACHIEVEMENT_ICONS } from '@/components/pickem/achievementIcons'
 
@@ -325,6 +325,7 @@ export function ShopTV() {
         {board && holiday && <HolidayScene theme={holiday} />}
         {board && holiday && <HolidayParticles theme={holiday} />}
         {status !== 'gone' && <LiveFromPhones code={code} />}
+        {board && <RemoteOverlay board={board} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
       </div>
     </div>
   )
@@ -440,12 +441,32 @@ function Board({ board, offline, holiday }: { board: TvBoard; offline: boolean; 
 /** Asks the board to reload now (a chat message was deleted). */
 const TV_REFRESH = 'gu-tv-refresh'
 
+/** A press of the commissioner's remote (tv_remote), passed around the TV. */
+interface TvRemote { action: string; text?: string; moment?: string }
+const TV_REMOTE = 'gu-tv-remote'
+
+/** Runs `on` for each press of the commissioner's remote. */
+function useTvRemote(on: (r: TvRemote) => void) {
+  const latest = useRef(on)
+  useEffect(() => { latest.current = on })
+  useEffect(() => {
+    const hear = (e: Event) => { const r = (e as CustomEvent<TvRemote>).detail; if (r?.action) latest.current(r) }
+    window.addEventListener(TV_REMOTE, hear)
+    return () => window.removeEventListener(TV_REMOTE, hear)
+  }, [])
+}
+
 const GAMES_MS = 50_000
 const BOARD_MS = 25_000
 
 /** Games for a while, then the full Board for a while — while there's a Board to show. */
 function useMainView(hasBoard: boolean): 'games' | 'board' {
   const [view, setView] = useState<'games' | 'board'>('games')
+  // The remote: the board now (once anything's locked), or back to the games
+  useTvRemote(r => {
+    if (r.action === 'board' && hasBoard) setView('board')
+    if (r.action === 'clear') setView('games')
+  })
   useEffect(() => {
     if (!hasBoard) { setView('games'); return }
     const t = setTimeout(() => setView(v => (v === 'games' ? 'board' : 'games')), view === 'games' ? GAMES_MS : BOARD_MS)
@@ -1310,8 +1331,20 @@ function Takeover({ board, emoji }: { board: TvBoard; emoji?: string }) {
   const urgent = !!sh?.lockAt && sh.rows.length > 0 && new Date(sh.lockAt).getTime() - now < 3 * 3600_000
   const roast = board.roast?.text ? board.roast : null
   const champ = board.complete && board.winners.length ? board.winners : null
-  const kind = urgent ? 'shame' : roast || champ ? 'roast' : null
   const [on, setOn] = useState(false)
+  // The remote: the roast now, or clear the screen
+  const [forced, setForced] = useState(false)
+  const forcedTimer = useRef<ReturnType<typeof setTimeout>>()
+  useTvRemote(r => {
+    if (r.action === 'roast' && roast) {
+      setForced(true)
+      clearTimeout(forcedTimer.current)
+      forcedTimer.current = setTimeout(() => setForced(false), TAKEOVER_FOR)
+    }
+    if (r.action === 'clear') { clearTimeout(forcedTimer.current); setForced(false); setOn(false) }
+  })
+  useEffect(() => () => clearTimeout(forcedTimer.current), [])
+  const kind = forced ? 'roast' : urgent ? 'shame' : roast || champ ? 'roast' : null
   useEffect(() => {
     if (!kind) { setOn(false); return }
     let hide: ReturnType<typeof setTimeout>
@@ -1320,7 +1353,7 @@ function Takeover({ board, emoji }: { board: TvBoard; emoji?: string }) {
     const every = setInterval(show, TAKEOVER_EVERY)
     return () => { clearTimeout(first); clearInterval(every); clearTimeout(hide) }
   }, [kind, roast])
-  if (!on || !kind) return null
+  if (!(on || forced) || !kind) return null
 
   if (kind === 'shame' && sh?.lockAt) {
     return (
@@ -1499,8 +1532,10 @@ function LiveFromPhones({ code }: { code: string }) {
       setChats(list => [...list.slice(-3), c])
       timers.push(setTimeout(() => setChats(list => list.filter(x => x.id !== c.id)), c.dur))
     }
+    // Private: only the database posts here (tv_broadcast); presence tells
+    // the commissioner's remote this TV is on
     const channel = supabase
-      .channel(`tv:${code}`)
+      .channel(`tv:${code}`, { config: { private: true, presence: { key: 'tv' } } })
       .on('broadcast', { event: 'reaction' }, ({ payload }) => {
         const p = payload as { emoji?: string; name?: string }
         if (!p?.emoji) return
@@ -1524,7 +1559,13 @@ function LiveFromPhones({ code }: { code: string }) {
         setChats(list => list.filter(c => c.msgId !== id))
         window.dispatchEvent(new Event(TV_REFRESH))
       })
-      .subscribe()
+      // The commissioner's remote (tv_remote)
+      .on('broadcast', { event: 'remote' }, ({ payload }) => {
+        window.dispatchEvent(new CustomEvent<TvRemote>(TV_REMOTE, { detail: payload as TvRemote }))
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') void channel.track({ on: true, since: new Date().toISOString() })
+      })
     if (new URLSearchParams(window.location.search).get('preview') === 'chat') {
       CHAT_PREVIEW.forEach((p, i) => timers.push(setTimeout(() => onChat(p), 1500 + i * 2500)))
     }
@@ -1536,6 +1577,126 @@ function LiveFromPhones({ code }: { code: string }) {
       <FloatingReactions items={floaters} />
       <ChatPopups items={chats} />
     </>
+  )
+}
+
+// ── The commissioner's remote ─────────────────────────────────
+// Presses from Commish panel → Shop TV (tv_remote): an announcement full
+// screen, the season standings, any moment, back to normal, or a reload.
+// The roast and the picks board are the Takeover's and the main view's.
+const ANNOUNCE_MS = 15_000
+const STANDINGS_MS = 20_000
+const NOTE_MS = 6000
+const isMoment = (m: unknown): m is TvMoment => TV_MOMENTS.some(x => x.kind === m)
+
+type RemoteShow = { kind: 'announce' | 'note'; text: string } | { kind: 'standings' }
+
+function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, string] }) {
+  const [show, setShow] = useState<(RemoteShow & { id: number }) | null>(null)
+  const [moment, setMoment] = useState<{ kind: TvMoment; id: number } | null>(null)
+  const n = useRef(0)
+  const showTimer = useRef<ReturnType<typeof setTimeout>>()
+  const momentTimer = useRef<ReturnType<typeof setTimeout>>()
+  const put = (s: RemoteShow, ms: number) => {
+    clearTimeout(showTimer.current)
+    setShow({ ...s, id: ++n.current })
+    showTimer.current = setTimeout(() => setShow(null), ms)
+  }
+  useTvRemote(r => {
+    switch (r.action) {
+      case 'announce':
+        if (r.text) put({ kind: 'announce', text: r.text.slice(0, 140) }, ANNOUNCE_MS)
+        break
+      case 'standings':
+        put({ kind: 'standings' }, STANDINGS_MS)
+        break
+      case 'board':
+        if (!board.board?.games.some(g => g.locked)) put({ kind: 'note', text: 'The picks board shows once a game locks' }, NOTE_MS)
+        break
+      case 'roast':
+        if (!board.roast?.text) put({ kind: 'note', text: 'No roast yet this week' }, NOTE_MS)
+        break
+      case 'moment':
+        if (isMoment(r.moment)) {
+          const kind = r.moment
+          clearTimeout(momentTimer.current)
+          setMoment({ kind, id: ++n.current })
+          momentTimer.current = setTimeout(() => setMoment(null), MOMENT_MS[kind])
+        }
+        break
+      case 'clear':
+        clearTimeout(showTimer.current)
+        clearTimeout(momentTimer.current)
+        setShow(null)
+        setMoment(null)
+        break
+      case 'reload':
+        window.location.reload()
+        break
+    }
+  })
+  useEffect(() => () => { clearTimeout(showTimer.current); clearTimeout(momentTimer.current) }, [])
+
+  return (
+    <>
+      {moment && (
+        <div className="absolute inset-0 pointer-events-none z-[7] overflow-hidden" aria-hidden>
+          <style>{MOMENT_CSS}</style>
+          <PlayMoment key={moment.id} kind={moment.kind} colors={colors} />
+        </div>
+      )}
+      {show?.kind === 'announce' && <Announcement key={show.id} text={show.text} />}
+      {show?.kind === 'standings' && <StandingsTakeover key={show.id} board={board} />}
+      {show?.kind === 'note' && (
+        <div key={show.id} className="absolute top-[110px] left-1/2 -translate-x-1/2 z-[35] rise-in rounded-full border-2 border-gold/50 bg-field-900/95 px-8 py-3 text-[26px] font-bold text-white">
+          {show.text}
+        </div>
+      )}
+    </>
+  )
+}
+
+/** The commissioner's words, full screen. */
+function Announcement({ text }: { text: string }) {
+  const size = text.length > 100 ? 64 : text.length > 50 ? 84 : 112
+  return (
+    <div className="absolute inset-0 z-[35] bg-field-950/[0.96] flex flex-col items-center justify-center px-28 text-center rise-in">
+      <p className="font-cond font-bold uppercase tracking-[0.35em] text-gold text-[34px] mb-8">📣 From the commissioner</p>
+      <p className="font-cond font-black text-white leading-[1.05] max-w-[1640px] break-words" style={{ fontSize: size }}>{text}</p>
+    </div>
+  )
+}
+
+/** The season standings, full screen: everyone, two columns past twelve. */
+function StandingsTakeover({ board }: { board: TvBoard }) {
+  const rows = board.season_table.slice(0, 24)
+  const two = rows.length > 12
+  return (
+    <div className="absolute inset-0 z-[35] bg-field-950/[0.97] flex flex-col px-24 py-14 rise-in">
+      <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[30px]">{board.league}</p>
+      <p className="font-cond font-black uppercase text-white text-[72px] leading-none mb-8">Season standings</p>
+      {rows.length === 0 ? (
+        <p className="text-field-300 text-[36px]">The standings start once Week 1 is final</p>
+      ) : (
+        <div className={clsx('grid gap-x-16 gap-y-2 flex-1 content-start', two ? 'grid-cols-2 grid-flow-col' : 'grid-cols-1 max-w-[1000px]')} style={two ? { gridTemplateRows: `repeat(${Math.ceil(rows.length / 2)}, minmax(0, auto))` } : undefined}>
+          {rows.map(r => (
+            <div key={r.userId} className={clsx('flex items-center gap-4 rounded-xl px-4 py-2', r.rank === 1 && 'bg-gold/15')}>
+              <span className="w-10 text-right font-cond font-black text-[32px] text-field-400 tabular-nums">{r.rank}</span>
+              {r.avatarUrl
+                ? <img src={r.avatarUrl} alt="" className="w-11 h-11 rounded-full object-cover shrink-0" />
+                : <span className="w-11 h-11 rounded-full bg-field-700 flex items-center justify-center text-[20px] font-black text-gold shrink-0">{r.name[0]?.toUpperCase()}</span>}
+              <span className="min-w-0 flex-1 truncate text-[32px] font-bold text-white">{r.name}</span>
+              <TvFlair badge={r.flair} size={28} />
+              {r.belt && <BeltIcon className="w-[30px] h-[19px]" />}
+              <span className="font-cond font-black text-[34px] text-white tabular-nums">
+                {r.correct}<span className="text-field-500">–{r.played - r.correct}</span>
+              </span>
+              {!!r.weeksWon && <span className="w-16 text-right text-[22px] font-bold text-gold">🏆 {r.weeksWon}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

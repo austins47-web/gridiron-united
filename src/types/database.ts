@@ -1427,6 +1427,11 @@ export interface Database {
       mark_chat_read: { Args: { p_league: string; p_room: string; p_at: string }; Returns: undefined }
       league_tv_token: { Args: { p_league: string; p_reset?: boolean }; Returns: string }
       league_has_tv: { Args: { p_league: string }; Returns: boolean }
+      /** The commissioner's TV remote: put something on the Shop TV now. */
+      tv_remote: {
+        Args: { p_league: string; p_action: string; p_text?: string | null; p_moment?: string | null }
+        Returns: undefined
+      }
       send_tv_reaction: { Args: { p_league: string; p_emoji: string }; Returns: undefined }
       /** Joins the league with this invite code; returns its id. */
       join_league: { Args: { p_code: string; p_team_name?: string | null }; Returns: string }
