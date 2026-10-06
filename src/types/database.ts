@@ -1428,7 +1428,12 @@ export interface Database {
       league_tv_token: { Args: { p_league: string; p_reset?: boolean }; Returns: string }
       league_has_tv: { Args: { p_league: string }; Returns: boolean }
       /** Whether a Spotify is connected for the Shop TV, and whose (commissioner only). */
-      league_spotify_status: { Args: { p_league: string }; Returns: { connected: boolean; spotify_name: string | null; connected_at: string | null }[] }
+      league_spotify_status: {
+        Args: { p_league: string }
+        Returns: { connected: boolean; spotify_name: string | null; connected_at: string | null; can_play: boolean; tv_player: boolean }[]
+      }
+      /** The Shop TV as a Spotify speaker, on or off (on needs a grant with playback). */
+      set_league_spotify_tv_player: { Args: { p_league: string; p_on: boolean }; Returns: undefined }
       disconnect_league_spotify: { Args: { p_league: string }; Returns: undefined }
       /** A live poll on the Shop TV (and in the chat); returns the poll's id. */
       tv_poll: { Args: { p_league: string; p_question: string; p_options: string[]; p_minutes?: number }; Returns: string }

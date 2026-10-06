@@ -119,7 +119,7 @@ serve(async (req) => {
         .select('id, question, options, closes_at, created_by, created_at')
         .eq('league_id', tv.league_id).gte('created_at', since)
         .order('created_at', { ascending: false }).limit(1),
-      admin.from('league_spotify').select('league_id').eq('league_id', tv.league_id).maybeSingle(),
+      admin.from('league_spotify').select('league_id, tv_player, scopes').eq('league_id', tv.league_id).maybeSingle(),
     ])
     if (!league || league.league_type !== 'pickem') return json({ error: 'not found' }, 404)
 
@@ -503,7 +503,8 @@ serve(async (req) => {
       // brand_color is the TV's own accent (Commish panel → Shop TV)
       // tv_theme: the commissioner's holiday theme (null: by the calendar)
       // music: a Spotify is connected (the TV then asks tv-now-playing what's on)
-      brand: { logo: league.brand_logo_url ?? null, color: league.brand_color ?? null, theme: league.tv_theme ?? null, music: !!spotify, location: league.tv_location ?? null },
+      // player: the TV plays the music itself too (tv-spotify-token)
+      brand: { logo: league.brand_logo_url ?? null, color: league.brand_color ?? null, theme: league.tv_theme ?? null, music: !!spotify, player: !!spotify?.tv_player && String(spotify?.scopes ?? '').split(' ').includes('streaming'), location: league.tv_location ?? null },
       season,
       week,
       now: now.toISOString(),

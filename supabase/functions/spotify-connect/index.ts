@@ -1,15 +1,17 @@
 // ══════════════════════════════════════════════════════════════
 // spotify-connect — connecting a league's Spotify for the Shop TV
 //
-// POST { league_id } (signed in as its commissioner): returns the
-//   Spotify page to approve it on, with a one-time state.
+// POST { league_id, player? } (signed in as its commissioner): returns
+//   the Spotify page to approve it on, with a one-time state. player:
+//   also ask to play music (the TV as a speaker), and turn that on.
 // GET ?code&state (Spotify sends the commissioner back here): trades
 //   the code for tokens, saves them in league_spotify, and goes back to
 //   the Commish panel.
 //
 // Needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET (a Spotify developer
-// app whose redirect URI is this function's URL). Read-only scopes: what's
-// playing, nothing else.
+// app whose redirect URI is this function's URL). Read-only scopes (what's
+// playing) unless it's for the TV's speaker: Spotify's Web Playback SDK
+// needs streaming, and the profile scopes it checks Premium with.
 // ══════════════════════════════════════════════════════════════
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -23,6 +25,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
 
 const SCOPES = 'user-read-currently-playing user-read-playback-state'
+const PLAYER_SCOPES = `${SCOPES} streaming user-read-email user-read-private`
 const STATE_TTL_MS = 15 * 60_000
 
 serve(async (req) => {
@@ -45,7 +48,7 @@ serve(async (req) => {
     })
     const { data: { user } } = await userClient.auth.getUser()
     if (!user) return json({ error: 'Sign in first' }, 401)
-    const { league_id: leagueId } = await req.json().catch(() => ({}))
+    const { league_id: leagueId, player = false } = await req.json().catch(() => ({}))
     if (typeof leagueId !== 'string') return json({ error: 'league_id required' }, 400)
     const { data: isCommish } = await userClient.rpc('is_league_commissioner', { check_league_id: leagueId })
     if (!isCommish) return json({ error: 'Only the commissioner can connect Spotify' }, 403)
@@ -53,12 +56,12 @@ serve(async (req) => {
     const bytes = crypto.getRandomValues(new Uint8Array(24))
     const state = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('')
     await admin.from('spotify_auth_states').delete().lt('created_at', new Date(Date.now() - STATE_TTL_MS).toISOString())
-    const { error } = await admin.from('spotify_auth_states').insert({ state, league_id: leagueId, user_id: user.id })
+    const { error } = await admin.from('spotify_auth_states').insert({ state, league_id: leagueId, user_id: user.id, player: player === true })
     if (error) return json({ error: error.message }, 500)
 
     const authorize = new URL('https://accounts.spotify.com/authorize')
     authorize.search = new URLSearchParams({
-      response_type: 'code', client_id: clientId, scope: SCOPES, redirect_uri: redirectUri, state, show_dialog: 'true',
+      response_type: 'code', client_id: clientId, scope: player === true ? PLAYER_SCOPES : SCOPES, redirect_uri: redirectUri, state, show_dialog: 'true',
     }).toString()
     return json({ url: authorize.toString() })
   }
@@ -70,7 +73,7 @@ serve(async (req) => {
   if (!clientId || !clientSecret) return back('not-set-up')
   if (params.get('error') || !code || !/^[0-9a-f]{48}$/.test(state)) return back('cancelled')
 
-  const { data: pending } = await admin.from('spotify_auth_states').select('league_id, user_id, created_at').eq('state', state).maybeSingle()
+  const { data: pending } = await admin.from('spotify_auth_states').select('league_id, user_id, created_at, player').eq('state', state).maybeSingle()
   await admin.from('spotify_auth_states').delete().eq('state', state)
   if (!pending || Date.now() - new Date(pending.created_at).getTime() > STATE_TTL_MS) return back('expired')
 
@@ -83,7 +86,8 @@ serve(async (req) => {
     body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri }),
   })
   if (!tokenRes.ok) return back('failed')
-  const tokens = await tokenRes.json() as { access_token: string; refresh_token: string; expires_in: number }
+  const tokens = await tokenRes.json() as { access_token: string; refresh_token: string; expires_in: number; scope?: string }
+  const canPlay = (tokens.scope ?? '').split(' ').includes('streaming')
 
   // Whose Spotify it is, for the Commish panel
   const me = await fetch('https://api.spotify.com/v1/me', { headers: { Authorization: `Bearer ${tokens.access_token}` } })
@@ -97,6 +101,9 @@ serve(async (req) => {
     access_token: tokens.access_token,
     expires_at: new Date(Date.now() + (tokens.expires_in - 60) * 1000).toISOString(),
     connected_at: new Date().toISOString(),
+    scopes: tokens.scope ?? null,
+    // Connected for the speaker: it's on. A grant without playback can't keep it on
+    ...(pending.player && canPlay ? { tv_player: true } : !canPlay ? { tv_player: false } : {}),
   })
-  return back(error ? 'failed' : 'connected')
+  return back(error ? 'failed' : pending.player ? (canPlay ? 'player' : 'no-player') : 'connected')
 })

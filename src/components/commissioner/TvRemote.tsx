@@ -8,6 +8,18 @@ import { TV_MOMENTS, type TvMoment } from '@/lib/holiday'
 
 type Action = 'roast' | 'standings' | 'board' | 'replay' | 'announce' | 'moment' | 'clear' | 'reload'
 
+/** What the TV's Spotify speaker is doing (its presence), worst news first. */
+const SPEAKER_ORDER = ['blocked', 'unsupported', 'premium', 'auth', 'error', 'connecting', 'ready']
+const SPEAKER_NOTES: Record<string, string> = {
+  ready: 'The TV is in Spotify’s list of devices. Pick it in Spotify to play the music there.',
+  connecting: 'Connecting the TV to Spotify…',
+  blocked: 'Spotify is sending music to the TV, but its browser is holding the sound back: click the TV screen (or press OK on its remote) once.',
+  unsupported: 'This TV’s browser can’t play Spotify. It works in Chrome, Edge, Firefox or Safari.',
+  premium: 'Spotify only plays on the TV with Premium.',
+  auth: 'Spotify needs connecting again (Music on the TV, below).',
+  error: 'The TV couldn’t reach Spotify. Reload tries again.',
+}
+
 /**
  * The commissioner's remote for the Shop TV: put the roast, the season
  * standings, the picks board, the week's replay, a live poll, an
@@ -29,6 +41,8 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
   // any is on lighter effects because it was dropping frames
   const [tvsOn, setTvsOn] = useState<number | null>(null)
   const [tvLite, setTvLite] = useState(false)
+  // The TV's Spotify speaker (Music on the TV), the most useful one if there are a few
+  const [speaker, setSpeaker] = useState<string | null>(null)
   useEffect(() => {
     if (!hasTv) return
     let channel: ReturnType<typeof supabase.channel> | null = null
@@ -39,9 +53,11 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       channel
         .on('presence', { event: 'sync' }, () => {
           // Every TV joins under the key 'tv': count them, not the keys
-          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string }[]
+          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string }[]
           setTvsOn(tvs.length)
           setTvLite(tvs.some(t => t.fx === 'lite'))
+          const states = tvs.map(t => t.speaker).filter((s): s is string => !!s && s !== 'off')
+          setSpeaker(SPEAKER_ORDER.find(s => states.includes(s)) ?? null)
         })
         .subscribe(status => { if (status === 'SUBSCRIBED') setTvsOn(n => n ?? 0) })
     })
@@ -85,6 +101,11 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
           {tvsOn == null ? 'Checking the TV…' : tvsOn > 0 ? `TV is on${tvsOn > 1 ? ` (${tvsOn})` : ''}` : 'TV looks off'}
         </span>
       </div>
+      {!!tvsOn && speaker && SPEAKER_NOTES[speaker] && (
+        <p className={clsx('-mt-2 text-[11px]', speaker === 'ready' ? 'text-[#1DB954]' : speaker === 'connecting' ? 'text-field-400' : 'text-amber-300')}>
+          🔊 {SPEAKER_NOTES[speaker]}
+        </p>
+      )}
       {!!tvsOn && tvLite && (
         <p className="-mt-2 text-[11px] text-field-400">
           Running lighter effects: the TV was dropping frames, so the background stopped drifting and the holiday fog is off. A reload tries the full effects again.

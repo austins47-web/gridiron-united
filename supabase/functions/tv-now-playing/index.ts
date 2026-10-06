@@ -6,12 +6,13 @@
 //   { connected: true, playing: false }      nothing on, or paused
 //   { connected: true, playing: true, title, artist, album, art,
 //     progressMs, durationMs }               what's on
-// Refreshes the access token (league_spotify) when it runs out. The TV
+// Refreshes the access token (_shared/spotifyToken.ts) when it runs out. The TV
 // calls this as each song should end and every 30 seconds while playing.
 // ══════════════════════════════════════════════════════════════
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { spotifyAccess } from '../_shared/spotifyToken.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -35,35 +36,11 @@ serve(async (req) => {
   if (!sp) return json({ connected: false })
 
   // A fresh access token when this one's run out
-  let access = sp.access_token as string | null
-  if (!access || !sp.expires_at || new Date(sp.expires_at).getTime() <= Date.now()) {
-    const clientId = Deno.env.get('SPOTIFY_CLIENT_ID')
-    const clientSecret = Deno.env.get('SPOTIFY_CLIENT_SECRET')
-    if (!clientId || !clientSecret) return json({ connected: true, playing: false })
-    const r = await fetch('https://accounts.spotify.com/api/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-      },
-      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: sp.refresh_token }),
-    })
-    if (!r.ok) {
-      // Revoked at Spotify's end: the commissioner has to connect again
-      if (r.status === 400) await admin.from('league_spotify').delete().eq('league_id', tv.league_id)
-      return json({ connected: r.status !== 400, playing: false })
-    }
-    const t = await r.json() as { access_token: string; refresh_token?: string; expires_in: number }
-    access = t.access_token
-    await admin.from('league_spotify').update({
-      access_token: t.access_token,
-      ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}),
-      expires_at: new Date(Date.now() + (t.expires_in - 60) * 1000).toISOString(),
-    }).eq('league_id', tv.league_id)
-  }
+  const access = await spotifyAccess(admin, tv.league_id, sp)
+  if ('error' in access) return json({ connected: access.error !== 'revoked', playing: false })
 
   const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing?additional_types=episode', {
-    headers: { Authorization: `Bearer ${access}` },
+    headers: { Authorization: `Bearer ${access.token}` },
   })
   if (res.status === 204) return json({ connected: true, playing: false })
   if (res.status === 429) return json({ connected: true, playing: false, retryAfterSec: Number(res.headers.get('Retry-After') ?? 60) })

@@ -22,6 +22,10 @@ verify_jwt = false
 [functions.tv-now-playing]
 verify_jwt = false
 
+# A Spotify token for the Shop TV's speaker (its code is the key, like shop-tv)
+[functions.tv-spotify-token]
+verify_jwt = false
+
 # Connecting Spotify: Spotify sends the commissioner back here without a
 # session; the start (POST) checks their sign-in itself
 [functions.spotify-connect]
