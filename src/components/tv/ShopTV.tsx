@@ -8,6 +8,7 @@ import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from '@/components/pickem/Belt'
 import { useHolidayTheme, type HolidayTheme } from '@/lib/holiday'
 import { HolidayPill, HolidayParticles } from '@/components/ui/Holiday'
+import { HolidayScene } from './HolidayScene'
 import { ACHIEVEMENTS } from '@/components/pickem/standings'
 import { ACHIEVEMENT_ICONS } from '@/components/pickem/achievementIcons'
 
@@ -311,7 +312,8 @@ export function ShopTV() {
           width: W, height: H, transform: `scale(${scale})`, transformOrigin: 'center',
           // The TV's own color (or the copper), set here so nobody's personal
           // accent, which AppShell may have left on the page root, carries over
-          ...(brandVars(board?.brand?.color ?? DEFAULT_GOLD) as CSSProperties),
+          // A holiday theme brings its own color (orange for Halloween, red for Christmas)
+          ...(brandVars(holiday?.accent ?? board?.brand?.color ?? DEFAULT_GOLD) as CSSProperties),
         }}
       >
         {status === 'gone' ? <Gone />
@@ -320,6 +322,7 @@ export function ShopTV() {
         {board && reveal && reveal.length > 0 && (
           <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
         )}
+        {board && holiday && <HolidayScene theme={holiday} />}
         {board && holiday && <HolidayParticles theme={holiday} />}
         {status !== 'gone' && <LiveFromPhones code={code} />}
       </div>
@@ -428,8 +431,8 @@ function Board({ board, offline, holiday }: { board: TvBoard; offline: boolean; 
         <FeaturePanel board={board} />
       </div>
 
-      <Ticker board={board} />
-      <Takeover board={board} />
+      <Ticker board={board} greeting={holiday?.greeting.replace('{league}', board.league)} />
+      <Takeover board={board} emoji={holiday?.emoji} />
     </div>
   )
 }
@@ -1241,9 +1244,11 @@ function FeaturePanel({ board }: { board: TvBoard }) {
 }
 
 // ── The ticker ────────────────────────────────────────────────
-function Ticker({ board }: { board: TvBoard }) {
+function Ticker({ board, greeting }: { board: TvBoard; greeting?: string }) {
   const items = useMemo(() => {
     const out: string[] = []
+    // A holiday theme's greeting leads
+    if (greeting) out.push(greeting)
     if (board.pin) out.push(`📌 ${board.pin}`)
     out.push(...board.upsets.map(u => `🚨 ${u}`))
     // The last play in every live game
@@ -1272,7 +1277,7 @@ function Ticker({ board }: { board: TvBoard }) {
       out.push(`Next kickoff: ${g ? `${g.away} @ ${g.home}, ` : ''}${kickoffLabel(board.nextKickoff)}`)
     }
     return out
-  }, [board])
+  }, [board, greeting])
 
   if (items.length === 0) return <div className="h-[56px] shrink-0" />
   const text = items.join('     •     ')
@@ -1299,7 +1304,7 @@ const TAKEOVER_EVERY = 5 * 60_000
 // The roast's turn on screen: long enough to catch, not to read all of it
 const TAKEOVER_FOR = 20_000
 
-function Takeover({ board }: { board: TvBoard }) {
+function Takeover({ board, emoji }: { board: TvBoard; emoji?: string }) {
   const now = useNow(60_000)
   const sh = board.shame
   const urgent = !!sh?.lockAt && sh.rows.length > 0 && new Date(sh.lockAt).getTime() - now < 3 * 3600_000
@@ -1340,7 +1345,7 @@ function Takeover({ board }: { board: TvBoard }) {
       )}
       {roast && (
         <div className="w-full max-w-[1600px]">
-          <p className="font-cond font-black uppercase tracking-[0.2em] text-gold text-[30px] mb-4">🎙️ The Commish · {weekTitle(roast.week)} roast</p>
+          <p className="font-cond font-black uppercase tracking-[0.2em] text-gold text-[30px] mb-4">{emoji ?? '🎙️'} The Commish · {weekTitle(roast.week)} roast</p>
           <p className="text-[27px] leading-[1.45] text-white whitespace-pre-line" style={{ columnCount: roast.text.length > 700 ? 2 : 1, columnGap: 64 }}>
             {roast.text}
           </p>

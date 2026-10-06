@@ -26,6 +26,26 @@ export interface HolidayTheme {
   particles: string[]
   /** Two colors for the gradient. */
   colors: [string, string]
+  /** The Shop TV's accent color while the theme is on. */
+  accent: string
+  /** The Shop TV ticker's first item ({league}: the league's name). */
+  greeting: string
+  /** The Shop TV's dressing (components/tv/HolidayScene.tsx). */
+  scene: HolidaySceneSpec
+}
+
+/** How a theme dresses the Shop TV. */
+export interface HolidaySceneSpec {
+  /** Along the bottom of the TV's header. */
+  edge: 'webs' | 'lights' | 'garland' | 'bunting' | 'shimmer'
+  /** For a garland: what it's strung with. */
+  garland?: string[]
+  /** Sitting on the ticker in the bottom corners. */
+  footer: string[]
+  /** What crosses the screen now and then, in turn. */
+  moments: ('bats' | 'ghost' | 'sleigh' | 'turkey' | 'fireworks' | 'flyover' | 'football' | 'spotlight')[]
+  /** A low fog drifting along the bottom. */
+  fog?: boolean
 }
 
 const KEYS: HolidayKey[] = ['kickoff', 'halloween', 'veterans', 'thanksgiving', 'christmas', 'newyear', 'playoffs', 'superbowl', 'july4']
@@ -36,23 +56,23 @@ const PLAYOFF_ROUND: Record<number, string> = { 19: 'Wild Card weekend', 20: 'Th
 export function themeOf(key: HolidayKey, week: number | null): HolidayTheme {
   switch (key) {
     case 'kickoff':
-      return { key, label: 'Season Kickoff', tagline: "Week 1: everybody's undefeated", emoji: '🏈', particles: ['🏈', '✨'], colors: ['#16a34a', '#d4a017'] }
+      return { key, accent: '#16A34A', greeting: "🏈 Kickoff week at {league}: everybody's 0–0", scene: { edge: 'garland', garland: ['🏈'], footer: ['🏈', '🏟️'], moments: ['football', 'spotlight'] }, label: 'Season Kickoff', tagline: "Week 1: everybody's undefeated", emoji: '🏈', particles: ['🏈', '✨'], colors: ['#16a34a', '#d4a017'] }
     case 'halloween':
-      return { key, label: 'Halloween Football', tagline: "Spooky season: nothing's scarier than your pick sheet", emoji: '🎃', particles: ['🎃', '🦇', '👻'], colors: ['#f97316', '#7c3aed'] }
+      return { key, accent: '#F97316', greeting: '🎃 Happy Halloween from {league}. Pick carefully… if you dare 👻', scene: { edge: 'webs', footer: ['🎃', '🕯️', '🎃'], moments: ['bats', 'ghost'], fog: true }, label: 'Halloween Football', tagline: "Spooky season: nothing's scarier than your pick sheet", emoji: '🎃', particles: ['🎃', '🦇', '👻'], colors: ['#f97316', '#7c3aed'] }
     case 'veterans':
-      return { key, label: 'Salute to Service', tagline: 'Thank you to everyone who served', emoji: '🎖️', particles: ['⭐', '✨'], colors: ['#1d4ed8', '#b91c1c'] }
+      return { key, accent: '#2563EB', greeting: '🎖️ Salute to Service: {league} thanks everyone who served', scene: { edge: 'bunting', footer: ['🎖️', '⭐'], moments: ['flyover'] }, label: 'Salute to Service', tagline: 'Thank you to everyone who served', emoji: '🎖️', particles: ['⭐', '✨'], colors: ['#1d4ed8', '#b91c1c'] }
     case 'newyear':
-      return { key, label: "New Year's Football", tagline: 'New year, same old picks', emoji: '🎆', particles: ['🎆', '✨', '🥂'], colors: ['#d4a017', '#7c3aed'] }
+      return { key, accent: '#D4A017', greeting: '🎆 Happy New Year from {league}! Same picks, new year', scene: { edge: 'shimmer', footer: ['🥂', '🎉'], moments: ['fireworks'] }, label: "New Year's Football", tagline: 'New year, same old picks', emoji: '🎆', particles: ['🎆', '✨', '🥂'], colors: ['#d4a017', '#7c3aed'] }
     case 'july4':
-      return { key, label: 'Fourth of July', tagline: 'Fireworks now, football soon', emoji: '🎆', particles: ['🎆', '⭐', '✨'], colors: ['#b91c1c', '#1d4ed8'] }
+      return { key, accent: '#DC2626', greeting: "🎆 Happy Fourth of July from {league}. Football's almost back", scene: { edge: 'bunting', footer: ['🎆', '⭐'], moments: ['fireworks'] }, label: 'Fourth of July', tagline: 'Fireworks now, football soon', emoji: '🎆', particles: ['🎆', '⭐', '✨'], colors: ['#b91c1c', '#1d4ed8'] }
     case 'thanksgiving':
-      return { key, label: 'Thanksgiving Football', tagline: 'Turkey Day slate: get your Thursday picks in before the food coma', emoji: '🦃', particles: ['🍂', '🍁', '🍂'], colors: ['#ea580c', '#a16207'] }
+      return { key, accent: '#EA580C', greeting: '🦃 Happy Thanksgiving from {league}: thankful for every right pick', scene: { edge: 'garland', garland: ['🍂', '🍁'], footer: ['🥧', '🌽', '🦃'], moments: ['turkey'] }, label: 'Thanksgiving Football', tagline: 'Turkey Day slate: get your Thursday picks in before the food coma', emoji: '🦃', particles: ['🍂', '🍁', '🍂'], colors: ['#ea580c', '#a16207'] }
     case 'christmas':
-      return { key, label: 'Christmas Football', tagline: 'Picks before presents', emoji: '🎄', particles: ['❄️', '❄️', '✨'], colors: ['#dc2626', '#16a34a'] }
+      return { key, accent: '#DC2626', greeting: '🎄 Merry Christmas from {league}! Hope Santa brings you a winning week', scene: { edge: 'lights', footer: ['🎁', '🎄', '🎁'], moments: ['sleigh'] }, label: 'Christmas Football', tagline: 'Picks before presents', emoji: '🎄', particles: ['❄️', '❄️', '✨'], colors: ['#dc2626', '#16a34a'] }
     case 'playoffs':
-      return { key, label: 'The Playoffs', tagline: `${PLAYOFF_ROUND[week ?? 0] ?? 'Win or go home'}: every pick counts`, emoji: '🏆', particles: ['✨', '⭐'], colors: ['#d4a017', '#94a3b8'] }
+      return { key, accent: '#D4A017', greeting: '🏆 Playoff football at {league}: win or go home', scene: { edge: 'shimmer', footer: ['🏆'], moments: ['spotlight', 'football'] }, label: 'The Playoffs', tagline: `${PLAYOFF_ROUND[week ?? 0] ?? 'Win or go home'}: every pick counts`, emoji: '🏆', particles: ['✨', '⭐'], colors: ['#d4a017', '#94a3b8'] }
     case 'superbowl':
-      return { key, label: 'Super Bowl Week', tagline: 'One game, one tiebreaker, everything on the line', emoji: '🏈', particles: ['🎉', '🎊', '✨'], colors: ['#d4a017', '#2563eb'] }
+      return { key, accent: '#D4A017', greeting: '🏈 Super Bowl week at {league}: one game, everything on the line', scene: { edge: 'shimmer', footer: ['🏆', '🎉'], moments: ['fireworks', 'spotlight'] }, label: 'Super Bowl Week', tagline: 'One game, one tiebreaker, everything on the line', emoji: '🏈', particles: ['🎉', '🎊', '✨'], colors: ['#d4a017', '#2563eb'] }
   }
 }
 
