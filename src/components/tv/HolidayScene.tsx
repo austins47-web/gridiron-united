@@ -196,7 +196,8 @@ function Footer({ theme }: { theme: HolidayTheme }) {
   const items = theme.scene.footer
   const glow = theme.key === 'halloween'
   const row = (side: 'left' | 'right') => (
-    <div className="absolute flex items-end gap-3" style={{ [side]: 22, bottom: TICKER - 8 }}>
+    // On top of the ticker, not over it (the song and the ticker text live there)
+    <div className="absolute flex items-end gap-3" style={{ [side]: 22, bottom: TICKER + 2 }}>
       {items.map((e, i) => (
         <div key={i} className="relative">
           {/* Candlelight inside the jack-o'-lanterns */}

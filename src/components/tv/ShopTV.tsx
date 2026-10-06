@@ -1353,12 +1353,15 @@ function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; 
     <div className="h-[56px] shrink-0 border-t-2 border-field-800 bg-field-900 overflow-hidden flex items-center">
       {song && <SongStrip song={song} />}
       <style>{'@keyframes tv-ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }'}</style>
-      <div className="flex whitespace-nowrap" style={{ animation: `tv-ticker ${seconds}s linear infinite` }}>
-        {[0, 1].map(i => (
-          <span key={i} className="whitespace-pre font-cond font-bold text-[27px] text-field-200 tracking-wide">
-            {text + '     •     '}
-          </span>
-        ))}
+      {/* Its own lane, so the scrolling text never runs under the song */}
+      <div className="flex-1 min-w-0 h-full overflow-hidden flex items-center">
+        <div className="flex whitespace-nowrap" style={{ animation: `tv-ticker ${seconds}s linear infinite` }}>
+          {[0, 1].map(i => (
+            <span key={i} className="whitespace-pre font-cond font-bold text-[27px] text-field-200 tracking-wide">
+              {text + '     •     '}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -1713,7 +1716,7 @@ function SongProgress({ song }: { song: NowPlaying }) {
 /** The song, at the left end of the ticker. */
 function SongStrip({ song }: { song: NowPlaying }) {
   return (
-    <div className="relative h-full w-[540px] shrink-0 flex items-center gap-3 px-4 bg-black/40 border-r-2 border-field-800 z-[1]">
+    <div className="relative h-full w-[540px] shrink-0 flex items-center gap-3 px-4 bg-field-950 border-r-2 border-field-800">
       <style>{MUSIC_CSS}</style>
       {song.art
         ? <img src={song.art} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
