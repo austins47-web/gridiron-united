@@ -1702,8 +1702,9 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
       {show?.kind === 'standings' && <StandingsTakeover key={show.id} board={board} />}
       <LivePoll />
       {show?.kind === 'note' && (
-        <div key={show.id} className="absolute top-[110px] left-1/2 -translate-x-1/2 z-[35] rise-in rounded-full border-2 border-gold/50 bg-field-900/95 px-8 py-3 text-[26px] font-bold text-white">
-          {show.text}
+        // Centered by the row, not a transform: the fade-in animates transform
+        <div key={show.id} className="absolute top-[110px] inset-x-0 z-[35] flex justify-center pointer-events-none">
+          <div className="rise-in rounded-full border-2 border-gold/50 bg-field-900/95 px-8 py-3 text-[26px] font-bold text-white">{show.text}</div>
         </div>
       )}
     </>
@@ -1971,7 +1972,7 @@ function ReceiptsPop({ board }: { board: TvBoard }) {
     </div>
   )
   return (
-    <div key={r.gameId} className="absolute top-[118px] left-1/2 -translate-x-1/2 z-[26] w-[1240px] rise-in rounded-3xl border-2 border-gold/50 bg-field-900/[0.97] shadow-2xl shadow-black/70 px-10 py-7 pointer-events-none">
+    <div key={r.gameId} className="absolute top-[118px] inset-x-0 mx-auto z-[26] w-[1240px] rise-in rounded-3xl border-2 border-gold/50 bg-field-900/[0.97] shadow-2xl shadow-black/70 px-10 py-7 pointer-events-none">
       <div className="flex items-baseline justify-between mb-5">
         <p className="font-cond font-black uppercase tracking-[0.2em] text-gold text-[28px]">🧾 Receipts · Final</p>
         <p className="font-cond font-black text-[34px] text-white">
