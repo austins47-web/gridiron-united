@@ -1,17 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2 } from 'lucide-react'
+import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2, Clapperboard, BarChart3, Plus } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { TV_MOMENTS, type TvMoment } from '@/lib/holiday'
 
-type Action = 'roast' | 'standings' | 'board' | 'announce' | 'moment' | 'clear' | 'reload'
+type Action = 'roast' | 'standings' | 'board' | 'replay' | 'announce' | 'moment' | 'clear' | 'reload'
 
 /**
  * The commissioner's remote for the Shop TV: put the roast, the season
- * standings, the picks board, an announcement or a moment on the TV
- * right now (tv_remote, over the TV's private channel), clear it, or
+ * standings, the picks board, the week's replay, a live poll, an
+ * announcement or a moment on the TV right now (tv_remote, over the TV's private channel), clear it, or
  * reload it. Shows whether a TV is on (its presence on that channel).
  */
 export function TvRemote({ leagueId }: { leagueId: string }) {
@@ -79,11 +79,14 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {button('roast', 'Roast', <Mic className="w-5 h-5" />, 'The roast is on the TV')}
         {button('standings', 'Standings', <ListOrdered className="w-5 h-5" />, 'Standings are on the TV')}
         {button('board', 'Picks board', <LayoutGrid className="w-5 h-5" />, 'The picks board is on the TV')}
+        {button('replay', 'Replay', <Clapperboard className="w-5 h-5" />, "The week's replay is on the TV")}
       </div>
+
+      <TvPollForm leagueId={leagueId} tvOff={tvsOn === 0} />
 
       <form onSubmit={announce} className="flex items-center gap-2">
         <Megaphone className="w-4 h-4 text-gold shrink-0" />
@@ -130,5 +133,90 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * A live poll on the TV (tv_poll): posted in the league chat, where
+ * everyone votes, and up on the TV full screen with the votes coming in
+ * until it closes.
+ */
+function TvPollForm({ leagueId, tvOff }: { leagueId: string; tvOff: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [question, setQuestion] = useState('')
+  const [options, setOptions] = useState(['', ''])
+  const [minutes, setMinutes] = useState(2)
+  const [busy, setBusy] = useState(false)
+  const filled = options.filter(o => o.trim())
+  const ready = question.trim().length > 0 && filled.length >= 2
+
+  const start = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!ready || busy) return
+    setBusy(true)
+    const { error } = await supabase.rpc('tv_poll', { p_league: leagueId, p_question: question.trim(), p_options: filled.map(o => o.trim()), p_minutes: minutes })
+    setBusy(false)
+    if (error) { toast.error(error.message); return }
+    toast.success(tvOff ? 'Poll is live in the chat. The TV looks off right now, though.' : 'Poll is live on the TV and in the chat')
+    setQuestion('')
+    setOptions(['', ''])
+    setOpen(false)
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="w-full flex items-center justify-center gap-2 rounded-xl border border-field-700 bg-field-800 px-3 py-2.5 text-xs font-bold text-field-200 hover:border-gold/50 hover:text-gold transition-colors">
+        <BarChart3 className="w-4 h-4" /> Start a live poll on the TV
+      </button>
+    )
+  }
+  return (
+    <form onSubmit={start} className="rounded-xl border border-field-700 bg-field-900/60 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-field-300"><BarChart3 className="w-3.5 h-3.5 text-gold" /> Live poll</span>
+        <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="p-1 text-field-500 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+      </div>
+      <input
+        value={question}
+        onChange={e => setQuestion(e.target.value)}
+        maxLength={140}
+        placeholder="Question, e.g. Who wins tonight?"
+        aria-label="Poll question"
+        className="input w-full !py-2 !text-sm"
+      />
+      {options.map((o, i) => (
+        <input
+          key={i}
+          value={o}
+          onChange={e => setOptions(list => list.map((x, j) => (j === i ? e.target.value : x)))}
+          maxLength={60}
+          placeholder={`Answer ${i + 1}`}
+          aria-label={`Answer ${i + 1}`}
+          className="input w-full !py-2 !text-sm"
+        />
+      ))}
+      <div className="flex items-center gap-2 flex-wrap">
+        {options.length < 4 && (
+          <button type="button" onClick={() => setOptions(list => [...list, ''])} className="flex items-center gap-1 text-xs font-bold text-field-400 hover:text-gold">
+            <Plus className="w-3.5 h-3.5" /> Add an answer
+          </button>
+        )}
+        <span className="ml-auto text-xs text-field-400">Open for</span>
+        {[1, 2, 5].map(m => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMinutes(m)}
+            aria-pressed={minutes === m}
+            className={clsx('rounded-lg border px-2 py-1 text-xs font-bold', minutes === m ? 'bg-gold text-field-950 border-gold' : 'border-field-700 text-field-300 hover:border-gold/50')}
+          >
+            {m} min
+          </button>
+        ))}
+      </div>
+      <button type="submit" disabled={!ready || busy} className="btn-gold w-full justify-center !py-2 !text-sm disabled:opacity-50">
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />} Put it on the TV
+      </button>
+    </form>
   )
 }

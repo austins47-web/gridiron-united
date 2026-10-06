@@ -20,7 +20,7 @@ import {
   nflSeasonFor, isVoid, isFinal, isLive, computeWeek, computeWinOdds, recentSlateLabel, computeUpsetWatch, computeBelt,
   computeStandings, weekWinners, isWeekComplete, homeWinChance, gameClockLabel, winnerOf,
   computeWeekStats, describeWeekStats, computeWhoCanWin, computeBadBeats, computeAchievements, ACHIEVEMENTS,
-  computePickDNA, computePickMatches, keyInjuries,
+  computePickDNA, computePickMatches, keyInjuries, rankOf, tiebreakerTotal,
   type Game, type Pick, type Member,
 } from '../_shared/pickemCore.ts'
 import { partsInZone, zonedTimeToUtc, stillPickable, weekDeadline } from '../_shared/pickLocks.ts'
@@ -323,6 +323,85 @@ serve(async (req) => {
       basement: seasonRows.slice(-3).reverse().map(r => ({ name: r.name, correct: r.correct, played: r.played })),
     }
 
+    // ── Receipts as each game ends ──────────────────────────
+    // The TV pops these up when it sees a game go final: the best receipt
+    // on the winner and the worst on the loser (the longest of each, the
+    // most to read out)
+    type WkPick = (typeof wkPicks)[number]
+    const longest = (ps: WkPick[]) => [...ps].sort((a, b) => String(b.reason).length - String(a.reason).length)[0]
+    const card = (p: WkPick | undefined) => (p ? { name: nameById.get(p.user_id) ?? 'Someone', team: p.picked_team, reason: String(p.reason) } : null)
+    const gameReceipts = wkGames.filter(g => isFinal(g) && winnerOf(g)).flatMap(g => {
+      const w = winnerOf(g)!
+      const on = wkPicks.filter(p => p.game_id === g.id)
+      const said = on.filter(p => p.reason)
+      if (said.length === 0) return []
+      return [{
+        gameId: g.id, away: g.away_team, home: g.home_team, awayScore: g.away_score, homeScore: g.home_score, winner: w,
+        right: on.filter(p => p.picked_team === w).length, pickers: on.length,
+        best: card(longest(said.filter(p => p.picked_team === w))),
+        worst: card(longest(said.filter(p => p.picked_team !== w))),
+      }]
+    })
+
+    // ── The replay: the finished week, slide by slide ─────────
+    // The TV plays it when the week goes final, every half hour after
+    // until the next week opens, and from the commissioner's remote
+    const replay = complete && played.length > 0 ? (() => {
+      const top = played[0]
+      const decidedByTiebreak = played.filter(r => r.correct === top.correct).length > winners.length
+      // Picks nearly everyone got right that someone still blew
+      const blown = wkGames.flatMap(g => {
+        const w = winnerOf(g)
+        if (!w) return []
+        const on = wkPicks.filter(p => p.game_id === g.id)
+        const wrong = on.filter(p => p.picked_team !== w)
+        if (on.length < 5 || wrong.length === 0 || wrong.length > Math.max(2, Math.floor(on.length / 5))) return []
+        return [{
+          names: wrong.map(p => nameById.get(p.user_id) ?? 'Someone'),
+          took: w === g.home_team ? g.away_team : g.home_team,
+          winner: w, right: on.length - wrong.length, of: on.length, share: wrong.length / on.length,
+        }]
+      }).sort((a, b) => a.share - b.share).slice(0, 2)
+      const beat = computeBadBeats(seasonGames, allPicks).filter(b => b.week === week).sort((a, b) => b.peak - a.peak)[0]
+      // The Belt: this week's winners, and who had it before
+      const lineage = belt?.lineage ?? []
+      const before = lineage.length > 1 && lineage[lineage.length - 1].week === week ? lineage[lineage.length - 2].winners.map(w => w.name) : []
+      // Receipts that aged worst
+      const agedWorst = wkPicks.filter(p => {
+        const g = teamOf.get(p.game_id)
+        const w = g ? winnerOf(g) : null
+        return !!p.reason && !!w && w !== p.picked_team
+      }).slice(0, 3).map(p => card(p)!)
+      // Who climbed and who fell in the season standings
+      const was = computeStandings(seasonGames.filter(g => g.week < week), allPicks, members).filter(r => r.played > 0)
+      const now = computeStandings(seasonGames.filter(g => g.week <= week), allPicks, members).filter(r => r.played > 0)
+      const rankWas = new Map(was.map((r, i) => [r.userId, rankOf(was, i)]))
+      const moves = now
+        .map((r, i) => ({ name: r.name, from: rankWas.get(r.userId), to: rankOf(now, i) }))
+        .filter((m): m is { name: string; from: number; to: number } => m.from != null && m.from !== m.to)
+        .sort((a, b) => (b.from - b.to) - (a.from - a.to))
+      const bottom = played[played.length - 1]
+      return {
+        week,
+        champion: {
+          names: winners, correct: top.correct, played: top.played,
+          tiebreak: decidedByTiebreak && top.tiebreakerGuess != null ? { guess: top.tiebreakerGuess, actual: tiebreakerTotal(wkGames) } : null,
+        },
+        headlines: headlines.slice(0, 4),
+        blown,
+        badBeat: beat ? {
+          loser: beat.loser, winner: beat.winner, loserScore: beat.loserScore, winnerScore: beat.winnerScore,
+          peak: beat.peak, victims: beat.victims.map(id => nameById.get(id) ?? 'Someone'),
+        } : null,
+        belt: winners.length ? { holders: winners, from: before, defended: winners.some(n => before.includes(n)) } : null,
+        agedWorst,
+        badges: lastDone === week ? badges.slice(0, 6) : [],
+        climber: moves[0] && moves[0].from > moves[0].to ? moves[0] : null,
+        faller: moves.length && moves[moves.length - 1].from < moves[moves.length - 1].to ? moves[moves.length - 1] : null,
+        basement: bottom ? { names: played.filter(r => r.correct === bottom.correct).map(r => r.name), correct: bottom.correct, played: bottom.played } : null,
+      }
+    })() : null
+
     // ── The Board: every pick on every game (hidden until it locks) ──
     const pickOf = new Map(wkPicks.map(p => [`${p.user_id}:${p.game_id}`, p]))
     const board = {
@@ -445,6 +524,8 @@ serve(async (req) => {
       stakes,
       who_can_win: whoCanWin,
       receipts,
+      gameReceipts,
+      replay,
       beats,
       badges,
       badges_week: lastDone || null,

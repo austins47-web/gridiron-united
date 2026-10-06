@@ -1427,6 +1427,8 @@ export interface Database {
       mark_chat_read: { Args: { p_league: string; p_room: string; p_at: string }; Returns: undefined }
       league_tv_token: { Args: { p_league: string; p_reset?: boolean }; Returns: string }
       league_has_tv: { Args: { p_league: string }; Returns: boolean }
+      /** A live poll on the Shop TV (and in the chat); returns the poll's id. */
+      tv_poll: { Args: { p_league: string; p_question: string; p_options: string[]; p_minutes?: number }; Returns: string }
       /** The commissioner's TV remote: put something on the Shop TV now. */
       tv_remote: {
         Args: { p_league: string; p_action: string; p_text?: string | null; p_moment?: string | null }

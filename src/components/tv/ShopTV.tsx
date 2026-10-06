@@ -83,8 +83,39 @@ interface TvRow {
 
 interface TvName { name: string; chance: number }
 
+/** A finished game's best and worst pick receipts (the TV pops them up as it ends). */
+interface TvGameReceipt {
+  gameId: string
+  away: string
+  home: string
+  awayScore: number | null
+  homeScore: number | null
+  winner: string
+  right: number
+  pickers: number
+  best: { name: string; team: string; reason: string } | null
+  worst: { name: string; team: string; reason: string } | null
+}
+
+/** The finished week, for the replay. */
+interface TvReplay {
+  week: number
+  champion: { names: string[]; correct: number; played: number; tiebreak: { guess: number; actual: number | null } | null }
+  headlines: { label: string; headline: string; detail: string }[]
+  blown: { names: string[]; took: string; winner: string; right: number; of: number }[]
+  badBeat: { loser: string; winner: string; loserScore: number; winnerScore: number; peak: number; victims: string[] } | null
+  belt: { holders: string[]; from: string[]; defended: boolean } | null
+  agedWorst: { name: string; team: string; reason: string }[]
+  badges: { name: string; label: string; detail: string }[]
+  climber: { name: string; from: number; to: number } | null
+  faller: { name: string; from: number; to: number } | null
+  basement: { names: string[]; correct: number; played: number } | null
+}
+
 interface TvBoard {
   league: string
+  gameReceipts?: TvGameReceipt[]
+  replay?: TvReplay | null
   /** The league's logo, and the TV's own accent color (Commish panel → Shop TV). */
   brand?: { logo: string | null; color?: string | null; theme?: string | null }
   week: number
@@ -326,6 +357,8 @@ export function ShopTV() {
         {board && holiday && <HolidayParticles theme={holiday} />}
         {status !== 'gone' && <LiveFromPhones code={code} />}
         {board && <RemoteOverlay board={board} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
+        {board && <ReplayShow board={board} />}
+        {board && <ReceiptsPop board={board} />}
       </div>
     </div>
   )
@@ -442,7 +475,17 @@ function Board({ board, offline, holiday }: { board: TvBoard; offline: boolean; 
 const TV_REFRESH = 'gu-tv-refresh'
 
 /** A press of the commissioner's remote (tv_remote), passed around the TV. */
-interface TvRemote { action: string; text?: string; moment?: string }
+interface TvRemote {
+  action: string
+  text?: string
+  moment?: string
+  /** action 'poll': the poll going up (tv_poll) */
+  poll?: TvPoll
+  /** action 'poll_votes': a poll's new counts */
+  pollId?: string
+  counts?: number[]
+}
+interface TvPoll { id: string; question: string; options: string[]; closesAt: string; counts: number[] }
 const TV_REMOTE = 'gu-tv-remote'
 
 /** Runs `on` for each press of the commissioner's remote. */
@@ -1559,6 +1602,13 @@ function LiveFromPhones({ code }: { code: string }) {
         setChats(list => list.filter(c => c.msgId !== id))
         window.dispatchEvent(new Event(TV_REFRESH))
       })
+      // Votes on a poll (league_poll_votes_to_tv), for the poll on screen
+      .on('broadcast', { event: 'poll_votes' }, ({ payload }) => {
+        const p = payload as { id?: string; counts?: number[] }
+        if (p?.id && Array.isArray(p.counts)) {
+          window.dispatchEvent(new CustomEvent<TvRemote>(TV_REMOTE, { detail: { action: 'poll_votes', pollId: p.id, counts: p.counts } }))
+        }
+      })
       // The commissioner's remote (tv_remote)
       .on('broadcast', { event: 'remote' }, ({ payload }) => {
         window.dispatchEvent(new CustomEvent<TvRemote>(TV_REMOTE, { detail: payload as TvRemote }))
@@ -1616,6 +1666,9 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
       case 'roast':
         if (!board.roast?.text) put({ kind: 'note', text: 'No roast yet this week' }, NOTE_MS)
         break
+      case 'replay':
+        if (!board.replay) put({ kind: 'note', text: 'The replay plays once the week is final' }, NOTE_MS)
+        break
       case 'moment':
         if (isMoment(r.moment)) {
           const kind = r.moment
@@ -1647,12 +1700,289 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
       )}
       {show?.kind === 'announce' && <Announcement key={show.id} text={show.text} />}
       {show?.kind === 'standings' && <StandingsTakeover key={show.id} board={board} />}
+      <LivePoll />
       {show?.kind === 'note' && (
         <div key={show.id} className="absolute top-[110px] left-1/2 -translate-x-1/2 z-[35] rise-in rounded-full border-2 border-gold/50 bg-field-900/95 px-8 py-3 text-[26px] font-bold text-white">
           {show.text}
         </div>
       )}
     </>
+  )
+}
+
+// ── A live poll ───────────────────────────────────────────────
+// Started from the remote (tv_poll): full screen while it's open, the
+// bars moving as votes come in (league_poll_votes_to_tv), then the
+// result for 15 seconds after it closes.
+const POLL_AFTER_MS = 15_000
+
+function LivePoll() {
+  const [poll, setPoll] = useState<TvPoll | null>(null)
+  const now = useNow(1000)
+  useTvRemote(r => {
+    if (r.action === 'poll' && r.poll?.id) setPoll(r.poll)
+    if (r.action === 'poll_votes') setPoll(p => (p && p.id === r.pollId && r.counts ? { ...p, counts: r.counts } : p))
+    if (r.action === 'clear') setPoll(null)
+  })
+  const closesAt = poll ? new Date(poll.closesAt).getTime() : 0
+  const pollId = poll?.id
+  useEffect(() => {
+    if (!pollId) return
+    const t = setTimeout(() => setPoll(null), Math.max(0, closesAt + POLL_AFTER_MS - Date.now()))
+    return () => clearTimeout(t)
+  }, [pollId, closesAt])
+  if (!poll) return null
+
+  const total = poll.counts.reduce((a, b) => a + b, 0)
+  const open = now < closesAt
+  const top = Math.max(0, ...poll.counts)
+  const left = Math.max(0, Math.ceil((closesAt - now) / 1000))
+  return (
+    <div className="absolute inset-0 z-[34] bg-field-950/[0.97] flex flex-col px-28 py-16 rise-in">
+      <div className="flex items-center justify-between mb-6">
+        <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[30px]">📊 Live poll · vote in the app chat</p>
+        <p className={clsx('font-cond font-black text-[44px] tabular-nums', open ? 'text-white' : 'text-gold')}>
+          {open ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Final'}
+        </p>
+      </div>
+      <p className="font-cond font-black text-white text-[80px] leading-[1.05] mb-12 max-w-[1700px]">{poll.question}</p>
+      <div className="flex flex-col gap-6">
+        {poll.options.map((o, i) => {
+          const n = poll.counts[i] ?? 0
+          const pct = total ? Math.round((n / total) * 100) : 0
+          const lead = !open && n === top && n > 0
+          return (
+            <div key={i}>
+              <div className="flex items-baseline justify-between mb-2">
+                <span className={clsx('text-[42px] font-bold', lead ? 'text-gold' : 'text-white')}>{lead && '🏆 '}{o}</span>
+                <span className="font-cond font-black text-[40px] text-white tabular-nums">{n} <span className="text-field-400 text-[30px]">· {pct}%</span></span>
+              </div>
+              <div className="h-8 rounded-full bg-field-800 overflow-hidden">
+                <div className={clsx('h-full rounded-full', lead ? 'bg-gold' : 'bg-gold/60')} style={{ width: `${total ? (n / total) * 100 : 0}%`, transition: 'width .6s ease-out' }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-auto text-[28px] text-field-400">{total} vote{total === 1 ? '' : 's'}{open ? ' so far' : ''}</p>
+    </div>
+  )
+}
+
+// ── The replay ────────────────────────────────────────────────
+// The finished week, slide by slide: the champion, the Belt, the
+// headlines, the worst pick, the bad beat, the receipts that aged badly,
+// badges, who moved, and last place. It plays a few minutes after the
+// week goes final, every half hour after until the next week opens, and
+// from the remote.
+const REPLAY_SLIDE_MS = 10_000
+const REPLAY_EVERY = 30 * 60_000
+
+interface ReplaySlide { key: string; label: string; body: ReactNode }
+
+const place = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')}`
+const names = (xs: string[]) => xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} & ${xs[xs.length - 1]}`
+
+function replaySlides(r: TvReplay): ReplaySlide[] {
+  const big = 'font-cond font-black text-white leading-[1.05]'
+  const out: ReplaySlide[] = [{
+    key: 'champ', label: `${weekTitle(r.week)} champion`,
+    body: (
+      <>
+        <p className={clsx(big, 'text-[120px]')}>🏆 {names(r.champion.names)}</p>
+        <p className="text-[46px] text-field-200 mt-6">{r.champion.correct} of {r.champion.played} right</p>
+        {r.champion.tiebreak && (
+          <p className="text-[36px] text-gold mt-3">Won it on the tiebreaker: guessed {r.champion.tiebreak.guess}{r.champion.tiebreak.actual != null ? `, the total was ${r.champion.tiebreak.actual}` : ''}</p>
+        )}
+      </>
+    ),
+  }]
+  if (r.belt?.holders.length) {
+    const b = r.belt
+    out.push({
+      key: 'belt', label: 'The Belt',
+      body: <p className={clsx(big, 'text-[96px]')}>{b.defended ? `${names(b.holders)} keeps the Belt` : b.from.length ? `${names(b.holders)} takes the Belt from ${names(b.from)}` : `${names(b.holders)} wins the Belt`}</p>,
+    })
+  }
+  for (const h of r.headlines.slice(0, 3)) {
+    out.push({
+      key: `h-${h.label}`, label: h.label,
+      body: (
+        <>
+          <p className={clsx(big, 'text-[110px]')}>{h.headline}</p>
+          <p className="text-[42px] text-field-300 mt-6">{h.detail}</p>
+        </>
+      ),
+    })
+  }
+  for (const [i, b] of r.blown.slice(0, 1).entries()) {
+    out.push({
+      key: `blown-${i}`, label: 'Worst pick of the week',
+      body: (
+        <>
+          <p className={clsx(big, 'text-[96px]')}>{names(b.names)} took {b.took}</p>
+          <p className="text-[42px] text-field-300 mt-6">{b.right} of {b.of} got {b.winner} right</p>
+        </>
+      ),
+    })
+  }
+  if (r.badBeat) {
+    const bb = r.badBeat
+    out.push({
+      key: 'beat', label: 'Bad beat of the week',
+      body: (
+        <>
+          <p className={clsx(big, 'text-[96px]')}>{bb.loser} was {Math.round(bb.peak * 100)}% to win</p>
+          <p className="text-[42px] text-field-300 mt-6">Lost {bb.loserScore}–{bb.winnerScore} to {bb.winner}. Ask {names(bb.victims.slice(0, 6))}{bb.victims.length > 6 ? ` and ${bb.victims.length - 6} more` : ''}.</p>
+        </>
+      ),
+    })
+  }
+  if (r.agedWorst.length) {
+    out.push({
+      key: 'receipts', label: 'Receipts that aged badly',
+      body: (
+        <div className="space-y-8">
+          {r.agedWorst.map((x, i) => (
+            <div key={i}>
+              <p className="text-[56px] italic text-white leading-tight">“{x.reason}”</p>
+              <p className="text-[32px] text-field-400 mt-1">{x.name} on {x.team} ❌</p>
+            </div>
+          ))}
+        </div>
+      ),
+    })
+  }
+  if (r.badges.length) {
+    out.push({
+      key: 'badges', label: 'Badges earned',
+      body: (
+        <div className="space-y-5">
+          {r.badges.map((b, i) => (
+            <p key={i} className="text-[48px] text-white"><span className="font-bold text-gold">🏅 {b.name}</span> · {b.label} <span className="text-field-400 text-[32px]">{b.detail}</span></p>
+          ))}
+        </div>
+      ),
+    })
+  }
+  if (r.climber || r.faller) {
+    out.push({
+      key: 'moves', label: 'On the move',
+      body: (
+        <div className="space-y-8">
+          {r.climber && <p className={clsx(big, 'text-[84px]')}>⬆️ {r.climber.name}: {place(r.climber.from)} to {place(r.climber.to)}</p>}
+          {r.faller && <p className={clsx(big, 'text-[84px] text-red-300')}>⬇️ {r.faller.name}: {place(r.faller.from)} to {place(r.faller.to)}</p>}
+        </div>
+      ),
+    })
+  }
+  if (r.basement?.names.length) {
+    out.push({
+      key: 'basement', label: 'Last place',
+      body: (
+        <>
+          <p className={clsx(big, 'text-[110px]')}>🗑️ {names(r.basement.names)}</p>
+          <p className="text-[46px] text-field-300 mt-6">{r.basement.correct} of {r.basement.played}. See you next week.</p>
+        </>
+      ),
+    })
+  }
+  return out
+}
+
+function ReplayShow({ board }: { board: TvBoard }) {
+  const r = board.replay ?? null
+  const slides = useMemo(() => (r ? replaySlides(r) : []), [r])
+  const [playing, setPlaying] = useState(false)
+  const [i, setI] = useState(0)
+  const week = r?.week ?? null
+  // A few minutes after the week goes final (or the TV comes on), then every half hour
+  useEffect(() => {
+    if (week == null) { setPlaying(false); return }
+    const start = () => { setI(0); setPlaying(true) }
+    const first = setTimeout(start, 3 * 60_000)
+    const every = setInterval(start, REPLAY_EVERY)
+    return () => { clearTimeout(first); clearInterval(every) }
+  }, [week])
+  useTvRemote(x => {
+    if (x.action === 'replay' && r) { setI(0); setPlaying(true) }
+    if (x.action === 'clear') setPlaying(false)
+  })
+  useEffect(() => {
+    if (!playing) return
+    const t = setTimeout(() => (i + 1 >= slides.length ? setPlaying(false) : setI(i + 1)), REPLAY_SLIDE_MS)
+    return () => clearTimeout(t)
+  }, [playing, i, slides.length])
+  const slide = slides[i]
+  if (!playing || !slide || !r) return null
+  return (
+    <div className="absolute inset-0 z-[33] bg-field-950/[0.97] flex flex-col px-28 py-16">
+      <div className="flex items-center justify-between">
+        <p className="font-cond font-black uppercase tracking-[0.3em] text-gold text-[30px]">📼 {board.league} · {weekTitle(r.week)} replay</p>
+        <div className="flex gap-2">
+          {slides.map((x, j) => <span key={x.key} className={clsx('w-3 h-3 rounded-full', j === i ? 'bg-gold' : j < i ? 'bg-gold/40' : 'bg-field-700')} />)}
+        </div>
+      </div>
+      <div key={slide.key} className="flex-1 flex flex-col justify-center rise-in">
+        <p className="font-cond font-bold uppercase tracking-[0.25em] text-field-400 text-[34px] mb-6">{slide.label}</p>
+        {slide.body}
+      </div>
+    </div>
+  )
+}
+
+// ── Receipts as a game ends ───────────────────────────────────
+// When the TV sees a game go final, it pops up the best receipt on the
+// winner and the worst on the loser for 14 seconds, one game at a time.
+// ?preview=receipts shows the week's finished games' cards.
+const RECEIPT_MS = 14_000
+
+function ReceiptsPop({ board }: { board: TvBoard }) {
+  const seen = useRef<Map<string, string> | null>(null)
+  const [queue, setQueue] = useState<TvGameReceipt[]>([])
+  useEffect(() => {
+    const states = new Map(board.games.map(g => [g.id, g.state]))
+    const was = seen.current
+    seen.current = states
+    const receipts = board.gameReceipts ?? []
+    if (!was) {
+      // On load, nothing old pops up (unless previewing)
+      if (new URLSearchParams(window.location.search).get('preview') === 'receipts') setQueue(receipts.slice(0, 4))
+      return
+    }
+    const ended = board.games.filter(g => g.state === 'final' && was.get(g.id) && was.get(g.id) !== 'final').map(g => g.id)
+    const fresh = receipts.filter(r => ended.includes(r.gameId) && (r.best || r.worst))
+    if (fresh.length) setQueue(q => [...q, ...fresh])
+  }, [board])
+  const current = queue[0]
+  useEffect(() => {
+    if (!current) return
+    const t = setTimeout(() => setQueue(q => q.slice(1)), RECEIPT_MS)
+    return () => clearTimeout(t)
+  }, [current])
+  useTvRemote(x => { if (x.action === 'clear') setQueue([]) })
+  if (!current) return null
+  const r = current
+  const side = (label: string, icon: string, x: TvGameReceipt['best'], tone: string) => x && (
+    <div className="flex-1 min-w-0">
+      <p className={clsx('font-cond font-bold uppercase tracking-[0.2em] text-[22px] mb-2', tone)}>{icon} {label}</p>
+      <p className="text-[34px] italic text-white leading-snug line-clamp-3">“{x.reason}”</p>
+      <p className="text-[24px] text-field-400 mt-2">{x.name} on {x.team}</p>
+    </div>
+  )
+  return (
+    <div key={r.gameId} className="absolute top-[118px] left-1/2 -translate-x-1/2 z-[26] w-[1240px] rise-in rounded-3xl border-2 border-gold/50 bg-field-900/[0.97] shadow-2xl shadow-black/70 px-10 py-7 pointer-events-none">
+      <div className="flex items-baseline justify-between mb-5">
+        <p className="font-cond font-black uppercase tracking-[0.2em] text-gold text-[28px]">🧾 Receipts · Final</p>
+        <p className="font-cond font-black text-[34px] text-white">
+          {r.away} {r.awayScore} – {r.home} {r.homeScore} <span className="text-field-400 text-[26px]">· {r.right} of {r.pickers} had {r.winner}</span>
+        </p>
+      </div>
+      <div className="flex gap-10">
+        {side('Aged well', '✅', r.best, 'text-nfl')}
+        {side('Aged badly', '❌', r.worst, 'text-red-400')}
+      </div>
+    </div>
   )
 }
 
