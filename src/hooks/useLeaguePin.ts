@@ -9,8 +9,9 @@ export function useLeaguePin(leagueId: string | null | undefined) {
   return useQuery<PinWithAuthor | null>({
     queryKey: ['league-pin', leagueId],
     enabled: !!leagueId,
+    // No timer: pins rarely change, and this refetches on opening the
+    // page or coming back to the app (and the chat's realtime refreshes it)
     staleTime: 30_000,
-    refetchInterval: 120_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('league_pins')

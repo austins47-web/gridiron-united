@@ -203,12 +203,14 @@ export function ShopTV() {
   useWakeLock()
   useDarkTheme()
 
-  // Poll: every 15s while a game is on, every minute otherwise
+  // Poll: every 30s while a game is on (scores sync every 2 minutes),
+  // every 10s in the last few minutes before a lock, and every 5
+  // minutes otherwise — a TV left on all week was ~1,500 calls a day
   useEffect(() => {
     let alive = true
     let timer: ReturnType<typeof setTimeout>
     const load = async () => {
-      let next = 60_000
+      let next = 5 * 60_000
       try {
         const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/shop-tv?token=${encodeURIComponent(code)}`, {
           headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
@@ -225,12 +227,16 @@ export function ShopTV() {
         setBoard(data)
         setStatus('ok')
         remember(code)
-        if (data.games.some(g => g.state === 'live')) next = 15_000
+        // On, or past kickoff but not marked live yet
+        const sinceKickoff = (g: TvGame) => Date.now() - new Date(g.kickoff).getTime()
+        if (data.games.some(g => g.state === 'live' || (g.state === 'pre' && sinceKickoff(g) >= 0 && sinceKickoff(g) < 6 * 3_600_000))) next = 30_000
         // Close to a lock, check often so the reveal starts right on time
         const lockAt = [data.deadline, data.nextKickoff]
           .map(t => (t ? new Date(t).getTime() - Date.now() : Infinity))
           .filter(ms => ms > -60_000)
         if (lockAt.some(ms => ms < 4 * 60_000)) next = 10_000
+        // Wake up in time for the next lock's last few minutes
+        else for (const ms of lockAt) if (ms < Infinity) next = Math.min(next, ms - 4 * 60_000 + 1_000)
       } catch {
         if (alive) setStatus(s => (s === 'loading' ? 'loading' : 'offline'))
         next = 20_000

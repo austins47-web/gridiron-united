@@ -105,7 +105,13 @@ export function LiveScoringView() {
     if (!athleteIds.length) return
     const channel = supabase
       .channel(`live-scoring-${activeLeagueId}-${currentWeek}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_player_stats' },
+      // Just this roster's players — unfiltered, every box score row of
+      // every game came through (thousands every couple of minutes on a
+      // college Saturday), each one counting against the realtime quota
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'live_player_stats',
+        filter: `espn_athlete_id=in.(${athleteIds.slice(0, 100).join(',')})`,
+      },
         (payload) => {
           const row = payload.new as any
           if (!athleteIds.includes(row?.espn_athlete_id)) return

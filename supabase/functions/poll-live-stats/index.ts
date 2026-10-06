@@ -1,19 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { espnScores } from '../_shared/espnScores.ts'
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!
-
-async function proxyFetch(endpoint: string) {
-  const r = await fetch(
-    `${SUPABASE_URL}/functions/v1/sportsdata?endpoint=${encodeURIComponent(endpoint)}`,
-    { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
-  )
-  if (!r.ok) throw new Error(`proxy ${r.status}: ${endpoint}`)
-  return r.json()
-}
 
 function parseBoxScore(summary: any): Map<number, Record<string, number>> {
   const stats = new Map<number, Record<string, number>>()
@@ -107,30 +98,27 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
   const now = new Date()
 
-  // Always re-poll everything genuinely in progress, PLUS catch any
-  // recently-final game that was never actually polled even once —
-  // confirmed as a real, active problem: every Week 1 game except
-  // one had already finished in real life before detect-games was
-  // ever correctly detecting the right week, so this function had
-  // no chance to see them while they were live. Those games would
-  // otherwise never get scored at all. Scoped to the last 24 hours
-  // specifically so this doesn't turn into an ever-growing,
-  // unbounded re-check of every final game from the entire season.
-  const [{ data: activeGames, error: gErr }, { data: recentFinal }, { data: alreadyHave }] = await Promise.all([
+  // Everything in progress, plus each game that has gone final but
+  // hasn't had its final box score read yet (stats_final_at) — that
+  // also catches a game that finished before it was ever polled live.
+  // This used to pick finals as "updated in the last 24h with no rows
+  // in live_player_stats", but detect-games touches updated_at every
+  // run (so the 24h never ran out) and the row check only saw the
+  // first 1,000 of 34,000 rows: it re-read 30 finished games every
+  // run, around the clock — ~21,000 proxy calls a day.
+  // Starts within the last 2 days, so a game ESPN keeps failing on
+  // doesn't get retried forever; capped per run so a backlog can't
+  // push one call past the cron's 30s timeout.
+  const [{ data: activeGames, error: gErr }, { data: unreadFinal }] = await Promise.all([
     supabase.from('live_games').select('*').eq('status', 'in_progress'),
     supabase.from('live_games').select('*')
       .eq('status', 'final')
-      .gte('updated_at', new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()),
-    supabase.from('live_player_stats').select('game_id'),
+      .is('stats_final_at', null)
+      .gte('start_time', new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString())
+      .limit(30),
   ])
 
-  const haveGameIds = new Set((alreadyHave ?? []).map((r: any) => r.game_id))
-  // Capped per run — the cron's own HTTP call times out at 30s, and
-  // a large one-time backlog (like today's ~97 missing games) could
-  // otherwise mean one oversized, timeout-prone invocation. The
-  // every-minute schedule naturally catches up on the remainder
-  // over the next few runs instead.
-  const missingFinal = (recentFinal ?? []).filter((g: any) => !haveGameIds.has(g.game_id)).slice(0, 30)
+  const missingFinal = unreadFinal ?? []
   const gamesToProcess = [...(activeGames ?? []), ...missingFinal]
 
   if (gErr) return new Response(JSON.stringify({ error: gErr.message }), { headers: CORS, status: 500 })
@@ -140,7 +128,7 @@ serve(async (req) => {
 
   await Promise.all(gamesToProcess.map(async (game: any) => {
     try {
-      const summary = await proxyFetch(`game/summary/${game.league}/${game.game_id}`)
+      const summary = await espnScores(`game/summary/${game.league}/${game.game_id}`)
       const statsMap = parseBoxScore(summary)
       const athleteIds = [...statsMap.keys()]
 
@@ -168,8 +156,11 @@ serve(async (req) => {
         if (error) throw new Error(error.message)
       }
 
+      // A final game's box score is now complete: done with it
       await supabase.from('live_games')
-        .update({ last_polled_at: now.toISOString() })
+        .update(game.status === 'final'
+          ? { last_polled_at: now.toISOString(), stats_final_at: now.toISOString() }
+          : { last_polled_at: now.toISOString() })
         .eq('game_id', game.game_id)
 
       results.push({ game_id: game.game_id, athletes: rows.length })

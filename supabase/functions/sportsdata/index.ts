@@ -1,23 +1,19 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { nflSeasonFor } from '../_shared/pickemCore.ts'
+import { espnFetch, espnScores } from '../_shared/espnScores.ts'
 
 // ── ESPN proxy + FantasyPros proxy ────────────────────────────
 // Replaces SportsDataIO. All sources are free, no API key needed.
 // Routes:
 //   nfl/news              → ESPN NFL news
 //   nfl/news/team/{abbr}  → ESPN team news
-//   nfl/live-scores       → ESPN scoreboard
-//   cfb/scores/{s}/{w}    → ESPN CFB scoreboard
+//   nfl/live-scores, nfl|cfb/scores/{s}/{w}, nfl|cfb/current-week,
+//   game/summary/{league}/{id} → _shared/espnScores.ts
 //   nfl/injuries          → ESPN NFL injuries (all teams)
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (compatible; Gridiron-United/1.0)',
-  'Accept': 'application/json',
 }
 
 // ESPN team abbreviation → ESPN team ID map (for news lookups)
@@ -26,12 +22,6 @@ const TEAM_ID: Record<string, number> = {
   DAL:6,  DEN:7,  DET:8,  GB:9,   HOU:34, IND:11, JAX:30, KC:12,
   LAC:24, LAR:14, LV:13,  MIA:15, MIN:16, NE:17,  NO:18,  NYG:19,
   NYJ:20, PHI:21, PIT:23, SEA:26, SF:25,  TB:27,  TEN:10, WAS:28,
-}
-
-async function espnFetch(url: string) {
-  const res = await fetch(url, { headers: HEADERS })
-  if (!res.ok) throw new Error(`ESPN ${res.status}: ${url}`)
-  return res.json()
 }
 
 serve(async (req) => {
@@ -90,7 +80,11 @@ serve(async (req) => {
       }
     }
 
-    if (endpoint === 'nfl/news') {
+    const scores = await espnScores(endpoint, url.searchParams.get('seasontype'))
+    if (scores !== undefined) {
+      data = scores
+
+    } else if (endpoint === 'nfl/news') {
       const articles = await fetchNewsPaged(
         'https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50', 6
       )
@@ -112,58 +106,8 @@ serve(async (req) => {
         Team:       abbr,
       }))
 
-    } else if (endpoint === 'nfl/live-scores') {
-      data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard')
-
-    } else if (endpoint.startsWith('nfl/scores/')) {
-      const [,, season, week] = endpoint.split('/')
-      const seasontype = url.searchParams.get('seasontype') ?? '2'
-      // ESPN requires 'dates' for year, not 'season'. Also needs limit to get all games.
-      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=${seasontype}&week=${week}&limit=20`)
-
-    } else if (endpoint.startsWith('cfb/scores/')) {
-      const [,, season, week] = endpoint.split('/')
-      const seasontype = url.searchParams.get('seasontype') ?? '2'
-      // CFB Week 0 is a single late-August Saturday slate that ESPN lumps
-      // into week 1. Split them by date: week 0 = before Aug 26, week 1 = after.
-      const yr = parseInt(season)
-      const WEEK0_CUTOFF = new Date(`${yr}-08-26T00:00:00Z`).getTime()
-
-      if (week === '0') {
-        // Tight range covering only the week 0 slate
-        data = await espnFetch(
-          `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=${yr}0818-${yr}0825`
-        )
-      } else {
-        data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=${season}&week=${week}&seasontype=${seasontype}`)
-        // Strip any week 0 stragglers out of week 1
-        if (week === '1' && Array.isArray(data?.events)) {
-          data.events = data.events.filter((e: any) =>
-            new Date(e.date).getTime() >= WEEK0_CUTOFF
-          )
-        }
-      }
-
     } else if (endpoint === 'nfl/injuries') {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries')
-
-    } else if (endpoint === 'nfl/current-week' || endpoint === 'cfb/current-week') {
-      // Lets a server-side caller (detect-games) discover the real
-      // current week from ESPN directly, instead of computing it
-      // from a hardcoded season-start date — that approach drifted
-      // wrong (computed Week 2 while the real season was still in
-      // Week 1), meaning detect-games silently fetched an empty or
-      // wrong week's scoreboard and never found any real games to
-      // seed live_games with, which is why fantasy points had
-      // nothing downstream to ever calculate from.
-      const league = endpoint.startsWith('nfl') ? 'nfl' : 'college-football'
-      const groupParam = league === 'college-football' ? '&groups=80' : ''
-      const raw = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/scoreboard?limit=1${groupParam}`)
-      data = {
-        week: raw?.week?.number ?? null,
-        season: raw?.season?.year ?? null,
-        seasonType: raw?.season?.type ?? null,
-      }
 
     } else if (endpoint === 'cfb/news') {
       const articles = await fetchNewsPaged(
@@ -328,13 +272,6 @@ serve(async (req) => {
 
     } else if (endpoint === 'cfb/rankings') {
       data = await espnFetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings')
-
-    } else if (endpoint.startsWith('game/summary/')) {
-      // game/summary/{league}/{gameId}
-      const parts = endpoint.split('/')
-      const league = parts[2] === 'CFB' ? 'college-football' : 'nfl'
-      const gameId = parts[3]
-      data = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/football/${league}/summary?event=${gameId}`)
 
     } else {
       return new Response(JSON.stringify({ error: `Unknown endpoint: ${endpoint}` }), {

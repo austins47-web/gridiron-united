@@ -1,21 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { espnScores } from '../_shared/espnScores.ts'
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!
-
-// Call through our own sportsdata proxy which handles ESPN auth/UA correctly
-async function proxyFetch(endpoint: string) {
-  const r = await fetch(
-    `${SUPABASE_URL}/functions/v1/sportsdata?endpoint=${encodeURIComponent(endpoint)}`,
-    { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } }
-  )
-  if (!r.ok) throw new Error(`proxy ${r.status}: ${endpoint}`)
-  return r.json()
-}
-
 function mapStatus(name: string): string {
   const s = name?.toLowerCase() ?? ''
   if (s.includes('progress') || s.includes('halftime') || s.includes('end_period')) return 'in_progress'
@@ -42,8 +31,8 @@ serve(async (req) => {
   // live_games with — which is the actual reason fantasy points had
   // nothing downstream to ever calculate from at all.
   const [nflWeekData, cfbWeekData] = await Promise.all([
-    proxyFetch('nfl/current-week').catch(() => null),
-    proxyFetch('cfb/current-week').catch(() => null),
+    espnScores('nfl/current-week').catch(() => null),
+    espnScores('cfb/current-week').catch(() => null),
   ])
   const nflWeek = nflWeekData?.week ?? 1
   const cfbWeek = cfbWeekData?.week ?? 1
@@ -71,7 +60,7 @@ serve(async (req) => {
   const fetched = await Promise.all(
     scoreboardSources.map(async (s) => {
       try {
-        return { ...s, data: await proxyFetch(s.endpoint) }
+        return { ...s, data: await espnScores(s.endpoint) }
       } catch (e: any) {
         errors.push(`${s.league}: ${e.message}`)
         return { ...s, data: null }
