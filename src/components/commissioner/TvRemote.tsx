@@ -14,7 +14,7 @@ const SPEAKER_NOTES: Record<string, string> = {
   ready: 'The TV is in Spotify’s list of devices. Pick it in Spotify to play the music there.',
   connecting: 'Connecting the TV to Spotify…',
   blocked: 'Spotify is sending music to the TV, but its browser is holding the sound back: click the TV screen (or press OK on its remote) once.',
-  unsupported: 'This TV’s browser can’t play Spotify. It works in Chrome, Edge, Firefox or Safari.',
+  unsupported: 'This TV’s browser can’t play Spotify, so it can’t be the speaker (the song still shows). On a Fire TV, try the Spotify app: start the music there, then go back to the TV page in Silk.',
   premium: 'Spotify only plays on the TV with Premium.',
   auth: 'Spotify needs connecting again (Music on the TV, below).',
   error: 'The TV couldn’t reach Spotify. Reload tries again.',
