@@ -67,9 +67,12 @@ export function startProblemLog(sender: (row: ProblemRow) => Promise<unknown>) {
 }
 
 /** Refusals that are normal, not a problem with the app. */
-function expected(url: URL, status: number, message: string): boolean {
+function expected(url: URL, status: number, message: string, code?: string): boolean {
   const p = url.pathname
   if (p.endsWith('/rpc/log_client_error')) return true
+  // A database function telling the person no on purpose (RAISE EXCEPTION):
+  // "Invalid invite code", "League is full"
+  if (code === 'P0001') return true
   // A wrong password, an email already signed up: the person's mistake
   if (p.startsWith('/auth/v1/') && status < 500) return true
   // supabase-js refreshes an expired session and retries
@@ -95,7 +98,7 @@ export const problemLoggingFetch: typeof fetch = async (input, init) => {
     let body: Record<string, any> = {}
     try { body = JSON.parse(text) } catch { /* not JSON */ }
     const message = String(body.message ?? body.error_description ?? body.error ?? body.msg ?? text ?? '').slice(0, 300)
-    if (!expected(url, res.status, message)) {
+    if (!expected(url, res.status, message, body.code)) {
       const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
       const where = url.pathname.replace(/^\/(rest|functions|storage|auth)\/v1\//, '$1 ')
       logProblem('api', `${res.status} ${method} ${where}: ${message}`, {

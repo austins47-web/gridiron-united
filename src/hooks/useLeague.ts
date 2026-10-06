@@ -245,39 +245,20 @@ export function useJoinLeague() {
     mutationFn: async (inviteCode: string) => {
       if (!user) throw new Error('Not logged in')
 
-      const { data: league, error: le } = await supabase
-        .from('leagues')
-        .select('*')
-        .eq('invite_code', inviteCode.toUpperCase())
-        .single()
-      if (le || !league) throw new Error('Invalid invite code')
+      // The database checks the code, that they're not already in, and
+      // that there's room (join_league); leagues and their invite codes
+      // aren't readable until you're a member
+      const { data: leagueId, error: je } = await supabase.rpc('join_league', {
+        p_code: inviteCode.toUpperCase(),
+        p_team_name: defaultTeamName(profile),
+      })
+      if (je || !leagueId) throw new Error(je?.message ?? 'Could not join league')
 
-      // Check not already a member
-      const { data: existing } = await supabase
-        .from('league_members')
-        .select('id')
-        .eq('league_id', league.id)
-        .eq('user_id', user.id)
-        .single()
-      if (existing) throw new Error('You are already in this league')
-
-      // Check not full
-      const { count } = await supabase
-        .from('league_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('league_id', league.id)
-      if ((count ?? 0) >= (league.league_type === 'pickem' ? 500 : league.num_teams)) throw new Error('League is full')
-
-      const { data: membership, error: me } = await supabase
-        .from('league_members')
-        .insert({
-          league_id: league.id,
-          user_id: user.id,
-          is_commissioner: false,
-          team_name: defaultTeamName(profile),
-        })
-        .select()
-        .single()
+      const [{ data: league, error: le }, { data: membership, error: me }] = await Promise.all([
+        supabase.from('leagues').select('*').eq('id', leagueId).single(),
+        supabase.from('league_members').select('*').eq('league_id', leagueId).eq('user_id', user.id).single(),
+      ])
+      if (le) throw le
       if (me) throw me
 
       return { league, membership }

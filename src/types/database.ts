@@ -1428,6 +1428,8 @@ export interface Database {
       league_tv_token: { Args: { p_league: string; p_reset?: boolean }; Returns: string }
       league_has_tv: { Args: { p_league: string }; Returns: boolean }
       send_tv_reaction: { Args: { p_league: string; p_emoji: string }; Returns: undefined }
+      /** Joins the league with this invite code; returns its id. */
+      join_league: { Args: { p_code: string; p_team_name?: string | null }; Returns: string }
       /** One of your earned badges next to your name in a league; null clears it. */
       set_badge_flair: { Args: { p_league: string; p_badge: string | null }; Returns: undefined }
       /** The problem log (src/lib/problemLog.ts). */
