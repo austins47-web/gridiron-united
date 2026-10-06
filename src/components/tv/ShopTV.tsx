@@ -1924,10 +1924,11 @@ function RevealShow({ board, games, onDone }: { board: TvBoard; games: TvGame[];
 // ── Live from phones: reactions and chat ──────────────────────
 // One channel, tv:<code>, carries both. A member taps an emoji in the
 // app (send_tv_reaction) and it floats up the screen with their name
-// under it. A message in the TV chat (send_tv_message: the TV's own,
-// not the league chat) pops up in the bottom-left corner for a few
-// seconds; one that's unsent or deleted (unsend_tv_message) comes
-// straight off, and the board reloads so the trash talk panel drops it too.
+// under it. Every message in the league chat (league_messages_to_tv)
+// and in the TV chat (send_tv_message: the TV's own, never in the league
+// chat) pops up in the bottom-left corner for a few seconds; one that's
+// unsent or deleted comes straight off, and the board reloads so the
+// trash talk panel drops it too.
 // ?preview=chat shows three sample messages, to see how they look.
 interface Floater { id: number; emoji: string; name: string; x: number; drift: number; size: number; dur: number }
 interface ChatPop { id: number; msgId: string | null; name: string; avatar: string | null; text: string; gif: string | null; thread: string | null; dur: number }

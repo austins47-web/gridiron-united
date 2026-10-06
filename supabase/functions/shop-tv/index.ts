@@ -96,7 +96,7 @@ serve(async (req) => {
     const now = new Date()
     const season = nflSeasonFor(now)
     const since = new Date(now.getTime() - 7 * 24 * 3600_000).toISOString()
-    const [{ data: league }, { data: memberRows }, { data: gameRows }, { data: pin }, { data: chatRows }, { data: roastRows }, { data: pollRows }, { data: spotify }] = await Promise.all([
+    const [{ data: league }, { data: memberRows }, { data: gameRows }, { data: pin }, { data: chatRows }, { data: tvChatRows }, { data: roastRows }, { data: pollRows }, { data: spotify }] = await Promise.all([
       admin.from('leagues')
         .select('id, name, league_type, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, brand_logo_url, brand_color, tv_theme, tv_location')
         .eq('id', tv.league_id).maybeSingle(),
@@ -105,7 +105,13 @@ serve(async (req) => {
         .eq('league_id', tv.league_id),
       admin.from('nfl_games').select(GAME_COLS).eq('season', season),
       admin.from('league_pins').select('message').eq('league_id', tv.league_id).maybeSingle(),
-      // The TV chat's latest words (tv_messages: the TV's own, not the league chat)
+      // The latest words in the league chat (text only) and the TV chat
+      // (tv_messages: the TV's own), together on the trash talk panel
+      admin.from('league_messages')
+        .select('user_id, message, created_at')
+        .eq('league_id', tv.league_id).eq('is_system', false).is('game_id', null).is('deleted_at', null)
+        .not('message', 'like', 'IMAGE:%').not('message', 'like', 'GIF:%').not('message', 'like', 'POLL:%').gte('created_at', since)
+        .order('created_at', { ascending: false }).limit(8),
       admin.from('tv_messages')
         .select('user_id, message, created_at')
         .eq('league_id', tv.league_id).is('deleted_at', null).gte('created_at', since)
@@ -482,7 +488,10 @@ serve(async (req) => {
       .sort((a, b) => Number(b.status === 'out') - Number(a.status === 'out') || Number(b.pos === 'QB') - Number(a.pos === 'QB'))
 
     // Chat, the roast and the latest poll
-    const chat = (chatRows ?? []).map(m => ({ name: nameById.get(m.user_id) ?? 'Someone', text: String(m.message).slice(0, 200), at: m.created_at }))
+    const chat = [...(chatRows ?? []), ...(tvChatRows ?? [])]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 8)
+      .map(m => ({ name: nameById.get(m.user_id) ?? 'Someone', text: String(m.message).slice(0, 200), at: m.created_at }))
     let roast: { week: number; text: string } | null = null
     const raw = roastRows?.[0]?.message as string | undefined
     if (raw) {

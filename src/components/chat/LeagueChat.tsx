@@ -294,7 +294,7 @@ function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit,
       <div className="chat-menu rise-in rounded-2xl border border-field-600 bg-field-800 shadow-xl shadow-black/40 p-1.5 max-w-full">
         {confirming ? (
           <div className="flex items-center gap-1 px-1.5 py-1">
-            <span className="text-xs text-field-200 mr-1">{isOwn ? 'Unsend this? It disappears for everyone.' : 'Delete this message for everyone?'}</span>
+            <span className="text-xs text-field-200 mr-1">{isOwn ? 'Unsend this? It disappears for everyone, and off the TV.' : 'Delete this message for everyone?'}</span>
             <button onClick={onDelete} className="text-xs font-bold text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10">{deleteWord}</button>
             <button onClick={() => setConfirming(false)} className="text-xs text-field-400 hover:text-white px-2 py-1">Cancel</button>
           </div>
