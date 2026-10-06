@@ -14,7 +14,9 @@ import type { HolidayTheme, HolidaySceneSpec } from '@/lib/holiday'
 //
 // Laid out in the TV's 1920×1080 space, transforms and opacity only, so
 // it runs on a Fire TV's browser. ?preview=moments plays a moment every
-// 14 seconds.
+// 14 seconds. `lite` (a TV that's dropping frames): no fog, and the glow
+// around the edges is painted under the panels by the TV's backdrop
+// instead of as a full-screen layer over everything.
 // ══════════════════════════════════════════════════════════════
 
 const W = 1920
@@ -43,7 +45,7 @@ const SCENE_CSS = `
 @keyframes hs-flicker { 0%, 100% { opacity: .55 } 30% { opacity: .9 } 60% { opacity: .45 } 80% { opacity: .8 } }
 @keyframes hs-dangle { from { transform: translateY(0) } to { transform: translateY(46px) } }
 @keyframes hs-fog { from { transform: translateX(0) } to { transform: translateX(-${W}px) } }
-@keyframes hs-shimmer { from { background-position: -600px 0 } to { background-position: ${W + 600}px 0 } }
+@keyframes hs-shimmer { from { transform: translateX(-600px) } to { transform: translateX(${W}px) } }
 @keyframes hs-rise { from { transform: translateY(var(--rise)); opacity: 1 } 90% { opacity: 1 } to { transform: translateY(0); opacity: 0 } }
 @keyframes hs-burst { 0% { transform: translate(0, 0) scale(1); opacity: 1 } 100% { transform: translate(var(--tx), var(--ty)) scale(.35); opacity: 0 } }
 @keyframes hs-sweep { 0% { transform: rotate(var(--from)); opacity: 0 } 12% { opacity: 1 } 50% { transform: rotate(var(--to)) } 88% { opacity: 1 } 100% { transform: rotate(var(--from)); opacity: 0 } }
@@ -55,15 +57,15 @@ const prefersCalm = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }
 }
 
-export function HolidayScene({ theme }: { theme: HolidayTheme }) {
+export function HolidayScene({ theme, lite = false }: { theme: HolidayTheme; lite?: boolean }) {
   const [c1, c2] = theme.colors
   return (
     <>
       <style>{SCENE_CSS}</style>
       <div className="absolute inset-0 pointer-events-none z-[6] overflow-hidden" aria-hidden>
         {/* A glow in the theme's colors around the edges */}
-        <div className="absolute inset-0" style={{ boxShadow: `inset 0 0 140px 24px ${c1}44, inset 0 0 380px 60px ${c2}2b` }} />
-        {theme.scene.fog && <Fog />}
+        {!lite && <div className="absolute inset-0" style={{ boxShadow: `inset 0 0 140px 24px ${c1}44, inset 0 0 380px 60px ${c2}2b` }} />}
+        {theme.scene.fog && !lite && <Fog />}
         <Edge theme={theme} />
         <Footer theme={theme} />
         <Moments theme={theme} />
@@ -149,17 +151,14 @@ function Edge({ theme }: { theme: HolidayTheme }) {
       )
     }
     case 'shimmer':
+      // The glint slides along on a transform (moving a background repaints every frame)
       return (
-        <div
-          className="absolute left-0 right-0"
-          style={{
-            top: HEADER - 2, height: 5,
-            background: `linear-gradient(90deg, transparent, ${c1}, #fff8dc, ${c1}, transparent) no-repeat`,
-            backgroundSize: '600px 100%',
-            backgroundColor: `${c1}55`,
-            animation: 'hs-shimmer 5s linear infinite',
-          }}
-        />
+        <div className="absolute left-0 right-0 overflow-hidden" style={{ top: HEADER - 2, height: 5, backgroundColor: `${c1}55` }}>
+          <div
+            className="absolute inset-y-0 left-0 w-[600px]"
+            style={{ background: `linear-gradient(90deg, transparent, ${c1}, #fff8dc, ${c1}, transparent)`, animation: 'hs-shimmer 5s linear infinite' }}
+          />
+        </div>
       )
   }
 }

@@ -331,6 +331,7 @@ export function ShopTV() {
   const holiday = useHolidayTheme(board?.week ?? null, board?.brand?.theme)
   // The song on the league's Spotify, when one's connected
   const song = useNowPlaying(code, !!board?.brand?.music)
+  const lite = useLiteEffects()
 
   const goFull = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {})
@@ -352,16 +353,16 @@ export function ShopTV() {
           ...(brandVars(holiday?.accent ?? board?.brand?.color ?? DEFAULT_GOLD) as CSSProperties),
         }}
       >
-        {board && status !== 'gone' && <Backdrop />}
+        {board && status !== 'gone' && <Backdrop lite={lite} edge={lite ? holiday?.colors ?? null : null} />}
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
           : <Board board={board} offline={status === 'offline'} holiday={holiday} song={song} />}
         {board && reveal && reveal.length > 0 && (
           <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
         )}
-        {board && holiday && <HolidayScene theme={holiday} />}
-        {board && holiday && <HolidayParticles theme={holiday} />}
-        {status !== 'gone' && <LiveFromPhones code={code} />}
+        {board && holiday && <HolidayScene theme={holiday} lite={lite} />}
+        {board && holiday && <HolidayParticles theme={holiday} count={lite ? 7 : 14} />}
+        {status !== 'gone' && <LiveFromPhones code={code} lite={lite} />}
         {board && <RemoteOverlay board={board} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
         {board && <ReplayShow board={board} />}
         {board && <ReceiptsPop board={board} />}
@@ -392,19 +393,77 @@ function Gone() {
   )
 }
 
-/** Slow drifting glows in the TV's color behind the (see-through) panels. */
+// ── Smoothness ────────────────────────────────────────────────
+// A Fire TV stick can't draw every effect 60 times a second, and when it
+// falls behind, everything that moves stutters. So the TV times its own
+// frames now and then, and once it's dropping them it switches to lighter
+// effects until the next reload: the background stops drifting, the
+// holiday glow moves under the panels, the fog goes and fewer things
+// fall. ?fx=lite or ?fx=full forces either.
+const FX_FIRST_MS = 20_000
+const FX_SAMPLE_MS = 5000
+const FX_EVERY_MS = 60_000
+
+function useLiteEffects(): boolean {
+  const [forced] = useState(() => new URLSearchParams(window.location.search).get('fx'))
+  const [lite, setLite] = useState(forced === 'lite')
+  useEffect(() => {
+    if (forced === 'lite' || forced === 'full') return
+    let raf = 0
+    let timer: ReturnType<typeof setTimeout>
+    let strikes = 0
+    const sample = () => {
+      const gaps: number[] = []
+      let start = 0, last = 0
+      const tick = (t: number) => {
+        if (start) gaps.push(t - last)
+        else start = t
+        last = t
+        if (t - start < FX_SAMPLE_MS) { raf = requestAnimationFrame(tick); return }
+        // A gap this long means the page was hidden: try again later
+        if (gaps.some(g => g > 500)) { timer = setTimeout(sample, FX_EVERY_MS); return }
+        const fps = gaps.length / ((t - start) / 1000)
+        const slow = gaps.filter(g => g > 25).length / Math.max(1, gaps.length)
+        strikes = fps < 48 || slow > 0.05 ? strikes + 1 : 0
+        if (strikes >= 2) { setLite(true); return }
+        // Check a bad sample again right away, so one hiccup doesn't count
+        timer = setTimeout(sample, strikes ? FX_SAMPLE_MS : FX_EVERY_MS)
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    timer = setTimeout(sample, FX_FIRST_MS)
+    return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
+  }, [forced])
+  return lite
+}
+
+/**
+ * Glows in the TV's color behind the (see-through) panels, drifting
+ * slowly. Lite: standing still, painted with the page (no layers of
+ * their own), with the holiday's glow around the edges painted here too.
+ */
 const BACKDROP_CSS = '@keyframes tv-drift-a { 0%, 100% { transform: translate(0, 0) scale(1) } 50% { transform: translate(380px, 160px) scale(1.2) } }'
   + ' @keyframes tv-drift-b { 0%, 100% { transform: translate(0, 0) scale(1.1) } 50% { transform: translate(-420px, -120px) scale(.9) } }'
-  + ' @keyframes tv-drift-c { 0%, 100% { transform: translate(0, 0) } 50% { transform: translate(200px, -220px) } }'
 
-function Backdrop() {
+function Backdrop({ lite, edge }: { lite: boolean; edge: [string, string] | null }) {
+  if (lite) {
+    return (
+      <div
+        className="absolute inset-0 pointer-events-none"
+        aria-hidden
+        style={{
+          background: 'radial-gradient(1000px 760px at 6% 0%, rgb(var(--gold) / .18), transparent 70%), radial-gradient(900px 700px at 96% 100%, rgb(var(--gold) / .14), transparent 70%)',
+          boxShadow: edge ? `inset 0 0 140px 24px ${edge[0]}44, inset 0 0 380px 60px ${edge[1]}2b` : undefined,
+        }}
+      />
+    )
+  }
   const glow = (alpha: number) => ({ background: `radial-gradient(closest-side, rgb(var(--gold) / ${alpha}), transparent)` })
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
       <style>{BACKDROP_CSS}</style>
       <div className="absolute w-[1300px] h-[1300px] -left-[360px] -top-[520px] will-change-transform" style={{ ...glow(0.2), animation: 'tv-drift-a 70s ease-in-out infinite' }} />
       <div className="absolute w-[1200px] h-[1200px] -right-[340px] -bottom-[560px] will-change-transform" style={{ ...glow(0.16), animation: 'tv-drift-b 90s ease-in-out infinite' }} />
-      <div className="absolute w-[900px] h-[900px] left-[620px] top-[260px] will-change-transform" style={{ background: 'radial-gradient(closest-side, rgb(var(--gold-light) / .07), transparent)', animation: 'tv-drift-c 110s ease-in-out infinite' }} />
     </div>
   )
 }
@@ -744,17 +803,19 @@ function KickoffRing({ kickoff, now, live }: { kickoff: string; now: number; liv
   const r = 7.5, c = 2 * Math.PI * r
   const p = Math.min(1, Math.max(0, 1 - left / RING_MS))
   const close = left < 15 * 60_000
+  // The pulse is on a wrapper: fading part of an SVG repaints the tile every frame
   return (
-    <svg width="20" height="20" viewBox="0 0 20 20" className="shrink-0 -rotate-90" aria-hidden>
-      <circle cx="10" cy="10" r={r} fill="none" strokeWidth="3" className="stroke-field-700" />
-      <circle
-        cx="10" cy="10" r={r} fill="none" strokeWidth="3" strokeLinecap="round"
-        stroke={close ? '#f87171' : 'rgb(var(--gold))'}
-        strokeDasharray={c} strokeDashoffset={c * (1 - p)}
-        style={{ transition: 'stroke-dashoffset 1s ease-out' }}
-        className={close ? 'animate-pulse' : undefined}
-      />
-    </svg>
+    <span className={clsx('shrink-0 flex', close && 'animate-pulse')} aria-hidden>
+      <svg width="20" height="20" viewBox="0 0 20 20" className="-rotate-90">
+        <circle cx="10" cy="10" r={r} fill="none" strokeWidth="3" className="stroke-field-700" />
+        <circle
+          cx="10" cy="10" r={r} fill="none" strokeWidth="3" strokeLinecap="round"
+          stroke={close ? '#f87171' : 'rgb(var(--gold))'}
+          strokeDasharray={c} strokeDashoffset={c * (1 - p)}
+          style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+        />
+      </svg>
+    </span>
   )
 }
 
@@ -1868,9 +1929,19 @@ const CHAT_PREVIEW = [
   { name: 'Preview', text: '🔥🔥🔥 called it' },
 ]
 
-function LiveFromPhones({ code }: { code: string }) {
+/** This TV's presence on its channel, for the commissioner's remote. */
+const tvPresence = (since: string, lite: boolean) => ({ on: true, since, fx: lite ? 'lite' : 'full' })
+
+function LiveFromPhones({ code, lite }: { code: string; lite: boolean }) {
   const [floaters, setFloaters] = useState<Floater[]>([])
   const [chats, setChats] = useState<ChatPop[]>([])
+  // What the remote sees of this TV: on since when, and on lighter effects
+  const joined = useRef<{ channel: ReturnType<typeof supabase.channel>; since: string } | null>(null)
+  const liteNow = useRef(lite)
+  useEffect(() => {
+    liteNow.current = lite
+    if (joined.current) void joined.current.channel.track(tvPresence(joined.current.since, lite))
+  }, [lite])
   useEffect(() => {
     let n = 0
     const timers: ReturnType<typeof setTimeout>[] = []
@@ -1932,12 +2003,14 @@ function LiveFromPhones({ code }: { code: string }) {
         window.dispatchEvent(new CustomEvent<TvRemote>(TV_REMOTE, { detail: payload as TvRemote }))
       })
       .subscribe(status => {
-        if (status === 'SUBSCRIBED') void channel.track({ on: true, since: new Date().toISOString() })
+        if (status !== 'SUBSCRIBED') return
+        joined.current = { channel, since: joined.current?.since ?? new Date().toISOString() }
+        void channel.track(tvPresence(joined.current.since, liteNow.current))
       })
     if (new URLSearchParams(window.location.search).get('preview') === 'chat') {
       CHAT_PREVIEW.forEach((p, i) => timers.push(setTimeout(() => onChat(p), 1500 + i * 2500)))
     }
-    return () => { timers.forEach(clearTimeout); supabase.removeChannel(channel) }
+    return () => { timers.forEach(clearTimeout); joined.current = null; supabase.removeChannel(channel) }
   }, [code])
 
   return (
@@ -2065,8 +2138,15 @@ function Equalizer({ size }: { size: number }) {
 /** How far into the song, run on from when it was asked. */
 function SongProgress({ song }: { song: NowPlaying }) {
   const now = useNow(1000)
-  const pct = song.durationMs ? Math.min(100, ((song.progressMs + now - song.at) / song.durationMs) * 100) : 0
-  return <div className="absolute left-0 bottom-0 h-[3px] bg-[#1DB954]" style={{ width: `${pct}%`, transition: 'width 1s linear' }} />
+  const done = song.durationMs ? Math.min(1, (song.progressMs + now - song.at) / song.durationMs) : 0
+  // Grown with a transform, not its width, so the TV doesn't redo the
+  // layout and repaint every frame the whole time music plays
+  return (
+    <div
+      className="absolute left-0 bottom-0 w-full h-[3px] bg-[#1DB954] origin-left"
+      style={{ transform: `scaleX(${done})`, transition: 'transform 1s linear' }}
+    />
+  )
 }
 
 /** The song, at the left end of the ticker. */

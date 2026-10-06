@@ -25,8 +25,10 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
     },
   })
 
-  // How many TVs are on: their presence on the TV's channel
+  // How many TVs are on (their presence on the TV's channel), and whether
+  // any is on lighter effects because it was dropping frames
   const [tvsOn, setTvsOn] = useState<number | null>(null)
+  const [tvLite, setTvLite] = useState(false)
   useEffect(() => {
     if (!hasTv) return
     let channel: ReturnType<typeof supabase.channel> | null = null
@@ -35,7 +37,12 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       if (!alive || !token) return
       channel = supabase.channel(`tv:${token}`, { config: { private: true } })
       channel
-        .on('presence', { event: 'sync' }, () => setTvsOn(Object.keys(channel!.presenceState()).length))
+        .on('presence', { event: 'sync' }, () => {
+          // Every TV joins under the key 'tv': count them, not the keys
+          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string }[]
+          setTvsOn(tvs.length)
+          setTvLite(tvs.some(t => t.fx === 'lite'))
+        })
         .subscribe(status => { if (status === 'SUBSCRIBED') setTvsOn(n => n ?? 0) })
     })
     return () => { alive = false; if (channel) supabase.removeChannel(channel) }
@@ -78,6 +85,11 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
           {tvsOn == null ? 'Checking the TV…' : tvsOn > 0 ? `TV is on${tvsOn > 1 ? ` (${tvsOn})` : ''}` : 'TV looks off'}
         </span>
       </div>
+      {!!tvsOn && tvLite && (
+        <p className="-mt-2 text-[11px] text-field-400">
+          Running lighter effects: the TV was dropping frames, so the background stopped drifting and the holiday fog is off. A reload tries the full effects again.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {button('roast', 'Roast', <Mic className="w-5 h-5" />, 'The roast is on the TV')}
