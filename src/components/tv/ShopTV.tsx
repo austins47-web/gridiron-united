@@ -1314,6 +1314,7 @@ function FeaturePanel({ board }: { board: TvBoard }) {
 
 // ── The ticker ────────────────────────────────────────────────
 function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; song: NowPlaying | null }) {
+  const strip = useSongFade(song)
   const items = useMemo(() => {
     const out: string[] = []
     // A holiday theme's greeting leads
@@ -1348,12 +1349,12 @@ function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; 
     return out
   }, [board, greeting])
 
-  if (items.length === 0 && !song) return <div className="h-[56px] shrink-0" />
+  if (items.length === 0 && !strip.shown) return <div className="h-[56px] shrink-0" />
   const text = items.join('     •     ')
   const seconds = Math.max(30, Math.round(text.length * 0.2))
   return (
     <div className="h-[56px] shrink-0 border-t-2 border-field-800 bg-field-900 overflow-hidden flex items-center">
-      {song && <SongStrip song={song} />}
+      {strip.shown && <SongStrip song={strip.shown} leaving={strip.leaving} />}
       <style>{'@keyframes tv-ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }'}</style>
       {/* Its own lane, so the scrolling text never runs under the song */}
       <div className="flex-1 min-w-0 h-full overflow-hidden flex items-center">
@@ -1719,6 +1720,28 @@ function onScreen(load: () => void): { due: () => void; stop: () => void } {
 }
 
 const MUSIC_CSS = '@keyframes tv-eq { 0%, 100% { transform: scaleY(.3) } 50% { transform: scaleY(1) } }'
+  + ' @keyframes tv-song-in { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }'
+  + ' @keyframes tv-song-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(14px) } }'
+
+/** How long the song card and strip take to fade in or out. */
+const SONG_FADE_MS = 700
+const SONG_CARD_MS = 8000
+const fade = (leaving: boolean): CSSProperties => ({
+  animation: `${leaving ? 'tv-song-out' : 'tv-song-in'} ${SONG_FADE_MS}ms ease-${leaving ? 'in' : 'out'} both`,
+})
+
+/** The last song, kept a moment after the music stops so it can fade out. */
+function useSongFade(song: NowPlaying | null): { shown: NowPlaying | null; leaving: boolean } {
+  const [shown, setShown] = useState(song)
+  const [leaving, setLeaving] = useState(false)
+  useEffect(() => {
+    if (song) { setShown(song); setLeaving(false); return }
+    setLeaving(true)
+    const t = setTimeout(() => { setShown(null); setLeaving(false) }, SONG_FADE_MS)
+    return () => clearTimeout(t)
+  }, [song])
+  return { shown, leaving }
+}
 
 /** Three bouncing bars: music's on. */
 function Equalizer({ size }: { size: number }) {
@@ -1739,9 +1762,9 @@ function SongProgress({ song }: { song: NowPlaying }) {
 }
 
 /** The song, at the left end of the ticker. */
-function SongStrip({ song }: { song: NowPlaying }) {
+function SongStrip({ song, leaving }: { song: NowPlaying; leaving: boolean }) {
   return (
-    <div className="relative h-full w-[540px] shrink-0 flex items-center gap-3 px-4 bg-field-950 border-r-2 border-field-800">
+    <div className="relative h-full w-[540px] shrink-0 flex items-center gap-3 px-4 bg-field-950 border-r-2 border-field-800" style={fade(leaving)}>
       <style>{MUSIC_CSS}</style>
       {song.art
         ? <img src={song.art} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
@@ -1760,19 +1783,26 @@ function SongStrip({ song }: { song: NowPlaying }) {
 function SongCard({ song }: { song: NowPlaying | null }) {
   const key = song ? `${song.title}\u0000${song.artist}` : null
   const [shown, setShown] = useState<NowPlaying | null>(null)
+  const [leaving, setLeaving] = useState(false)
   const last = useRef<string | null>(null)
   useEffect(() => {
     if (!key || key === last.current) return
     last.current = key
     setShown(song)
-    const t = setTimeout(() => setShown(null), 8000)
-    return () => clearTimeout(t)
+    setLeaving(false)
+    const out = setTimeout(() => setLeaving(true), SONG_CARD_MS - SONG_FADE_MS)
+    const gone = setTimeout(() => setShown(null), SONG_CARD_MS)
+    return () => { clearTimeout(out); clearTimeout(gone) }
     // Only a new song (not every refresh of the same one) shows the card
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
   if (!shown) return null
   return (
-    <div className="absolute right-8 bottom-[76px] z-[27] pointer-events-none rise-in flex items-center gap-5 rounded-2xl border-2 border-[#1DB954]/60 bg-field-900/[0.97] shadow-2xl shadow-black/60 p-4 max-w-[720px]">
+    <div
+      key={key ?? ''}
+      style={fade(leaving)}
+      className="absolute right-8 bottom-[76px] z-[27] pointer-events-none flex items-center gap-5 rounded-2xl border-2 border-[#1DB954]/60 bg-field-900/[0.97] shadow-2xl shadow-black/60 p-4 max-w-[720px]"
+    >
       <style>{MUSIC_CSS}</style>
       {shown.art
         ? <img src={shown.art} alt="" className="w-[140px] h-[140px] rounded-xl object-cover shrink-0" />
