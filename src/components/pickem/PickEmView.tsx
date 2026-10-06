@@ -1199,14 +1199,17 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
 
       {/* ── RESULTS TAB ── */}
       {tab === 'results' && (
-        <PicksChart
-          games={games}
-          allPicks={allPicks}
-          leagueMembers={leagueMembers}
-          userId={user?.id}
-          deadline={weekDeadline}
-          week={week}
-        />
+        <div className="space-y-3">
+          <PicksChart
+            games={games}
+            allPicks={allPicks}
+            leagueMembers={leagueMembers}
+            userId={user?.id}
+            deadline={weekDeadline}
+            week={week}
+          />
+          <WeekReceipts games={games} allPicks={allPicks} leagueMembers={leagueMembers} userId={user?.id} deadline={weekDeadline} />
+        </div>
       )}
 
       {/* ── BOARD TAB ── */}
@@ -1227,6 +1230,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
             threadCounts={threadCounts}
             onThread={id => navigate(`/app/chat?game=${id}`)}
           />
+          <WeekReceipts games={games} allPicks={allPicks} leagueMembers={leagueMembers} userId={user?.id} deadline={weekDeadline} />
         </div>
       )}
     </div>
@@ -1936,6 +1940,86 @@ function PicksChart({
 // can scan who picked what across the whole week at a glance
 // instead of paging through one card per game. First column stays
 // pinned while the game columns scroll horizontally.
+
+/**
+ * The week's pick receipts in full: why each person picked what they
+ * picked, and how it aged. Under the Board and the Results (on the Board
+ * itself a receipt is just a quote mark under the pick). Each shows on
+ * the same rule as the pick: at kickoff, or once the pick deadline
+ * passes; your own always. Newest game first.
+ */
+function WeekReceipts({ games, allPicks, leagueMembers, userId, deadline }: {
+  games: any[]
+  allPicks: any[]
+  leagueMembers: any[]
+  userId: string | undefined
+  deadline: string | null
+}) {
+  const [all, setAll] = useState(false)
+  const now = Date.now()
+  const revealed = (game: any) =>
+    now >= new Date(game.game_date).getTime() || (!!deadline && now >= new Date(deadline).getTime())
+  const gameById = new Map(games.map((g: any) => [g.id, g]))
+  const memberById = new Map(leagueMembers.map((m: any) => [m.user_id, m]))
+  const receipts = allPicks
+    .filter((p: any) => p.reason && gameById.has(p.game_id) && (p.user_id === userId || revealed(gameById.get(p.game_id))))
+    .map((p: any) => {
+      const game = gameById.get(p.game_id)
+      const m = memberById.get(p.user_id) as any
+      const winner = winnerOf(game)
+      return {
+        key: `${p.game_id}:${p.user_id}`,
+        name: p.user_id === userId ? 'You' : (m?.profile?.display_name || m?.profile?.username || p.profile?.display_name || p.profile?.username || 'Someone'),
+        team: p.picked_team as string,
+        reason: p.reason as string,
+        game: `${game.away_team} @ ${game.home_team}`,
+        kickoff: new Date(game.game_date).getTime(),
+        result: winner == null ? null : p.picked_team === winner ? 'hit' as const : 'miss' as const,
+      }
+    })
+    .sort((a: any, b: any) => b.kickoff - a.kickoff)
+  if (receipts.length === 0) return null
+  const shown = all ? receipts : receipts.slice(0, 6)
+
+  return (
+    <div className="panel p-4">
+      <p className="flex items-center gap-1.5 font-cond font-bold text-sm uppercase tracking-wider text-white mb-3">
+        <Quote className="w-4 h-4 text-gold" /> Receipts · {receipts.length}
+        {receipts.some(r => r.result) && (
+          <span className="normal-case tracking-normal font-sans font-normal text-xs text-field-400">
+            · {receipts.filter(r => r.result === 'hit').length} of {receipts.filter(r => r.result).length} aged well
+          </span>
+        )}
+      </p>
+      <ul className="space-y-3">
+        {shown.map(r => {
+          const logo = teamLogoUrl({ abbr: r.team }, 'NFL')
+          return (
+            <li key={r.key} className="flex items-start gap-3">
+              {logo
+                ? <img src={logo} alt="" className="w-7 h-7 object-contain shrink-0 mt-0.5" />
+                : <span className="w-7 shrink-0" />}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-white italic leading-snug break-words">&ldquo;{r.reason}&rdquo;</p>
+                <p className="text-[11px] text-field-400 mt-0.5">
+                  <span className="font-bold text-field-200">{r.name}</span> on <span className="font-bold text-field-200">{r.team}</span> · {r.game}
+                  {r.result && (
+                    <span className={clsx('font-bold', r.result === 'hit' ? 'text-nfl' : 'text-red-400')}> · {r.result === 'hit' ? 'Aged well' : 'Aged badly'}</span>
+                  )}
+                </p>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+      {receipts.length > 6 && (
+        <button onClick={() => setAll(a => !a)} className="mt-3 text-xs font-bold text-gold hover:text-gold-light">
+          {all ? 'Show fewer' : `Show all ${receipts.length}`}
+        </button>
+      )}
+    </div>
+  )
+}
 
 function PicksBoard({
   leagueId, games, allPicks, leagueMembers, weekRows, userId, deadline, week, onWeekChange, beltHolders, threadCounts, onThread,
