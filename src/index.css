@@ -717,6 +717,18 @@
   color: #111827;
 }
 
+/* ── Shop TV: brighter text, for reading from across the shop ──
+   Every gray steps up (white > 300 > 400 > 500 …, in the same order),
+   and a losing team or a passed tiebreaker fades less. Only on the TV's
+   stage (.tv-bright, ShopTV.tsx). */
+.tv-bright .text-field-300 { color: #D9D9D9; }
+.tv-bright .text-field-400 { color: #BDBDBD; }
+.tv-bright .text-field-500 { color: #9E9E9E; }
+.tv-bright .text-field-600 { color: #808080; }
+.tv-bright .text-field-700 { color: #616161; }
+.tv-bright .opacity-40 { opacity: .65; }
+.tv-bright .opacity-35 { opacity: .6; }
+
 /* ── Field color overrides — remap dark palette to light ── */
 [data-theme="light"] .bg-field-950 { background-color: #dde2ee !important; }
 [data-theme="light"] .bg-field-900 { background-color: #e8ecf4 !important; }

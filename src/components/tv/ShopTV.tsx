@@ -344,7 +344,7 @@ export function ShopTV() {
       style={{ cursor: idle ? 'none' : 'default' }}
     >
       <div
-        className="shrink-0 bg-field-950 text-white relative"
+        className="tv-bright shrink-0 bg-field-950 text-white relative"
         style={{
           width: W, height: H, transform: `scale(${scale})`, transformOrigin: 'center',
           // The TV's own color (or the copper), set here so nobody's personal
