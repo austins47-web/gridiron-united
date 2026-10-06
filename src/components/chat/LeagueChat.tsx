@@ -55,6 +55,7 @@ interface ChatMessage {
  * profiles(...) when there's more than one (the chat went blank).
  */
 const MESSAGE_SELECT = '*, profiles!league_messages_user_id_fkey(username, display_name, avatar_url)'
+const NO_MESSAGES: ChatMessage[] = []
 
 interface Member {
   user_id: string
@@ -144,7 +145,6 @@ const senderName = (m?: ChatMessage | null) =>
 
 /** One line of a message, for reply quotes and the composer bar. */
 function snippet(m: ChatMessage): string {
-  if (m.deleted_at) return 'Message deleted'
   if (m.message.startsWith('IMAGE:')) return '📷 Photo'
   if (m.message.startsWith('GIF:')) return 'GIF'
   if (m.message.startsWith(POLL_PREFIX)) return '📊 Poll'
@@ -471,9 +471,8 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
   // Storage URL); GIF: is a GIPHY result. Rendered inside the same
   // bubble wrapper (avatar, sender, timestamp) as a normal message —
   // only what's inside the bubble itself changes.
-  const deleted = !!msg.deleted_at
-  const isImage = !deleted && msg.message.startsWith('IMAGE:')
-  const isGif   = !deleted && msg.message.startsWith('GIF:')
+  const isImage = msg.message.startsWith('IMAGE:')
+  const isGif   = msg.message.startsWith('GIF:')
   const mediaUrl = isImage ? msg.message.slice('IMAGE:'.length)
                   : isGif  ? msg.message.slice('GIF:'.length)
                   : null
@@ -517,28 +516,24 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
         {replyTo && <ReplyQuote original={replyTo} isOwn={isOwn} onJump={onJump} />}
         <div className={clsx('flex items-center gap-1.5 max-w-full', poll && 'w-full', isOwn ? 'flex-row-reverse' : 'flex-row')}>
         {/* A poll's options are buttons, so it keeps its own react button */}
-        {poll && !deleted ? (
+        {poll ? (
           <div className={clsx('min-w-0 flex-1 flex', isOwn ? 'justify-end' : 'justify-start', isNew && 'message-reveal')}>{poll}</div>
         ) : (
         /* Tap a message for reactions, reply, edit, delete */
         <div
-          onClick={deleted ? undefined : onOpenMenu}
+          onClick={onOpenMenu}
           className={clsx(
-            !deleted && 'cursor-pointer',
-            deleted
-              ? 'px-3.5 py-2 rounded-2xl text-sm italic text-field-500 border border-dashed border-field-600'
-              : mediaUrl
+            'cursor-pointer',
+            mediaUrl
               ? 'rounded-2xl overflow-hidden border max-w-[220px]'
               : 'px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm',
-            !deleted && (isOwn
+            isOwn
               ? clsx('chat-bubble-own border-gold/30', !mediaUrl && 'bg-gold/20 text-white rounded-br-md')
-              : clsx('chat-bubble-other border-field-600', !mediaUrl && 'bg-field-700 text-field-100 rounded-bl-md')),
+              : clsx('chat-bubble-other border-field-600', !mediaUrl && 'bg-field-700 text-field-100 rounded-bl-md'),
             isNew && 'message-reveal',
           )}
         >
-          {deleted ? (
-            'Message deleted'
-          ) : mediaUrl ? (
+          {mediaUrl ? (
             // max-h caps user-uploaded photos, which — unlike GIPHY
             // GIFs (always 200px tall at the source) — have no
             // guaranteed aspect ratio. object-contain keeps the
@@ -554,18 +549,16 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
         </div>
         )}
         {/* Computers: a react button on hover (phones just tap the message) */}
-        {!deleted && (
-          <button
-            onClick={onOpenMenu}
-            aria-label="React or reply"
-            className={clsx(
-              'p-1 rounded-full text-field-500 hover:text-gold hover:bg-field-700 transition-opacity shrink-0',
-              poll ? 'flex self-end' : 'hidden sm:flex opacity-0 group-hover:opacity-100 focus:opacity-100',
-            )}
-          >
-            <SmilePlus className="w-4 h-4" />
-          </button>
-        )}
+        <button
+          onClick={onOpenMenu}
+          aria-label="React or reply"
+          className={clsx(
+            'p-1 rounded-full text-field-500 hover:text-gold hover:bg-field-700 transition-opacity shrink-0',
+            poll ? 'flex self-end' : 'hidden sm:flex opacity-0 group-hover:opacity-100 focus:opacity-100',
+          )}
+        >
+          <SmilePlus className="w-4 h-4" />
+        </button>
         </div>
       </div>
     </div>
@@ -833,7 +826,7 @@ export function LeagueChat() {
 
   // ── Fetch messages ──────────────────────────────────────────
   // The newest 200 of this room (the main chat, or one game's thread)
-  const { data: messages = [], isPending: messagesPending, isError: messagesFailed, refetch: refetchMessages } = useQuery({
+  const { data: allMessages = NO_MESSAGES, isPending: messagesPending, isError: messagesFailed, refetch: refetchMessages } = useQuery({
     queryKey: chatKey,
     enabled: !!activeLeagueId,
     queryFn: async () => {
@@ -849,6 +842,8 @@ export function LeagueChat() {
       return ((data ?? []) as ChatMessage[]).reverse()
     },
   })
+  // A deleted (unsent) message just disappears: no placeholder in its place
+  const messages = useMemo(() => allMessages.filter(m => !m.deleted_at), [allMessages])
 
   // ── Read receipts ───────────────────────────────────────────
   // How far everyone has read, per room (league_chat_reads)
@@ -917,6 +912,12 @@ export function LeagueChat() {
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [editing, setEditing] = useState<ChatMessage | null>(null)
+  // Replying to (or editing) a message that then gets deleted: drop the bar
+  useEffect(() => {
+    const gone = (m: ChatMessage | null) => !!m && !!allMessages.find(x => x.id === m.id)?.deleted_at
+    if (gone(replyTo)) setReplyTo(null)
+    if (gone(editing)) { setEditing(null); setText('') }
+  }, [allMessages, replyTo, editing])
   const [flashId, setFlashId] = useState<string | null>(null)
   const closeMenu = useCallback(() => setMenuFor(null), [])
 
@@ -1344,7 +1345,8 @@ export function LeagueChat() {
 
   const myUsername = profile?.username
   const myAvatarUrl = profile?.avatar_url
-  const byId = new Map(messages.map(m => [m.id, m]))
+  // Every loaded message, deleted ones too: a reply to a deleted message shows no quote
+  const byId = new Map(allMessages.map(m => [m.id, m]))
   const nameOf = (userId: string) => {
     if (userId === user?.id) return 'You'
     const m = members.find(x => x.user_id === userId)
@@ -1456,7 +1458,8 @@ export function LeagueChat() {
           const isOwn = msg.user_id === user?.id
           const align: Align = msg.is_system ? 'center' : isOwn ? 'right' : 'left'
           const groups = msg.deleted_at ? [] : (reactionsByMessage.get(msg.id) ?? [])
-          const original = msg.reply_to_id ? (byId.get(msg.reply_to_id) ?? 'missing') : null
+          const replied = msg.reply_to_id ? byId.get(msg.reply_to_id) : undefined
+          const original = !msg.reply_to_id || replied?.deleted_at ? null : (replied ?? 'missing')
           // Cards (week final, trades) aren't tappable bubbles — they get a react button
           const isCard = msg.is_system && (PICKEM_WEEK_FINAL_PATTERN.test(msg.message) || PICKEM_ROAST_PATTERN.test(msg.message)
             || msg.message.startsWith('TRADE_COMPLETED:') || msg.message.startsWith(POLL_PREFIX))
