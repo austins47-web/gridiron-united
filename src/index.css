@@ -1296,3 +1296,52 @@
   border-color: #d1d5db !important;
   color: #374151 !important;
 }
+
+/* ── Holiday themes (src/lib/holiday.ts) ──
+   --h1 and --h2 are the theme colors, set inline */
+.holiday-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  color: #fff;
+  border: 1px solid color-mix(in srgb, var(--h1) 45%, transparent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--h1) 24%, transparent), color-mix(in srgb, var(--h2) 14%, transparent));
+}
+[data-theme="light"] .holiday-ribbon {
+  color: #1c1917;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--h1) 16%, #fff), color-mix(in srgb, var(--h2) 10%, #fff));
+}
+.holiday-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  border-radius: 9999px;
+  padding: 0.125rem 0.9rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+  border: 2px solid color-mix(in srgb, var(--h1) 70%, transparent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--h1) 40%, transparent), color-mix(in srgb, var(--h2) 30%, transparent));
+}
+.holiday-particle {
+  position: absolute;
+  top: 0;
+  opacity: 0.45;
+  will-change: transform;
+  animation-name: holiday-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes holiday-fall {
+  from { transform: translate3d(0, -80px, 0) rotate(0deg); }
+  to   { transform: translate3d(var(--drift, 0px), 1160px, 0) rotate(var(--spin, 0deg)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .holiday-particle { display: none; }
+}

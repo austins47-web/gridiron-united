@@ -1,5 +1,6 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { logProblem } from '@/lib/problemLog'
 
 interface Props { children: ReactNode; label?: string }
 interface State { error: Error | null; info: ErrorInfo | null }
@@ -41,6 +42,14 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     this.setState({ error, info })
     console.error('[ErrorBoundary]', this.props.label ?? '', error, info)
+    // An old tab after a deploy isn't a bug; everything else is
+    if (!isStaleChunkError(error)) {
+      logProblem('crash', error.message, {
+        screen: this.props.label ?? null,
+        stack: error.stack?.slice(0, 1500),
+        components: info.componentStack?.slice(0, 1000),
+      })
+    }
 
     if (isStaleChunkError(error) && !alreadyTriedReload()) {
       sessionStorage.setItem(RELOAD_GUARD_KEY, String(Date.now()))

@@ -18,7 +18,7 @@ export function useLeagueMembersList(leagueId: string | null | undefined, enable
     queryFn: async () => {
       const { data, error } = await supabase
         .from('league_members')
-        .select('user_id, team_name, joined_at, profile:profiles(username, display_name, avatar_url, favorite_nfl_team)')
+        .select('user_id, team_name, joined_at, badge_flair, profile:profiles(username, display_name, avatar_url, favorite_nfl_team)')
         .eq('league_id', leagueId!)
       if (error) throw error
       return data ?? []
@@ -60,7 +60,7 @@ export function usePickemSeasonData(leagueId: string | null | undefined, enabled
       // A season of picks passes the API's 1,000-row cap — page through
       return (await fetchAll((from, to) => supabase
         .from('pickem_picks')
-        .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score, reason, auto, switched_from')
         .eq('league_id', leagueId!)
         .eq('season', CURRENT_SEASON)
         .order('id')

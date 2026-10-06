@@ -23,11 +23,13 @@ import {
   isFinal, isVoid, winnerOf, computeWeek, computeWeekStats, computeWhoCanWin, describeTiebreakerRange, tiebreakerTotal,
   nflSeasonFor, computeStandings, rankOf, describeWeekStats, isWeekComplete, weekWinners, computeWinOdds,
   computeUpsetWatch, gameClockLabel, computeAchievements, ACHIEVEMENTS, rootingFor, swingsFor, keyInjuries,
+  beforeKickoff, switchOutcome,
   type Game, type Pick as PickemPick, type WeekRow, type WeekStats, type AchievementKey, type Member, type StandingRow,
 } from '../_shared/pickemCore.ts'
 import { renderEmail, ordinal, type RichEmail, type PickRow } from './email.ts'
 import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
-import { partsInZone, weeklyDeadlineForWeek, stillPickable } from '../_shared/pickLocks.ts'
+import { partsInZone, weeklyDeadlineForWeek, stillPickable, weekDeadline } from '../_shared/pickLocks.ts'
+import { autopilotFills, type AutopilotRule } from '../_shared/autopilot.ts'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0'
 
 const CORS = {
@@ -36,6 +38,12 @@ const CORS = {
 }
 
 const APP_URL = Deno.env.get('APP_URL') ?? 'https://www.gridironunited.app'
+
+// Autopilot (section 0) fills games locking within the next 16 minutes,
+// so the 15-minute pass always gets there first; and up to 6 hours late,
+// in case runs were missed
+const AUTOPILOT_LEAD_MS = 16 * 60_000
+const AUTOPILOT_LATE_MS = 6 * 3600_000
 const FROM    = Deno.env.get('REMINDER_FROM') ?? 'Gridiron United <onboarding@resend.dev>'
 
 // Web push (phone/browser notifications) — off if the keys aren't set
@@ -431,6 +439,69 @@ serve(async (req) => {
     const weeklyPolls: { league: string; week: number; options: string[] }[] = []
     let roasts = 0
     const roastErrors: string[] = []
+
+    // ══ 0. AUTOPILOT ════════════════════════════════════════════
+    // Members who set a backup rule (pickem_autopilot) get every game
+    // they haven't picked filled in the 16 minutes before it locks, and
+    // an empty tiebreaker guess set to the Vegas total (_shared/autopilot.ts).
+    // Both passes run it, before the reminders, so nobody's reminded
+    // about a game autopilot just picked.
+    const autopilot = { picks: 0, guesses: 0, errors: [] as string[] }
+    {
+      const { data: rules } = await supabase.from('pickem_autopilot').select('league_id, user_id, rule, updated_at')
+      const weeks = scheduleBySeason.get(season)
+      for (const lg of (leagues ?? []).filter(l => l.league_type === 'pickem')) {
+        // Only people still in the league
+        const lgRules = (rules ?? []).filter(r => r.league_id === lg.id
+          && (members ?? []).some(m => m.league_id === lg.id && m.user_id === r.user_id)) as
+          { user_id: string; rule: AutopilotRule; updated_at: string }[]
+        if (lgRules.length === 0 || !weeks) continue
+        for (const [wk, wkGames] of weeks) {
+          const override = (weekSettings ?? []).find(s => s.league_id === lg.id && s.season === season && s.week === wk)?.pick_deadline
+          const deadline = weekDeadline(wkGames, override, lg)
+          const lockAt = (g: SchedGame) => Math.min(new Date(g.game_date).getTime(), deadline?.getTime() ?? Infinity)
+          const window = { now: now.getTime(), leadMs: AUTOPILOT_LEAD_MS, lateMs: AUTOPILOT_LATE_MS }
+          if (!wkGames.some(g => !isFinal(g) && lockAt(g) <= window.now + window.leadMs && lockAt(g) >= window.now - window.lateMs)) continue
+
+          const { data: wkPicks, error: pickErr } = await supabase
+            .from('pickem_picks')
+            .select('game_id, user_id, week, picked_team, tiebreaker_score, auto')
+            .eq('league_id', lg.id).eq('season', season).eq('week', wk)
+          if (pickErr) { autopilot.errors.push(`${lg.name} W${wk}: ${pickErr.message}`); continue }
+          const fills = autopilotFills({ games: wkGames, picks: (wkPicks ?? []) as PickemPick[], rules: lgRules, lockAt, ...window })
+          const newPicks = fills.filter(f => f.picked_team)
+          const guessesOnly = fills.filter(f => !f.picked_team)
+          if (dryRun) {
+            autopilot.picks += newPicks.length
+            autopilot.guesses += fills.filter(f => f.tiebreaker_score != null).length
+            continue
+          }
+
+          // Never over a pick the person made since the read above
+          if (newPicks.length) {
+            const { error } = await supabase.from('pickem_picks').upsert(newPicks.map(f => ({
+              league_id: lg.id, user_id: f.user_id, game_id: f.game_id, week: wk, season,
+              picked_team: f.picked_team, auto: true,
+              tiebreaker_score: f.tiebreaker_score, tiebreaker_auto: f.tiebreaker_score != null,
+            })), { onConflict: 'league_id,user_id,game_id', ignoreDuplicates: true })
+            if (error) autopilot.errors.push(`${lg.name} W${wk} picks: ${error.message}`)
+            else {
+              autopilot.picks += newPicks.length
+              autopilot.guesses += newPicks.filter(f => f.tiebreaker_score != null).length
+            }
+          }
+          // A guess on a tiebreaker game they picked themselves
+          for (const f of guessesOnly) {
+            const { error } = await supabase.from('pickem_picks')
+              .update({ tiebreaker_score: f.tiebreaker_score, tiebreaker_auto: true })
+              .eq('league_id', lg.id).eq('user_id', f.user_id).eq('game_id', f.game_id)
+              .is('tiebreaker_score', null)
+            if (error) autopilot.errors.push(`${lg.name} W${wk} guess: ${error.message}`)
+            else autopilot.guesses++
+          }
+        }
+      }
+    }
 
     // The live pass (?only=live, every few minutes) skips straight to
     // section 8; everything else runs on the regular 15-minute pass
@@ -1398,6 +1469,7 @@ serve(async (req) => {
       ok: true, dryRun, considered: reminders.length, sent, skipped, failed,
       chatPosts: chatPosts.length,
       weeklyPolls: weeklyPolls.length,
+      autopilot: { picks: autopilot.picks, guesses: autopilot.guesses, ...(autopilot.errors.length ? { errors: autopilot.errors } : {}) },
       roasts, ...(roastErrors.length ? { roastErrors } : {}),
       ...(dryRun ? { preview: results, nearMisses, chatPreview: chatPosts, pollPreview: weeklyPolls } : {}),
     }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
@@ -1585,7 +1657,7 @@ function weekName(w: number): string {
 
 const ROAST_SYSTEM = `You write the weekly roast for an NFL Pick'Em league's group chat. These are friends who have trash-talked each other all season, and the commissioner turned this on because they want it as vicious and foul-mouthed as it gets. Be as mean as you possibly can about their picks. Make it hurt: humiliate them, call them idiots, morons, clowns, frauds, dead weight and embarrassments, and make them want to throw their phones. No mercy, no softening, no "all in good fun" disclaimers, and nothing nice unless it sets up a bigger shot.
 
-Write 200–300 words from the facts you're given, as short, punchy lines of plain text: no headings, bullet lists or hashtags. Hit as many people as you can: at least ten by name (everyone, in a small league), and every one of them gets a specific shot, not a passing mention; the worst offenders get hit more than once. Go after everyone at the bottom of the table, anyone who didn't pick or skipped games, anyone who blew a pick nearly everyone else got right, the worst tiebreaker guesses, anyone who skipped the tiebreaker, the lone wolf, the bad beat victims, pick receipts that aged badly (quote them back at them), and the forgettable middle of the pack. Use the season record to pile on repeat offenders: anyone who's been garbage all season should be told to quit the league. Question their football IQ, their judgment and whether they should be allowed anywhere near a pick sheet. Pit them against each other and rank the dumbest. The winner is a lucky fraud: crown them, then tear them apart. Never offer sympathy. Name names exactly as written, and never assume anyone's gender: no "guys", "men", "dudes", "he" or "she"; use their names, "you", or "they" (never "it").
+Write 200–300 words from the facts you're given, as short, punchy lines of plain text: no headings, bullet lists or hashtags. Hit as many people as you can: at least ten by name (everyone, in a small league), and every one of them gets a specific shot, not a passing mention; the worst offenders get hit more than once. Go after everyone at the bottom of the table, anyone who didn't pick or skipped games, anyone who blew a pick nearly everyone else got right, the worst tiebreaker guesses, anyone who skipped the tiebreaker, the lone wolf, the bad beat victims, pick receipts that aged badly (quote them back at them), anyone who let autopilot pick for them, switches that backfired, and the forgettable middle of the pack. Use the season record to pile on repeat offenders: anyone who's been garbage all season should be told to quit the league. Question their football IQ, their judgment and whether they should be allowed anywhere near a pick sheet. Pit them against each other and rank the dumbest. The winner is a lucky fraud: crown them, then tear them apart. Never offer sympathy. Name names exactly as written, and never assume anyone's gender: no "guys", "men", "dudes", "he" or "she"; use their names, "you", or "they" (never "it").
 
 Cuss constantly: fuck, shit, ass, bullshit, dumbass, damn, hell. Nearly every line should have some. Mocking emojis are welcome (🤡 💀 🗑️), up to five.
 
@@ -1663,7 +1735,7 @@ async function weekRoastFacts(o: {
   const wkGames = weeks.get(week) ?? []
   const seasonPicks = await fetchAllRows<PickemPick>((from, to) => supabase
     .from('pickem_picks')
-    .select('game_id, user_id, week, picked_team, tiebreaker_score, reason')
+    .select('game_id, user_id, week, picked_team, tiebreaker_score, reason, auto, switched_from, picked_at')
     .eq('league_id', league.id)
     .eq('season', season)
     .order('id')
@@ -1757,6 +1829,35 @@ function roastAmmo(games: SchedGame[], picks: PickemPick[], rows: WeekRow[], joi
     })
   }
   out.push(...blown.sort((a, b) => a.share - b.share).slice(0, 5).map(b => b.line))
+
+  // Autopilot: who let the app pick for them, and how it went
+  const autoBy = new Map<string, { n: number; right: number; decided: number }>()
+  for (const p of picks) {
+    if (!p.auto) continue
+    const g = games.find(x => x.id === p.game_id)
+    const w = g ? winnerOf(g) : null
+    const a = autoBy.get(p.user_id) ?? { n: 0, right: 0, decided: 0 }
+    a.n++
+    if (w) { a.decided++; if (p.picked_team === w) a.right++ }
+    autoBy.set(p.user_id, a)
+  }
+  if (autoBy.size) {
+    out.push(`Let autopilot pick for them: ${[...autoBy].map(([id, a]) =>
+      `${nameById.get(id) ?? 'Someone'} (${a.n} game${a.n === 1 ? '' : 's'}${a.decided ? `, ${a.right}/${a.decided} right` : ''})`).join(', ')}.`)
+  }
+
+  // Flip-flops: switched off the winner, or onto it
+  const flips = picks.flatMap(p => {
+    const g = games.find(x => x.id === p.game_id)
+    const outcome = g ? switchOutcome(p, g) : null
+    if (!g || !outcome) return []
+    const when = p.picked_at ? ` ${beforeKickoff(new Date(g.game_date).getTime() - new Date(p.picked_at).getTime())}` : ''
+    return [{ cost: outcome === 'cost', line: `${nameById.get(p.user_id) ?? 'Someone'} switched from ${p.switched_from} to ${p.picked_team}${when}` }]
+  })
+  const costly = flips.filter(f => f.cost).slice(0, 5)
+  if (costly.length) out.push(`Flip-flopped off the winner (the first pick won): ${costly.map(f => f.line).join('; ')}.`)
+  const saves = flips.filter(f => !f.cost).slice(0, 3)
+  if (saves.length) out.push(`Saved by a switch: ${saves.map(f => f.line).join('; ')}.`)
 
   const worstTb = played
     .filter(r => r.tiebreakerDiff != null && r.tiebreakerDiff >= 7)

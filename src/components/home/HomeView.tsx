@@ -11,6 +11,7 @@ import {
 import clsx from 'clsx'
 import { InstallCard } from '@/components/ui/InstallGuide'
 import { YourTeams } from './YourTeamCard'
+import { HolidayRibbon } from '@/components/ui/Holiday'
 
 const TeamPage = lazy(() => import('@/components/teams/TeamPage').then(m => ({ default: m.TeamPage })))
 
@@ -86,6 +87,9 @@ export function HomeView() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-5">
+
+      {/* Thanksgiving, Christmas, the playoffs, Super Bowl week */}
+      <HolidayRibbon />
 
       {/* ══ JUMBOTRON ══ */}
       <div className="jumbotron rise-in">

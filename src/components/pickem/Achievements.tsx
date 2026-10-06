@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Lock } from 'lucide-react'
+import { Lock, BadgeCheck } from 'lucide-react'
 import clsx from 'clsx'
 import { ACHIEVEMENTS, type AchievementKey, type EarnedAchievement } from './standings'
 import { ACHIEVEMENT_ICONS } from './achievementIcons'
@@ -10,9 +10,14 @@ const when = (iso: string) =>
 /**
  * Every badge, earned ones lit up with how many times, the rest dim —
  * the collection is half the fun. Tap one for what it takes, and, once
- * earned, each time it was: the date and what happened.
+ * earned, each time it was: the date and what happened. On your own
+ * card, an earned badge can be shown next to your name (badge flair).
  */
-export function AchievementGrid({ earned }: { earned: EarnedAchievement[] }) {
+export function AchievementGrid({ earned, flair, onSetFlair }: {
+  earned: EarnedAchievement[]
+  flair?: string | null
+  onSetFlair?: (badge: AchievementKey | null) => void
+}) {
   const [open, setOpen] = useState<AchievementKey | null>(null)
   const byKey = new Map(earned.map(e => [e.key, e]))
   const openDef = open ? ACHIEVEMENTS.find(a => a.key === open) : null
@@ -42,6 +47,9 @@ export function AchievementGrid({ earned }: { earned: EarnedAchievement[] }) {
               <span className={clsx('text-[10px] font-bold leading-tight', got ? 'text-white' : 'text-field-400')}>{a.label}</span>
               {got && got.events.length > 1 && (
                 <span className="absolute top-1 right-1 text-[9px] font-black text-gold tabular-nums">×{got.events.length}</span>
+              )}
+              {flair === a.key && (
+                <BadgeCheck className="absolute top-1 left-1 w-3 h-3 text-gold" aria-label="Shown next to your name" />
               )}
             </button>
           )
@@ -77,6 +85,21 @@ export function AchievementGrid({ earned }: { earned: EarnedAchievement[] }) {
             <p className="mt-2 flex items-center gap-1.5 text-xs text-field-500">
               <Lock className="w-3 h-3" /> Still locked. It unlocks when a finished week qualifies.
             </p>
+          )}
+          {openGot && onSetFlair && (
+            flair === openDef.key ? (
+              <div className="mt-2.5 flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-gold"><BadgeCheck className="w-3.5 h-3.5" /> Showing next to your name</span>
+                <button onClick={() => onSetFlair(null)} className="text-xs font-bold text-field-400 hover:text-white">Remove</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => onSetFlair(openDef.key)}
+                className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-bold text-gold hover:bg-gold/20"
+              >
+                <BadgeCheck className="w-3.5 h-3.5" /> Show next to my name
+              </button>
+            )
           )}
         </div>
       )}

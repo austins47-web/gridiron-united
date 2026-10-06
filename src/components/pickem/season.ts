@@ -9,7 +9,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import {
-  computeStandings, computeWeek, isFinal, isVoid, isWeekComplete, rankOf, winnerOf, computeBadBeats, nameOf,
+  computeStandings, computeWeek, isFinal, isVoid, isWeekComplete, rankOf, winnerOf, computeBadBeats, nameOf, switchOutcome,
   type Game, type Pick, type Member, type StandingRow, type BadBeat,
 } from './standings'
 
@@ -327,6 +327,23 @@ export function computeSeasonAwards(games: Game[], picks: Pick[], members: Membe
       names: [...burned].filter(([, n]) => n === mostBurned).map(([id]) => nameById.get(id) ?? 'Someone'),
       headline: `${mostBurned} bad beats`,
       detail: 'Picks that lost after a 75%+ second-half chance',
+    })
+  }
+
+  // Flip-Flopper: switched off a pick that went on to win, most often
+  const gameById = new Map(games.map(g => [g.id, g]))
+  const backfired = new Map<string, number>()
+  for (const p of picks) {
+    const g = gameById.get(p.game_id)
+    if (g && switchOutcome(p, g) === 'cost') backfired.set(p.user_id, (backfired.get(p.user_id) ?? 0) + 1)
+  }
+  const mostBackfired = Math.max(0, ...backfired.values())
+  if (mostBackfired >= 2) {
+    awards.push({
+      key: 'flipFlopper', label: 'Flip-Flopper',
+      names: [...backfired].filter(([, n]) => n === mostBackfired).map(([id]) => nameById.get(id) ?? 'Someone'),
+      headline: `${mostBackfired} switches backfired`,
+      detail: 'Switched off a pick that went on to win',
     })
   }
   const hallOfShame = beats.slice(0, 5).map(b => ({ ...b, victimNames: b.victims.map(id => nameById.get(id) ?? 'Someone') }))

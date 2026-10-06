@@ -62,6 +62,13 @@ export interface Pick {
   week: number
   picked_team: string
   tiebreaker_score: number | null
+  // Optional: narrow selects don't carry them
+  /** Made by autopilot, not the person. */
+  auto?: boolean
+  /** The team picked before the latest switch. */
+  switched_from?: string | null
+  /** When the pick (or its latest switch) was made. */
+  picked_at?: string | null
 }
 
 export interface Member {
@@ -801,6 +808,22 @@ export function whenDecided(d: { period: number; clock: string }): string {
   if (d.period > 4) return 'in overtime'
   if (d.period === 4) return d.clock ? `with ${d.clock} left` : 'in the 4th quarter'
   return `in the ${['1st', '2nd', '3rd'][d.period - 1] ?? `${d.period}th`} quarter`
+}
+
+/** How long before kickoff a pick was switched: "12 minutes before kickoff", or "12m" short. */
+export function beforeKickoff(ms: number, short = false): string {
+  const min = Math.max(1, Math.round(ms / 60_000))
+  const [n, unit] = min < 60 ? [min, 'minute'] : min < 48 * 60 ? [Math.round(min / 60), 'hour'] : [Math.round(min / 1440), 'day']
+  return short ? `${n}${unit[0]}` : `${n} ${unit}${n === 1 ? '' : 's'} before kickoff`
+}
+
+/** Switches that cost or saved a point: switched off the winner, or onto it. Null otherwise. */
+export function switchOutcome(p: Pick, g: Game): 'cost' | 'saved' | null {
+  const w = winnerOf(g)
+  if (!w || !p.switched_from || p.switched_from === p.picked_team) return null
+  if (p.switched_from === w) return 'cost'
+  if (p.picked_team === w) return 'saved'
+  return null
 }
 
 // ── Win probability ──────────────────────────────────────────

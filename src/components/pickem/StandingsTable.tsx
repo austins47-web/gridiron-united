@@ -4,11 +4,14 @@ import { rankOf, type StandingRow, type WeekRow } from './standings'
 import { useFlipList } from '@/hooks/useFlipList'
 import { tierLabel, isFoundingMember } from '@/lib/prestige'
 import { BeltIcon } from './Belt'
+import { BadgeFlair } from './BadgeFlair'
 
 export function StandingsTable({
-  rows, currentUserId, thisWeekRows, leagueCreatedAt, joinedAtByUser, onSelect, beltHolders,
+  rows, currentUserId, thisWeekRows, leagueCreatedAt, joinedAtByUser, onSelect, beltHolders, flairByUser,
 }: {
   rows: StandingRow[]
+  /** The badge each person shows next to their name. */
+  flairByUser?: Map<string, string>
   currentUserId?: string
   thisWeekRows: WeekRow[]
   leagueCreatedAt?: string | null
@@ -143,6 +146,7 @@ export function StandingsTable({
                       {isYou && (
                         <span className="text-[11px] font-bold uppercase tracking-wider text-gold shrink-0">you</span>
                       )}
+                      <BadgeFlair badge={flairByUser?.get(r.userId)} />
                       {beltHolders?.has(r.userId) && <BeltIcon />}
                       {r.streak >= 2 && (
                         <span title={`${r.streak} weekly wins in a row`} className="flex items-center gap-0.5 text-[11px] font-bold text-gold shrink-0">

@@ -6,6 +6,10 @@ import { brandVars, DEFAULT_GOLD } from '@/lib/brand'
 import { weatherLabel, type GameWeather } from '@/lib/weather'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from '@/components/pickem/Belt'
+import { useHolidayTheme, type HolidayTheme } from '@/lib/holiday'
+import { HolidayPill, HolidayParticles } from '@/components/ui/Holiday'
+import { ACHIEVEMENTS } from '@/components/pickem/standings'
+import { ACHIEVEMENT_ICONS } from '@/components/pickem/achievementIcons'
 
 // ══════════════════════════════════════════════════════════════
 // Shop TV — the league's live Pick'Em board, full screen on a TV
@@ -71,6 +75,8 @@ interface TvRow {
   trendFrom?: number | null
   weeksWon?: number
   belt: boolean
+  /** The badge they show next to their name. */
+  flair?: string | null
   winner?: boolean
 }
 
@@ -283,6 +289,9 @@ export function ShopTV() {
     if (locked.length) setReveal(locked)
   }, [board, params])
 
+  // Thanksgiving, Christmas, the playoffs, Super Bowl week
+  const holiday = useHolidayTheme(board?.week ?? null)
+
   const goFull = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {})
   }
@@ -304,10 +313,11 @@ export function ShopTV() {
       >
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
-          : <Board board={board} offline={status === 'offline'} />}
+          : <Board board={board} offline={status === 'offline'} holiday={holiday} />}
         {board && reveal && reveal.length > 0 && (
           <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
         )}
+        {board && holiday && <HolidayParticles theme={holiday} />}
         {status !== 'gone' && <FloatingReactions code={code} />}
       </div>
     </div>
@@ -336,7 +346,7 @@ function Gone() {
   )
 }
 
-function Board({ board, offline }: { board: TvBoard; offline: boolean }) {
+function Board({ board, offline, holiday }: { board: TvBoard; offline: boolean; holiday: HolidayTheme | null }) {
   const clock = useClock()
   const anyLive = board.games.some(g => g.state === 'live')
   const showWeek = board.started
@@ -360,7 +370,10 @@ function Board({ board, offline }: { board: TvBoard; offline: boolean }) {
   return (
     <div className="absolute inset-0 flex flex-col">
       {/* Header */}
-      <header className="h-[92px] shrink-0 flex items-center gap-6 px-8 border-b-2 border-field-800 bg-field-900">
+      <header
+        className="h-[92px] shrink-0 flex items-center gap-6 px-8 border-b-2 border-field-800 bg-field-900"
+        style={holiday ? { backgroundImage: `linear-gradient(90deg, ${holiday.colors[0]}33, transparent 35%, transparent 65%, ${holiday.colors[1]}33)`, borderBottomColor: `${holiday.colors[0]}88` } : undefined}
+      >
         <div className="min-w-0 w-[520px] flex items-center gap-4">
           {board.brand?.logo && <img src={board.brand.logo} alt="" className="h-[68px] w-auto max-w-[140px] object-contain shrink-0" />}
           <div className="min-w-0">
@@ -370,6 +383,7 @@ function Board({ board, offline }: { board: TvBoard; offline: boolean }) {
         </div>
         <div className="flex-1 flex items-center justify-center gap-4">
           <span className="font-cond font-black uppercase text-[40px] text-white tracking-wide whitespace-nowrap">{weekTitle(board.week)}</span>
+          {holiday && <HolidayPill theme={holiday} />}
           {anyLive && (
             <span className="flex items-center gap-2 rounded-full bg-red-600/20 border-2 border-red-500/60 px-3.5 py-0.5">
               <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
@@ -429,6 +443,18 @@ function useMainView(hasBoard: boolean): 'games' | 'board' {
     return () => clearTimeout(t)
   }, [view, hasBoard])
   return hasBoard ? view : 'games'
+}
+
+/** The badge someone shows next to their name, sized for across the room. */
+function TvFlair({ badge, size }: { badge?: string | null; size: number }) {
+  const a = ACHIEVEMENTS.find(x => x.key === badge)
+  if (!a) return null
+  const Icon = ACHIEVEMENT_ICONS[a.key]
+  return (
+    <span className="shrink-0 inline-flex items-center justify-center rounded-full bg-gold/20 text-gold" style={{ width: size, height: size }} title={a.label}>
+      <Icon style={{ width: size * 0.62, height: size * 0.62 }} aria-label={a.label} />
+    </span>
+  )
 }
 
 function Chip({ children }: { children: ReactNode }) {
@@ -645,6 +671,7 @@ function PicksBoardView({ board }: { board: TvBoard }) {
               <span className="flex items-center gap-2 min-w-0">
                 <span className="w-6 text-right font-cond font-black text-[18px] text-field-400 tabular-nums">{r.rank}</span>
                 <span className="truncate text-[19px] font-bold text-white">{r.name}</span>
+                <TvFlair badge={r.flair} size={20} />
                 {r.belt && <BeltIcon className="w-[22px] h-[14px]" />}
               </span>
               <span className="text-center font-cond font-black text-[20px] text-white tabular-nums">
@@ -731,6 +758,7 @@ function StandingsPanel({ board, rows, week }: { board: TvBoard; rows: TvRow[]; 
                 ? <img src={r.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
                 : <span className="w-7 h-7 rounded-full bg-field-700 flex items-center justify-center text-[14px] font-black text-gold shrink-0">{r.name[0]?.toUpperCase()}</span>}
               <span className="min-w-0 flex-1 truncate text-[21px] font-bold text-white">{r.name}</span>
+              <TvFlair badge={r.flair} size={22} />
               {r.belt && <BeltIcon className="w-[24px] h-[15px]" />}
               <span className="font-cond font-black text-[23px] tabular-nums text-white w-[64px] text-right">
                 {r.correct}<span className="text-field-500 text-[17px]">/{r.played}</span>

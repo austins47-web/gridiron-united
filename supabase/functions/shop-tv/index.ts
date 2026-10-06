@@ -101,7 +101,7 @@ serve(async (req) => {
         .select('id, name, league_type, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, brand_logo_url, brand_color')
         .eq('id', tv.league_id).maybeSingle(),
       admin.from('league_members')
-        .select('user_id, profile:profiles(username, display_name, avatar_url, favorite_nfl_team)')
+        .select('user_id, badge_flair, profile:profiles(username, display_name, avatar_url, favorite_nfl_team)')
         .eq('league_id', tv.league_id),
       admin.from('nfl_games').select(GAME_COLS).eq('season', season),
       admin.from('league_pins').select('message').eq('league_id', tv.league_id).maybeSingle(),
@@ -124,6 +124,8 @@ serve(async (req) => {
 
     const members = (memberRows ?? []) as unknown as Member[]
     const avatarOf = new Map(members.map(m => [m.user_id, (m.profile as { avatar_url?: string | null } | null)?.avatar_url ?? null]))
+    // The badge each person shows next to their name
+    const flairOf = new Map((memberRows ?? []).map((m: { user_id: string; badge_flair?: string | null }) => [m.user_id, m.badge_flair ?? null]))
     const games = ((gameRows ?? []) as Game[]).filter(g => g.game_date)
     const week = currentWeek(games, now)
     const wkGames = games.filter(g => g.week === week)
@@ -195,6 +197,7 @@ serve(async (req) => {
       // this (they reload every 6 hours); drop it after a day or so
       kickoffChance: odds?.recent?.get(r.userId) ?? null,
       belt: beltIds.has(r.userId),
+      flair: flairOf.get(r.userId) ?? null,
       winner: winners.includes(r.name),
     }))
     const seasonRows = computeStandings(seasonGames.filter(g => g.week < week || complete), allPicks, members)
@@ -208,6 +211,7 @@ serve(async (req) => {
       rank: 1 + seasonRows.filter(o => o.correct > r.correct).length,
       weeksWon: r.weeksWon,
       belt: beltIds.has(r.userId),
+      flair: flairOf.get(r.userId) ?? null,
     }))
 
     // ── The ticker ──────────────────────────────────────────

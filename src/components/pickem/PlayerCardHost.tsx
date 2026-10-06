@@ -8,6 +8,10 @@ import { computeSeasonProfiles, computePickDNA, computePickMatches, computeSeaso
 import { computeBelt, computeAchievements, computeBadBeats, winnerOf, isLive, isFinal } from './standings'
 import { SeasonCard, type Receipt } from './SeasonCard'
 import { PickemWrapped } from './PickemWrapped'
+import { useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { supabase } from '@/lib/supabase'
+import { ACHIEVEMENTS, type AchievementKey } from './standings'
 
 /**
  * The Pick'Em player card: any name in a Pick'Em league (chat, the
@@ -23,6 +27,16 @@ export function PlayerCardHost() {
   const open = !!leagueId && (!!userId || !!wrappedFor)
 
   const members = useLeagueMembersList(leagueId, open)
+  const qc = useQueryClient()
+  // Your badge flair: the one earned badge shown next to your name
+  const myFlair = (members.find((m: any) => m.user_id === user?.id) as any)?.badge_flair ?? null
+  const setFlair = async (badge: AchievementKey | null) => {
+    if (!leagueId) return
+    const { error } = await supabase.rpc('set_badge_flair', { p_league: leagueId, p_badge: badge })
+    if (error) { toast.error(`Couldn't change your badge: ${error.message}`); return }
+    qc.invalidateQueries({ queryKey: ['league-members-list', leagueId] })
+    toast.success(badge ? `${ACHIEVEMENTS.find(a => a.key === badge)?.label} now shows next to your name` : 'Badge removed from your name')
+  }
   const { games, picks, loaded } = usePickemSeasonData(leagueId, open)
 
   // A card from one league never follows you into another
@@ -118,6 +132,8 @@ export function PlayerCardHost() {
           leagueDna={season!.dna.league}
           onWrapped={() => { setWrappedFor(profile.userId); closePlayerCard() }}
           achievements={season!.achievements.get(profile.userId) ?? []}
+          flair={profile.userId === user?.id ? myFlair : undefined}
+          onSetFlair={profile.userId === user?.id ? setFlair : undefined}
           matches={matches}
           belt={{ weeks: beltWeeksOf(profile.userId), reign: holder?.reign ?? 0 }}
           receipts={receipts}

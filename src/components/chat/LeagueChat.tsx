@@ -24,6 +24,8 @@ import { PinnedBanner, PinComposer } from './PinnedAnnouncement'
 import { GameThreadStrip, GameThreadHeader } from './GameThreads'
 import { TvReactionButton } from '@/components/tv/TvReactions'
 import { BeltIcon } from '@/components/pickem/Belt'
+import { BadgeFlair } from '@/components/pickem/BadgeFlair'
+import { useFlairMap } from '@/hooks/useFlairMap'
 import { useBeltHolders } from '@/hooks/useBeltHolders'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -345,7 +347,7 @@ function MenuButton({ icon, label, onClick, danger = false }: {
 
 // ── Message bubble ────────────────────────────────────────────
 
-function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick, isNew, replyTo, onJump, onOpenMenu, beltHolder, onOpenProfile, poll }: {
+function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMentionClick, isNew, replyTo, onJump, onOpenMenu, beltHolder, flair, onOpenProfile, poll }: {
   msg: ChatMessage
   isOwn: boolean
   showAvatar: boolean
@@ -359,6 +361,8 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
   onOpenMenu: () => void
   /** Holds the Pick'Em belt — a gold belt next to their name. */
   beltHolder?: boolean
+  /** The badge they show next to their name. */
+  flair?: string | null
   /** Tapping the sender's avatar or name (their profile or Pick'Em card). */
   onOpenProfile?: () => void
   /** The poll this message posted, rendered in place of its text. */
@@ -500,6 +504,7 @@ function MessageBubble({ msg, isOwn, showAvatar, myUsername, myAvatarUrl, onMent
             >
               {isOwn ? 'You' : (msg.profiles?.display_name || msg.profiles?.username || 'Unknown')}
             </button>
+            <BadgeFlair badge={flair} className="self-center" />
             {beltHolder && <BeltIcon className="w-[16px] h-[10px] self-center" />}
             <span className="text-xs text-field-500 chat-time">{formatTime(msg.created_at)}</span>
           </div>
@@ -750,6 +755,7 @@ function MentionDropdownInner({ anchorRef, filtered, onSelect }: {
 export function LeagueChat() {
   const { activeLeagueId, activeLeague, user, profile, myMembership } = useAppStore()
   const beltHolders = useBeltHolders()
+  const flairByUser = useFlairMap(activeLeagueId)
   const qc = useQueryClient()
   const isPickem = activeLeague?.league_type === 'pickem'
   const isCommissioner = !!myMembership?.is_commissioner
@@ -1467,6 +1473,7 @@ export function LeagueChat() {
                 onJump={jumpTo}
                 onOpenMenu={() => setMenuFor(id => (id === msg.id ? null : msg.id))}
                 beltHolder={!!msg.user_id && beltHolders.has(msg.user_id)}
+                flair={msg.user_id ? flairByUser.get(msg.user_id) : null}
                 onOpenProfile={openSender(msg)}
                 poll={pollFor(msg)}
               />

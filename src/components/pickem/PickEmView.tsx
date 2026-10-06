@@ -13,9 +13,11 @@ import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, computeWhoCanWin, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
-  computeWinOdds, computeUpsetWatch, computeBelt, keyInjuries,
+  computeWinOdds, computeUpsetWatch, computeBelt, keyInjuries, switchOutcome, beforeKickoff,
   type WeekRow, type InjuredStarter,
 } from './standings'
+import { BadgeFlair } from './BadgeFlair'
+import { useFlairMap } from '@/hooks/useFlairMap'
 import { WeekInProgress } from './WeekRecap'
 import { AnimatedWeekReveal } from './AnimatedWeekReveal'
 import { StandingsTable } from './StandingsTable'
@@ -30,10 +32,12 @@ import { openPlayerCard } from '@/hooks/usePlayerCard'
 import { useThreadCounts } from '@/hooks/useGameThreads'
 import { PinnedBanner, PinComposer } from '@/components/chat/PinnedAnnouncement'
 import { TvReactionButton } from '@/components/tv/TvReactions'
+import { AutopilotPanel } from './Autopilot'
+import { HolidayRibbon } from '@/components/ui/Holiday'
 import { weatherLabel } from '@/lib/weather'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
-  TrendingDown, Home, Plane, Award, Quote, MessageSquare, Pin
+  TrendingDown, Home, Plane, Award, Quote, MessageSquare, Pin, Bot, Repeat2, BellRing
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -265,6 +269,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     () => new Map(leagueMembers.map((m: any) => [m.user_id, m.joined_at as string | null])),
     [leagueMembers],
   )
+  const flairByUser = useFlairMap(activeLeagueId)
 
   // ── Season-wide data for derived standings ──────────────────
   // Standings are computed from picks joined to game results rather
@@ -339,7 +344,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
 
   // Each saved pick, for the line it was made at (pick cards show the move since)
   const savedPickByGame = useMemo(
-    () => new Map((myPicks as any[]).map(p => [p.game_id, { picked_team: p.picked_team as string, spread_at_pick: (p.spread_at_pick ?? null) as number | null }])),
+    () => new Map((myPicks as any[]).map(p => [p.game_id, { picked_team: p.picked_team as string, spread_at_pick: (p.spread_at_pick ?? null) as number | null, auto: !!p.auto }])),
     [myPicks],
   )
 
@@ -726,6 +731,9 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
         </div>
       </div>
 
+      {/* Thanksgiving, Christmas, the playoffs, Super Bowl week */}
+      <HolidayRibbon />
+
       {/* The commissioner's pinned announcement */}
       <PinnedBanner leagueId={activeLeagueId} isCommissioner={!!isCommissioner} dismissible />
       {composingPin && <PinComposer leagueId={activeLeagueId} onClose={() => setComposingPin(false)} />}
@@ -944,6 +952,9 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
           </button>
         </div>
       )}
+
+      {/* A backup rule for any game they don't get to */}
+      {tab === 'picks' && <AutopilotPanel leagueId={activeLeagueId} />}
 
       {/* Commissioner tools */}
       {isCommissioner && !weekDeadline && (
@@ -1177,6 +1188,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
             joinedAtByUser={joinedAtByUser}
             onSelect={openPlayerCard}
             beltHolders={beltHolders}
+            flairByUser={flairByUser}
           />
 
           {belt && <BeltPanel belt={belt} currentUserId={user?.id} />}
@@ -1202,6 +1214,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
         <div className="space-y-3">
           <UpsetWatchBanner items={upsetWatch} />
           <PicksBoard
+            leagueId={activeLeagueId}
             games={games}
             allPicks={allPicks}
             leagueMembers={leagueMembers}
@@ -1238,8 +1251,8 @@ function GamePickCard({
   /** Pick receipt: why they picked it (optional), public at kickoff. */
   reason?: string
   onReason?: (val: string) => void
-  /** The pick as saved — its team and the line when it was made. */
-  savedPick?: { picked_team: string; spread_at_pick: number | null } | null
+  /** The pick as saved — its team, the line when it was made, and whether autopilot made it. */
+  savedPick?: { picked_team: string; spread_at_pick: number | null; auto?: boolean } | null
   /** Injured key players, by team (keyInjuries). */
   injuries?: Map<string, InjuredStarter[]>
   /** This game's chat thread: how many messages, and opening it. */
@@ -1308,6 +1321,14 @@ function GamePickCard({
           </span>
         )}
         {isFinal && <span className="text-xs text-field-300 font-bold">Final</span>}
+        {savedPick?.auto && savedPick.picked_team === pickedTeam && (
+          <span
+            title={locked ? 'Autopilot made this pick' : 'Autopilot made this pick. Tap a team to make it yours'}
+            className="flex items-center gap-1 rounded-full border border-field-600 px-2 py-0.5 text-[11px] font-bold text-field-300"
+          >
+            <Bot className="w-3 h-3" /> Autopilot
+          </span>
+        )}
         {odds && !isFinal && (
           <span className="flex items-center gap-1 text-xs text-field-500">
             <TrendingUp className="w-3 h-3 text-gold/50" />
@@ -1917,8 +1938,9 @@ function PicksChart({
 // pinned while the game columns scroll horizontally.
 
 function PicksBoard({
-  games, allPicks, leagueMembers, weekRows, userId, deadline, week, onWeekChange, beltHolders, threadCounts, onThread,
+  leagueId, games, allPicks, leagueMembers, weekRows, userId, deadline, week, onWeekChange, beltHolders, threadCounts, onThread,
 }: {
+  leagueId: string
   games: any[]
   allPicks: any[]
   leagueMembers: any[]
@@ -1946,6 +1968,52 @@ function PicksBoard({
   const tableScrollRef = useRef<HTMLDivElement>(null)
   const [overflowWidth, setOverflowWidth] = useState<number | null>(null)
   const hasGames = games.length > 0
+
+  // ── Nudges ───────────────────────────────────────────────────
+  // Before the lock, anyone with open games (or no tiebreaker guess)
+  // gets a nudge button; each person can be nudged once a day, by
+  // anyone (pickem-nudge), and the Board shows who already did it.
+  const openGames = games.filter((g: any) => !isVoid(g) && !isGameLocked(g.game_date, deadline, g.status))
+  const openFor = (memberId: string) => {
+    const mine = allPicks.filter((p: any) => p.user_id === memberId)
+    const unpicked = openGames.filter((g: any) => !mine.some((p: any) => p.game_id === g.id)).length
+    const noGuess = openGames.some((g: any) => g.is_tiebreaker) && !mine.some((p: any) => p.tiebreaker_score != null)
+    return { unpicked, noGuess }
+  }
+  const qc = useQueryClient()
+  const nudgesKey = ['pickem-nudges', leagueId]
+  const { data: nudges = [] } = useQuery({
+    queryKey: nudgesKey,
+    enabled: openGames.length > 0,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pickem_nudges')
+        .select('target_id, nudger_id, created_at')
+        .eq('league_id', leagueId)
+        .gte('created_at', new Date(Date.now() - 20 * 3600_000).toISOString())
+      if (error) throw error
+      return data ?? []
+    },
+  })
+  const [nudging, setNudging] = useState<string | null>(null)
+  const nudge = async (memberId: string, name: string) => {
+    setNudging(memberId)
+    try {
+      const { data, error } = await supabase.functions.invoke('pickem-nudge', {
+        body: { league_id: leagueId, target_id: memberId, week },
+      })
+      if (error) {
+        const msg = await (error as any).context?.json?.().then((b: any) => b?.error).catch(() => null)
+        toast.error(msg ?? `Couldn't nudge ${name}`)
+      } else {
+        toast.success(data?.pushed ? `Nudged ${name}` : `Nudged ${name}. They'll see it in the app (phone notifications are off).`)
+      }
+      qc.invalidateQueries({ queryKey: nudgesKey })
+    } finally {
+      setNudging(null)
+    }
+  }
 
   useEffect(() => {
     const el = tableScrollRef.current
@@ -2036,10 +2104,13 @@ function PicksBoard({
   const pickMap: Record<string, Record<string, string>> = {}
   // Pick receipts, shown on the same reveal rule as the pick
   const receiptOf = new Map<string, string>()
+  // The whole pick: autopilot marks and switches
+  const pickOf = new Map<string, any>()
   allPicks.forEach((p: any) => {
     if (!pickMap[p.game_id]) pickMap[p.game_id] = {}
     pickMap[p.game_id][p.user_id] = p.picked_team
     if (p.reason) receiptOf.set(`${p.game_id}:${p.user_id}`, p.reason)
+    pickOf.set(`${p.game_id}:${p.user_id}`, p)
   })
 
   const ptsByUser = new Map(weekRows.map(r => [r.userId, r]))
@@ -2154,6 +2225,7 @@ function PicksBoard({
                   'sticky left-0 z-10 px-3 py-2 whitespace-nowrap bg-field-800',
                   isMe && 'border-l-2 border-gold',
                 )}>
+                  <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => openPlayerCard(m.user_id)}
                     title={`${displayName === 'You' ? 'Your' : `${displayName}'s`} season`}
@@ -2169,8 +2241,39 @@ function PicksBoard({
                     <span className={clsx('font-bold text-xs truncate max-w-[120px] group-hover:underline', isMe ? 'text-gold' : 'text-white')}>
                       {displayName}
                     </span>
+                    <BadgeFlair badge={m.badge_flair} />
                     {beltHolders?.has(m.user_id) && <BeltIcon />}
                   </button>
+                  {/* Nudge: open games before the lock, once a day per person */}
+                  {!isMe && (() => {
+                    const open = openFor(m.user_id)
+                    if (!open.unpicked && !open.noGuess) return null
+                    const what = open.unpicked
+                      ? `${open.unpicked} game${open.unpicked === 1 ? '' : 's'} still open${open.noGuess ? ' and no tiebreaker' : ''}`
+                      : 'No tiebreaker guess yet'
+                    const done = nudges.find((n: any) => n.target_id === m.user_id)
+                    if (done) {
+                      const by = done.nudger_id === userId ? 'you'
+                        : (() => { const nm = memberByUserId.get(done.nudger_id) as any; return nm?.profile?.display_name || nm?.profile?.username || 'someone' })()
+                      return (
+                        <span title={`${what}. Nudged by ${by} today`} className="flex items-center gap-0.5 text-[10px] font-bold text-field-500">
+                          <BellRing className="w-3 h-3" /> Nudged
+                        </span>
+                      )
+                    }
+                    return (
+                      <button
+                        onClick={() => nudge(m.user_id, displayName)}
+                        disabled={nudging === m.user_id}
+                        title={`${what}. Nudge ${displayName}`}
+                        aria-label={`Nudge ${displayName}: ${what}`}
+                        className="flex items-center gap-0.5 rounded-full border border-gold/40 px-1.5 py-0.5 text-[10px] font-bold text-gold hover:bg-gold/10 disabled:opacity-50"
+                      >
+                        <BellRing className="w-3 h-3" /> Nudge
+                      </button>
+                    )
+                  })()}
+                  </div>
                 </td>
                 <td className="text-center px-2 py-2 border-l border-field-700/60">
                   <span className="font-cond font-black text-white">{pts?.correct ?? 0}</span>
@@ -2184,6 +2287,7 @@ function PicksBoard({
                   const isWrong = winner != null && !!picked && picked !== winner
                   const logo = picked ? teamLogoUrl({ abbr: picked }, 'NFL') : null
                   const tbWon = game.is_tiebreaker && wonTiebreaker(pts)
+                  const pick = pickOf.get(`${game.id}:${m.user_id}`)
 
                   return (
                     <td key={game.id} className={clsx(
@@ -2201,10 +2305,30 @@ function PicksBoard({
                         )}>
                           {logo && <img src={logo} alt="" className="w-4 h-4 object-contain" />}
                           <span className="font-cond font-black text-[11px]">{picked}</span>
+                          {pick?.auto && <span title="Autopilot pick" className="flex"><Bot className="w-3 h-3 opacity-80" aria-label="Autopilot pick" /></span>}
                           {isCorrect && <Check className="w-3 h-3" />}
                           {isWrong && <X className="w-3 h-3" />}
                         </div>
                       )}
+                      {/* A switch: from what, how close to kickoff, and
+                          whether it cost (or saved) a point */}
+                      {visible && picked && pick?.switched_from && pick.switched_from !== picked && (() => {
+                        const outcome = switchOutcome(pick, game)
+                        const before = pick.picked_at ? new Date(game.game_date).getTime() - new Date(pick.picked_at).getTime() : null
+                        return (
+                          <div
+                            title={`Switched from ${pick.switched_from}${before != null && before > 0 ? ` ${beforeKickoff(before)}` : ''}${outcome === 'cost' ? '. It cost a point' : outcome === 'saved' ? '. It saved a point' : ''}`}
+                            className={clsx(
+                              'mt-1 mx-auto w-fit flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-bold whitespace-nowrap',
+                              outcome === 'cost' ? 'bg-red-500/10 text-red-400' : outcome === 'saved' ? 'bg-nfl/10 text-nfl' : 'text-field-500',
+                            )}
+                          >
+                            <Repeat2 className="w-3 h-3" />
+                            {pick.switched_from}
+                            {before != null && before > 0 && <span className="font-normal opacity-80">· {beforeKickoff(before, true)}</span>}
+                          </div>
+                        )
+                      })()}
                       {/* Pick receipt — tap the quote; it opens in a row under this one */}
                       {visible && picked && receiptOf.has(`${game.id}:${m.user_id}`) && (() => {
                         const key = `${game.id}:${m.user_id}`
@@ -2242,6 +2366,7 @@ function PicksBoard({
                               <span className={clsx('font-cond font-black text-[13px]', tbWon ? 'text-gold' : 'text-white')}>
                                 {pts.tiebreakerGuess}
                               </span>
+                              {pick?.tiebreaker_auto && <span title="Autopilot guess (the Vegas total)" className="flex"><Bot className="w-3 h-3" aria-label="Autopilot guess" /></span>}
                               {pts.tiebreakerDiff != null && <span>±{pts.tiebreakerDiff}</span>}
                             </>
                           )}

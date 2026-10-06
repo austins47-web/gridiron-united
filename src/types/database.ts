@@ -546,6 +546,12 @@ export interface Database {
           spread_at_pick: number | null
           /** When this team was picked (set by trigger). */
           picked_at: string | null
+          /** Made by autopilot (set by the server only). */
+          auto: boolean
+          /** The tiebreaker guess was made by autopilot. */
+          tiebreaker_auto: boolean
+          /** The team picked before the latest switch (set by trigger). */
+          switched_from: string | null
           updated_at: string | null
           user_id: string | null
           week: number
@@ -634,6 +640,33 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pickem_autopilot: {
+        Row: {
+          league_id: string
+          user_id: string
+          rule: 'favorites' | 'home' | 'majority'
+          /** Set by the server; autopilot only fills games that locked after it. */
+          updated_at: string
+        }
+        Insert: { league_id: string; user_id: string; rule: 'favorites' | 'home' | 'majority' }
+        Update: { rule?: 'favorites' | 'home' | 'majority' }
+        Relationships: []
+      }
+      pickem_nudges: {
+        Row: {
+          id: number
+          league_id: string
+          target_id: string
+          nudger_id: string
+          season: number
+          week: number
+          created_at: string
+        }
+        // Written by the pickem-nudge function only
+        Insert: never
+        Update: never
+        Relationships: []
       }
       pickem_week_settings: {
         Row: {
@@ -1395,6 +1428,13 @@ export interface Database {
       league_tv_token: { Args: { p_league: string; p_reset?: boolean }; Returns: string }
       league_has_tv: { Args: { p_league: string }; Returns: boolean }
       send_tv_reaction: { Args: { p_league: string; p_emoji: string }; Returns: undefined }
+      /** One of your earned badges next to your name in a league; null clears it. */
+      set_badge_flair: { Args: { p_league: string; p_badge: string | null }; Returns: undefined }
+      /** The problem log (src/lib/problemLog.ts). */
+      log_client_error: {
+        Args: { p_kind: string; p_message: string; p_detail: Json | null; p_path: string | null; p_version: string | null; p_agent: string | null }
+        Returns: undefined
+      }
       notify_league_member: {
         Args: { p_user: string; p_league: string; p_type: string; p_title: string; p_body?: string | null; p_data?: Json }
         Returns: undefined
@@ -1566,6 +1606,8 @@ export type LeagueMember = {
   faab_spent: number
   is_commissioner: boolean
   joined_at: string
+  /** A badge they've earned, shown next to their name (set_badge_flair). */
+  badge_flair: string | null
   // Joined
   profiles?: Profile
 }

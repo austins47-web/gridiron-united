@@ -6,7 +6,7 @@ import { teamLogoUrl } from '@/components/teams/teamIds'
 import { PickDNABars } from './PickDNA'
 import { AchievementGrid } from './Achievements'
 import { BeltIcon } from './Belt'
-import { ACHIEVEMENTS, type EarnedAchievement } from './standings'
+import { ACHIEVEMENTS, type EarnedAchievement, type AchievementKey } from './standings'
 import type { SeasonProfile, TeamRecord, PickDNA, PickTraits, PickMatch } from './season'
 
 /** A pick with its one-line reason, public once the game kicks off. */
@@ -27,7 +27,7 @@ export interface Receipt {
  * With Pick DNA, it also shows how they pick and opens their Wrapped.
  * Opened from any name in the league (PlayerCardHost).
  */
-export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueDna, onWrapped, achievements, matches, belt, receipts }: {
+export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueDna, onWrapped, achievements, matches, belt, receipts, flair, onSetFlair }: {
   profile: SeasonProfile
   totalPlayers: number
   isYou: boolean
@@ -36,6 +36,9 @@ export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueD
   leagueDna?: PickTraits | null
   onWrapped?: () => void
   achievements?: EarnedAchievement[]
+  /** Your own card: the badge shown next to your name, and changing it. */
+  flair?: string | null
+  onSetFlair?: (badge: AchievementKey | null) => void
   matches?: { twin: PickMatch | null; nemesis: PickMatch | null } | null
   /** Weeks they won the Belt, and their current reign (0 if they don't hold it). */
   belt?: { weeks: number[]; reign: number } | null
@@ -169,7 +172,10 @@ export function SeasonCard({ profile, totalPlayers, isYou, onClose, dna, leagueD
               <p className="flex items-center gap-1.5 font-cond font-bold text-[11px] uppercase tracking-[0.16em] text-field-500 mb-1.5">
                 <Medal className="w-3.5 h-3.5 text-gold" /> Badges · {achievements.length} of {ACHIEVEMENTS.length}
               </p>
-              <AchievementGrid earned={achievements} />
+              {onSetFlair && !flair && achievements.length > 0 && (
+                <p className="text-[11px] text-field-400 -mt-0.5 mb-1.5">Tap a badge you've earned to show it next to your name.</p>
+              )}
+              <AchievementGrid earned={achievements} flair={flair} onSetFlair={onSetFlair} />
             </div>
           )}
 

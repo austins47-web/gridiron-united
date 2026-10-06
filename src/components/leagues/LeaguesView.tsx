@@ -306,7 +306,7 @@ function PickemRecords({ leagueId }: { leagueId: string }) {
       // A season of picks passes the API's 1,000-row cap — page through
       return (await fetchAll((from, to) => supabase
         .from('pickem_picks')
-        .select('game_id, user_id, week, picked_team, tiebreaker_score')
+        .select('game_id, user_id, week, picked_team, tiebreaker_score, switched_from')
         .eq('league_id', leagueId)
         .eq('season', CURRENT_SEASON)
         .order('id')

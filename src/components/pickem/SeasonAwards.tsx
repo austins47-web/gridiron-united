@@ -1,4 +1,4 @@
-import { Award, Crown, Medal, Flame, Star, Zap, Dog, Target, Sparkles, Skull, HeartCrack, type LucideIcon } from 'lucide-react'
+import { Award, Crown, Medal, Flame, Star, Zap, Dog, Target, Sparkles, Skull, HeartCrack, Repeat2, type LucideIcon } from 'lucide-react'
 import clsx from 'clsx'
 import { whenDecided } from './standings'
 import type { SeasonAwards } from './season'
@@ -6,6 +6,7 @@ import type { SeasonAwards } from './season'
 const ICONS: Record<string, LucideIcon> = {
   champion: Crown, weeksWon: Medal, streak: Flame, bestWeek: Star,
   boldestCall: Zap, underdog: Dog, tiebreaker: Target, whisperer: Sparkles, jinx: Skull, heartbreak: HeartCrack,
+  flipFlopper: Repeat2,
 }
 
 /**
