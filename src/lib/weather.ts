@@ -31,6 +31,17 @@ function icon(w: GameWeather): string {
   return c <= 2 ? '🌤️' : '☁️'
 }
 
+/** The sky now, from a WMO weather code: an icon and a word or two (the Shop TV's header). */
+export function skyNow(code: number): { icon: string; label: string } {
+  const label = code === 0 ? 'Clear' : code <= 2 ? 'Partly cloudy' : code === 3 ? 'Cloudy'
+    : code === 45 || code === 48 ? 'Fog'
+    : code >= 51 && code <= 57 ? 'Drizzle'
+    : (code >= 61 && code <= 67) || (code >= 80 && code <= 82) ? 'Rain'
+    : (code >= 71 && code <= 77) || code === 85 || code === 86 ? 'Snow'
+    : code >= 95 ? 'Storms' : 'Cloudy'
+  return { icon: icon({ indoor: false, code }), label }
+}
+
 /**
  * The weather as an icon, a base label ("62°", "Dome") and the things
  * worth knowing when picking (wind, gusts, rain, snow, cold, heat).

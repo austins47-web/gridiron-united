@@ -10,6 +10,7 @@ import { ColorPicker } from '@/components/settings/ColorPicker'
 import { HOLIDAY_CHOICES } from '@/lib/holiday'
 import { TvRemote } from './TvRemote'
 import { TvMusicSetting } from './TvMusicSetting'
+import { TvLocationSetting } from './TvLocationSetting'
 import clsx from 'clsx'
 
 /**
@@ -162,6 +163,9 @@ export function ShopTvSetting({ leagueId }: { leagueId: string }) {
 
       {/* The song on the shop's Spotify */}
       <TvMusicSetting leagueId={leagueId} />
+
+      {/* The weather outside the shop, in the TV's header */}
+      <TvLocationSetting leagueId={leagueId} />
 
       {/* The holiday theme */}
       <div className="pt-3 border-t border-field-700">

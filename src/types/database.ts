@@ -1600,6 +1600,8 @@ export type League = ScoringRules & RosterSlotConfig & {
   brand_color?: string | null
   /** The commissioner's holiday theme: null by the calendar, 'off', or a theme kept on. */
   tv_theme?: string | null
+  /** Where the shop is, for the Shop TV's weather. */
+  tv_location?: { name: string; lat: number; lon: number } | null
   created_at: string
   updated_at: string
 }

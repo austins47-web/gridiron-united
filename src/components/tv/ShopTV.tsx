@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { supabase } from '@/lib/supabase'
 import { brandVars, DEFAULT_GOLD } from '@/lib/brand'
-import { weatherLabel, type GameWeather } from '@/lib/weather'
+import { weatherLabel, skyNow, type GameWeather } from '@/lib/weather'
+import { teamGlow } from '@/lib/teamColors'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from '@/components/pickem/Belt'
 import { useHolidayTheme, TV_MOMENTS, type HolidayTheme, type TvMoment } from '@/lib/holiday'
@@ -117,7 +118,7 @@ interface TvBoard {
   gameReceipts?: TvGameReceipt[]
   replay?: TvReplay | null
   /** The league's logo, and the TV's own accent color (Commish panel → Shop TV). */
-  brand?: { logo: string | null; color?: string | null; theme?: string | null; music?: boolean }
+  brand?: { logo: string | null; color?: string | null; theme?: string | null; music?: boolean; location?: { name: string; lat: number; lon: number } | null }
   week: number
   now: string
   started: boolean
@@ -351,6 +352,7 @@ export function ShopTV() {
           ...(brandVars(holiday?.accent ?? board?.brand?.color ?? DEFAULT_GOLD) as CSSProperties),
         }}
       >
+        {board && status !== 'gone' && <Backdrop />}
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
           : <Board board={board} offline={status === 'offline'} holiday={holiday} song={song} />}
@@ -390,8 +392,56 @@ function Gone() {
   )
 }
 
+/** Slow drifting glows in the TV's color behind the (see-through) panels. */
+const BACKDROP_CSS = '@keyframes tv-drift-a { 0%, 100% { transform: translate(0, 0) scale(1) } 50% { transform: translate(380px, 160px) scale(1.2) } }'
+  + ' @keyframes tv-drift-b { 0%, 100% { transform: translate(0, 0) scale(1.1) } 50% { transform: translate(-420px, -120px) scale(.9) } }'
+  + ' @keyframes tv-drift-c { 0%, 100% { transform: translate(0, 0) } 50% { transform: translate(200px, -220px) } }'
+
+function Backdrop() {
+  const glow = (alpha: number) => ({ background: `radial-gradient(closest-side, rgb(var(--gold) / ${alpha}), transparent)` })
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+      <style>{BACKDROP_CSS}</style>
+      <div className="absolute w-[1300px] h-[1300px] -left-[360px] -top-[520px] will-change-transform" style={{ ...glow(0.2), animation: 'tv-drift-a 70s ease-in-out infinite' }} />
+      <div className="absolute w-[1200px] h-[1200px] -right-[340px] -bottom-[560px] will-change-transform" style={{ ...glow(0.16), animation: 'tv-drift-b 90s ease-in-out infinite' }} />
+      <div className="absolute w-[900px] h-[900px] left-[620px] top-[260px] will-change-transform" style={{ background: 'radial-gradient(closest-side, rgb(var(--gold-light) / .07), transparent)', animation: 'tv-drift-c 110s ease-in-out infinite' }} />
+    </div>
+  )
+}
+
+/** The shop's weather now (leagues.tv_location), straight from Open-Meteo every 20 minutes while the TV's on screen. */
+const WEATHER_MS = 20 * 60_000
+
+interface ShopWeather { temp: number; code: number; day: boolean }
+
+function useShopWeather(at: { lat: number; lon: number } | null | undefined): ShopWeather | null {
+  const lat = at?.lat, lon = at?.lon
+  const [wx, setWx] = useState<ShopWeather | null>(null)
+  useEffect(() => {
+    if (lat == null || lon == null) { setWx(null); return }
+    let alive = true
+    let timer: ReturnType<typeof setTimeout>
+    const load = async () => {
+      try {
+        const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit`)
+        const c = r.ok ? (await r.json()).current : null
+        if (alive && c && typeof c.temperature_2m === 'number') {
+          setWx({ temp: Math.round(c.temperature_2m), code: c.weather_code ?? 0, day: c.is_day !== 0 })
+        }
+      } catch { /* keep the last reading */ }
+      if (alive) timer = setTimeout(due, WEATHER_MS)
+    }
+    const { due, stop } = onScreen(load)
+    load()
+    return () => { alive = false; clearTimeout(timer); stop() }
+  }, [lat, lon])
+  return wx
+}
+
 function Board({ board, offline, holiday, song }: { board: TvBoard; offline: boolean; holiday: HolidayTheme | null; song: NowPlaying | null }) {
   const clock = useClock()
+  const wx = useShopWeather(board.brand?.location)
+  const sky = wx ? skyNow(wx.code) : null
   const anyLive = board.games.some(g => g.state === 'live')
   const showWeek = board.started
   const table = showWeek ? board.week_table : board.season_table
@@ -415,17 +465,17 @@ function Board({ board, offline, holiday, song }: { board: TvBoard; offline: boo
     <div className="absolute inset-0 flex flex-col">
       {/* Header */}
       <header
-        className="h-[92px] shrink-0 flex items-center gap-6 px-8 border-b-2 border-field-800 bg-field-900"
+        className="h-[92px] shrink-0 flex items-center gap-6 px-8 border-b-2 border-field-800 bg-field-900/80"
         style={holiday ? { backgroundImage: `linear-gradient(90deg, ${holiday.colors[0]}33, transparent 35%, transparent 65%, ${holiday.colors[1]}33)`, borderBottomColor: `${holiday.colors[0]}88` } : undefined}
       >
-        <div className="min-w-0 w-[520px] flex items-center gap-4">
+        <div className="min-w-0 w-[460px] shrink-0 flex items-center gap-4">
           {board.brand?.logo && <img src={board.brand.logo} alt="" className="h-[68px] w-auto max-w-[140px] object-contain shrink-0" />}
           <div className="min-w-0">
             <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[16px] leading-none">Gridiron United · Pick&apos;Em</p>
             <p className="font-cond font-black uppercase text-white text-[40px] leading-tight truncate">{board.league}</p>
           </div>
         </div>
-        <div className="flex-1 flex items-center justify-center gap-4">
+        <div className="flex-1 min-w-0 overflow-hidden flex items-center [justify-content:safe_center] gap-4">
           <span className="font-cond font-black uppercase text-[40px] text-white tracking-wide whitespace-nowrap">{weekTitle(board.week)}</span>
           {holiday && <HolidayPill theme={holiday} />}
           {anyLive && (
@@ -450,22 +500,40 @@ function Board({ board, offline, holiday, song }: { board: TvBoard; offline: boo
             <Chip><span className="text-amber-300">Picks lock in <Countdown to={board.shame.lockAt} /></span></Chip>
           )}
         </div>
-        <div className="w-[260px] flex items-center justify-end gap-4">
-          {offline && <span className="text-[18px] font-bold text-amber-300">Reconnecting…</span>}
-          <span className="font-cond font-black text-[44px] tabular-nums text-white">{clock}</span>
+        <div className="min-w-[200px] shrink-0 flex items-center justify-end gap-5">
+          {offline && <span className="text-[18px] font-bold text-amber-300 whitespace-nowrap">Reconnecting…</span>}
+          {/* The weather outside the shop (Commish panel → Shop TV) */}
+          {wx && sky && (
+            <div className="flex items-center gap-2.5 pr-5 border-r-2 border-field-700/70" title={board.brand?.location?.name}>
+              <span className="text-[40px] leading-none">{!wx.day && wx.code <= 2 ? '🌙' : sky.icon}</span>
+              <div className="leading-none">
+                <p className="font-cond font-black text-[36px] tabular-nums text-white">{wx.temp}°</p>
+                <p className="mt-1 font-cond font-bold uppercase tracking-wider text-[14px] text-field-400 whitespace-nowrap">{sky.label}</p>
+              </div>
+            </div>
+          )}
+          <div className="text-right leading-none">
+            <p className="font-cond font-black text-[40px] tabular-nums text-white whitespace-nowrap">{clock.time}</p>
+            <p className="mt-1 font-cond font-bold uppercase tracking-wider text-[15px] text-field-400 whitespace-nowrap">{clock.date}</p>
+          </div>
         </div>
       </header>
 
       {/* Body: games + standings (or the full Board) · the rotating panel */}
       <div className="flex-1 min-h-0 flex gap-[18px] p-5">
-        {view === 'board' && board.board
-          ? <PicksBoardView board={board} />
-          : (
-            <>
-              <GamesGrid games={games} injuries={injuries} />
-              <StandingsPanel board={board} rows={table} week={showWeek} />
-            </>
-          )}
+        <div className="relative w-[1468px] shrink-0">
+          <Crossfade
+            k={view === 'board' && board.board ? 'board' : 'games'}
+            render={k => (k === 'board' && board.board
+              ? <PicksBoardView board={board} />
+              : (
+                <>
+                  <GamesGrid games={games} injuries={injuries} />
+                  <StandingsPanel board={board} rows={table} week={showWeek} />
+                </>
+              ))}
+          />
+        </div>
         <FeaturePanel board={board} />
       </div>
 
@@ -523,6 +591,44 @@ function useMainView(hasBoard: boolean): 'games' | 'board' {
   return hasBoard ? view : 'games'
 }
 
+/** How long one view takes to fade into the next. */
+const VIEW_FADE_MS = 800
+const VIEW_CSS = '@keyframes tv-view-in { from { opacity: 0; transform: scale(.985) } to { opacity: 1; transform: none } }'
+  + ' @keyframes tv-view-out { from { opacity: 1; transform: none } to { opacity: 0; transform: scale(1.01) } }'
+
+/**
+ * Crossfades between views: the one leaving stays a moment, fading out,
+ * while the new one fades in on top. Each is a layer filling the parent
+ * (which must be `relative`), keyed so neither remounts mid-fade.
+ */
+function Crossfade({ k, render }: { k: string; render: (k: string) => ReactNode }) {
+  const [shown, setShown] = useState<{ cur: string; prev: string | null }>({ cur: k, prev: null })
+  if (shown.cur !== k) setShown({ cur: k, prev: shown.cur })
+  useEffect(() => {
+    if (!shown.prev) return
+    const t = setTimeout(() => setShown(s => ({ ...s, prev: null })), VIEW_FADE_MS)
+    return () => clearTimeout(t)
+  }, [shown])
+  const layers = shown.prev && shown.prev !== shown.cur ? [shown.prev, shown.cur] : [shown.cur]
+  return (
+    <>
+      <style>{VIEW_CSS}</style>
+      {layers.map(l => {
+        const leaving = l !== shown.cur
+        return (
+          <div
+            key={l}
+            className={clsx('absolute inset-0 flex gap-[18px]', leaving && 'pointer-events-none')}
+            style={shown.prev ? { animation: `${leaving ? 'tv-view-out' : 'tv-view-in'} ${VIEW_FADE_MS}ms ease-in-out both` } : undefined}
+          >
+            {render(l)}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 /** The badge someone shows next to their name, sized for across the room. */
 function TvFlair({ badge, size }: { badge?: string | null; size: number }) {
   const a = ACHIEVEMENTS.find(x => x.key === badge)
@@ -567,6 +673,7 @@ function Countdown({ to }: { to: string }) {
 
 // ── Games ─────────────────────────────────────────────────────
 function GamesGrid({ games, injuries }: { games: TvGame[]; injuries: Map<string, TvInjury[]> }) {
+  const now = useNow(30_000)
   if (games.length === 0) {
     return (
       <div className="w-[1010px] shrink-0 flex items-center justify-center rounded-3xl border-2 border-field-800 text-field-400 text-4xl font-cond font-bold uppercase">
@@ -581,8 +688,73 @@ function GamesGrid({ games, injuries }: { games: TvGame[]; injuries: Map<string,
       className="w-[1010px] shrink-0 grid gap-3"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
     >
-      {games.map(g => <GameTile key={g.id} g={g} big={cols <= 3} injuries={injuries} />)}
+      <style>{TILE_CSS}</style>
+      {games.map(g => <GameTile key={g.id} g={g} big={cols <= 3} injuries={injuries} now={now} />)}
     </div>
+  )
+}
+
+const TILE_CSS = '@keyframes tv-flip { 0% { transform: perspective(300px) rotateX(-90deg); opacity: 0 } 55% { transform: perspective(300px) rotateX(20deg); opacity: 1 } 80% { transform: perspective(300px) rotateX(-8deg) } 100% { transform: none } }'
+  + ' @keyframes tv-burst { 0% { opacity: 0 } 8% { opacity: 1 } 75% { opacity: 1 } 100% { opacity: 0 } }'
+  + ' @keyframes tv-burst-text { 0% { transform: scale(.4); opacity: 0 } 14% { transform: scale(1.12); opacity: 1 } 24% { transform: scale(1) } 100% { transform: scale(1.04) } }'
+  + ' @keyframes tv-live-ring { 0% { transform: scale(1); opacity: .9 } 100% { transform: scale(2); opacity: 0 } }'
+
+/** A kickoff that's this close fills its ring. */
+const RING_MS = 2 * 3_600_000
+/** How long a score's flash stays on its tile. */
+const BURST_MS = 3200
+
+/** A score that flips like a stadium scoreboard when it changes (not when it first shows). */
+function FlipNumber({ value, className }: { value: number | string; className?: string }) {
+  const last = useRef(value)
+  const [flips, setFlips] = useState(0)
+  useEffect(() => {
+    if (last.current === value) return
+    last.current = value
+    setFlips(n => n + 1)
+  }, [value])
+  return (
+    <span key={flips} className={clsx('inline-block', className)} style={flips ? { animation: 'tv-flip .7s cubic-bezier(.2,.8,.2,1) both' } : undefined}>
+      {value}
+    </span>
+  )
+}
+
+/** What a jump in the score most likely was. */
+function scoreLabel(points: number): string {
+  if (points >= 6 && points <= 8) return 'TOUCHDOWN'
+  if (points === 3) return 'FIELD GOAL'
+  if (points === 2) return 'TWO POINTS'
+  if (points === 1) return 'EXTRA POINT'
+  return `+${points}`
+}
+
+/** The ring before kickoff: fills over the last two hours, then pulses red once the game's on. */
+function KickoffRing({ kickoff, now, live }: { kickoff: string; now: number; live: boolean }) {
+  if (live) {
+    return (
+      <span className="relative w-[18px] h-[18px] shrink-0 flex items-center justify-center" aria-hidden>
+        <span className="absolute inset-0 rounded-full border-2 border-red-500" style={{ animation: 'tv-live-ring 1.6s ease-out infinite' }} />
+        <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+      </span>
+    )
+  }
+  const left = new Date(kickoff).getTime() - now
+  if (left > RING_MS) return null
+  const r = 7.5, c = 2 * Math.PI * r
+  const p = Math.min(1, Math.max(0, 1 - left / RING_MS))
+  const close = left < 15 * 60_000
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" className="shrink-0 -rotate-90" aria-hidden>
+      <circle cx="10" cy="10" r={r} fill="none" strokeWidth="3" className="stroke-field-700" />
+      <circle
+        cx="10" cy="10" r={r} fill="none" strokeWidth="3" strokeLinecap="round"
+        stroke={close ? '#f87171' : 'rgb(var(--gold))'}
+        strokeDasharray={c} strokeDashoffset={c * (1 - p)}
+        style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+        className={close ? 'animate-pulse' : undefined}
+      />
+    </svg>
   )
 }
 
@@ -602,11 +774,31 @@ function injuryFlag(list: TvInjury[] | undefined): { text: string; out: boolean 
   return { text: list.some(i => i.pos === 'QB') ? 'QB Q' : 'Q', out: false }
 }
 
-function GameTile({ g, big, injuries }: { g: TvGame; big: boolean; injuries: Map<string, TvInjury[]> }) {
+function GameTile({ g, big, injuries, now }: { g: TvGame; big: boolean; injuries: Map<string, TvInjury[]>; now: number }) {
   const final = g.state === 'final'
   const live = g.state === 'live'
   const pre = g.state === 'pre'
   const started = live || final
+  const untilKickoff = new Date(g.kickoff).getTime() - now
+
+  // A score: the tile flashes the scoring team's color ("TOUCHDOWN")
+  const [burst, setBurst] = useState<{ team: string; label: string; n: number } | null>(null)
+  const lastScore = useRef<{ away: number; home: number } | null>(null)
+  useEffect(() => {
+    const was = lastScore.current
+    const next = { away: g.awayScore ?? 0, home: g.homeScore ?? 0 }
+    lastScore.current = started ? next : null
+    if (!was || !started) return
+    const away = next.away - was.away, home = next.home - was.home
+    if (away <= 0 && home <= 0) return
+    const team = away >= home ? g.away : g.home
+    setBurst(b => ({ team, label: scoreLabel(Math.max(away, home)), n: (b?.n ?? 0) + 1 }))
+  }, [g.awayScore, g.homeScore, started, g.away, g.home])
+  useEffect(() => {
+    if (!burst) return
+    const t = setTimeout(() => setBurst(null), BURST_MS)
+    return () => clearTimeout(t)
+  }, [burst])
   const winner = final && g.awayScore != null && g.homeScore != null && g.awayScore !== g.homeScore
     ? (g.homeScore > g.awayScore ? g.home : g.away) : null
   const fav = g.homeChance == null || final ? null
@@ -633,66 +825,100 @@ function GameTile({ g, big, injuries }: { g: TvGame; big: boolean; injuries: Map
           <span className={clsx('rounded px-1 text-[12px] font-black tracking-wide', hurt.out ? 'bg-red-500/25 text-red-300' : 'bg-amber-500/20 text-amber-300')}>{hurt.text}</span>
         )}
         <span className={clsx('ml-auto font-cond font-black tabular-nums', big ? 'text-[44px]' : 'text-[33px]', started ? 'text-white' : 'text-field-700')}>
-          {started ? (score ?? 0) : '–'}
+          {started ? <FlipNumber value={score ?? 0} /> : '–'}
         </span>
       </div>
     )
   }
 
+  const awayGlow = teamGlow(g.away), homeGlow = teamGlow(g.home)
+  const awayLogo = teamLogoUrl({ abbr: g.away }, 'NFL'), homeLogo = teamLogoUrl({ abbr: g.home }, 'NFL')
+  const burstGlow = burst ? teamGlow(burst.team) : null
+
   return (
-    <div className={clsx(
-      'min-h-0 flex flex-col justify-between rounded-xl border-2 px-3.5 py-2.5',
-      redZone ? 'border-red-500 bg-red-500/[0.08] shadow-[0_0_24px_rgba(239,68,68,0.3)]'
-        : live ? 'border-gold bg-gold/[0.08] shadow-[0_0_24px_rgba(206,123,69,0.25)]'
-        : final ? 'border-field-800 bg-field-900/60'
-        : 'border-field-700 bg-field-900',
-    )}>
-      <div className="flex items-center gap-2 text-[16px] font-bold">
-        {live && <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />}
-        <span className={clsx('truncate', live ? 'text-gold' : final ? 'text-field-400' : 'text-field-300')}>
-          {g.state === 'void' ? 'Postponed' : final ? 'Final' : live ? g.clock : kickoffLabel(g.kickoff)}
-        </span>
-        <span className="ml-auto flex items-center gap-1 shrink-0">
-          {/* Stadium weather, for the games still to come */}
-          {pre && (() => {
-            const wx = weatherLabel(g.weather)
-            if (!wx) return null
-            const alert = wx.alerts[0]
-            return (
-              <span className={clsx('text-[14px] whitespace-nowrap', alert ? 'text-amber-300' : 'text-field-400')} title={[wx.base, ...wx.alerts].join(' · ')}>
-                {wx.icon} {alert ?? wx.base}
-              </span>
-            )
-          })()}
-          {redZone && <span className="rounded bg-red-600 text-white text-[12px] font-black px-1.5 py-0.5 tracking-wider">RED ZONE</span>}
-          {g.tiebreaker && <span className="rounded bg-gold/15 text-gold text-[13px] font-black px-1.5 py-0.5 tracking-wider">TB</span>}
-        </span>
+    <div
+      className={clsx(
+        'relative overflow-hidden min-h-0 rounded-xl border-2',
+        redZone ? 'border-red-500 bg-red-500/[0.08] shadow-[0_0_24px_rgba(239,68,68,0.3)]'
+          : live ? 'border-gold bg-gold/[0.08] shadow-[0_0_24px_rgba(206,123,69,0.25)]'
+          : final ? 'border-field-800 bg-field-900/60'
+          : 'border-field-700 bg-field-900/80',
+      )}
+      style={burstGlow ? { borderColor: burstGlow, boxShadow: `0 0 36px ${burstGlow}99`, transition: 'box-shadow .4s, border-color .4s' } : undefined}
+    >
+      {/* Both teams' colors, and their logos big and faded behind */}
+      <div className={clsx('absolute inset-0 pointer-events-none', final && 'opacity-50')} aria-hidden>
+        <div className="absolute inset-0" style={{ background: `linear-gradient(155deg, ${awayGlow}40 0%, ${awayGlow}10 42%, ${homeGlow}10 58%, ${homeGlow}40 100%)` }} />
+        {awayLogo && <img src={awayLogo} alt="" className="absolute -left-[8%] -top-[30%] h-[95%] w-auto opacity-[0.11]" onError={e => { e.currentTarget.style.display = 'none' }} />}
+        {homeLogo && <img src={homeLogo} alt="" className="absolute -right-[8%] -bottom-[30%] h-[95%] w-auto opacity-[0.11]" onError={e => { e.currentTarget.style.display = 'none' }} />}
       </div>
-      <div className="space-y-0.5">
-        {side(g.away, g.awayScore, g.riders ? a : null)}
-        {side(g.home, g.homeScore, g.riders ? h : null)}
+      <div className="relative h-full flex flex-col justify-between px-3.5 py-2.5">
+        <div className="flex items-center gap-2 text-[16px] font-bold">
+          {(live || (pre && untilKickoff <= RING_MS)) && <KickoffRing kickoff={g.kickoff} now={now} live={live} />}
+          <span className={clsx('truncate', live ? 'text-gold' : final ? 'text-field-400' : pre && untilKickoff <= RING_MS ? 'text-white' : 'text-field-300')}>
+            {g.state === 'void' ? 'Postponed' : final ? 'Final' : live ? g.clock
+              : untilKickoff <= 0 ? 'Kicking off'
+              : untilKickoff <= RING_MS ? `In ${untilLabel(g.kickoff, now)}`
+              : kickoffLabel(g.kickoff)}
+          </span>
+          <span className="ml-auto flex items-center gap-1 shrink-0">
+            {/* Stadium weather, for the games still to come */}
+            {pre && (() => {
+              const wx = weatherLabel(g.weather)
+              if (!wx) return null
+              const alert = wx.alerts[0]
+              return (
+                <span className={clsx('text-[14px] whitespace-nowrap', alert ? 'text-amber-300' : 'text-field-400')} title={[wx.base, ...wx.alerts].join(' · ')}>
+                  {wx.icon} {alert ?? wx.base}
+                </span>
+              )
+            })()}
+            {redZone && <span className="rounded bg-red-600 text-white text-[12px] font-black px-1.5 py-0.5 tracking-wider">RED ZONE</span>}
+            {g.tiebreaker && <span className="rounded bg-gold/15 text-gold text-[13px] font-black px-1.5 py-0.5 tracking-wider">TB</span>}
+          </span>
+        </div>
+        <div className="space-y-0.5">
+          {side(g.away, g.awayScore, g.riders ? a : null)}
+          {side(g.home, g.homeScore, g.riders ? h : null)}
+        </div>
+        {/* How the league split, once it's locked */}
+        {g.riders && a + h > 0 && (
+          <div className="flex h-2 rounded-full overflow-hidden bg-field-800" title="League picks">
+            <span className="bg-field-400" style={{ width: `${(a / (a + h)) * 100}%` }} />
+            <span className="bg-gold" style={{ width: `${(h / (a + h)) * 100}%` }} />
+          </div>
+        )}
+        <div className="flex items-center gap-2 text-[15px] text-field-400">
+          <span className="min-w-0 truncate">
+            {live
+              ? (g.downDistance ? <span className="font-bold text-field-100">{g.downDistance}</span> : null)
+              : fav ? <span className="font-black text-white">{fav.team} {Math.round(fav.pct * 100)}%</span>
+              : final ? (winner ? `${winner} wins` : 'Tie')
+              : ''}
+          </span>
+          <span className="ml-auto shrink-0 whitespace-nowrap">
+            {live && fav && <span className="font-black text-white">{fav.team} {Math.round(fav.pct * 100)}%</span>}
+            {pre && !g.riders ? <>🔒 {g.picked}</> : pre && lineLabel(g) ? lineLabel(g) : null}
+            {pre && g.total != null && <span className="ml-2">O/U {g.total}</span>}
+          </span>
+        </div>
       </div>
-      {/* How the league split, once it's locked */}
-      {g.riders && a + h > 0 && (
-        <div className="flex h-2 rounded-full overflow-hidden bg-field-800" title="League picks">
-          <span className="bg-field-400" style={{ width: `${(a / (a + h)) * 100}%` }} />
-          <span className="bg-gold" style={{ width: `${(h / (a + h)) * 100}%` }} />
+      {/* The score flash */}
+      {burst && burstGlow && (
+        <div
+          key={burst.n}
+          className="absolute inset-0 pointer-events-none flex items-center justify-center gap-3"
+          style={{ background: `radial-gradient(circle at center, ${burstGlow}f0 0%, ${burstGlow}b0 55%, ${burstGlow}60 100%)`, animation: `tv-burst ${BURST_MS}ms ease-out both` }}
+        >
+          <TeamLogo team={burst.team} className={big ? 'w-16 h-16' : 'w-11 h-11'} />
+          <span
+            className={clsx('font-cond font-black italic text-white tracking-wide leading-none drop-shadow-[0_3px_8px_rgba(0,0,0,0.6)]', big ? 'text-[44px]' : 'text-[32px]')}
+            style={{ animation: `tv-burst-text ${BURST_MS}ms cubic-bezier(.2,.8,.2,1) both` }}
+          >
+            {burst.label}
+          </span>
         </div>
       )}
-      <div className="flex items-center gap-2 text-[15px] text-field-400">
-        <span className="min-w-0 truncate">
-          {live
-            ? (g.downDistance ? <span className="font-bold text-field-100">{g.downDistance}</span> : null)
-            : fav ? <span className="font-black text-white">{fav.team} {Math.round(fav.pct * 100)}%</span>
-            : final ? (winner ? `${winner} wins` : 'Tie')
-            : ''}
-        </span>
-        <span className="ml-auto shrink-0 whitespace-nowrap">
-          {live && fav && <span className="font-black text-white">{fav.team} {Math.round(fav.pct * 100)}%</span>}
-          {pre && !g.riders ? <>🔒 {g.picked}</> : pre && lineLabel(g) ? lineLabel(g) : null}
-          {pre && g.total != null && <span className="ml-2">O/U {g.total}</span>}
-        </span>
-      </div>
     </div>
   )
 }
@@ -720,7 +946,7 @@ function PicksBoardView({ board }: { board: TvBoard }) {
   const cols = `270px 76px repeat(${b.games.length}, minmax(0, 1fr))${hasTb ? ' 64px' : ''}`
 
   return (
-    <div className="w-[1468px] shrink-0 flex flex-col rounded-2xl border-2 border-field-800 bg-field-900 overflow-hidden">
+    <div className="w-[1468px] shrink-0 flex flex-col rounded-2xl border-2 border-field-800 bg-field-900/85 overflow-hidden">
       <div className="px-5 py-2.5 border-b-2 border-field-800 flex items-baseline justify-between">
         <p className="font-cond font-black uppercase text-white text-[28px] tracking-wide">The Board</p>
         <p className="font-cond font-bold uppercase tracking-wider text-field-400 text-[15px]">Every pick · 🔒 shows at kickoff</p>
@@ -796,6 +1022,59 @@ function PicksBoardView({ board }: { board: TvBoard }) {
 
 // ── Standings ─────────────────────────────────────────────────
 const TABLE_ROWS = 20
+/** How long a ▲/▼ stays next to someone who just moved. */
+const RANK_MOVE_MS = 10_000
+const STANDINGS_CSS = '@keyframes tv-row-up { from { background-color: rgb(16 185 129 / .35) } to { background-color: transparent } }'
+  + ' @keyframes tv-row-down { from { background-color: rgb(239 68 68 / .3) } to { background-color: transparent } }'
+  + ' @keyframes tv-pop { 0% { transform: scale(0) } 60% { transform: scale(1.3) } 100% { transform: scale(1) } }'
+
+/**
+ * Rows slide from their old spots to their new ones when the order
+ * changes (FLIP). offsetTop, not getBoundingClientRect: the whole TV is
+ * scaled, and the slide is in the unscaled pixels.
+ */
+function useFlipRows(box: RefObject<HTMLElement | null>, order: string, page: number) {
+  const last = useRef<{ page: number; tops: Map<string, number> } | null>(null)
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    const tops = new Map<string, number>()
+    const was = last.current?.page === page ? last.current.tops : null
+    for (const row of el.querySelectorAll<HTMLElement>('[data-flip]')) {
+      const key = row.dataset.flip!
+      tops.set(key, row.offsetTop)
+      const from = was?.get(key)
+      if (from != null && from !== row.offsetTop) {
+        row.animate?.([{ transform: `translateY(${from - row.offsetTop}px)` }, { transform: 'none' }], { duration: 900, easing: 'cubic-bezier(.22,1,.36,1)' })
+      }
+    }
+    last.current = { page, tops }
+  }, [box, order, page])
+}
+
+/** Who just moved in the standings, and by how many places (up is positive), for a few seconds. */
+function useRankMoves(rows: TvRow[], mode: string): Map<string, number> {
+  const last = useRef<{ mode: string; ranks: Map<string, number> } | null>(null)
+  const [moves, setMoves] = useState<Map<string, number>>(() => new Map())
+  const ranks = rows.map(r => `${r.userId}:${r.rank}`).join()
+  useEffect(() => {
+    const was = last.current?.mode === mode ? last.current.ranks : null
+    last.current = { mode, ranks: new Map(rows.map(r => [r.userId, r.rank])) }
+    if (!was) return
+    const m = new Map<string, number>()
+    for (const r of rows) {
+      const before = was.get(r.userId)
+      if (before != null && before !== r.rank) m.set(r.userId, before - r.rank)
+    }
+    if (m.size === 0) return
+    setMoves(m)
+    const t = setTimeout(() => setMoves(new Map()), RANK_MOVE_MS)
+    return () => clearTimeout(t)
+    // `ranks` stands for the rows
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ranks, mode])
+  return moves
+}
 
 function StandingsPanel({ board, rows, week }: { board: TvBoard; rows: TvRow[]; week: boolean }) {
   const pages = Math.max(1, Math.ceil(rows.length / TABLE_ROWS))
@@ -807,9 +1086,13 @@ function StandingsPanel({ board, rows, week }: { board: TvBoard; rows: TvRow[]; 
   }, [pages])
   const shown = rows.slice(page * TABLE_ROWS, (page + 1) * TABLE_ROWS)
   const withChance = week && rows.some(r => r.chance != null)
+  const box = useRef<HTMLDivElement>(null)
+  useFlipRows(box, shown.map(r => r.userId).join(), page)
+  const moves = useRankMoves(rows, week ? `week-${board.week}` : 'season')
 
   return (
-    <div className="w-[440px] shrink-0 flex flex-col rounded-2xl border-2 border-field-800 bg-field-900 overflow-hidden">
+    <div className="w-[440px] shrink-0 flex flex-col rounded-2xl border-2 border-field-800 bg-field-900/85 overflow-hidden">
+      <style>{STANDINGS_CSS}</style>
       {board.complete && board.winners.length > 0 ? (
         <div className="px-5 py-3 bg-gold/15 border-b-2 border-gold/40">
           <p className="font-cond font-bold uppercase tracking-[0.25em] text-gold text-[16px]">{weekTitle(board.week)} champion</p>
@@ -826,16 +1109,30 @@ function StandingsPanel({ board, rows, week }: { board: TvBoard; rows: TvRow[]; 
           )}
         </div>
       )}
-      <div className="flex-1 min-h-0 flex flex-col px-2 py-1.5">
+      <div ref={box} key={page} className="relative flex-1 min-h-0 flex flex-col px-2 py-1.5 rise-in">
         {shown.map(r => {
           const delta = r.chance != null && r.trendFrom != null ? r.chance - r.trendFrom : 0
+          const moved = moves.get(r.userId) ?? 0
           return (
-            <div key={r.userId} className={clsx('flex-1 max-h-[46px] min-h-0 flex items-center gap-2 px-2 rounded-lg', r.winner && 'bg-gold/15')}>
+            <div
+              key={r.userId}
+              data-flip={r.userId}
+              className={clsx('flex-1 max-h-[46px] min-h-0 flex items-center gap-2 px-2 rounded-lg', r.winner && 'bg-gold/15')}
+              style={moved ? { animation: `${moved > 0 ? 'tv-row-up' : 'tv-row-down'} 3s ease-out` } : undefined}
+            >
               <span className="w-7 text-right font-cond font-black text-[21px] text-field-400 tabular-nums">{r.rank}</span>
               {r.avatarUrl
                 ? <img src={r.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
                 : <span className="w-7 h-7 rounded-full bg-field-700 flex items-center justify-center text-[14px] font-black text-gold shrink-0">{r.name[0]?.toUpperCase()}</span>}
               <span className="min-w-0 flex-1 truncate text-[21px] font-bold text-white">{r.name}</span>
+              {moved !== 0 && (
+                <span
+                  className={clsx('shrink-0 rounded-md px-1.5 font-cond font-black text-[16px] tabular-nums', moved > 0 ? 'bg-emerald-500/25 text-emerald-300' : 'bg-red-500/25 text-red-300')}
+                  style={{ animation: 'tv-pop .5s ease-out both' }}
+                >
+                  {moved > 0 ? '▲' : '▼'}{Math.abs(moved)}
+                </span>
+              )}
               <TvFlair badge={r.flair} size={22} />
               {r.belt && <BeltIcon className="w-[24px] h-[15px]" />}
               <span className="font-cond font-black text-[23px] tabular-nums text-white w-[64px] text-right">
@@ -1270,9 +1567,13 @@ function Stat({ label, value, bad = false }: { label: string; value: string; bad
 }
 
 const PANEL_MS = 14_000
+/** A panel fades out for this long before the next one fades in. */
+const PANEL_FADE_MS = 450
+const PANEL_CSS = '@keyframes tv-panel-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-12px) } }'
 
 function FeaturePanel({ board }: { board: TvBoard }) {
   const [i, setI] = useState(0)
+  const [out, setOut] = useState(false)
   // Which panels there are doesn't depend on whose spotlight it is
   const count = useMemo(() => panelsFor(board, 0).length, [board])
   // Each lap through the panels moves on to the next two players
@@ -1281,23 +1582,30 @@ function FeaturePanel({ board }: { board: TvBoard }) {
   const keys = panels.map(p => p.key).join(',')
   useEffect(() => {
     setI(0)
+    setOut(false)
     if (count <= 1) return
-    const t = setInterval(() => setI(x => x + 1), PANEL_MS)
-    return () => clearInterval(t)
+    let swap: ReturnType<typeof setTimeout>
+    const t = setInterval(() => {
+      setOut(true)
+      swap = setTimeout(() => { setI(x => x + 1); setOut(false) }, PANEL_FADE_MS)
+    }, PANEL_MS)
+    return () => { clearInterval(t); clearTimeout(swap) }
     // Restart only when the set of panels changes, not on every refresh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys])
+  const leave: CSSProperties | undefined = out ? { animation: `tv-panel-out ${PANEL_FADE_MS}ms ease-in both` } : undefined
   if (panels.length === 0) return <div className="flex-1 min-w-0" />
   const at = i % panels.length
   const panel = panels[at]
   const next = panels[(at + 1) % panels.length]
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col rounded-2xl border-2 border-field-800 bg-field-900 overflow-hidden">
+    <div className="flex-1 min-w-0 flex flex-col rounded-2xl border-2 border-field-800 bg-field-900/85 overflow-hidden">
+      <style>{PANEL_CSS}</style>
       <div className="px-5 py-3 border-b-2 border-field-800">
-        <p className="font-cond font-black uppercase text-white text-[26px] tracking-wide truncate">{panel.title}</p>
+        <p key={panel.key + i} className="font-cond font-black uppercase text-white text-[26px] tracking-wide truncate rise-in" style={leave}>{panel.title}</p>
       </div>
-      <div key={panel.key + i} className="flex-1 min-h-0 overflow-hidden px-5 py-4 rise-in">
+      <div key={panel.key + i} className="flex-1 min-h-0 overflow-hidden px-5 py-4 rise-in" style={leave}>
         {panel.body}
       </div>
       {panels.length > 1 && (
@@ -1353,7 +1661,7 @@ function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; 
   const text = items.join('     •     ')
   const seconds = Math.max(30, Math.round(text.length * 0.2))
   return (
-    <div className="h-[56px] shrink-0 border-t-2 border-field-800 bg-field-900 overflow-hidden flex items-center">
+    <div className="h-[56px] shrink-0 border-t-2 border-field-800 bg-field-900/90 overflow-hidden flex items-center">
       {strip.shown && <SongStrip song={strip.shown} leaving={strip.leaving} />}
       <style>{'@keyframes tv-ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }'}</style>
       {/* Its own lane, so the scrolling text never runs under the song */}
@@ -2319,11 +2627,21 @@ function useDarkTheme() {
   }, [])
 }
 
-function useClock(): string {
-  const fmt = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+/** The time ("7:42 PM") and the date ("Tue, Oct 6"). */
+function useClock(): { time: string; date: string } {
+  const fmt = () => {
+    const d = new Date()
+    return {
+      time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      date: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+    }
+  }
   const [now, setNow] = useState(fmt)
   useEffect(() => {
-    const t = setInterval(() => setNow(fmt()), 15_000)
+    const t = setInterval(() => setNow(was => {
+      const n = fmt()
+      return n.time === was.time && n.date === was.date ? was : n
+    }), 15_000)
     return () => clearInterval(t)
   }, [])
   return now
