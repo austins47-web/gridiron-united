@@ -245,20 +245,33 @@ export function ShopTV() {
   useDarkTheme()
 
   // Closing time: asleep outside the shop's hours (Commish panel → Shop TV),
-  // unless someone woke it: any remote button, or OK on the TV, for half an
-  // hour. "Back to normal" on the remote puts it straight back to sleep.
+  // or since the remote's Sleep (until the shop next opens, or for good
+  // without hours; it outlasts a reload). Any other remote button, or OK
+  // on the TV, wakes it for half an hour. "Back to normal" goes back to
+  // the shop's hours: asleep if it's after them, awake if not.
   const [wakeUntil, setWakeUntil] = useState(0)
+  const [sleepUntil, setSleepUntil] = useState(() => readSleep(code))
+  useEffect(() => { writeSleep(code, sleepUntil) }, [code, sleepUntil])
   const hours = useMemo(() => parseShopHours(board?.brand?.hours), [board?.brand?.hours])
-  const asleep = useAsleep(hours, wakeUntil)
+  const sleep = useAsleep(hours, wakeUntil, sleepUntil)
+  const asleep = sleep !== null
   const asleepNow = useRef(asleep)
   asleepNow.current = asleep
   useTvRemote(r => {
-    if (r.action === 'clear') setWakeUntil(0)
-    else if (r.action !== 'reload' && r.action !== 'poll_votes') setWakeUntil(Date.now() + WAKE_MS)
+    if (r.action === 'sleep') {
+      setWakeUntil(0)
+      setSleepUntil(hours ? nextShopOpen(hours, new Date())?.getTime() ?? Infinity : Infinity)
+    } else if (r.action === 'clear') {
+      setWakeUntil(0)
+      setSleepUntil(0)
+    } else if (r.action !== 'reload' && r.action !== 'poll_votes') {
+      setSleepUntil(0)
+      setWakeUntil(Date.now() + WAKE_MS)
+    }
   })
   useEffect(() => {
     if (!asleep) return
-    const wake = () => setWakeUntil(Date.now() + WAKE_MS)
+    const wake = () => { setSleepUntil(0); setWakeUntil(Date.now() + WAKE_MS) }
     window.addEventListener('keydown', wake)
     window.addEventListener('click', wake)
     return () => { window.removeEventListener('keydown', wake); window.removeEventListener('click', wake) }
@@ -397,7 +410,7 @@ export function ShopTV() {
         {board && status !== 'gone' && !asleep && <Backdrop lite={lite} edge={lite ? holiday?.colors ?? null : null} />}
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
-          : asleep ? <ClosedScreen board={board} hours={hours} />
+          : sleep ? <ClosedScreen board={board} hours={hours} why={sleep} until={sleepUntil} />
           : <Board board={board} offline={status === 'offline'} holiday={holiday} song={song} />}
         {board && !asleep && reveal && reveal.length > 0 && (
           <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
@@ -405,7 +418,7 @@ export function ShopTV() {
         {board && !asleep && holiday && <HolidayScene theme={holiday} lite={lite} still={still} />}
         {/* Lite: a few falling pieces; still: none */}
         {board && !asleep && holiday && !still && <HolidayParticles theme={holiday} count={lite ? 6 : 14} />}
-        {status !== 'gone' && <LiveFromPhones code={code} status={{ lite, still, speaker, perf, asleep }} />}
+        {status !== 'gone' && <LiveFromPhones code={code} status={{ lite, still, speaker, perf, asleep, sleep }} />}
         {speaker === 'blocked' && <SpeakerBlocked />}
         {board && <RemoteOverlay board={board} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
         {board && !asleep && <ReplayShow board={board} />}
@@ -420,24 +433,51 @@ export function ShopTV() {
 /** How long a remote button, or OK on the TV, wakes it after hours. */
 const WAKE_MS = 30 * 60_000
 
+type SleepReason = 'hours' | 'manual'
+
 /**
- * Whether the TV's asleep: outside the shop's hours, and nobody's woken
- * it. Checked every 30 seconds by the TV's own clock. ?sleep=preview puts
- * it to sleep now (a look at the screen; it wakes like any other time).
+ * Whether the TV's asleep, and why: the remote's Sleep (until
+ * `sleepUntil`), or outside the shop's hours; either way not while
+ * someone's woken it. Checked every 30 seconds by the TV's own clock.
+ * ?sleep=preview puts it to sleep now (a look at the screen; it wakes
+ * like any other time).
  */
-function useAsleep(hours: ShopHours | null, wakeUntil: number): boolean {
+function useAsleep(hours: ShopHours | null, wakeUntil: number, sleepUntil: number): SleepReason | null {
   const [preview] = useState(() => new URLSearchParams(window.location.search).get('sleep') === 'preview')
   const key = hours ? JSON.stringify(hours) : ''
-  const check = () => Date.now() >= wakeUntil && (preview || (!!hours && !isShopOpen(hours, new Date())))
-  const [asleep, setAsleep] = useState(check)
+  const check = (): SleepReason | null => {
+    const now = Date.now()
+    if (now < wakeUntil) return null
+    if (now < sleepUntil) return 'manual'
+    if (preview || (hours && !isShopOpen(hours, new Date(now)))) return 'hours'
+    return null
+  }
+  const [why, setWhy] = useState(check)
   useEffect(() => {
-    setAsleep(check())
-    const t = setInterval(() => setAsleep(check()), 30_000)
+    setWhy(check())
+    const t = setInterval(() => setWhy(check()), 30_000)
     return () => clearInterval(t)
     // `key` stands for the hours
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, wakeUntil])
-  return asleep
+  }, [key, wakeUntil, sleepUntil])
+  return why
+}
+
+/** The remote's Sleep, kept on this TV so a reload doesn't wake it: until when (Infinity: until woken). */
+const sleepKey = (code: string) => `gu-tv-sleep-${code}`
+function readSleep(code: string): number {
+  try {
+    const v = localStorage.getItem(sleepKey(code))
+    if (v === 'forever') return Infinity
+    const n = Number(v)
+    return n > Date.now() ? n : 0
+  } catch { return 0 }
+}
+function writeSleep(code: string, until: number) {
+  try {
+    if (until > Date.now()) localStorage.setItem(sleepKey(code), until === Infinity ? 'forever' : String(until))
+    else localStorage.removeItem(sleepKey(code))
+  } catch { /* no storage: a reload wakes it */ }
 }
 
 /**
@@ -445,10 +485,13 @@ function useAsleep(hours: ShopHours | null, wakeUntil: number): boolean {
  * game on. Nothing animates; the whole block moves a little each minute
  * so nothing burns into the screen.
  */
-function ClosedScreen({ board, hours }: { board: TvBoard; hours: ShopHours | null }) {
+function ClosedScreen({ board, hours, why, until }: { board: TvBoard; hours: ShopHours | null; why: SleepReason; until: number }) {
   const clock = useClock()
   const now = useNow(60_000)
-  const back = hours ? nextShopOpen(hours, new Date(now)) : null
+  // Put to sleep: wakes when the Sleep runs out; closed: back when the shop opens
+  const back = why === 'manual'
+    ? (Number.isFinite(until) ? new Date(until) : null)
+    : hours ? nextShopOpen(hours, new Date(now)) : null
   const spot = Math.floor(now / 60_000)
   const dx = (((spot * 137) % 9) - 4) * 55
   const dy = (((spot * 71) % 7) - 3) * 45
@@ -460,7 +503,9 @@ function ClosedScreen({ board, hours }: { board: TvBoard; hours: ShopHours | nul
         <p className="font-cond font-black text-[190px] leading-none tabular-nums text-white">{clock.time}</p>
         <p className="mt-3 font-cond font-bold uppercase tracking-[0.3em] text-[30px] text-field-400">{clock.date}</p>
         <p className="mt-8 text-[30px] text-field-300">
-          {board.league} is closed{back ? <> · back {backLabel(back, new Date(now))}</> : null}
+          {why === 'manual'
+            ? <>The board is asleep{back ? <> · wakes {backLabel(back, new Date(now))}</> : null}</>
+            : <>{board.league} is closed{back ? <> · back {backLabel(back, new Date(now))}</> : null}</>}
         </p>
         {live.length > 0 && (
           <div className="mt-10 flex flex-wrap justify-center gap-x-16 gap-y-3 max-w-[1500px]">
@@ -2113,10 +2158,10 @@ const CHAT_PREVIEW = [
 ]
 
 /** This TV's presence on its channel, for the commissioner's remote: on lighter effects, and its Spotify speaker. */
-interface TvStatus { lite: boolean; still: boolean; speaker: SpeakerState; perf: TvPerf | null; asleep: boolean }
+interface TvStatus { lite: boolean; still: boolean; speaker: SpeakerState; perf: TvPerf | null; asleep: boolean; sleep: SleepReason | null }
 const tvPresence = (since: string, s: TvStatus) => ({
   on: true, since, fx: s.still ? 'still' : s.lite ? 'lite' : 'full', speaker: s.speaker,
-  fps: s.perf?.fps ?? null, slow: s.perf?.slow ?? null, silk: SILK, asleep: s.asleep,
+  fps: s.perf?.fps ?? null, slow: s.perf?.slow ?? null, silk: SILK, asleep: s.asleep, sleep: s.sleep,
 })
 
 function LiveFromPhones({ code, status }: { code: string; status: TvStatus }) {
@@ -2126,11 +2171,11 @@ function LiveFromPhones({ code, status }: { code: string; status: TvStatus }) {
   // speaker, its frames a second, asleep after hours
   const joined = useRef<{ channel: ReturnType<typeof supabase.channel>; since: string } | null>(null)
   const now = useRef(status)
-  const { lite, still, speaker, perf, asleep } = status
+  const { lite, still, speaker, perf, asleep, sleep } = status
   useEffect(() => {
-    now.current = { lite, still, speaker, perf, asleep }
+    now.current = { lite, still, speaker, perf, asleep, sleep }
     if (joined.current) void joined.current.channel.track(tvPresence(joined.current.since, now.current))
-  }, [lite, still, speaker, perf, asleep])
+  }, [lite, still, speaker, perf, asleep, sleep])
   useEffect(() => {
     let n = 0
     const timers: ReturnType<typeof setTimeout>[] = []

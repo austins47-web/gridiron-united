@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2, Clapperboard, BarChart3, Plus, MessageSquare, ChevronDown } from 'lucide-react'
+import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2, Clapperboard, BarChart3, Plus, MessageSquare, ChevronDown, Moon } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -8,7 +8,7 @@ import { TV_MOMENTS, type TvMoment } from '@/lib/holiday'
 import { useTvReactions } from '@/hooks/useTvReactions'
 import { TvChatBox } from '@/components/tv/TvReactions'
 
-type Action = 'roast' | 'standings' | 'board' | 'replay' | 'chat' | 'announce' | 'moment' | 'clear' | 'reload'
+type Action = 'roast' | 'standings' | 'board' | 'replay' | 'chat' | 'sleep' | 'announce' | 'moment' | 'clear' | 'reload'
 
 /** What the TV's Spotify speaker is doing (its presence), worst news first. */
 const SPEAKER_ORDER = ['blocked', 'unsupported', 'premium', 'auth', 'error', 'connecting', 'ready']
@@ -45,8 +45,8 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
   const [tvsOn, setTvsOn] = useState<number | null>(null)
   const [tvLite, setTvLite] = useState(false)
   const [tvFps, setTvFps] = useState<number | null>(null)
-  // Asleep after the shop's hours (Shop hours, below)
-  const [tvAsleep, setTvAsleep] = useState(false)
+  // Asleep: after the shop's hours (Shop hours, below), or put to sleep here
+  const [tvAsleep, setTvAsleep] = useState<'hours' | 'manual' | null>(null)
   // The TV's Spotify speaker (Music on the TV), the most useful one if there are a few
   const [speaker, setSpeaker] = useState<string | null>(null)
   useEffect(() => {
@@ -59,10 +59,10 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       channel
         .on('presence', { event: 'sync' }, () => {
           // Every TV joins under the key 'tv': count them, not the keys
-          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string; fps?: number | null; asleep?: boolean }[]
+          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string; fps?: number | null; asleep?: boolean; sleep?: 'hours' | 'manual' | null }[]
           setTvsOn(tvs.length)
           setTvLite(tvs.some(t => t.fx === 'lite' || t.fx === 'still'))
-          setTvAsleep(tvs.length > 0 && tvs.every(t => t.asleep))
+          setTvAsleep(tvs.length > 0 && tvs.every(t => t.asleep) ? (tvs.some(t => t.sleep === 'manual') ? 'manual' : 'hours') : null)
           const fps = tvs.map(t => t.fps).filter((n): n is number => typeof n === 'number')
           setTvFps(fps.length ? Math.min(...fps) : null)
           const states = tvs.map(t => t.speaker).filter((s): s is string => !!s && s !== 'off')
@@ -114,7 +114,9 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       </div>
       {!!tvsOn && tvAsleep && (
         <p className="-mt-2 text-[11px] text-field-300">
-          😴 Asleep after shop hours. Any button below wakes it for 30 minutes; Back to normal puts it back to sleep.
+          {tvAsleep === 'manual'
+            ? '😴 Asleep: you put it to sleep. Any button below wakes it for 30 minutes; Back to normal wakes it for good (during shop hours).'
+            : '😴 Asleep after shop hours. Any button below wakes it for 30 minutes; Back to normal puts it back to sleep.'}
         </p>
       )}
       {!!tvsOn && speaker && SPEAKER_NOTES[speaker] && (
@@ -194,6 +196,9 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       </div>
 
       <div className="flex gap-2">
+        <button onClick={() => press('sleep', {}, 'The TV is asleep')} disabled={!!busy} className="btn-ghost flex-1 justify-center !py-1.5 !text-xs">
+          {busy === 'sleep' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Moon className="w-3.5 h-3.5" />} Sleep
+        </button>
         <button onClick={() => press('clear', {}, 'The TV is back to normal')} disabled={!!busy} className="btn-ghost flex-1 justify-center !py-1.5 !text-xs">
           <X className="w-3.5 h-3.5" /> Back to normal
         </button>
