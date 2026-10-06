@@ -250,7 +250,10 @@ export function ShopTV() {
       if (alive) timer = setTimeout(load, next)
     }
     load()
-    return () => { alive = false; clearTimeout(timer) }
+    // A message was deleted: reload now rather than at the next poll
+    const refresh = () => { clearTimeout(timer); load() }
+    window.addEventListener(TV_REFRESH, refresh)
+    return () => { alive = false; clearTimeout(timer); window.removeEventListener(TV_REFRESH, refresh) }
   }, [code])
 
   // Pick up new versions of the app now and then
@@ -430,6 +433,9 @@ function Board({ board, offline, holiday }: { board: TvBoard; offline: boolean; 
     </div>
   )
 }
+
+/** Asks the board to reload now (a chat message was deleted). */
+const TV_REFRESH = 'gu-tv-refresh'
 
 const GAMES_MS = 50_000
 const BOARD_MS = 25_000
@@ -1450,10 +1456,12 @@ function RevealShow({ board, games, onDone }: { board: TvBoard; games: TvGame[];
 // One channel, tv:<code>, carries both. A member taps an emoji in the
 // app (send_tv_reaction) and it floats up the screen with their name
 // under it. Every league chat message (league_messages_to_tv) pops up
-// in the bottom-left corner for a few seconds.
+// in the bottom-left corner for a few seconds; one that's unsent or
+// deleted (league_messages_unsend_tv) comes straight off, and the board
+// reloads so the trash talk panel and the roast drop it too.
 // ?preview=chat shows three sample messages, to see how they look.
 interface Floater { id: number; emoji: string; name: string; x: number; drift: number; size: number; dur: number }
-interface ChatPop { id: number; name: string; avatar: string | null; text: string; gif: string | null; thread: string | null; dur: number }
+interface ChatPop { id: number; msgId: string | null; name: string; avatar: string | null; text: string; gif: string | null; thread: string | null; dur: number }
 
 const CHAT_PREVIEW = [
   { name: 'Preview', text: 'Bears ain\'t ready. Book it.' },
@@ -1467,13 +1475,14 @@ function LiveFromPhones({ code }: { code: string }) {
   useEffect(() => {
     let n = 0
     const timers: ReturnType<typeof setTimeout>[] = []
-    const onChat = (p: { name?: string; avatar?: string | null; text?: string; gif?: string | null; thread?: string | null }) => {
+    const onChat = (p: { id?: string; name?: string; avatar?: string | null; text?: string; gif?: string | null; thread?: string | null }) => {
       const text = String(p.text ?? '').slice(0, 240)
       const gif = typeof p.gif === 'string' && /^https:\/\//.test(p.gif) ? p.gif : null
       if (!text && !gif) return
       // Long enough to read: 8s, plus a bit per character, up to 16s
       const c: ChatPop = {
         id: ++n,
+        msgId: typeof p.id === 'string' ? p.id : null,
         name: String(p.name ?? 'Someone').slice(0, 30),
         avatar: typeof p.avatar === 'string' ? p.avatar : null,
         text,
@@ -1504,6 +1513,12 @@ function LiveFromPhones({ code }: { code: string }) {
         timers.push(setTimeout(() => setFloaters(list => list.filter(x => x.id !== f.id)), f.dur + 200))
       })
       .on('broadcast', { event: 'chat' }, ({ payload }) => onChat(payload ?? {}))
+      .on('broadcast', { event: 'chat_delete' }, ({ payload }) => {
+        const id = (payload as { id?: string })?.id
+        if (!id) return
+        setChats(list => list.filter(c => c.msgId !== id))
+        window.dispatchEvent(new Event(TV_REFRESH))
+      })
       .subscribe()
     if (new URLSearchParams(window.location.search).get('preview') === 'chat') {
       CHAT_PREVIEW.forEach((p, i) => timers.push(setTimeout(() => onChat(p), 1500 + i * 2500)))

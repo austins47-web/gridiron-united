@@ -10,7 +10,7 @@ import { openPlayerCard } from '@/hooks/usePlayerCard'
 import { useLeaguePolls } from '@/hooks/useLeaguePolls'
 import { useGameThreads, useThreadGame, useThreadPicks } from '@/hooks/useGameThreads'
 import {
-  Send, MessageSquare, Image as ImageIcon, Search, Loader2, ArrowLeftRight,
+  Send, MessageSquare, Image as ImageIcon, Search, Loader2, ArrowLeftRight, Undo2,
   CornerUpLeft, Pencil, Trash2, Copy, SmilePlus, X, BarChart3, Pin,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -255,7 +255,7 @@ function SeenBy({ readers }: { readers: Member[] }) {
  * Opens under a tapped message: react, reply, copy — and edit/delete
  * your own. The commissioner can pin any text message.
  */
-function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit, onDelete, onClose, onPin }: {
+function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit, onDelete, onClose, onPin, canModerate = false }: {
   msg: ChatMessage
   isOwn: boolean
   align: Align
@@ -267,8 +267,13 @@ function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit,
   onClose: () => void
   /** The commissioner pinning it for the league. */
   onPin?: () => void
+  /** The commissioner: can delete anyone's message, the Commish's posts too. */
+  canModerate?: boolean
 }) {
   const [confirming, setConfirming] = useState(false)
+  // Your own: unsend. Someone else's, as commissioner: delete.
+  const canDelete = !msg.deleted_at && ((isOwn && !msg.is_system) || canModerate)
+  const deleteWord = isOwn ? 'Unsend' : 'Delete'
   const isText = !msg.is_system && !msg.message.startsWith('IMAGE:') && !msg.message.startsWith('GIF:')
     && !msg.message.startsWith(POLL_PREFIX)
 
@@ -289,8 +294,8 @@ function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit,
       <div className="chat-menu rise-in rounded-2xl border border-field-600 bg-field-800 shadow-xl shadow-black/40 p-1.5 max-w-full">
         {confirming ? (
           <div className="flex items-center gap-1 px-1.5 py-1">
-            <span className="text-xs text-field-200 mr-1">Delete this message for everyone?</span>
-            <button onClick={onDelete} className="text-xs font-bold text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10">Delete</button>
+            <span className="text-xs text-field-200 mr-1">{isOwn ? 'Unsend this? It disappears for everyone, and off the TV.' : 'Delete this message for everyone?'}</span>
+            <button onClick={onDelete} className="text-xs font-bold text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10">{deleteWord}</button>
             <button onClick={() => setConfirming(false)} className="text-xs text-field-400 hover:text-white px-2 py-1">Cancel</button>
           </div>
         ) : (
@@ -315,8 +320,8 @@ function MessageMenu({ msg, isOwn, align, myReactions, onReact, onReply, onEdit,
               {isText && <MenuButton icon={<Copy className="w-3.5 h-3.5" />} label="Copy" onClick={copy} />}
               {isOwn && isText && <MenuButton icon={<Pencil className="w-3.5 h-3.5" />} label="Edit" onClick={onEdit} />}
               {onPin && isText && !msg.deleted_at && <MenuButton icon={<Pin className="w-3.5 h-3.5" />} label="Pin" onClick={onPin} />}
-              {isOwn && !msg.is_system && (
-                <MenuButton icon={<Trash2 className="w-3.5 h-3.5" />} label="Delete" danger onClick={() => setConfirming(true)} />
+              {canDelete && (
+                <MenuButton icon={isOwn ? <Undo2 className="w-3.5 h-3.5" /> : <Trash2 className="w-3.5 h-3.5" />} label={deleteWord} danger onClick={() => setConfirming(true)} />
               )}
               <button onClick={onClose} aria-label="Close" className="ml-auto p-1.5 text-field-500 hover:text-white">
                 <X className="w-3.5 h-3.5" />
@@ -1507,6 +1512,7 @@ export function LeagueChat() {
                   onDelete={() => deleteMessage(msg)}
                   onClose={closeMenu}
                   onPin={isCommissioner ? () => pinMessage(msg) : undefined}
+                  canModerate={isCommissioner}
                 />
               )}
             </div>

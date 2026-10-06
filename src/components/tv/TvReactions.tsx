@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Tv, Send } from 'lucide-react'
+import { Tv, Send, Undo2 } from 'lucide-react'
 import clsx from 'clsx'
 import { TV_REACTIONS, TV_MESSAGE_MAX, useTvReactions } from '@/hooks/useTvReactions'
 
@@ -7,7 +7,9 @@ import { TV_REACTIONS, TV_MESSAGE_MAX, useTvReactions } from '@/hooks/useTvReact
 function ReactionGrid({ send }: { send: (emoji: string) => void }) {
   const [pop, setPop] = useState<string | null>(null)
   return (
-    <div className="grid grid-cols-5 gap-1">
+    // Fixed columns: with fractional ones the grid could shrink below the
+    // emojis and spill them out of the box on a phone
+    <div className="grid grid-cols-[repeat(5,2.75rem)] gap-1 justify-center">
       {TV_REACTIONS.map(e => (
         <button
           key={e}
@@ -25,16 +27,31 @@ function ReactionGrid({ send }: { send: (emoji: string) => void }) {
   )
 }
 
-/** A message for the TV: posted to the league chat, which the TV pops up live. */
-function TvMessageBox({ say }: { say: (text: string) => Promise<boolean> }) {
+/**
+ * A message for the TV: posted to the league chat, which the TV pops up
+ * live. What you send from here is listed under it with Unsend, which
+ * deletes it from the chat and takes it off the TV.
+ */
+function TvMessageBox({ say, unsend }: {
+  say: (text: string) => Promise<string | null>
+  unsend: (id: string) => Promise<boolean>
+}) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState<{ id: string; text: string; gone?: boolean }[]>([])
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (!text.trim() || sending) return
     setSending(true)
-    if (await say(text)) setText('')
+    const id = await say(text)
+    if (id) {
+      setSent(list => [{ id, text: text.trim() }, ...list].slice(0, 3))
+      setText('')
+    }
     setSending(false)
+  }
+  const takeBack = async (id: string) => {
+    if (await unsend(id)) setSent(list => list.map(m => (m.id === id ? { ...m, gone: true } : m)))
   }
   return (
     <form onSubmit={submit} className="mt-2 pt-2 border-t border-field-700">
@@ -56,7 +73,24 @@ function TvMessageBox({ say }: { say: (text: string) => Promise<boolean> }) {
           <Send className="w-4 h-4" />
         </button>
       </div>
-      <p className="px-0.5 pt-1 text-[10px] text-field-500">Pops up on the TV, and goes in the league chat.</p>
+      {sent.length > 0 ? (
+        <ul className="mt-1.5 space-y-1">
+          {sent.map(m => (
+            <li key={m.id} className="flex items-center gap-2 text-xs">
+              <span className={clsx('flex-1 min-w-0 truncate', m.gone ? 'text-field-600 line-through' : 'text-field-300')}>{m.text}</span>
+              {m.gone
+                ? <span className="shrink-0 text-field-500">Unsent</span>
+                : (
+                  <button type="button" onClick={() => takeBack(m.id)} className="shrink-0 flex items-center gap-1 font-bold text-field-400 hover:text-red-400">
+                    <Undo2 className="w-3 h-3" /> Unsend
+                  </button>
+                )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="px-0.5 pt-1 text-[11px] leading-snug text-field-500">Pops up on the TV, and goes in the league chat.</p>
+      )}
     </form>
   )
 }
@@ -67,7 +101,7 @@ function TvMessageBox({ say }: { say: (text: string) => Promise<boolean> }) {
  * Pick'Em.
  */
 export function TvReactionButton({ variant = 'chat' }: { variant?: 'chat' | 'header' }) {
-  const { enabled, send, say } = useTvReactions()
+  const { enabled, send, say, unsend } = useTvReactions()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -91,10 +125,12 @@ export function TvReactionButton({ variant = 'chat' }: { variant?: 'chat' | 'hea
         <Tv className="w-4 h-4" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 z-30 rise-in rounded-2xl border border-field-600 bg-field-800 shadow-2xl shadow-black/50 p-2">
-          <p className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-field-400 whitespace-nowrap">On the Shop TV</p>
+        // A set width: sized to its contents, the box shrank to its title
+        // next to a small button and squeezed the emojis out
+        <div className="absolute right-0 top-full mt-2 z-30 w-64 max-w-[calc(100vw-2rem)] rise-in rounded-2xl border border-field-600 bg-field-800 shadow-2xl shadow-black/50 p-2">
+          <p className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-field-400">On the Shop TV</p>
           <ReactionGrid send={send} />
-          <TvMessageBox say={say} />
+          <TvMessageBox say={say} unsend={unsend} />
         </div>
       )}
     </div>

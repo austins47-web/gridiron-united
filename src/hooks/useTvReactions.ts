@@ -36,14 +36,25 @@ export function useTvReactions() {
     if (error) toast.error(error.message)
   }
 
-  /** Posts to the league chat; true once it's sent. */
-  const say = async (text: string): Promise<boolean> => {
+  /** Posts to the league chat; the new message's id once it's sent. */
+  const say = async (text: string): Promise<string | null> => {
     const message = text.trim().slice(0, TV_MESSAGE_MAX)
-    if (!leagueId || !user || !message) return false
-    const { error } = await supabase.from('league_messages').insert({ league_id: leagueId, user_id: user.id, message })
-    if (error) { toast.error(`Couldn't send: ${error.message}`); return false }
+    if (!leagueId || !user || !message) return null
+    const { data, error } = await supabase
+      .from('league_messages')
+      .insert({ league_id: leagueId, user_id: user.id, message })
+      .select('id')
+      .single()
+    if (error) { toast.error(`Couldn't send: ${error.message}`); return null }
+    return data.id
+  }
+
+  /** Deletes a message you sent: out of the chat, and off the TV. */
+  const unsend = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from('league_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+    if (error) { toast.error(`Couldn't unsend: ${error.message}`); return false }
     return true
   }
 
-  return { enabled: !!leagueId && hasTv, send, say }
+  return { enabled: !!leagueId && hasTv, send, say, unsend }
 }
