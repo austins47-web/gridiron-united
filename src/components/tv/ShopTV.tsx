@@ -85,7 +85,7 @@ interface TvName { name: string; chance: number }
 interface TvBoard {
   league: string
   /** The league's logo, and the TV's own accent color (Commish panel → Shop TV). */
-  brand?: { logo: string | null; color?: string | null }
+  brand?: { logo: string | null; color?: string | null; theme?: string | null }
   week: number
   now: string
   started: boolean
@@ -290,7 +290,7 @@ export function ShopTV() {
   }, [board, params])
 
   // Thanksgiving, Christmas, the playoffs, Super Bowl week
-  const holiday = useHolidayTheme(board?.week ?? null)
+  const holiday = useHolidayTheme(board?.week ?? null, board?.brand?.theme)
 
   const goFull = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {})
@@ -318,7 +318,7 @@ export function ShopTV() {
           <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
         )}
         {board && holiday && <HolidayParticles theme={holiday} />}
-        {status !== 'gone' && <FloatingReactions code={code} />}
+        {status !== 'gone' && <LiveFromPhones code={code} />}
       </div>
     </div>
   )
@@ -1290,7 +1290,8 @@ function Ticker({ board }: { board: TvBoard }) {
 // Otherwise the Commish's latest roast, and the champion once the
 // week's final.
 const TAKEOVER_EVERY = 5 * 60_000
-const TAKEOVER_FOR = 40_000
+// The roast's turn on screen: long enough to catch, not to read all of it
+const TAKEOVER_FOR = 20_000
 
 function Takeover({ board }: { board: TvBoard }) {
   const now = useNow(60_000)
@@ -1445,16 +1446,45 @@ function RevealShow({ board, games, onDone }: { board: TvBoard; games: TvGame[];
   )
 }
 
-// ── Reactions from phones ─────────────────────────────────────
-// Members tap an emoji in the app (send_tv_reaction); it's broadcast to
-// tv:<code> and floats up the screen with their name under it.
+// ── Live from phones: reactions and chat ──────────────────────
+// One channel, tv:<code>, carries both. A member taps an emoji in the
+// app (send_tv_reaction) and it floats up the screen with their name
+// under it. Every league chat message (league_messages_to_tv) pops up
+// in the bottom-left corner for a few seconds.
+// ?preview=chat shows three sample messages, to see how they look.
 interface Floater { id: number; emoji: string; name: string; x: number; drift: number; size: number; dur: number }
+interface ChatPop { id: number; name: string; avatar: string | null; text: string; gif: string | null; thread: string | null; dur: number }
 
-function FloatingReactions({ code }: { code: string }) {
-  const [items, setItems] = useState<Floater[]>([])
+const CHAT_PREVIEW = [
+  { name: 'Preview', text: 'Bears ain\'t ready. Book it.' },
+  { name: 'Preview', text: 'Whoever took the Jets this week, explain yourself', thread: 'NYJ @ BUF' },
+  { name: 'Preview', text: '🔥🔥🔥 called it' },
+]
+
+function LiveFromPhones({ code }: { code: string }) {
+  const [floaters, setFloaters] = useState<Floater[]>([])
+  const [chats, setChats] = useState<ChatPop[]>([])
   useEffect(() => {
     let n = 0
     const timers: ReturnType<typeof setTimeout>[] = []
+    const onChat = (p: { name?: string; avatar?: string | null; text?: string; gif?: string | null; thread?: string | null }) => {
+      const text = String(p.text ?? '').slice(0, 240)
+      const gif = typeof p.gif === 'string' && /^https:\/\//.test(p.gif) ? p.gif : null
+      if (!text && !gif) return
+      // Long enough to read: 8s, plus a bit per character, up to 16s
+      const c: ChatPop = {
+        id: ++n,
+        name: String(p.name ?? 'Someone').slice(0, 30),
+        avatar: typeof p.avatar === 'string' ? p.avatar : null,
+        text,
+        gif,
+        thread: p.thread ? String(p.thread).slice(0, 20) : null,
+        dur: Math.min(16_000, (gif ? 10_000 : 8_000) + text.length * 40),
+      }
+      // Four on screen at most: a burst drops the oldest
+      setChats(list => [...list.slice(-3), c])
+      timers.push(setTimeout(() => setChats(list => list.filter(x => x.id !== c.id)), c.dur))
+    }
     const channel = supabase
       .channel(`tv:${code}`)
       .on('broadcast', { event: 'reaction' }, ({ payload }) => {
@@ -1470,13 +1500,54 @@ function FloatingReactions({ code }: { code: string }) {
           dur: 4200 + Math.random() * 1800,
         }
         // Keep it to a screenful: a flood drops the oldest
-        setItems(list => [...list.slice(-60), f])
-        timers.push(setTimeout(() => setItems(list => list.filter(x => x.id !== f.id)), f.dur + 200))
+        setFloaters(list => [...list.slice(-60), f])
+        timers.push(setTimeout(() => setFloaters(list => list.filter(x => x.id !== f.id)), f.dur + 200))
       })
+      .on('broadcast', { event: 'chat' }, ({ payload }) => onChat(payload ?? {}))
       .subscribe()
+    if (new URLSearchParams(window.location.search).get('preview') === 'chat') {
+      CHAT_PREVIEW.forEach((p, i) => timers.push(setTimeout(() => onChat(p), 1500 + i * 2500)))
+    }
     return () => { timers.forEach(clearTimeout); supabase.removeChannel(channel) }
   }, [code])
 
+  return (
+    <>
+      <FloatingReactions items={floaters} />
+      <ChatPopups items={chats} />
+    </>
+  )
+}
+
+function ChatPopups({ items }: { items: ChatPop[] }) {
+  if (items.length === 0) return null
+  return (
+    <div className="absolute left-8 bottom-[76px] z-30 pointer-events-none flex flex-col items-start gap-3 max-w-[760px]">
+      <style>{'@keyframes tv-chat { 0% { transform: translateX(-80px); opacity: 0 } 5% { transform: translateX(0); opacity: 1 } 92% { transform: translateX(0); opacity: 1 } 100% { transform: translateX(-30px); opacity: 0 } }'}</style>
+      {items.map(c => (
+        <div
+          key={c.id}
+          className="flex items-start gap-4 rounded-2xl border-2 border-gold/50 bg-field-900/95 px-5 py-3.5 shadow-2xl shadow-black/60"
+          style={{ animation: `tv-chat ${c.dur}ms ease-out forwards` }}
+        >
+          {c.avatar
+            ? <img src={c.avatar} alt="" className="w-14 h-14 rounded-full object-cover shrink-0" />
+            : <span className="w-14 h-14 rounded-full bg-field-700 flex items-center justify-center text-[26px] font-black text-gold shrink-0">{c.name[0]?.toUpperCase()}</span>}
+          <div className="min-w-0">
+            <p className="flex items-center gap-3 leading-none mb-1.5">
+              <span className="font-cond font-black text-[24px] text-gold">{c.name}</span>
+              {c.thread && <span className="rounded-full bg-field-800 border border-field-600 px-2.5 py-0.5 text-[16px] font-bold text-field-300">{c.thread}</span>}
+            </p>
+            {c.text && <p className="text-[28px] leading-snug text-white break-words line-clamp-3">{c.text}</p>}
+            {c.gif && <img src={c.gif} alt="GIF" className="mt-1 max-h-[220px] max-w-[420px] rounded-xl" />}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function FloatingReactions({ items }: { items: Floater[] }) {
   return (
     <div className="absolute inset-0 z-40 pointer-events-none overflow-hidden">
       <style>{'@keyframes tv-float { 0% { transform: translate(0, 0) scale(.5); opacity: 0 } 10% { transform: translate(calc(var(--dx) * .1), -90px) scale(1); opacity: 1 } 75% { opacity: 1 } 100% { transform: translate(var(--dx), -960px) scale(1.12); opacity: 0 } }'}</style>

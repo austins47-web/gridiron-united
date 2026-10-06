@@ -5,9 +5,10 @@
 // of July. Most come from the date; the kickoff, the playoffs and the
 // Super Bowl from the Pick'Em week.
 //
-// Preview one with ?theme=<key> on any page (the keys below;
-// ?theme=off hides it). The choice sticks for that browser tab until
-// changed.
+// A commissioner can also pick one for their league (leagues.tv_theme,
+// Commish panel → Shop TV): keep a theme on, or turn them off. Preview
+// one with ?theme=<key> on any page (the keys below; ?theme=off hides
+// it); the preview sticks for that browser tab until changed.
 // ══════════════════════════════════════════════════════════════
 
 import { useEffect, useMemo, useState } from 'react'
@@ -103,17 +104,27 @@ function previewChoice(): HolidayKey | 'off' | null {
   }
 }
 
-/** The holiday theme in effect, rechecked every half hour (the TV stays up for days). */
-export function useHolidayTheme(week: number | null | undefined): HolidayTheme | null {
+/** Every theme, for the commissioner's picker. */
+export const HOLIDAY_CHOICES: { key: HolidayKey; label: string; emoji: string }[] =
+  KEYS.map(key => { const t = themeOf(key, null); return { key, label: t.label, emoji: t.emoji } })
+
+const isChoice = (v: unknown): v is HolidayKey | 'off' => v === 'off' || KEYS.includes(v as HolidayKey)
+
+/**
+ * The holiday theme in effect, rechecked every half hour (the TV stays
+ * up for days): a ?theme= preview, else the league's setting (`chosen`,
+ * leagues.tv_theme), else the calendar.
+ */
+export function useHolidayTheme(week: number | null | undefined, chosen?: string | null): HolidayTheme | null {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30 * 60_000)
     return () => clearInterval(t)
   }, [])
   return useMemo(() => {
-    const preview = previewChoice()
-    if (preview === 'off') return null
-    const key = preview ?? holidayFor(now, week ?? null)
+    const pick = previewChoice() ?? (isChoice(chosen) ? chosen : null)
+    if (pick === 'off') return null
+    const key = pick ?? holidayFor(now, week ?? null)
     return key ? themeOf(key, week ?? null) : null
-  }, [now, week])
+  }, [now, week, chosen])
 }

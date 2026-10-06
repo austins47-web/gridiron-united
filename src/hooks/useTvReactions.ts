@@ -2,17 +2,20 @@ import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
-import { useGameThreads } from './useGameThreads'
 
 /** What phones can throw on the Shop TV (send_tv_reaction checks the same list). */
 export const TV_REACTIONS = ['🔥', '😂', '💀', '🏈', '🎉', '😱', '👏', '🤡', '😤', '💩']
 
+/** The longest message the TV shows in full (league_messages_to_tv cuts there). */
+export const TV_MESSAGE_MAX = 240
+
 /**
- * Reacting on the Shop TV from a phone: offered in a Pick'Em league that
- * has a TV set up, while one of this week's games is being played.
+ * Reacting on the Shop TV from a phone, any time: offered in a Pick'Em
+ * league that has a TV set up. Messages go to the league chat, which
+ * the TV pops up live (league_messages_to_tv).
  */
 export function useTvReactions() {
-  const { activeLeague } = useAppStore()
+  const { activeLeague, user } = useAppStore()
   const leagueId = activeLeague?.league_type === 'pickem' ? activeLeague.id : null
 
   const { data: hasTv = false } = useQuery({
@@ -25,8 +28,6 @@ export function useTvReactions() {
       return !!data
     },
   })
-  const { games } = useGameThreads(leagueId, hasTv)
-  const live = games.some(g => g.status === 'in_progress')
 
   const send = async (emoji: string) => {
     if (!leagueId) return
@@ -35,5 +36,14 @@ export function useTvReactions() {
     if (error) toast.error(error.message)
   }
 
-  return { enabled: !!leagueId && hasTv && live, send }
+  /** Posts to the league chat; true once it's sent. */
+  const say = async (text: string): Promise<boolean> => {
+    const message = text.trim().slice(0, TV_MESSAGE_MAX)
+    if (!leagueId || !user || !message) return false
+    const { error } = await supabase.from('league_messages').insert({ league_id: leagueId, user_id: user.id, message })
+    if (error) { toast.error(`Couldn't send: ${error.message}`); return false }
+    return true
+  }
+
+  return { enabled: !!leagueId && hasTv, send, say }
 }

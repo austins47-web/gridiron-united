@@ -7,6 +7,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/appStore'
 import { DEFAULT_GOLD } from '@/lib/brand'
 import { ColorPicker } from '@/components/settings/ColorPicker'
+import { HOLIDAY_CHOICES } from '@/lib/holiday'
+import clsx from 'clsx'
 
 /**
  * Shop TV: the league's live board on a TV, at /tv/<code>. The code is
@@ -35,7 +37,23 @@ export function ShopTvSetting({ leagueId }: { leagueId: string }) {
     if (error) { toast.error(`Couldn't save the TV color: ${error.message}`); return }
     if (activeLeague?.id === leagueId) setActiveLeague({ ...activeLeague, brand_color: value }, myMembership)
     qc.invalidateQueries({ queryKey: ['my-leagues'] })
-    toast.success('TV color saved. The TV picks it up within a minute.')
+    toast.success('TV color saved. The TV picks it up within a few minutes.')
+  }
+
+  // The holiday theme: null follows the calendar, 'off' never shows one,
+  // a theme's key keeps it on (leagues.tv_theme)
+  const tvTheme = activeLeague?.id === leagueId ? activeLeague.tv_theme ?? null : null
+  const [savingTheme, setSavingTheme] = useState(false)
+  async function pickTheme(value: string | null) {
+    if (value === tvTheme) return
+    setSavingTheme(true)
+    const { error } = await supabase.from('leagues').update({ tv_theme: value }).eq('id', leagueId)
+    setSavingTheme(false)
+    if (error) { toast.error(`Couldn't save the theme: ${error.message}`); return }
+    if (activeLeague?.id === leagueId) setActiveLeague({ ...activeLeague, tv_theme: value }, myMembership)
+    qc.invalidateQueries({ queryKey: ['my-leagues'] })
+    const label = value === null ? 'Themes follow the calendar' : value === 'off' ? 'Holiday themes off' : `${HOLIDAY_CHOICES.find(c => c.key === value)?.label} is on`
+    toast.success(`${label}. The TV picks it up within a few minutes.`)
   }
 
   const origin = window.location.origin
@@ -121,7 +139,7 @@ export function ShopTvSetting({ leagueId }: { leagueId: string }) {
               <li><span className="font-bold text-white">Smart TV or Fire TV Stick:</span> open the TV&apos;s web browser (Fire TV: the Silk browser), go to <span className="text-gold">{host}/tv</span> and type the code. It remembers it after that.</li>
               <li><span className="font-bold text-white">Chromecast or Google TV:</span> open the link in Chrome on a computer, then Chrome&apos;s menu → Cast → the TV.</li>
               <li><span className="font-bold text-white">Any TV with HDMI:</span> plug in a laptop or mini PC, open the link in a browser, and click the board once to go full screen.</li>
-              <li>Turn off the TV&apos;s sleep timer or screensaver, and leave it on the board. It refreshes itself every 15 seconds during games.</li>
+              <li>Turn off the TV&apos;s sleep timer or screensaver, and leave it on the board. It refreshes itself every 30 seconds during games.</li>
             </ol>
           )}
         </div>
@@ -135,6 +153,38 @@ export function ShopTvSetting({ leagueId }: { leagueId: string }) {
         </div>
         <p className="text-field-400 text-xs mb-3">The accent on the Shop TV only. It doesn't change anyone's own color in the app.</p>
         <ColorPicker value={tvColor} onPick={pickTvColor} disabled={savingColor} idPrefix="tv-color" />
+      </div>
+
+      {/* The holiday theme */}
+      <div className="pt-3 border-t border-field-700">
+        <div className="flex items-baseline justify-between gap-2 mb-1">
+          <span className="font-cond font-bold text-sm uppercase tracking-wider text-white">Holiday theme</span>
+          {savingTheme && <Loader2 className="w-3.5 h-3.5 animate-spin text-field-400" />}
+        </div>
+        <p className="text-field-400 text-xs mb-3">
+          Automatic puts one up for each holiday on its own. Pick a theme to keep it on as long as you like (a whole month of
+          Halloween), or turn them off. Shows on the TV and the league&apos;s banner in the app.
+        </p>
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Holiday theme">
+          {[{ key: null as string | null, label: 'Automatic', emoji: '📅' }, { key: 'off', label: 'Off', emoji: '🚫' }, ...HOLIDAY_CHOICES].map(c => {
+            const on = tvTheme === c.key
+            return (
+              <button
+                key={c.key ?? 'auto'}
+                role="radio"
+                aria-checked={on}
+                disabled={savingTheme}
+                onClick={() => pickTheme(c.key)}
+                className={clsx(
+                  'flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors disabled:opacity-50',
+                  on ? 'bg-gold text-field-950 border-gold' : 'bg-field-800 border-field-700 text-field-300 hover:border-gold/50 hover:text-gold',
+                )}
+              >
+                <span aria-hidden>{c.emoji}</span> {c.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

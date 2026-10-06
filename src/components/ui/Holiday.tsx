@@ -2,13 +2,15 @@ import { useMemo, type CSSProperties } from 'react'
 import clsx from 'clsx'
 import { useHolidayTheme, type HolidayTheme } from '@/lib/holiday'
 import { usePickemCalendar } from '@/hooks/usePickemCalendar'
+import { useAppStore } from '@/store/appStore'
 
 const themeVars = (t: HolidayTheme) => ({ '--h1': t.colors[0], '--h2': t.colors[1] }) as CSSProperties
 
-/** The app's holiday banner (Home, Pick'Em) while a theme is on. */
+/** The app's holiday banner (Home, Pick'Em) while a theme is on: the league's choice, else the calendar. */
 export function HolidayRibbon({ className }: { className?: string }) {
   const calendar = usePickemCalendar()
-  const theme = useHolidayTheme(calendar?.currentWeek ?? null)
+  const chosen = useAppStore(s => s.activeLeague?.tv_theme ?? null)
+  const theme = useHolidayTheme(calendar?.currentWeek ?? null, chosen)
   if (!theme) return null
   return (
     <div className={clsx('holiday-ribbon rise-in', className)} style={themeVars(theme)}>

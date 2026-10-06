@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import { Tv } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Tv, Send } from 'lucide-react'
 import clsx from 'clsx'
-import { TV_REACTIONS, useTvReactions } from '@/hooks/useTvReactions'
+import { TV_REACTIONS, TV_MESSAGE_MAX, useTvReactions } from '@/hooks/useTvReactions'
 
 /** The emoji grid: each tap floats that emoji up the Shop TV with your name. */
 function ReactionGrid({ send }: { send: (emoji: string) => void }) {
@@ -25,13 +25,49 @@ function ReactionGrid({ send }: { send: (emoji: string) => void }) {
   )
 }
 
+/** A message for the TV: posted to the league chat, which the TV pops up live. */
+function TvMessageBox({ say }: { say: (text: string) => Promise<boolean> }) {
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!text.trim() || sending) return
+    setSending(true)
+    if (await say(text)) setText('')
+    setSending(false)
+  }
+  return (
+    <form onSubmit={submit} className="mt-2 pt-2 border-t border-field-700">
+      <div className="flex items-center gap-1.5">
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          maxLength={TV_MESSAGE_MAX}
+          placeholder="Say something on the TV…"
+          aria-label="Message for the Shop TV"
+          className="input flex-1 min-w-0 !py-2 !text-sm"
+        />
+        <button
+          type="submit"
+          disabled={!text.trim() || sending}
+          aria-label="Send to the TV"
+          className="shrink-0 w-9 h-9 rounded-lg bg-gold text-field-950 flex items-center justify-center disabled:opacity-40"
+        >
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
+      <p className="px-0.5 pt-1 text-[10px] text-field-500">Pops up on the TV, and goes in the league chat.</p>
+    </form>
+  )
+}
+
 /**
- * A TV button with the grid below it, while a game is on: small in the
- * chat header, a gold header button on Pick'Em (it used to float over
- * the pick cards and covered them).
+ * A TV button with the emoji grid and a message box below it, any time
+ * the league has a TV: small in the chat header, a gold header button on
+ * Pick'Em.
  */
 export function TvReactionButton({ variant = 'chat' }: { variant?: 'chat' | 'header' }) {
-  const { enabled, send } = useTvReactions()
+  const { enabled, send, say } = useTvReactions()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -56,8 +92,9 @@ export function TvReactionButton({ variant = 'chat' }: { variant?: 'chat' | 'hea
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-2 z-30 rise-in rounded-2xl border border-field-600 bg-field-800 shadow-2xl shadow-black/50 p-2">
-          <p className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-field-400 whitespace-nowrap">React on the Shop TV</p>
+          <p className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-field-400 whitespace-nowrap">On the Shop TV</p>
           <ReactionGrid send={send} />
+          <TvMessageBox say={say} />
         </div>
       )}
     </div>

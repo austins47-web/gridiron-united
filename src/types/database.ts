@@ -1588,6 +1588,8 @@ export type League = ScoringRules & RosterSlotConfig & {
   /** The league's own logo and accent color (the app and the Shop TV). */
   brand_logo_url?: string | null
   brand_color?: string | null
+  /** The commissioner's holiday theme: null by the calendar, 'off', or a theme kept on. */
+  tv_theme?: string | null
   created_at: string
   updated_at: string
 }

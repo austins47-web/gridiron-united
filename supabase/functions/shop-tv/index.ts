@@ -98,7 +98,7 @@ serve(async (req) => {
     const since = new Date(now.getTime() - 7 * 24 * 3600_000).toISOString()
     const [{ data: league }, { data: memberRows }, { data: gameRows }, { data: pin }, { data: chatRows }, { data: roastRows }, { data: pollRows }] = await Promise.all([
       admin.from('leagues')
-        .select('id, name, league_type, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, brand_logo_url, brand_color')
+        .select('id, name, league_type, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, brand_logo_url, brand_color, tv_theme')
         .eq('id', tv.league_id).maybeSingle(),
       admin.from('league_members')
         .select('user_id, badge_flair, profile:profiles(username, display_name, avatar_url, favorite_nfl_team)')
@@ -421,7 +421,8 @@ serve(async (req) => {
     return json({
       league: league.name,
       // brand_color is the TV's own accent (Commish panel → Shop TV)
-      brand: { logo: league.brand_logo_url ?? null, color: league.brand_color ?? null },
+      // tv_theme: the commissioner's holiday theme (null: by the calendar)
+      brand: { logo: league.brand_logo_url ?? null, color: league.brand_color ?? null, theme: league.tv_theme ?? null },
       season,
       week,
       now: now.toISOString(),
