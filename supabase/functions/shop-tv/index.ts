@@ -127,6 +127,8 @@ serve(async (req) => {
       admin.from('league_spotify').select('league_id, tv_player, scopes').eq('league_id', tv.league_id).maybeSingle(),
     ])
     if (!league || league.league_type !== 'pickem') return json({ error: 'not found' }, 404)
+    // Conquest, if the league's at war (read alongside everything else)
+    const warP = conquestOf(admin, league.id, season)
 
     const members = (memberRows ?? []) as unknown as Member[]
     const avatarOf = new Map(members.map(m => [m.user_id, (m.profile as { avatar_url?: string | null } | null)?.avatar_url ?? null]))
@@ -506,6 +508,7 @@ serve(async (req) => {
       poll = { question: p0.question, options, total: (votes ?? []).length, closesAt: p0.closes_at, commish: p0.created_by == null }
     }
 
+    const war = await warP
     return json({
       league: league.name,
       // brand_color is the TV's own accent (Commish panel → Shop TV)
@@ -536,6 +539,11 @@ serve(async (req) => {
       who_can_win: whoCanWin,
       receipts,
       gameReceipts,
+      // Conquest: the map, the empires, and the last week settled
+      conquest: war && {
+        ...war,
+        players: war.players.map(p => ({ ...p, name: nameById.get(p.userId) ?? 'Someone', avatarUrl: avatarOf.get(p.userId) ?? null })),
+      },
       replay,
       beats,
       badges,
@@ -556,3 +564,33 @@ serve(async (req) => {
     return json({ error: String(e) }, 500)
   }
 })
+
+/** The league's Conquest war this season, if there is one: who owns what, and the last week's moves. */
+async function conquestOf(admin: ReturnType<typeof createClient>, leagueId: string, season: number) {
+  const { data: war } = await admin.from('conquest_games').select('start_week, last_resolved_week')
+    .eq('league_id', leagueId).eq('season', season).maybeSingle()
+  if (!war) return null
+  const lastWeek = war.last_resolved_week as number | null
+  const [{ data: players }, { data: cities }, { data: moves }] = await Promise.all([
+    admin.from('conquest_players').select('user_id, color, capital').eq('league_id', leagueId).eq('season', season),
+    admin.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', season),
+    lastWeek == null
+      ? Promise.resolve({ data: [] as never[] })
+      : admin.from('conquest_moves').select('kind, team, from_user, to_user, score_for, score_against, exiled')
+        .eq('league_id', leagueId).eq('season', season).eq('week', lastWeek).order('id'),
+  ])
+  return {
+    startWeek: war.start_week as number,
+    lastWeek,
+    players: (players ?? []).map(p => ({ userId: p.user_id as string, color: p.color as string, capital: p.capital as string | null })),
+    owners: Object.fromEntries((cities ?? []).map(c => [c.team, c.owner_id])) as Record<string, string | null>,
+    besieged: Object.fromEntries((cities ?? []).filter(c => c.besieged_by).map(c => [c.team, c.besieged_by])) as Record<string, string>,
+    report: lastWeek == null ? null : {
+      week: lastWeek,
+      moves: (moves ?? []).map(m => ({
+        kind: m.kind as string, team: m.team as string, from: m.from_user as string | null, to: m.to_user as string,
+        score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: !!m.exiled,
+      })),
+    },
+  }
+}

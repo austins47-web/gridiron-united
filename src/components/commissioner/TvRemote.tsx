@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2, Clapperboard, BarChart3, Plus, MessageSquare, ChevronDown, Moon } from 'lucide-react'
+import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2, Clapperboard, BarChart3, Plus, MessageSquare, ChevronDown, Moon, Swords } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -8,7 +8,7 @@ import { TV_MOMENTS, type TvMoment } from '@/lib/holiday'
 import { useTvReactions } from '@/hooks/useTvReactions'
 import { TvChatBox } from '@/components/tv/TvReactions'
 
-type Action = 'roast' | 'standings' | 'board' | 'replay' | 'chat' | 'sleep' | 'announce' | 'moment' | 'clear' | 'reload'
+type Action = 'roast' | 'standings' | 'board' | 'replay' | 'chat' | 'map' | 'sleep' | 'announce' | 'moment' | 'clear' | 'reload'
 
 /** What the TV's Spotify speaker is doing (its presence), worst news first. */
 const SPEAKER_ORDER = ['blocked', 'unsupported', 'premium', 'auth', 'error', 'connecting', 'ready']
@@ -131,12 +131,13 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
         </p>
       )}
 
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
         {button('roast', 'Roast', <Mic className="w-5 h-5" />, 'The roast is on the TV')}
         {button('standings', 'Standings', <ListOrdered className="w-5 h-5" />, 'Standings are on the TV')}
         {button('board', 'Picks board', <LayoutGrid className="w-5 h-5" />, 'The picks board is on the TV')}
         {button('replay', 'Replay', <Clapperboard className="w-5 h-5" />, "The week's replay is on the TV")}
         {button('chat', 'Chat', <MessageSquare className="w-5 h-5" />, 'The chat is on the TV')}
+        {button('map', 'War map', <Swords className="w-5 h-5" />, 'The war map is on the TV')}
       </div>
 
       {/* The TV chat, here: say something on the TV, see what's been said, take anything down */}

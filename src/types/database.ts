@@ -668,6 +668,44 @@ export interface Database {
         Update: never
         Relationships: []
       }
+      /** Conquest (supabase/functions/_shared/conquest.ts): written by the conquest function only. */
+      conquest_games: {
+        Row: { league_id: string; season: number; start_week: number; last_resolved_week: number | null; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      conquest_players: {
+        Row: { league_id: string; season: number; user_id: string; color: string; capital: string | null; joined_week: number }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      conquest_territories: {
+        Row: { league_id: string; season: number; team: string; owner_id: string | null; since_week: number | null; besieged_by: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      conquest_moves: {
+        Row: {
+          id: number
+          league_id: string
+          season: number
+          week: number
+          kind: 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion'
+          team: string
+          from_user: string | null
+          to_user: string
+          score_for: number
+          score_against: number
+          exiled: boolean
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       pickem_week_settings: {
         Row: {
           created_at: string | null

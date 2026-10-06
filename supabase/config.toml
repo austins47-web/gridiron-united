@@ -30,3 +30,8 @@ verify_jwt = false
 # session; the start (POST) checks their sign-in itself
 [functions.spotify-connect]
 verify_jwt = false
+
+# Conquest: the hourly cron settles finished weeks without a session; starting a
+# war checks the commissioner itself
+[functions.conquest]
+verify_jwt = false

@@ -37,8 +37,10 @@ export const TEAM_COLORS: Record<string, TeamColors> = {
   SEA: { primary: '#002244', secondary: '#69BE28', glow: '#69BE28' },
   TB: { primary: '#D50A0A', secondary: '#34302B', glow: '#E8231F' },
   TEN: { primary: '#0C2340', secondary: '#4B92DB', glow: '#4B92DB' },
-  WAS: { primary: '#5A1414', secondary: '#FFB612', glow: '#9E2A2B' },
+  WSH: { primary: '#5A1414', secondary: '#FFB612', glow: '#9E2A2B' },
 }
+// The schedule calls Washington WSH; some feeds say WAS
+TEAM_COLORS.WAS = TEAM_COLORS.WSH
 
 /** A team's TV glow color; the league's accent for anyone unknown. */
 export function teamGlow(abbr: string, fallback = '#CE7B45'): string {

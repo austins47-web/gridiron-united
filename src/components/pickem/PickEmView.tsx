@@ -9,6 +9,7 @@ import { resolveWeekDeadline } from '@/lib/deadline'
 import { isGameLocked, livePollInterval } from '@/lib/pickemWeek'
 import { usePickemCalendar, type PickemCalendar } from '@/hooks/usePickemCalendar'
 import { teamLogoUrl } from '@/components/teams/teamIds'
+import { ConquestTab } from './ConquestTab'
 import { byeTeamsForWeek } from '@/lib/byeWeeks'
 import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
@@ -135,10 +136,10 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   // the default Picks tab), or ?tab= from an email or notification
   // ("See every pick" opens the Board) — read once on mount, same as
   // any other router-state-driven initial value.
-  const [tab, setTab] = useState<'picks' | 'standings' | 'results' | 'board'>(() => {
+  const [tab, setTab] = useState<'picks' | 'standings' | 'results' | 'board' | 'map'>(() => {
     const linked = new URLSearchParams(location.search).get('tab')
     return (location.state as any)?.pickemTab
-      ?? (linked === 'standings' || linked === 'results' || linked === 'board' ? linked : 'picks')
+      ?? (linked === 'standings' || linked === 'results' || linked === 'board' || linked === 'map' ? linked : 'picks')
   })
   const [pendingPicks, setPendingPicks] = useState<Record<string, string>>({})
   const [tiebreakerScore, setTiebreakerScore] = useState<Record<string, string>>({})
@@ -248,7 +249,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   // All league members' picks for this week (revealed only after each game kicks off)
   const { data: allPicks = [] } = useQuery({
     queryKey: ['all-pickem-picks', activeLeagueId, week],
-    enabled: !!activeLeagueId && (tab === 'results' || tab === 'standings' || tab === 'board'),
+    enabled: !!activeLeagueId && (tab === 'results' || tab === 'standings' || tab === 'board' || tab === 'map'),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pickem_picks')
@@ -835,7 +836,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
             own line on narrow screens, rather than left-aligned and
             cramped alongside the week dropdown */}
         <div className="flex gap-1 w-full sm:w-auto">
-          {(['picks', 'standings', 'results', 'board'] as const).map(t => (
+          {(['picks', 'standings', 'results', 'board', 'map'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -1232,6 +1233,21 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
           />
           <WeekReceipts games={games} allPicks={allPicks} leagueMembers={leagueMembers} userId={user?.id} deadline={weekDeadline} />
         </div>
+      )}
+
+      {/* ── MAP TAB: Conquest ── */}
+      {tab === 'map' && activeLeagueId && (
+        <ConquestTab
+          leagueId={activeLeagueId}
+          week={week}
+          games={games}
+          allPicks={allPicks}
+          weekRows={weekRows}
+          leagueMembers={leagueMembers}
+          userId={user?.id}
+          deadline={weekDeadline}
+          isCommissioner={!!isCommissioner}
+        />
       )}
     </div>
   )

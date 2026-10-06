@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase'
 import { brandVars, DEFAULT_GOLD } from '@/lib/brand'
 import { weatherLabel, skyNow, type GameWeather } from '@/lib/weather'
 import { teamGlow } from '@/lib/teamColors'
+import { ConquestPanel, ConquestMapShow, WarReport } from './ConquestTV'
+import type { ConquestData } from '@/components/conquest/conquestView'
 import { parseShopHours, isShopOpen, nextShopOpen, backLabel, type ShopHours } from '@/lib/shopHours'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from '@/components/pickem/Belt'
@@ -117,6 +119,8 @@ interface TvReplay {
 interface TvBoard {
   league: string
   gameReceipts?: TvGameReceipt[]
+  /** Conquest, while the league's at war */
+  conquest?: ConquestData | null
   replay?: TvReplay | null
   /** The league's logo, and the TV's own accent color (Commish panel → Shop TV). */
   brand?: { logo: string | null; color?: string | null; theme?: string | null; music?: boolean; player?: boolean; location?: { name: string; lat: number; lon: number } | null; hours?: unknown }
@@ -423,6 +427,7 @@ export function ShopTV() {
         {board && <RemoteOverlay board={board} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
         {board && !asleep && <ReplayShow board={board} />}
         {board && !asleep && <ReceiptsPop board={board} />}
+        {board?.conquest && !asleep && <WarReport war={board.conquest} league={board.league} />}
         </StillFx.Provider>
       </div>
     </div>
@@ -1686,6 +1691,7 @@ function panelsFor(b: TvBoard, spot: number): Panel[] {
       </div>
     ) })
   }
+  if (b.conquest) out.push({ key: 'conquest', title: '⚔️ Conquest', body: <ConquestPanel b={b} /> })
   if (b.chat?.length) {
     out.push({ key: 'chat', title: '💬 Trash talk', body: (
       <div className="space-y-3">
@@ -2566,10 +2572,11 @@ function SongCard({ song }: { song: NowPlaying | null }) {
 const ANNOUNCE_MS = 15_000
 const STANDINGS_MS = 20_000
 const CHAT_MS = 25_000
+const MAP_MS = 30_000
 const NOTE_MS = 6000
 const isMoment = (m: unknown): m is TvMoment => TV_MOMENTS.some(x => x.kind === m)
 
-type RemoteShow = { kind: 'announce' | 'note'; text: string } | { kind: 'standings' | 'chat' }
+type RemoteShow = { kind: 'announce' | 'note'; text: string } | { kind: 'standings' | 'chat' | 'map' }
 
 function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, string] }) {
   const [show, setShow] = useState<(RemoteShow & { id: number }) | null>(null)
@@ -2589,6 +2596,10 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
         break
       case 'standings':
         put({ kind: 'standings' }, STANDINGS_MS)
+        break
+      case 'map':
+        if (board.conquest) put({ kind: 'map' }, MAP_MS)
+        else put({ kind: 'note', text: 'No war going on yet' }, NOTE_MS)
         break
       case 'chat':
         put({ kind: 'chat' }, CHAT_MS)
@@ -2636,6 +2647,7 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
       {show?.kind === 'announce' && <Announcement key={show.id} text={show.text} />}
       {show?.kind === 'standings' && <StandingsTakeover key={show.id} board={board} />}
       {show?.kind === 'chat' && <ChatTakeover key={show.id} board={board} />}
+      {show?.kind === 'map' && <ConquestMapShow key={show.id} b={board} />}
       <LivePoll />
       {show?.kind === 'note' && (
         // Centered by the row, not a transform: the fade-in animates transform
