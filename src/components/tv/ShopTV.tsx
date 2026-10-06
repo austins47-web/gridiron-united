@@ -243,7 +243,8 @@ export function ShopTV() {
 
   // Poll: every 30s while a game is on (scores sync every 2 minutes),
   // every 10s in the last few minutes before a lock, and every 5
-  // minutes otherwise — a TV left on all week was ~1,500 calls a day
+  // minutes otherwise — a TV left on all week was ~1,500 calls a day.
+  // None at all while the page can't be seen (onScreen).
   useEffect(() => {
     let alive = true
     let timer: ReturnType<typeof setTimeout>
@@ -279,13 +280,14 @@ export function ShopTV() {
         if (alive) setStatus(s => (s === 'loading' ? 'loading' : 'offline'))
         next = 20_000
       }
-      if (alive) timer = setTimeout(load, next)
+      if (alive) timer = setTimeout(due, next)
     }
+    const { due, stop } = onScreen(load)
     load()
     // A message was deleted: reload now rather than at the next poll
     const refresh = () => { clearTimeout(timer); load() }
     window.addEventListener(TV_REFRESH, refresh)
-    return () => { alive = false; clearTimeout(timer); window.removeEventListener(TV_REFRESH, refresh) }
+    return () => { alive = false; clearTimeout(timer); stop(); window.removeEventListener(TV_REFRESH, refresh) }
   }, [code])
 
   // Pick up new versions of the app now and then
@@ -1678,19 +1680,42 @@ function useNowPlaying(code: string, on: boolean): NowPlaying | null {
           next = Math.max(4000, Math.min(30_000, (d.durationMs ?? 0) - (d.progressMs ?? 0) + 1500))
         } else {
           setSong(null)
+          const quiet = Date.now() - quietSince
           next = d.retryAfterSec ? d.retryAfterSec * 1000
             : d.connected === false ? 10 * 60_000
-            : Date.now() - quietSince > 30 * 60_000 ? 5 * 60_000 : 60_000
+            : quiet > 2 * 3600_000 ? 15 * 60_000
+            : quiet > 30 * 60_000 ? 5 * 60_000
+            : 60_000
         }
       } catch {
         next = 60_000
       }
-      if (alive) timer = setTimeout(load, next)
+      if (alive) timer = setTimeout(due, next)
     }
+    const { due, stop } = onScreen(load)
     load()
-    return () => { alive = false; clearTimeout(timer) }
+    return () => { alive = false; clearTimeout(timer); stop() }
   }, [code, on])
   return song
+}
+
+/**
+ * Polling that stops while the TV page can't be seen (the screen's off,
+ * the device asleep, the tab hidden): a call that comes due then waits,
+ * and runs the moment the page is back on screen. `due` is what the
+ * poller's timer calls instead of `load`.
+ */
+function onScreen(load: () => void): { due: () => void; stop: () => void } {
+  let waiting = false
+  const due = () => {
+    if (document.visibilityState === 'hidden') waiting = true
+    else load()
+  }
+  const back = () => {
+    if (document.visibilityState === 'visible' && waiting) { waiting = false; load() }
+  }
+  document.addEventListener('visibilitychange', back)
+  return { due, stop: () => document.removeEventListener('visibilitychange', back) }
 }
 
 const MUSIC_CSS = '@keyframes tv-eq { 0%, 100% { transform: scaleY(.3) } 50% { transform: scaleY(1) } }'
