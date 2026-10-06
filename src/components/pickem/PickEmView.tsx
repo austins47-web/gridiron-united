@@ -29,7 +29,7 @@ import { usePickemSeasonData, useLeagueMembersList } from '@/hooks/usePickemSeas
 import { openPlayerCard } from '@/hooks/usePlayerCard'
 import { useThreadCounts } from '@/hooks/useGameThreads'
 import { PinnedBanner, PinComposer } from '@/components/chat/PinnedAnnouncement'
-import { TvReactionFab } from '@/components/tv/TvReactions'
+import { TvReactionButton } from '@/components/tv/TvReactions'
 import { weatherLabel } from '@/lib/weather'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
@@ -720,11 +720,11 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
               {pickedCount}/{totalGames} picked
             </div>
           )}
+          {/* Reacting on the Shop TV, while a game is on. Last, so the
+              grid (anchored to its right edge) stays on a phone screen. */}
+          <TvReactionButton variant="header" />
         </div>
       </div>
-
-      {/* Reacting on the Shop TV, while a game is on */}
-      <TvReactionFab />
 
       {/* The commissioner's pinned announcement */}
       <PinnedBanner leagueId={activeLeagueId} isCommissioner={!!isCommissioner} dismissible />
