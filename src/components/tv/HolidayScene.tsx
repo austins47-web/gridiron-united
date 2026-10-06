@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import clsx from 'clsx'
 import type { HolidayTheme, HolidaySceneSpec } from '@/lib/holiday'
 
 // ══════════════════════════════════════════════════════════════
@@ -295,9 +296,15 @@ function Ghost() {
 }
 
 function Sleigh() {
+  // Windows draws the reindeer facing right, phones and Fire TVs facing
+  // left: fly the way they face, so the team never goes backwards
+  const facesRight = useMemo(() => /Windows/.test(navigator.userAgent), [])
   return (
-    <div className="absolute" style={{ top: 150, left: 0, animation: `hs-across-left ${MOMENT_MS.sleigh}ms linear forwards` }}>
-      <div className="flex items-end gap-1 whitespace-nowrap" style={{ animation: 'hs-bob 1.8s ease-in-out infinite alternate' }}>
+    <div className="absolute" style={{ top: 150, left: 0, animation: `${facesRight ? 'hs-across-right' : 'hs-across-left'} ${MOMENT_MS.sleigh}ms linear forwards` }}>
+      <div
+        className={clsx('flex items-end gap-1 whitespace-nowrap', facesRight && 'flex-row-reverse')}
+        style={{ animation: 'hs-bob 1.8s ease-in-out infinite alternate' }}
+      >
         <span className="text-[64px] leading-none">🦌</span>
         <span className="text-[64px] leading-none">🦌</span>
         <span className="text-[64px] leading-none">🦌</span>
@@ -368,7 +375,7 @@ function Fireworks({ theme }: { theme: HolidayTheme }) {
           {b.sparks.map((s, j) => (
             <div
               key={j}
-              className="absolute w-3 h-3 rounded-full"
+              className="absolute w-4 h-4 rounded-full"
               style={{
                 background: b.color, boxShadow: `0 0 10px 2px ${b.color}`, opacity: 0,
                 '--tx': `${s.tx}px`, '--ty': `${s.ty}px`,
