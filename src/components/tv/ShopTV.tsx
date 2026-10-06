@@ -908,10 +908,10 @@ function GameTile({ g, big, injuries, now }: { g: TvGame; big: boolean; injuries
       style={burstGlow ? { borderColor: burstGlow, boxShadow: `0 0 36px ${burstGlow}99`, transition: 'box-shadow .4s, border-color .4s' } : undefined}
     >
       {/* Both teams' colors, and their logos big and faded behind */}
-      <div className={clsx('absolute inset-0 pointer-events-none', final && 'opacity-50')} aria-hidden>
+      <div className={clsx('absolute inset-0 pointer-events-none', final && 'opacity-75')} aria-hidden>
         <div className="absolute inset-0" style={{ background: `linear-gradient(155deg, ${awayGlow}40 0%, ${awayGlow}10 42%, ${homeGlow}10 58%, ${homeGlow}40 100%)` }} />
-        {awayLogo && <img src={awayLogo} alt="" className="absolute -left-[8%] -top-[30%] h-[95%] w-auto opacity-[0.11]" onError={e => { e.currentTarget.style.display = 'none' }} />}
-        {homeLogo && <img src={homeLogo} alt="" className="absolute -right-[8%] -bottom-[30%] h-[95%] w-auto opacity-[0.11]" onError={e => { e.currentTarget.style.display = 'none' }} />}
+        {awayLogo && <img src={awayLogo} alt="" className="absolute -left-[8%] -top-[30%] h-[95%] w-auto opacity-[0.24]" onError={e => { e.currentTarget.style.display = 'none' }} />}
+        {homeLogo && <img src={homeLogo} alt="" className="absolute -right-[8%] -bottom-[30%] h-[95%] w-auto opacity-[0.24]" onError={e => { e.currentTarget.style.display = 'none' }} />}
       </div>
       <div className="relative h-full flex flex-col justify-between px-3.5 py-2.5">
         <div className="flex items-center gap-2 text-[16px] font-bold">
