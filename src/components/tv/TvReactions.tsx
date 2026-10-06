@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Tv, Send, Undo2, Gamepad2 } from 'lucide-react'
+import { Tv, Send, Undo2, Gamepad2, MessageSquare, Trash2, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
 import clsx from 'clsx'
-import { TV_REACTIONS, TV_MESSAGE_MAX, useTvReactions } from '@/hooks/useTvReactions'
+import { TV_REACTIONS, TV_MESSAGE_MAX, useTvReactions, useTvChat } from '@/hooks/useTvReactions'
 
 /** The emoji grid: each tap floats that emoji up the Shop TV with your name. */
 function ReactionGrid({ send }: { send: (emoji: string) => void }) {
@@ -29,34 +29,45 @@ function ReactionGrid({ send }: { send: (emoji: string) => void }) {
   )
 }
 
+/** "now", "5m", "2h", "3d" */
+const ago = (iso: string) => {
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
+  return m < 1 ? 'now' : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`
+}
+
 /**
- * A message for the TV: posted to the league chat, which the TV pops up
- * live. What you send from here is listed under it with Unsend, which
- * deletes it from the chat and takes it off the TV.
+ * The TV chat: the TV's own, not the league chat. What's said here pops
+ * up on the TV and is listed below the box, newest first; your own
+ * messages have Unsend, and the commissioner can take anyone's down.
  */
-function TvMessageBox({ say, unsend }: {
+function TvChatBox({ leagueId, open, say, unsend, isCommissioner }: {
+  leagueId: string | null
+  open: boolean
   say: (text: string) => Promise<string | null>
   unsend: (id: string) => Promise<boolean>
+  isCommissioner: boolean
 }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
-  const [sent, setSent] = useState<{ id: string; text: string; gone?: boolean }[]>([])
+  const [busy, setBusy] = useState<string | null>(null)
+  const { data: messages = [], isLoading } = useTvChat(leagueId, open)
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (!text.trim() || sending) return
     setSending(true)
-    const id = await say(text)
-    if (id) {
-      setSent(list => [{ id, text: text.trim() }, ...list].slice(0, 3))
-      setText('')
-    }
+    if (await say(text)) setText('')
     setSending(false)
   }
-  const takeBack = async (id: string) => {
-    if (await unsend(id)) setSent(list => list.map(m => (m.id === id ? { ...m, gone: true } : m)))
+  const takeDown = async (id: string) => {
+    setBusy(id)
+    await unsend(id)
+    setBusy(null)
   }
   return (
     <form onSubmit={submit} className="mt-2 pt-2 border-t border-field-700">
+      <p className="px-0.5 pb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-field-400">
+        <MessageSquare className="w-3 h-3" /> TV chat
+      </p>
       <div className="flex items-center gap-1.5">
         <input
           value={text}
@@ -72,38 +83,47 @@ function TvMessageBox({ say, unsend }: {
           aria-label="Send to the TV"
           className="shrink-0 w-9 h-9 rounded-lg bg-gold text-field-950 flex items-center justify-center disabled:opacity-40"
         >
-          <Send className="w-4 h-4" />
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>
       </div>
-      {sent.length > 0 ? (
-        <ul className="mt-1.5 space-y-1">
-          {sent.map(m => (
-            <li key={m.id} className="flex items-center gap-2 text-xs">
-              <span className={clsx('flex-1 min-w-0 truncate', m.gone ? 'text-field-600 line-through' : 'text-field-300')}>{m.text}</span>
-              {m.gone
-                ? <span className="shrink-0 text-field-500">Unsent</span>
-                : (
-                  <button type="button" onClick={() => takeBack(m.id)} className="shrink-0 flex items-center gap-1 font-bold text-field-400 hover:text-red-400">
-                    <Undo2 className="w-3 h-3" /> Unsend
+      {messages.length > 0 ? (
+        <ul className="mt-2 max-h-56 overflow-y-auto space-y-1.5 pr-0.5">
+          {messages.map(m => (
+            <li key={m.id} className="text-xs leading-snug">
+              <div className="flex items-baseline gap-1.5">
+                <span className={clsx('font-bold truncate', m.mine ? 'text-white' : 'text-gold')}>{m.mine ? 'You' : m.name}</span>
+                <span className="text-field-500 shrink-0">{ago(m.created_at)}</span>
+                {(m.mine || isCommissioner) && (
+                  <button
+                    type="button"
+                    onClick={() => takeDown(m.id)}
+                    disabled={busy === m.id}
+                    className="ml-auto shrink-0 flex items-center gap-1 font-bold text-field-400 hover:text-red-400 disabled:opacity-50"
+                  >
+                    {m.mine ? <><Undo2 className="w-3 h-3" /> Unsend</> : <><Trash2 className="w-3 h-3" /> Delete</>}
                   </button>
                 )}
+              </div>
+              <p className="text-field-200 break-words">{m.message}</p>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="px-0.5 pt-1 text-[11px] leading-snug text-field-500">Pops up on the TV, and goes in the league chat.</p>
+        <p className="px-0.5 pt-1.5 text-[11px] leading-snug text-field-500">
+          {isLoading ? 'Loading the TV chat…' : 'Pops up on the TV. It’s the TV’s own chat: nothing here goes in the league chat.'}
+        </p>
       )}
     </form>
   )
 }
 
 /**
- * A TV button with the emoji grid and a message box below it, any time
+ * A TV button with the emoji grid and the TV chat below it, any time
  * the league has a TV: small in the chat header, a gold header button on
  * Pick'Em.
  */
 export function TvReactionButton({ variant = 'chat' }: { variant?: 'chat' | 'header' }) {
-  const { enabled, send, say, unsend } = useTvReactions()
+  const { enabled, leagueId, send, say, unsend } = useTvReactions()
   const isCommissioner = useAppStore(s => !!s.myMembership?.is_commissioner)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -130,10 +150,10 @@ export function TvReactionButton({ variant = 'chat' }: { variant?: 'chat' | 'hea
       {open && (
         // A set width: sized to its contents, the box shrank to its title
         // next to a small button and squeezed the emojis out
-        <div className="absolute right-0 top-full mt-2 z-30 w-64 max-w-[calc(100vw-2rem)] rise-in rounded-2xl border border-field-600 bg-field-800 shadow-2xl shadow-black/50 p-2">
+        <div className="absolute right-0 top-full mt-2 z-30 w-72 max-w-[calc(100vw-2rem)] rise-in rounded-2xl border border-field-600 bg-field-800 shadow-2xl shadow-black/50 p-2">
           <p className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-field-400">On the Shop TV</p>
           <ReactionGrid send={send} />
-          <TvMessageBox say={say} unsend={unsend} />
+          <TvChatBox leagueId={leagueId} open={open} say={say} unsend={unsend} isCommissioner={isCommissioner} />
           {isCommissioner && (
             <Link
               to="/app/commissioner?tab=extras"

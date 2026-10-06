@@ -105,11 +105,10 @@ serve(async (req) => {
         .eq('league_id', tv.league_id),
       admin.from('nfl_games').select(GAME_COLS).eq('season', season),
       admin.from('league_pins').select('message').eq('league_id', tv.league_id).maybeSingle(),
-      // The main chat's latest words (text only)
-      admin.from('league_messages')
+      // The TV chat's latest words (tv_messages: the TV's own, not the league chat)
+      admin.from('tv_messages')
         .select('user_id, message, created_at')
-        .eq('league_id', tv.league_id).eq('is_system', false).is('game_id', null).is('deleted_at', null)
-        .not('message', 'like', 'IMAGE:%').not('message', 'like', 'GIF:%').not('message', 'like', 'POLL:%').gte('created_at', since)
+        .eq('league_id', tv.league_id).is('deleted_at', null).gte('created_at', since)
         .order('created_at', { ascending: false }).limit(8),
       admin.from('league_messages')
         .select('message, created_at')

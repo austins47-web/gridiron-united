@@ -1443,6 +1443,15 @@ export interface Database {
         Returns: undefined
       }
       send_tv_reaction: { Args: { p_league: string; p_emoji: string }; Returns: undefined }
+      /** The TV chat (its own, not the league chat): say something on the TV; returns its id. */
+      send_tv_message: { Args: { p_league: string; p_text: string }; Returns: string }
+      /** Takes a TV chat message off the TV: your own, or anyone's for the commissioner. */
+      unsend_tv_message: { Args: { p_id: string }; Returns: undefined }
+      /** The TV chat's last week, newest first. */
+      tv_chat: {
+        Args: { p_league: string }
+        Returns: { id: string; name: string; avatar: string | null; message: string; created_at: string; mine: boolean }[]
+      }
       /** Joins the league with this invite code; returns its id. */
       join_league: { Args: { p_code: string; p_team_name?: string | null }; Returns: string }
       /** One of your earned badges next to your name in a league; null clears it. */

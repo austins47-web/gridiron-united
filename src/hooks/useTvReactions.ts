@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
@@ -6,16 +6,20 @@ import { useAppStore } from '@/store/appStore'
 /** What phones can throw on the Shop TV (send_tv_reaction checks the same list). */
 export const TV_REACTIONS = ['🔥', '😂', '💀', '🏈', '🎉', '😱', '👏', '🤡', '😤', '💩']
 
-/** The longest message the TV shows in full (league_messages_to_tv cuts there). */
+/** The longest message the TV chat takes (send_tv_message cuts there). */
 export const TV_MESSAGE_MAX = 240
+
+export interface TvChatMessage { id: string; name: string; avatar: string | null; message: string; created_at: string; mine: boolean }
 
 /**
  * Reacting on the Shop TV from a phone, any time: offered in a Pick'Em
- * league that has a TV set up. Messages go to the league chat, which
- * the TV pops up live (league_messages_to_tv).
+ * league that has a TV set up. Messages go in the TV chat, the TV's own
+ * (send_tv_message), which pops them up on the TV; they never go in the
+ * league chat.
  */
 export function useTvReactions() {
-  const { activeLeague, user } = useAppStore()
+  const qc = useQueryClient()
+  const { activeLeague } = useAppStore()
   const leagueId = activeLeague?.league_type === 'pickem' ? activeLeague.id : null
 
   const { data: hasTv = false } = useQuery({
@@ -36,25 +40,37 @@ export function useTvReactions() {
     if (error) toast.error(error.message)
   }
 
-  /** Posts to the league chat; the new message's id once it's sent. */
+  /** Says something on the TV; the new message's id once it's sent. */
   const say = async (text: string): Promise<string | null> => {
     const message = text.trim().slice(0, TV_MESSAGE_MAX)
-    if (!leagueId || !user || !message) return null
-    const { data, error } = await supabase
-      .from('league_messages')
-      .insert({ league_id: leagueId, user_id: user.id, message })
-      .select('id')
-      .single()
+    if (!leagueId || !message) return null
+    const { data, error } = await supabase.rpc('send_tv_message', { p_league: leagueId, p_text: message })
     if (error) { toast.error(`Couldn't send: ${error.message}`); return null }
-    return data.id
+    qc.invalidateQueries({ queryKey: ['tv-chat', leagueId] })
+    return data
   }
 
-  /** Deletes a message you sent: out of the chat, and off the TV. */
+  /** Takes a message off the TV: your own, or anyone's for the commissioner. */
   const unsend = async (id: string): Promise<boolean> => {
-    const { error } = await supabase.from('league_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id)
-    if (error) { toast.error(`Couldn't unsend: ${error.message}`); return false }
+    const { error } = await supabase.rpc('unsend_tv_message', { p_id: id })
+    if (error) { toast.error(`Couldn't take it down: ${error.message}`); return false }
+    qc.invalidateQueries({ queryKey: ['tv-chat', leagueId] })
     return true
   }
 
-  return { enabled: !!leagueId && hasTv, send, say, unsend }
+  return { enabled: !!leagueId && hasTv, leagueId, send, say, unsend }
+}
+
+/** The TV chat's last week, newest first: asked for while it's open, every 10 seconds. */
+export function useTvChat(leagueId: string | null, open: boolean) {
+  return useQuery({
+    queryKey: ['tv-chat', leagueId],
+    enabled: !!leagueId && open,
+    refetchInterval: open ? 10_000 : false,
+    queryFn: async (): Promise<TvChatMessage[]> => {
+      const { data, error } = await supabase.rpc('tv_chat', { p_league: leagueId! })
+      if (error) throw error
+      return data ?? []
+    },
+  })
 }
