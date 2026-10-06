@@ -39,13 +39,16 @@ const ago = (iso: string) => {
  * The TV chat: the TV's own, not the league chat. What's said here pops
  * up on the TV and is listed below the box, newest first; your own
  * messages have Unsend, and the commissioner can take anyone's down.
+ * In the TV button's popup, and in the commissioner's TV remote (`bare`:
+ * no divider or label of its own).
  */
-function TvChatBox({ leagueId, open, say, unsend, isCommissioner }: {
+export function TvChatBox({ leagueId, open, say, unsend, isCommissioner, bare = false }: {
   leagueId: string | null
   open: boolean
   say: (text: string) => Promise<string | null>
   unsend: (id: string) => Promise<boolean>
   isCommissioner: boolean
+  bare?: boolean
 }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -64,10 +67,12 @@ function TvChatBox({ leagueId, open, say, unsend, isCommissioner }: {
     setBusy(null)
   }
   return (
-    <form onSubmit={submit} className="mt-2 pt-2 border-t border-field-700">
-      <p className="px-0.5 pb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-field-400">
-        <MessageSquare className="w-3 h-3" /> TV chat
-      </p>
+    <form onSubmit={submit} className={bare ? undefined : 'mt-2 pt-2 border-t border-field-700'}>
+      {!bare && (
+        <p className="px-0.5 pb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-field-400">
+          <MessageSquare className="w-3 h-3" /> TV chat
+        </p>
+      )}
       <div className="flex items-center gap-1.5">
         <input
           value={text}

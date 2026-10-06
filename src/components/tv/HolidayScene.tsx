@@ -14,9 +14,11 @@ import type { HolidayTheme, HolidaySceneSpec } from '@/lib/holiday'
 //
 // Laid out in the TV's 1920×1080 space, transforms and opacity only, so
 // it runs on a Fire TV's browser. ?preview=moments plays a moment every
-// 14 seconds. `lite` (a TV that's dropping frames): no fog, and the glow
-// around the edges is painted under the panels by the TV's backdrop
-// instead of as a full-screen layer over everything.
+// 14 seconds. `lite` (a Fire TV, or one that's dropping frames): no fog,
+// the glow around the edges is painted under the panels by the TV's
+// backdrop instead of as a full-screen layer over everything, and nothing
+// moves between moments (the spider hangs still, the candles and lights
+// hold steady), so the TV isn't redrawing every frame.
 // ══════════════════════════════════════════════════════════════
 
 const W = 1920
@@ -66,8 +68,8 @@ export function HolidayScene({ theme, lite = false }: { theme: HolidayTheme; lit
         {/* A glow in the theme's colors around the edges */}
         {!lite && <div className="absolute inset-0" style={{ boxShadow: `inset 0 0 140px 24px ${c1}44, inset 0 0 380px 60px ${c2}2b` }} />}
         {theme.scene.fog && !lite && <Fog />}
-        <Edge theme={theme} />
-        <Footer theme={theme} />
+        <Edge theme={theme} lite={lite} />
+        <Footer theme={theme} lite={lite} />
         <Moments theme={theme} />
       </div>
       {theme.key === 'newyear' && <NewYearCountdown theme={theme} />}
@@ -77,7 +79,7 @@ export function HolidayScene({ theme, lite = false }: { theme: HolidayTheme; lit
 
 // ── Along the header ──────────────────────────────────────────
 
-function Edge({ theme }: { theme: HolidayTheme }) {
+function Edge({ theme, lite }: { theme: HolidayTheme; lite: boolean }) {
   const [c1, c2] = theme.colors
   switch (theme.scene.edge) {
     case 'webs':
@@ -86,7 +88,7 @@ function Edge({ theme }: { theme: HolidayTheme }) {
           <Cobweb style={{ left: 0, top: HEADER }} />
           <Cobweb style={{ right: 0, top: HEADER, transform: 'scaleX(-1)' }} />
           {/* A spider letting itself down from the right-hand web */}
-          <div className="absolute" style={{ right: 96, top: HEADER, animation: 'hs-dangle 3.6s ease-in-out infinite alternate' }}>
+          <div className="absolute" style={{ right: 96, top: HEADER, animation: lite ? undefined : 'hs-dangle 3.6s ease-in-out infinite alternate' }}>
             <div className="mx-auto w-px bg-white/40" style={{ height: 130 }} />
             <div className="text-[40px] leading-none -mt-1 text-center">🕷️</div>
           </div>
@@ -113,7 +115,7 @@ function Edge({ theme }: { theme: HolidayTheme }) {
                 style={{
                   left: i * swag + swag / 2 - 7, top: HEADER + 12, width: 14, height: 20,
                   background: color, boxShadow: `0 0 14px 4px ${color}aa`,
-                  animation: `hs-blink ${1.6 + (i % 3) * 0.5}s ease-in-out ${(i % 5) * 0.3}s infinite`,
+                  animation: lite ? undefined : `hs-blink ${1.6 + (i % 3) * 0.5}s ease-in-out ${(i % 5) * 0.3}s infinite`,
                 }}
               />
             )
@@ -156,7 +158,7 @@ function Edge({ theme }: { theme: HolidayTheme }) {
         <div className="absolute left-0 right-0 overflow-hidden" style={{ top: HEADER - 2, height: 5, backgroundColor: `${c1}55` }}>
           <div
             className="absolute inset-y-0 left-0 w-[600px]"
-            style={{ background: `linear-gradient(90deg, transparent, ${c1}, #fff8dc, ${c1}, transparent)`, animation: 'hs-shimmer 5s linear infinite' }}
+            style={{ background: `linear-gradient(90deg, transparent, ${c1}, #fff8dc, ${c1}, transparent)`, animation: lite ? undefined : 'hs-shimmer 5s linear infinite', transform: lite ? 'translateX(660px)' : undefined }}
           />
         </div>
       )
@@ -191,7 +193,7 @@ function Cobweb({ style }: { style: CSSProperties }) {
 
 // ── On the ticker ─────────────────────────────────────────────
 
-function Footer({ theme }: { theme: HolidayTheme }) {
+function Footer({ theme, lite }: { theme: HolidayTheme; lite: boolean }) {
   const items = theme.scene.footer
   const glow = theme.key === 'halloween'
   const row = (side: 'left' | 'right') => (
@@ -205,7 +207,7 @@ function Footer({ theme }: { theme: HolidayTheme }) {
               className="absolute rounded-full"
               style={{
                 inset: -18, background: 'radial-gradient(circle, rgba(251,146,60,0.55), transparent 65%)',
-                animation: `hs-flicker ${1.3 + i * 0.4}s ease-in-out infinite`,
+                ...(lite ? { opacity: 0.7 } : { animation: `hs-flicker ${1.3 + i * 0.4}s ease-in-out infinite` }),
               }}
             />
           )}

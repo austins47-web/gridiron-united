@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from 'react'
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { supabase } from '@/lib/supabase'
@@ -339,7 +339,7 @@ export function ShopTV() {
   const song = useNowPlaying(code, !!board?.brand?.music)
   // The TV as a Spotify speaker, when the commissioner's turned that on
   const speaker = useSpotifySpeaker(code, !!board?.brand?.player, `${board?.league ?? 'Shop'} TV`)
-  const lite = useLiteEffects()
+  const { lite, perf } = useLiteEffects()
 
   const goFull = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {})
@@ -352,7 +352,7 @@ export function ShopTV() {
       style={{ cursor: idle ? 'none' : 'default' }}
     >
       <div
-        className="tv-bright shrink-0 bg-field-950 text-white relative"
+        className={clsx('tv-bright shrink-0 bg-field-950 text-white relative', lite && 'tv-lite')}
         style={{
           width: W, height: H, transform: `scale(${scale})`, transformOrigin: 'center',
           // The TV's own color (or the copper), set here so nobody's personal
@@ -361,6 +361,7 @@ export function ShopTV() {
           ...(brandVars(holiday?.accent ?? board?.brand?.color ?? DEFAULT_GOLD) as CSSProperties),
         }}
       >
+        <LiteFx.Provider value={lite}>
         {board && status !== 'gone' && <Backdrop lite={lite} edge={lite ? holiday?.colors ?? null : null} />}
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
@@ -369,12 +370,14 @@ export function ShopTV() {
           <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
         )}
         {board && holiday && <HolidayScene theme={holiday} lite={lite} />}
-        {board && holiday && <HolidayParticles theme={holiday} count={lite ? 7 : 14} />}
-        {status !== 'gone' && <LiveFromPhones code={code} lite={lite} speaker={speaker} />}
+        {/* Lite: nothing falls (it would have the TV redrawing every frame) */}
+        {board && holiday && !lite && <HolidayParticles theme={holiday} />}
+        {status !== 'gone' && <LiveFromPhones code={code} lite={lite} speaker={speaker} perf={perf} />}
         {speaker === 'blocked' && <SpeakerBlocked />}
         {board && <RemoteOverlay board={board} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
         {board && <ReplayShow board={board} />}
         {board && <ReceiptsPop board={board} />}
+        </LiteFx.Provider>
       </div>
     </div>
   )
@@ -406,18 +409,35 @@ function Gone() {
 // A Fire TV stick can't draw every effect 60 times a second, and when it
 // falls behind, everything that moves stutters. So the TV times its own
 // frames now and then, and once it's dropping them it switches to lighter
-// effects until the next reload: the background stops drifting, the
-// holiday glow moves under the panels, the fog goes and fewer things
-// fall. ?fx=lite or ?fx=full forces either.
+// effects until the next reload; Fire TV's Silk starts on them. Lite, the
+// background holds still, the holiday glow moves under the panels and
+// the fog goes, and nothing moves on its own between
+// changes: the ticker steps through instead of scrolling, panels switch
+// without animating, the music bars hold still, nothing falls and the
+// holiday decorations hold still between moments. ?fx=lite or ?fx=full
+// forces either.
 const FX_FIRST_MS = 20_000
 const FX_SAMPLE_MS = 5000
 const FX_EVERY_MS = 60_000
 
-function useLiteEffects(): boolean {
+/** What the TV last measured of itself: frames a second, and the share that came late. */
+interface TvPerf { fps: number; slow: number }
+
+/**
+ * Fire TV's browser (Silk): lighter effects from the start. Measured on
+ * the shop's TV, it dropped frames even before the extras, so it doesn't
+ * wait to find out.
+ */
+const SILK = typeof navigator !== 'undefined' && /\bSilk\/|\bAFT[A-Z]/.test(navigator.userAgent)
+
+/** Whether the TV runs lighter effects, for anything that moves (see useLiteEffects). */
+const LiteFx = createContext(false)
+
+function useLiteEffects(): { lite: boolean; perf: TvPerf | null } {
   const [forced] = useState(() => new URLSearchParams(window.location.search).get('fx'))
-  const [lite, setLite] = useState(forced === 'lite')
+  const [lite, setLite] = useState(forced === 'lite' || (forced !== 'full' && SILK))
+  const [perf, setPerf] = useState<TvPerf | null>(null)
   useEffect(() => {
-    if (forced === 'lite' || forced === 'full') return
     let raf = 0
     let timer: ReturnType<typeof setTimeout>
     let strikes = 0
@@ -433,17 +453,19 @@ function useLiteEffects(): boolean {
         if (gaps.some(g => g > 500)) { timer = setTimeout(sample, FX_EVERY_MS); return }
         const fps = gaps.length / ((t - start) / 1000)
         const slow = gaps.filter(g => g > 25).length / Math.max(1, gaps.length)
+        setPerf({ fps: Math.round(fps), slow: Math.round(slow * 100) / 100 })
         strikes = fps < 48 || slow > 0.05 ? strikes + 1 : 0
-        if (strikes >= 2) { setLite(true); return }
-        // Check a bad sample again right away, so one hiccup doesn't count
-        timer = setTimeout(sample, strikes ? FX_SAMPLE_MS : FX_EVERY_MS)
+        if (strikes >= 2 && forced !== 'full') setLite(true)
+        // Check a bad sample again right away, so one hiccup doesn't count;
+        // after that, once a minute, so the remote can show how it's doing
+        timer = setTimeout(sample, strikes === 1 ? FX_SAMPLE_MS : FX_EVERY_MS)
       }
       raf = requestAnimationFrame(tick)
     }
     timer = setTimeout(sample, FX_FIRST_MS)
     return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
   }, [forced])
-  return lite
+  return { lite, perf }
 }
 
 /**
@@ -451,8 +473,8 @@ function useLiteEffects(): boolean {
  * slowly. Lite: standing still, painted with the page (no layers of
  * their own), with the holiday's glow around the edges painted here too.
  */
-const BACKDROP_CSS = '@keyframes tv-drift-a { 0%, 100% { transform: translate(0, 0) scale(1) } 50% { transform: translate(380px, 160px) scale(1.2) } }'
-  + ' @keyframes tv-drift-b { 0%, 100% { transform: translate(0, 0) scale(1.1) } 50% { transform: translate(-420px, -120px) scale(.9) } }'
+const BACKDROP_CSS = '@keyframes tv-drift-a { 0%, 100% { transform: translate(0, 0) } 50% { transform: translate(380px, 160px) } }'
+  + ' @keyframes tv-drift-b { 0%, 100% { transform: translate(0, 0) } 50% { transform: translate(-420px, -120px) } }'
 
 function Backdrop({ lite, edge }: { lite: boolean; edge: [string, string] | null }) {
   if (lite) {
@@ -506,10 +528,36 @@ function useShopWeather(at: { lat: number; lon: number } | null | undefined): Sh
   return wx
 }
 
-function Board({ board, offline, holiday, song }: { board: TvBoard; offline: boolean; holiday: HolidayTheme | null; song: NowPlaying | null }) {
+/**
+ * The header's right end: the shop's weather, the time and the date. Its
+ * own component, so the clock ticking over doesn't redraw the whole board.
+ */
+function HeaderRight({ offline, location }: { offline: boolean; location?: { name: string; lat: number; lon: number } | null }) {
   const clock = useClock()
-  const wx = useShopWeather(board.brand?.location)
+  const wx = useShopWeather(location)
   const sky = wx ? skyNow(wx.code) : null
+  return (
+    <div className="min-w-[200px] shrink-0 flex items-center justify-end gap-5">
+      {offline && <span className="text-[18px] font-bold text-amber-300 whitespace-nowrap">Reconnecting…</span>}
+      {/* The weather outside the shop (Commish panel → Shop TV) */}
+      {wx && sky && (
+        <div className="flex items-center gap-2.5 pr-5 border-r-2 border-field-700/70" title={location?.name}>
+          <span className="text-[40px] leading-none">{!wx.day && wx.code <= 2 ? '🌙' : sky.icon}</span>
+          <div className="leading-none">
+            <p className="font-cond font-black text-[36px] tabular-nums text-white">{wx.temp}°</p>
+            <p className="mt-1 font-cond font-bold uppercase tracking-wider text-[14px] text-field-400 whitespace-nowrap">{sky.label}</p>
+          </div>
+        </div>
+      )}
+      <div className="text-right leading-none">
+        <p className="font-cond font-black text-[40px] tabular-nums text-white whitespace-nowrap">{clock.time}</p>
+        <p className="mt-1 font-cond font-bold uppercase tracking-wider text-[15px] text-field-400 whitespace-nowrap">{clock.date}</p>
+      </div>
+    </div>
+  )
+}
+
+function Board({ board, offline, holiday, song }: { board: TvBoard; offline: boolean; holiday: HolidayTheme | null; song: NowPlaying | null }) {
   const anyLive = board.games.some(g => g.state === 'live')
   const showWeek = board.started
   const table = showWeek ? board.week_table : board.season_table
@@ -568,23 +616,7 @@ function Board({ board, offline, holiday, song }: { board: TvBoard; offline: boo
             <Chip><span className="text-amber-300">Picks lock in <Countdown to={board.shame.lockAt} /></span></Chip>
           )}
         </div>
-        <div className="min-w-[200px] shrink-0 flex items-center justify-end gap-5">
-          {offline && <span className="text-[18px] font-bold text-amber-300 whitespace-nowrap">Reconnecting…</span>}
-          {/* The weather outside the shop (Commish panel → Shop TV) */}
-          {wx && sky && (
-            <div className="flex items-center gap-2.5 pr-5 border-r-2 border-field-700/70" title={board.brand?.location?.name}>
-              <span className="text-[40px] leading-none">{!wx.day && wx.code <= 2 ? '🌙' : sky.icon}</span>
-              <div className="leading-none">
-                <p className="font-cond font-black text-[36px] tabular-nums text-white">{wx.temp}°</p>
-                <p className="mt-1 font-cond font-bold uppercase tracking-wider text-[14px] text-field-400 whitespace-nowrap">{sky.label}</p>
-              </div>
-            </div>
-          )}
-          <div className="text-right leading-none">
-            <p className="font-cond font-black text-[40px] tabular-nums text-white whitespace-nowrap">{clock.time}</p>
-            <p className="mt-1 font-cond font-bold uppercase tracking-wider text-[15px] text-field-400 whitespace-nowrap">{clock.date}</p>
-          </div>
-        </div>
+        <HeaderRight offline={offline} location={board.brand?.location} />
       </header>
 
       {/* Body: games + standings (or the full Board) · the rotating panel */}
@@ -593,16 +625,16 @@ function Board({ board, offline, holiday, song }: { board: TvBoard; offline: boo
           <Crossfade
             k={view === 'board' && board.board ? 'board' : 'games'}
             render={k => (k === 'board' && board.board
-              ? <PicksBoardView board={board} />
+              ? <MemoPicksBoardView board={board} />
               : (
                 <>
-                  <GamesGrid games={games} injuries={injuries} />
-                  <StandingsPanel board={board} rows={table} week={showWeek} />
+                  <MemoGamesGrid games={games} injuries={injuries} />
+                  <MemoStandingsPanel board={board} rows={table} week={showWeek} />
                 </>
               ))}
           />
         </div>
-        <FeaturePanel board={board} />
+        <MemoFeaturePanel board={board} />
       </div>
 
       <Ticker board={board} greeting={holiday?.greeting.replace('{league}', board.league)} song={song} />
@@ -661,8 +693,8 @@ function useMainView(hasBoard: boolean): 'games' | 'board' {
 
 /** How long one view takes to fade into the next. */
 const VIEW_FADE_MS = 800
-const VIEW_CSS = '@keyframes tv-view-in { from { opacity: 0; transform: scale(.985) } to { opacity: 1; transform: none } }'
-  + ' @keyframes tv-view-out { from { opacity: 1; transform: none } to { opacity: 0; transform: scale(1.01) } }'
+const VIEW_CSS = '@keyframes tv-view-in { from { opacity: 0 } to { opacity: 1 } }'
+  + ' @keyframes tv-view-out { from { opacity: 1 } to { opacity: 0 } }'
 
 /**
  * Crossfades between views: the one leaving stays a moment, fading out,
@@ -677,7 +709,10 @@ function Crossfade({ k, render }: { k: string; render: (k: string) => ReactNode 
     const t = setTimeout(() => setShown(s => ({ ...s, prev: null })), VIEW_FADE_MS)
     return () => clearTimeout(t)
   }, [shown])
-  const layers = shown.prev && shown.prev !== shown.cur ? [shown.prev, shown.cur] : [shown.cur]
+  // Lite: straight to the new view
+  const lite = useContext(LiteFx)
+  const fading = !lite && !!shown.prev && shown.prev !== shown.cur
+  const layers = fading ? [shown.prev!, shown.cur] : [shown.cur]
   return (
     <>
       <style>{VIEW_CSS}</style>
@@ -687,7 +722,7 @@ function Crossfade({ k, render }: { k: string; render: (k: string) => ReactNode 
           <div
             key={l}
             className={clsx('absolute inset-0 flex gap-[18px]', leaving && 'pointer-events-none')}
-            style={shown.prev ? { animation: `${leaving ? 'tv-view-out' : 'tv-view-in'} ${VIEW_FADE_MS}ms ease-in-out both` } : undefined}
+            style={fading ? { animation: `${leaving ? 'tv-view-out' : 'tv-view-in'} ${VIEW_FADE_MS}ms ease-in-out both` } : undefined}
           >
             {render(l)}
           </div>
@@ -799,10 +834,11 @@ function scoreLabel(points: number): string {
 
 /** The ring before kickoff: fills over the last two hours, then pulses red once the game's on. */
 function KickoffRing({ kickoff, now, live }: { kickoff: string; now: number; live: boolean }) {
+  const lite = useContext(LiteFx)
   if (live) {
     return (
       <span className="relative w-[18px] h-[18px] shrink-0 flex items-center justify-center" aria-hidden>
-        <span className="absolute inset-0 rounded-full border-2 border-red-500" style={{ animation: 'tv-live-ring 1.6s ease-out infinite' }} />
+        <span className="absolute inset-0 rounded-full border-2 border-red-500" style={lite ? undefined : { animation: 'tv-live-ring 1.6s ease-out infinite' }} />
         <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
       </span>
     )
@@ -827,6 +863,8 @@ function KickoffRing({ kickoff, now, live }: { kickoff: string; now: number; liv
     </span>
   )
 }
+
+const MemoGamesGrid = memo(GamesGrid)
 
 /** "CHI -3.5" — the favorite's line, from the home team's number. */
 function lineLabel(g: { home: string; away: string; spread: number | null }): string | null {
@@ -1090,6 +1128,8 @@ function PicksBoardView({ board }: { board: TvBoard }) {
   )
 }
 
+const MemoPicksBoardView = memo(PicksBoardView)
+
 // ── Standings ─────────────────────────────────────────────────
 const TABLE_ROWS = 20
 /** How long a ▲/▼ stays next to someone who just moved. */
@@ -1233,6 +1273,8 @@ function StandingsPanel({ board, rows, week }: { board: TvBoard; rows: TvRow[]; 
     </div>
   )
 }
+
+const MemoStandingsPanel = memo(StandingsPanel)
 
 function pct(p: number | null | undefined): string {
   if (p == null) return '—'
@@ -1642,6 +1684,7 @@ const PANEL_FADE_MS = 450
 const PANEL_CSS = '@keyframes tv-panel-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-12px) } }'
 
 function FeaturePanel({ board }: { board: TvBoard }) {
+  const lite = useContext(LiteFx)
   const [i, setI] = useState(0)
   const [out, setOut] = useState(false)
   // Which panels there are doesn't depend on whose spotlight it is
@@ -1656,6 +1699,8 @@ function FeaturePanel({ board }: { board: TvBoard }) {
     if (count <= 1) return
     let swap: ReturnType<typeof setTimeout>
     const t = setInterval(() => {
+      // Lite: straight to the next one
+      if (lite) { setI(x => x + 1); return }
       setOut(true)
       swap = setTimeout(() => { setI(x => x + 1); setOut(false) }, PANEL_FADE_MS)
     }, PANEL_MS)
@@ -1690,8 +1735,11 @@ function FeaturePanel({ board }: { board: TvBoard }) {
   )
 }
 
+const MemoFeaturePanel = memo(FeaturePanel)
+
 // ── The ticker ────────────────────────────────────────────────
 function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; song: NowPlaying | null }) {
+  const lite = useContext(LiteFx)
   const strip = useSongFade(song)
   const items = useMemo(() => {
     const out: string[] = []
@@ -1733,6 +1781,8 @@ function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; 
   return (
     <div className="h-[56px] shrink-0 border-t-2 border-field-800 bg-field-900/90 overflow-hidden flex items-center">
       {strip.shown && <SongStrip song={strip.shown} leaving={strip.leaving} />}
+      {lite ? <TickerSteps items={items} /> : (
+      <>
       <style>{'@keyframes tv-ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }'}</style>
       {/* Its own lane, so the scrolling text never runs under the song */}
       <div className="flex-1 min-w-0 h-full overflow-hidden flex items-center">
@@ -1744,6 +1794,28 @@ function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; 
           ))}
         </div>
       </div>
+      </>
+      )}
+    </div>
+  )
+}
+
+/** How long each ticker item shows on lighter effects. */
+const TICKER_STEP_MS = 7000
+
+/** Lite: the ticker one item at a time, a few seconds each, instead of a scroll that never stops. */
+function TickerSteps({ items }: { items: string[] }) {
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    setI(0)
+    if (items.length <= 1) return
+    const t = setInterval(() => setI(x => x + 1), TICKER_STEP_MS)
+    return () => clearInterval(t)
+  }, [items.length])
+  const item = items[i % Math.max(1, items.length)] ?? ''
+  return (
+    <div className="flex-1 min-w-0 h-full flex items-center px-6">
+      <span className={clsx('truncate font-cond font-bold text-field-200 tracking-wide', item.length > 90 ? 'text-[22px]' : 'text-[27px]')}>{item}</span>
     </div>
   )
 }
@@ -1940,18 +2012,19 @@ const CHAT_PREVIEW = [
 ]
 
 /** This TV's presence on its channel, for the commissioner's remote: on lighter effects, and its Spotify speaker. */
-const tvPresence = (since: string, lite: boolean, speaker: SpeakerState) => ({ on: true, since, fx: lite ? 'lite' : 'full', speaker })
+const tvPresence = (since: string, lite: boolean, speaker: SpeakerState, perf: TvPerf | null) =>
+  ({ on: true, since, fx: lite ? 'lite' : 'full', speaker, fps: perf?.fps ?? null, slow: perf?.slow ?? null, silk: SILK })
 
-function LiveFromPhones({ code, lite, speaker }: { code: string; lite: boolean; speaker: SpeakerState }) {
+function LiveFromPhones({ code, lite, speaker, perf }: { code: string; lite: boolean; speaker: SpeakerState; perf: TvPerf | null }) {
   const [floaters, setFloaters] = useState<Floater[]>([])
   const [chats, setChats] = useState<ChatPop[]>([])
   // What the remote sees of this TV: on since when, on lighter effects, its speaker
   const joined = useRef<{ channel: ReturnType<typeof supabase.channel>; since: string } | null>(null)
-  const now = useRef({ lite, speaker })
+  const now = useRef({ lite, speaker, perf })
   useEffect(() => {
-    now.current = { lite, speaker }
-    if (joined.current) void joined.current.channel.track(tvPresence(joined.current.since, lite, speaker))
-  }, [lite, speaker])
+    now.current = { lite, speaker, perf }
+    if (joined.current) void joined.current.channel.track(tvPresence(joined.current.since, lite, speaker, perf))
+  }, [lite, speaker, perf])
   useEffect(() => {
     let n = 0
     const timers: ReturnType<typeof setTimeout>[] = []
@@ -2015,7 +2088,7 @@ function LiveFromPhones({ code, lite, speaker }: { code: string; lite: boolean; 
       .subscribe(status => {
         if (status !== 'SUBSCRIBED') return
         joined.current = { channel, since: joined.current?.since ?? new Date().toISOString() }
-        void channel.track(tvPresence(joined.current.since, now.current.lite, now.current.speaker))
+        void channel.track(tvPresence(joined.current.since, now.current.lite, now.current.speaker, now.current.perf))
       })
     if (new URLSearchParams(window.location.search).get('preview') === 'chat') {
       CHAT_PREVIEW.forEach((p, i) => timers.push(setTimeout(() => onChat(p), 1500 + i * 2500)))
@@ -2243,10 +2316,16 @@ function useSongFade(song: NowPlaying | null): { shown: NowPlaying | null; leavi
 
 /** Three bouncing bars: music's on. */
 function Equalizer({ size }: { size: number }) {
+  // Lite: the bars hold still
+  const lite = useContext(LiteFx)
   return (
     <span className="inline-flex items-end gap-[3px] shrink-0" style={{ height: size }} aria-hidden>
       {[0.9, 0.6, 1.1].map((d, i) => (
-        <span key={i} className="w-[4px] h-full rounded-sm bg-[#1DB954] origin-bottom" style={{ animation: `tv-eq ${d}s ease-in-out ${i * 0.15}s infinite` }} />
+        <span
+          key={i}
+          className="w-[4px] h-full rounded-sm bg-[#1DB954] origin-bottom"
+          style={lite ? { transform: `scaleY(${[0.6, 1, 0.75][i]})` } : { animation: `tv-eq ${d}s ease-in-out ${i * 0.15}s infinite` }}
+        />
       ))}
     </span>
   )
@@ -2254,14 +2333,16 @@ function Equalizer({ size }: { size: number }) {
 
 /** How far into the song, run on from when it was asked. */
 function SongProgress({ song }: { song: NowPlaying }) {
-  const now = useNow(1000)
+  // Lite: a step every 5 seconds, not a glide every second
+  const lite = useContext(LiteFx)
+  const now = useNow(lite ? 5000 : 1000)
   const done = song.durationMs ? Math.min(1, (song.progressMs + now - song.at) / song.durationMs) : 0
   // Grown with a transform, not its width, so the TV doesn't redo the
   // layout and repaint every frame the whole time music plays
   return (
     <div
       className="absolute left-0 bottom-0 w-full h-[3px] bg-[#1DB954] origin-left"
-      style={{ transform: `scaleX(${done})`, transition: 'transform 1s linear' }}
+      style={{ transform: `scaleX(${done})`, transition: lite ? undefined : 'transform 1s linear' }}
     />
   )
 }

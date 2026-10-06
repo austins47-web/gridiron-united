@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2, Clapperboard, BarChart3, Plus } from 'lucide-react'
+import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2, Clapperboard, BarChart3, Plus, MessageSquare, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { TV_MOMENTS, type TvMoment } from '@/lib/holiday'
+import { useTvReactions } from '@/hooks/useTvReactions'
+import { TvChatBox } from '@/components/tv/TvReactions'
 
 type Action = 'roast' | 'standings' | 'board' | 'replay' | 'announce' | 'moment' | 'clear' | 'reload'
 
@@ -37,10 +39,12 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
     },
   })
 
-  // How many TVs are on (their presence on the TV's channel), and whether
-  // any is on lighter effects because it was dropping frames
+  // How many TVs are on (their presence on the TV's channel), whether any
+  // is on lighter effects (a Fire TV, or one that was dropping frames), and
+  // the slowest one's last frames a second
   const [tvsOn, setTvsOn] = useState<number | null>(null)
   const [tvLite, setTvLite] = useState(false)
+  const [tvFps, setTvFps] = useState<number | null>(null)
   // The TV's Spotify speaker (Music on the TV), the most useful one if there are a few
   const [speaker, setSpeaker] = useState<string | null>(null)
   useEffect(() => {
@@ -53,9 +57,11 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       channel
         .on('presence', { event: 'sync' }, () => {
           // Every TV joins under the key 'tv': count them, not the keys
-          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string }[]
+          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string; fps?: number | null }[]
           setTvsOn(tvs.length)
           setTvLite(tvs.some(t => t.fx === 'lite'))
+          const fps = tvs.map(t => t.fps).filter((n): n is number => typeof n === 'number')
+          setTvFps(fps.length ? Math.min(...fps) : null)
           const states = tvs.map(t => t.speaker).filter((s): s is string => !!s && s !== 'off')
           setSpeaker(SPEAKER_ORDER.find(s => states.includes(s)) ?? null)
         })
@@ -66,6 +72,8 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
 
   const [busy, setBusy] = useState<string | null>(null)
   const [text, setText] = useState('')
+  const [chatOpen, setChatOpen] = useState(false)
+  const { say, unsend } = useTvReactions()
   const press = async (action: Action, extra: { p_text?: string; p_moment?: TvMoment } = {}, done = 'On the TV') => {
     setBusy(action + (extra.p_moment ?? ''))
     const { error } = await supabase.rpc('tv_remote', { p_league: leagueId, p_action: action, ...extra })
@@ -108,7 +116,8 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       )}
       {!!tvsOn && tvLite && (
         <p className="-mt-2 text-[11px] text-field-400">
-          Running lighter effects: the TV was dropping frames, so the background stopped drifting and the holiday fog is off. A reload tries the full effects again.
+          Running lighter effects so it stays smooth: the ticker steps through instead of scrolling, panels switch without animating, the background holds still and the holiday fog is off.
+          {tvFps != null && <> Last check: {tvFps} frames a second{tvFps >= 50 ? ' (smooth)' : tvFps >= 30 ? ' (a little choppy)' : ' (choppy)'}.</>}
         </p>
       )}
 
@@ -117,6 +126,24 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
         {button('standings', 'Standings', <ListOrdered className="w-5 h-5" />, 'Standings are on the TV')}
         {button('board', 'Picks board', <LayoutGrid className="w-5 h-5" />, 'The picks board is on the TV')}
         {button('replay', 'Replay', <Clapperboard className="w-5 h-5" />, "The week's replay is on the TV")}
+      </div>
+
+      {/* The TV chat: say something on the TV, see what's been said, take anything down */}
+      <div className="rounded-xl border border-field-700 bg-field-900/60">
+        <button
+          onClick={() => setChatOpen(o => !o)}
+          aria-expanded={chatOpen}
+          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-white"
+        >
+          <MessageSquare className="w-4 h-4 text-gold" /> TV chat
+          <span className="ml-auto text-xs font-normal text-field-400">{chatOpen ? 'Hide' : 'Open'}</span>
+          <ChevronDown className={clsx('w-4 h-4 text-field-400 transition-transform', chatOpen && 'rotate-180')} />
+        </button>
+        {chatOpen && (
+          <div className="px-3 pb-3">
+            <TvChatBox leagueId={leagueId} open say={say} unsend={unsend} isCommissioner bare />
+          </div>
+        )}
       </div>
 
       <TvPollForm leagueId={leagueId} tvOff={tvsOn === 0} />
