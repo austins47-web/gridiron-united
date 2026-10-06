@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { brandVars, DEFAULT_GOLD } from '@/lib/brand'
 import { weatherLabel, skyNow, type GameWeather } from '@/lib/weather'
 import { teamGlow } from '@/lib/teamColors'
+import { parseShopHours, isShopOpen, nextShopOpen, backLabel, type ShopHours } from '@/lib/shopHours'
 import { teamLogoUrl } from '@/components/teams/teamIds'
 import { BeltIcon } from '@/components/pickem/Belt'
 import { useHolidayTheme, TV_MOMENTS, type HolidayTheme, type TvMoment } from '@/lib/holiday'
@@ -118,7 +119,7 @@ interface TvBoard {
   gameReceipts?: TvGameReceipt[]
   replay?: TvReplay | null
   /** The league's logo, and the TV's own accent color (Commish panel → Shop TV). */
-  brand?: { logo: string | null; color?: string | null; theme?: string | null; music?: boolean; player?: boolean; location?: { name: string; lat: number; lon: number } | null }
+  brand?: { logo: string | null; color?: string | null; theme?: string | null; music?: boolean; player?: boolean; location?: { name: string; lat: number; lon: number } | null; hours?: unknown }
   week: number
   now: string
   started: boolean
@@ -243,10 +244,37 @@ export function ShopTV() {
   useWakeLock()
   useDarkTheme()
 
+  // Closing time: asleep outside the shop's hours (Commish panel → Shop TV),
+  // unless someone woke it: any remote button, or OK on the TV, for half an
+  // hour. "Back to normal" on the remote puts it straight back to sleep.
+  const [wakeUntil, setWakeUntil] = useState(0)
+  const hours = useMemo(() => parseShopHours(board?.brand?.hours), [board?.brand?.hours])
+  const asleep = useAsleep(hours, wakeUntil)
+  const asleepNow = useRef(asleep)
+  asleepNow.current = asleep
+  useTvRemote(r => {
+    if (r.action === 'clear') setWakeUntil(0)
+    else if (r.action !== 'reload' && r.action !== 'poll_votes') setWakeUntil(Date.now() + WAKE_MS)
+  })
+  useEffect(() => {
+    if (!asleep) return
+    const wake = () => setWakeUntil(Date.now() + WAKE_MS)
+    window.addEventListener('keydown', wake)
+    window.addEventListener('click', wake)
+    return () => { window.removeEventListener('keydown', wake); window.removeEventListener('click', wake) }
+  }, [asleep])
+  // Awake again: the latest, not what it had when it dozed off
+  const wasAsleep = useRef(false)
+  useEffect(() => {
+    if (wasAsleep.current && !asleep) window.dispatchEvent(new Event(TV_REFRESH))
+    wasAsleep.current = asleep
+  }, [asleep])
+
   // Poll: every 30s while a game is on (scores sync every 2 minutes),
   // every 10s in the last few minutes before a lock, and every 5
   // minutes otherwise — a TV left on all week was ~1,500 calls a day.
-  // None at all while the page can't be seen (onScreen).
+  // Asleep after hours, every 15 minutes (2 while a game's on). None at
+  // all while the page can't be seen (onScreen).
   useEffect(() => {
     let alive = true
     let timer: ReturnType<typeof setTimeout>
@@ -278,6 +306,8 @@ export function ShopTV() {
         if (lockAt.some(ms => ms < 4 * 60_000)) next = 10_000
         // Wake up in time for the next lock's last few minutes
         else for (const ms of lockAt) if (ms < Infinity) next = Math.min(next, ms - 4 * 60_000 + 1_000)
+        // Asleep: now and then, a little more often while a game's on
+        if (asleepNow.current) next = data.games.some(g => g.state === 'live') ? 2 * 60_000 : 15 * 60_000
       } catch {
         if (alive) setStatus(s => (s === 'loading' ? 'loading' : 'offline'))
         next = 20_000
@@ -321,7 +351,8 @@ export function ShopTV() {
     if (!seen || seen.week !== board.week) { store(locked.map(g => g.id)); return }
     const fresh = locked.filter(g => !seen!.ids.includes(g.id) && Date.now() - new Date(g.kickoff).getTime() < 45 * 60_000)
     store([...new Set([...seen.ids, ...locked.map(g => g.id)])])
-    if (fresh.length) setReveal(r => (r ? [...r, ...fresh.filter(f => !r.some(x => x.id === f.id))] : fresh))
+    // Not while it's asleep: on waking it'd be old news
+    if (fresh.length && !asleepNow.current) setReveal(r => (r ? [...r, ...fresh.filter(f => !r.some(x => x.id === f.id))] : fresh))
   }, [board, code])
 
   // ?reveal=demo plays it once with this week's locked games (a preview)
@@ -337,7 +368,7 @@ export function ShopTV() {
   // Thanksgiving, Christmas, the playoffs, Super Bowl week
   const holiday = useHolidayTheme(board?.week ?? null, board?.brand?.theme)
   // The song on the league's Spotify, when one's connected
-  const song = useNowPlaying(code, !!board?.brand?.music)
+  const song = useNowPlaying(code, !!board?.brand?.music && !asleep)
   // The TV as a Spotify speaker, when the commissioner's turned that on
   const speaker = useSpotifySpeaker(code, !!board?.brand?.player, `${board?.league ?? 'Shop'} TV`)
   const { lite, still, perf } = useLiteEffects()
@@ -363,22 +394,85 @@ export function ShopTV() {
         }}
       >
         <StillFx.Provider value={still}>
-        {board && status !== 'gone' && <Backdrop lite={lite} edge={lite ? holiday?.colors ?? null : null} />}
+        {board && status !== 'gone' && !asleep && <Backdrop lite={lite} edge={lite ? holiday?.colors ?? null : null} />}
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
+          : asleep ? <ClosedScreen board={board} hours={hours} />
           : <Board board={board} offline={status === 'offline'} holiday={holiday} song={song} />}
-        {board && reveal && reveal.length > 0 && (
+        {board && !asleep && reveal && reveal.length > 0 && (
           <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
         )}
-        {board && holiday && <HolidayScene theme={holiday} lite={lite} still={still} />}
+        {board && !asleep && holiday && <HolidayScene theme={holiday} lite={lite} still={still} />}
         {/* Lite: a few falling pieces; still: none */}
-        {board && holiday && !still && <HolidayParticles theme={holiday} count={lite ? 6 : 14} />}
-        {status !== 'gone' && <LiveFromPhones code={code} lite={lite} still={still} speaker={speaker} perf={perf} />}
+        {board && !asleep && holiday && !still && <HolidayParticles theme={holiday} count={lite ? 6 : 14} />}
+        {status !== 'gone' && <LiveFromPhones code={code} status={{ lite, still, speaker, perf, asleep }} />}
         {speaker === 'blocked' && <SpeakerBlocked />}
         {board && <RemoteOverlay board={board} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
-        {board && <ReplayShow board={board} />}
-        {board && <ReceiptsPop board={board} />}
+        {board && !asleep && <ReplayShow board={board} />}
+        {board && !asleep && <ReceiptsPop board={board} />}
         </StillFx.Provider>
+      </div>
+    </div>
+  )
+}
+
+// ── Closing time ──────────────────────────────────────────────
+/** How long a remote button, or OK on the TV, wakes it after hours. */
+const WAKE_MS = 30 * 60_000
+
+/**
+ * Whether the TV's asleep: outside the shop's hours, and nobody's woken
+ * it. Checked every 30 seconds by the TV's own clock. ?sleep=preview puts
+ * it to sleep now (a look at the screen; it wakes like any other time).
+ */
+function useAsleep(hours: ShopHours | null, wakeUntil: number): boolean {
+  const [preview] = useState(() => new URLSearchParams(window.location.search).get('sleep') === 'preview')
+  const key = hours ? JSON.stringify(hours) : ''
+  const check = () => Date.now() >= wakeUntil && (preview || (!!hours && !isShopOpen(hours, new Date())))
+  const [asleep, setAsleep] = useState(check)
+  useEffect(() => {
+    setAsleep(check())
+    const t = setInterval(() => setAsleep(check()), 30_000)
+    return () => clearInterval(t)
+    // `key` stands for the hours
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, wakeUntil])
+  return asleep
+}
+
+/**
+ * After hours: a dim clock, when the shop's back, and the score of any
+ * game on. Nothing animates; the whole block moves a little each minute
+ * so nothing burns into the screen.
+ */
+function ClosedScreen({ board, hours }: { board: TvBoard; hours: ShopHours | null }) {
+  const clock = useClock()
+  const now = useNow(60_000)
+  const back = hours ? nextShopOpen(hours, new Date(now)) : null
+  const spot = Math.floor(now / 60_000)
+  const dx = (((spot * 137) % 9) - 4) * 55
+  const dy = (((spot * 71) % 7) - 3) * 45
+  const live = board.games.filter(g => g.state === 'live')
+  return (
+    <div className="absolute inset-0 bg-black flex items-center justify-center">
+      <div className="flex flex-col items-center text-center opacity-70" style={{ transform: `translate(${dx}px, ${dy}px)` }}>
+        {board.brand?.logo && <img src={board.brand.logo} alt="" className="h-[72px] w-auto mb-6 opacity-60" />}
+        <p className="font-cond font-black text-[190px] leading-none tabular-nums text-white">{clock.time}</p>
+        <p className="mt-3 font-cond font-bold uppercase tracking-[0.3em] text-[30px] text-field-400">{clock.date}</p>
+        <p className="mt-8 text-[30px] text-field-300">
+          {board.league} is closed{back ? <> · back {backLabel(back, new Date(now))}</> : null}
+        </p>
+        {live.length > 0 && (
+          <div className="mt-10 flex flex-wrap justify-center gap-x-16 gap-y-3 max-w-[1500px]">
+            {live.slice(0, 8).map(g => (
+              <p key={g.id} className="font-cond font-black text-[34px] text-white tabular-nums whitespace-nowrap">
+                {g.away} {g.awayScore ?? 0} <span className="text-field-500">–</span> {g.homeScore ?? 0} {g.home}
+                {g.clock && <span className="ml-3 font-sans font-bold text-[20px] text-field-400">{g.clock}</span>}
+              </p>
+            ))}
+          </div>
+        )}
+        <p className="mt-12 text-[20px] text-field-500">Press OK on the TV’s remote to wake the board</p>
       </div>
     </div>
   )
@@ -2019,19 +2113,24 @@ const CHAT_PREVIEW = [
 ]
 
 /** This TV's presence on its channel, for the commissioner's remote: on lighter effects, and its Spotify speaker. */
-const tvPresence = (since: string, lite: boolean, still: boolean, speaker: SpeakerState, perf: TvPerf | null) =>
-  ({ on: true, since, fx: still ? 'still' : lite ? 'lite' : 'full', speaker, fps: perf?.fps ?? null, slow: perf?.slow ?? null, silk: SILK })
+interface TvStatus { lite: boolean; still: boolean; speaker: SpeakerState; perf: TvPerf | null; asleep: boolean }
+const tvPresence = (since: string, s: TvStatus) => ({
+  on: true, since, fx: s.still ? 'still' : s.lite ? 'lite' : 'full', speaker: s.speaker,
+  fps: s.perf?.fps ?? null, slow: s.perf?.slow ?? null, silk: SILK, asleep: s.asleep,
+})
 
-function LiveFromPhones({ code, lite, still, speaker, perf }: { code: string; lite: boolean; still: boolean; speaker: SpeakerState; perf: TvPerf | null }) {
+function LiveFromPhones({ code, status }: { code: string; status: TvStatus }) {
   const [floaters, setFloaters] = useState<Floater[]>([])
   const [chats, setChats] = useState<ChatPop[]>([])
-  // What the remote sees of this TV: on since when, on lighter effects, its speaker
+  // What the remote sees of this TV: on since when, its effects, its
+  // speaker, its frames a second, asleep after hours
   const joined = useRef<{ channel: ReturnType<typeof supabase.channel>; since: string } | null>(null)
-  const now = useRef({ lite, still, speaker, perf })
+  const now = useRef(status)
+  const { lite, still, speaker, perf, asleep } = status
   useEffect(() => {
-    now.current = { lite, still, speaker, perf }
-    if (joined.current) void joined.current.channel.track(tvPresence(joined.current.since, lite, still, speaker, perf))
-  }, [lite, still, speaker, perf])
+    now.current = { lite, still, speaker, perf, asleep }
+    if (joined.current) void joined.current.channel.track(tvPresence(joined.current.since, now.current))
+  }, [lite, still, speaker, perf, asleep])
   useEffect(() => {
     let n = 0
     const timers: ReturnType<typeof setTimeout>[] = []
@@ -2099,7 +2198,7 @@ function LiveFromPhones({ code, lite, still, speaker, perf }: { code: string; li
       .subscribe(status => {
         if (status !== 'SUBSCRIBED') return
         joined.current = { channel, since: joined.current?.since ?? new Date().toISOString() }
-        void channel.track(tvPresence(joined.current.since, now.current.lite, now.current.still, now.current.speaker, now.current.perf))
+        void channel.track(tvPresence(joined.current.since, now.current))
       })
     if (new URLSearchParams(window.location.search).get('preview') === 'chat') {
       CHAT_PREVIEW.forEach((p, i) => timers.push(setTimeout(() => onChat(p), 1500 + i * 2500)))
@@ -2109,8 +2208,9 @@ function LiveFromPhones({ code, lite, still, speaker, perf }: { code: string; li
 
   return (
     <>
-      <FloatingReactions items={floaters} />
-      <ChatPopups items={chats} />
+      {/* Asleep: nothing pops up (the chat still lands on the chat screen once woken) */}
+      {!asleep && <FloatingReactions items={floaters} />}
+      {!asleep && <ChatPopups items={chats} />}
     </>
   )
 }

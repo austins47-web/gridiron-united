@@ -45,6 +45,8 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
   const [tvsOn, setTvsOn] = useState<number | null>(null)
   const [tvLite, setTvLite] = useState(false)
   const [tvFps, setTvFps] = useState<number | null>(null)
+  // Asleep after the shop's hours (Shop hours, below)
+  const [tvAsleep, setTvAsleep] = useState(false)
   // The TV's Spotify speaker (Music on the TV), the most useful one if there are a few
   const [speaker, setSpeaker] = useState<string | null>(null)
   useEffect(() => {
@@ -57,9 +59,10 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       channel
         .on('presence', { event: 'sync' }, () => {
           // Every TV joins under the key 'tv': count them, not the keys
-          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string; fps?: number | null }[]
+          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string; fps?: number | null; asleep?: boolean }[]
           setTvsOn(tvs.length)
           setTvLite(tvs.some(t => t.fx === 'lite' || t.fx === 'still'))
+          setTvAsleep(tvs.length > 0 && tvs.every(t => t.asleep))
           const fps = tvs.map(t => t.fps).filter((n): n is number => typeof n === 'number')
           setTvFps(fps.length ? Math.min(...fps) : null)
           const states = tvs.map(t => t.speaker).filter((s): s is string => !!s && s !== 'off')
@@ -109,6 +112,11 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
           {tvsOn == null ? 'Checking the TV…' : tvsOn > 0 ? `TV is on${tvsOn > 1 ? ` (${tvsOn})` : ''}` : 'TV looks off'}
         </span>
       </div>
+      {!!tvsOn && tvAsleep && (
+        <p className="-mt-2 text-[11px] text-field-300">
+          😴 Asleep after shop hours. Any button below wakes it for 30 minutes; Back to normal puts it back to sleep.
+        </p>
+      )}
       {!!tvsOn && speaker && SPEAKER_NOTES[speaker] && (
         <p className={clsx('-mt-2 text-[11px]', speaker === 'ready' ? 'text-[#1DB954]' : speaker === 'connecting' ? 'text-field-400' : 'text-amber-300')}>
           🔊 {SPEAKER_NOTES[speaker]}

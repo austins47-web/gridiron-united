@@ -1616,6 +1616,8 @@ export type League = ScoringRules & RosterSlotConfig & {
   tv_theme?: string | null
   /** Where the shop is, for the Shop TV's weather. */
   tv_location?: { name: string; lat: number; lon: number } | null
+  /** Shop hours for the Shop TV: it sleeps outside them (by the TV's own clock). Sunday = 0. */
+  tv_hours?: { open: string; close: string; days: number[] } | null
   created_at: string
   updated_at: string
 }

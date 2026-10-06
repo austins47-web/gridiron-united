@@ -11,6 +11,7 @@ import { HOLIDAY_CHOICES } from '@/lib/holiday'
 import { TvRemote } from './TvRemote'
 import { TvMusicSetting } from './TvMusicSetting'
 import { TvLocationSetting } from './TvLocationSetting'
+import { TvHoursSetting } from './TvHoursSetting'
 import clsx from 'clsx'
 
 /**
@@ -166,6 +167,7 @@ export function ShopTvSetting({ leagueId }: { leagueId: string }) {
 
       {/* The weather outside the shop, in the TV's header */}
       <TvLocationSetting leagueId={leagueId} />
+      <TvHoursSetting leagueId={leagueId} />
 
       {/* The holiday theme */}
       <div className="pt-3 border-t border-field-700">
