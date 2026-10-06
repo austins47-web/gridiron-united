@@ -8,7 +8,7 @@ import { TV_MOMENTS, type TvMoment } from '@/lib/holiday'
 import { useTvReactions } from '@/hooks/useTvReactions'
 import { TvChatBox } from '@/components/tv/TvReactions'
 
-type Action = 'roast' | 'standings' | 'board' | 'replay' | 'announce' | 'moment' | 'clear' | 'reload'
+type Action = 'roast' | 'standings' | 'board' | 'replay' | 'chat' | 'announce' | 'moment' | 'clear' | 'reload'
 
 /** What the TV's Spotify speaker is doing (its presence), worst news first. */
 const SPEAKER_ORDER = ['blocked', 'unsupported', 'premium', 'auth', 'error', 'connecting', 'ready']
@@ -59,7 +59,7 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
           // Every TV joins under the key 'tv': count them, not the keys
           const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string; fps?: number | null }[]
           setTvsOn(tvs.length)
-          setTvLite(tvs.some(t => t.fx === 'lite'))
+          setTvLite(tvs.some(t => t.fx === 'lite' || t.fx === 'still'))
           const fps = tvs.map(t => t.fps).filter((n): n is number => typeof n === 'number')
           setTvFps(fps.length ? Math.min(...fps) : null)
           const states = tvs.map(t => t.speaker).filter((s): s is string => !!s && s !== 'off')
@@ -116,19 +116,20 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       )}
       {!!tvsOn && tvLite && (
         <p className="-mt-2 text-[11px] text-field-400">
-          Running lighter effects so it stays smooth: the ticker steps through instead of scrolling, panels switch without animating, the background holds still and the holiday fog is off.
+          Running lighter effects so it stays smooth: the background holds still, the holiday fog is off and fewer pieces fall.
           {tvFps != null && <> Last check: {tvFps} frames a second{tvFps >= 50 ? ' (smooth)' : tvFps >= 30 ? ' (a little choppy)' : ' (choppy)'}.</>}
         </p>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
         {button('roast', 'Roast', <Mic className="w-5 h-5" />, 'The roast is on the TV')}
         {button('standings', 'Standings', <ListOrdered className="w-5 h-5" />, 'Standings are on the TV')}
         {button('board', 'Picks board', <LayoutGrid className="w-5 h-5" />, 'The picks board is on the TV')}
         {button('replay', 'Replay', <Clapperboard className="w-5 h-5" />, "The week's replay is on the TV")}
+        {button('chat', 'Chat', <MessageSquare className="w-5 h-5" />, 'The chat is on the TV')}
       </div>
 
-      {/* The TV chat: say something on the TV, see what's been said, take anything down */}
+      {/* The TV chat, here: say something on the TV, see what's been said, take anything down */}
       <div className="rounded-xl border border-field-700 bg-field-900/60">
         <button
           onClick={() => setChatOpen(o => !o)}

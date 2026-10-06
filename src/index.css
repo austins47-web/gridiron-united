@@ -728,11 +728,11 @@
 .tv-bright .text-field-700 { color: #616161; }
 .tv-bright .opacity-40 { opacity: .65; }
 .tv-bright .opacity-35 { opacity: .6; }
-/* Lighter effects (.tv-lite, a Fire TV): nothing pulses or slides in on
-   its own, so the TV only redraws when something actually changes */
-.tv-lite .rise-in,
-.tv-lite .animate-pulse,
-.tv-lite .animate-ping { animation: none !important; }
+/* Nothing moving on its own (.tv-still, ?fx=still): nothing pulses or
+   slides in, so the TV only redraws when something actually changes */
+.tv-still .rise-in,
+.tv-still .animate-pulse,
+.tv-still .animate-ping { animation: none !important; }
 
 /* ── Field color overrides — remap dark palette to light ── */
 [data-theme="light"] .bg-field-950 { background-color: #dde2ee !important; }

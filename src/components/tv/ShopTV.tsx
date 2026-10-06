@@ -158,7 +158,8 @@ interface TvBoard {
     bestPct: { name: string; correct: number; played: number; pct: number } | null
     basement: { name: string; correct: number; played: number }[]
   }
-  chat?: { name: string; text: string; at: string }[]
+  /** The league chat and the TV chat together, newest first (text only). */
+  chat?: { id?: string; name: string; text: string; at: string }[]
   roast?: { week: number; text: string } | null
   poll?: { question: string; options: { text: string; votes: number }[]; total: number; closesAt: string | null; commish: boolean } | null
   /** Every pick on every game: a team, '?' while it can still be picked, null for no pick. */
@@ -339,7 +340,7 @@ export function ShopTV() {
   const song = useNowPlaying(code, !!board?.brand?.music)
   // The TV as a Spotify speaker, when the commissioner's turned that on
   const speaker = useSpotifySpeaker(code, !!board?.brand?.player, `${board?.league ?? 'Shop'} TV`)
-  const { lite, perf } = useLiteEffects()
+  const { lite, still, perf } = useLiteEffects()
 
   const goFull = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {})
@@ -352,7 +353,7 @@ export function ShopTV() {
       style={{ cursor: idle ? 'none' : 'default' }}
     >
       <div
-        className={clsx('tv-bright shrink-0 bg-field-950 text-white relative', lite && 'tv-lite')}
+        className={clsx('tv-bright shrink-0 bg-field-950 text-white relative', lite && 'tv-lite', still && 'tv-still')}
         style={{
           width: W, height: H, transform: `scale(${scale})`, transformOrigin: 'center',
           // The TV's own color (or the copper), set here so nobody's personal
@@ -361,7 +362,7 @@ export function ShopTV() {
           ...(brandVars(holiday?.accent ?? board?.brand?.color ?? DEFAULT_GOLD) as CSSProperties),
         }}
       >
-        <LiteFx.Provider value={lite}>
+        <StillFx.Provider value={still}>
         {board && status !== 'gone' && <Backdrop lite={lite} edge={lite ? holiday?.colors ?? null : null} />}
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
@@ -369,15 +370,15 @@ export function ShopTV() {
         {board && reveal && reveal.length > 0 && (
           <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
         )}
-        {board && holiday && <HolidayScene theme={holiday} lite={lite} />}
-        {/* Lite: nothing falls (it would have the TV redrawing every frame) */}
-        {board && holiday && !lite && <HolidayParticles theme={holiday} />}
-        {status !== 'gone' && <LiveFromPhones code={code} lite={lite} speaker={speaker} perf={perf} />}
+        {board && holiday && <HolidayScene theme={holiday} lite={lite} still={still} />}
+        {/* Lite: a few falling pieces; still: none */}
+        {board && holiday && !still && <HolidayParticles theme={holiday} count={lite ? 6 : 14} />}
+        {status !== 'gone' && <LiveFromPhones code={code} lite={lite} still={still} speaker={speaker} perf={perf} />}
         {speaker === 'blocked' && <SpeakerBlocked />}
         {board && <RemoteOverlay board={board} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
         {board && <ReplayShow board={board} />}
         {board && <ReceiptsPop board={board} />}
-        </LiteFx.Provider>
+        </StillFx.Provider>
       </div>
     </div>
   )
@@ -409,13 +410,14 @@ function Gone() {
 // A Fire TV stick can't draw every effect 60 times a second, and when it
 // falls behind, everything that moves stutters. So the TV times its own
 // frames now and then, and once it's dropping them it switches to lighter
-// effects until the next reload; Fire TV's Silk starts on them. Lite, the
-// background holds still, the holiday glow moves under the panels and
-// the fog goes, and nothing moves on its own between
-// changes: the ticker steps through instead of scrolling, panels switch
-// without animating, the music bars hold still, nothing falls and the
-// holiday decorations hold still between moments. ?fx=lite or ?fx=full
-// forces either.
+// effects until the next reload; Fire TV's Silk starts on them. Lite
+// keeps the movement (the ticker, fades, a few falling pieces) and drops
+// the big layers that cost the most: the background holds still, the
+// holiday glow moves under the panels, the fog goes. Still (?fx=still,
+// for a TV that can't keep up even then) has nothing moving on its own:
+// the ticker steps through instead of scrolling, panels switch without
+// animating, nothing falls or pulses. ?fx=full / ?fx=lite / ?fx=still
+// force any of them.
 const FX_FIRST_MS = 20_000
 const FX_SAMPLE_MS = 5000
 const FX_EVERY_MS = 60_000
@@ -430,12 +432,13 @@ interface TvPerf { fps: number; slow: number }
  */
 const SILK = typeof navigator !== 'undefined' && /\bSilk\/|\bAFT[A-Z]/.test(navigator.userAgent)
 
-/** Whether the TV runs lighter effects, for anything that moves (see useLiteEffects). */
-const LiteFx = createContext(false)
+/** Nothing moving on its own (?fx=still; see useLiteEffects), for anything that moves. */
+const StillFx = createContext(false)
 
-function useLiteEffects(): { lite: boolean; perf: TvPerf | null } {
+function useLiteEffects(): { lite: boolean; still: boolean; perf: TvPerf | null } {
   const [forced] = useState(() => new URLSearchParams(window.location.search).get('fx'))
-  const [lite, setLite] = useState(forced === 'lite' || (forced !== 'full' && SILK))
+  const still = forced === 'still'
+  const [lite, setLite] = useState(still || forced === 'lite' || (forced !== 'full' && SILK))
   const [perf, setPerf] = useState<TvPerf | null>(null)
   useEffect(() => {
     let raf = 0
@@ -465,7 +468,7 @@ function useLiteEffects(): { lite: boolean; perf: TvPerf | null } {
     timer = setTimeout(sample, FX_FIRST_MS)
     return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
   }, [forced])
-  return { lite, perf }
+  return { lite, still, perf }
 }
 
 /**
@@ -647,6 +650,10 @@ function Board({ board, offline, holiday, song }: { board: TvBoard; offline: boo
 /** Asks the board to reload now (a chat message was deleted). */
 const TV_REFRESH = 'gu-tv-refresh'
 
+/** A chat message as it lands on the TV, or one taken down (for the chat takeover). */
+type TvChatEvent = { id: string; name: string; text: string; gif: string | null; at: string } | { deleted: string }
+const TV_CHAT = 'gu-tv-chat'
+
 /** A press of the commissioner's remote (tv_remote), passed around the TV. */
 interface TvRemote {
   action: string
@@ -709,9 +716,9 @@ function Crossfade({ k, render }: { k: string; render: (k: string) => ReactNode 
     const t = setTimeout(() => setShown(s => ({ ...s, prev: null })), VIEW_FADE_MS)
     return () => clearTimeout(t)
   }, [shown])
-  // Lite: straight to the new view
-  const lite = useContext(LiteFx)
-  const fading = !lite && !!shown.prev && shown.prev !== shown.cur
+  // Still: straight to the new view
+  const still = useContext(StillFx)
+  const fading = !still && !!shown.prev && shown.prev !== shown.cur
   const layers = fading ? [shown.prev!, shown.cur] : [shown.cur]
   return (
     <>
@@ -834,11 +841,11 @@ function scoreLabel(points: number): string {
 
 /** The ring before kickoff: fills over the last two hours, then pulses red once the game's on. */
 function KickoffRing({ kickoff, now, live }: { kickoff: string; now: number; live: boolean }) {
-  const lite = useContext(LiteFx)
+  const still = useContext(StillFx)
   if (live) {
     return (
       <span className="relative w-[18px] h-[18px] shrink-0 flex items-center justify-center" aria-hidden>
-        <span className="absolute inset-0 rounded-full border-2 border-red-500" style={lite ? undefined : { animation: 'tv-live-ring 1.6s ease-out infinite' }} />
+        <span className="absolute inset-0 rounded-full border-2 border-red-500" style={still ? undefined : { animation: 'tv-live-ring 1.6s ease-out infinite' }} />
         <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
       </span>
     )
@@ -1684,7 +1691,7 @@ const PANEL_FADE_MS = 450
 const PANEL_CSS = '@keyframes tv-panel-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-12px) } }'
 
 function FeaturePanel({ board }: { board: TvBoard }) {
-  const lite = useContext(LiteFx)
+  const still = useContext(StillFx)
   const [i, setI] = useState(0)
   const [out, setOut] = useState(false)
   // Which panels there are doesn't depend on whose spotlight it is
@@ -1699,8 +1706,8 @@ function FeaturePanel({ board }: { board: TvBoard }) {
     if (count <= 1) return
     let swap: ReturnType<typeof setTimeout>
     const t = setInterval(() => {
-      // Lite: straight to the next one
-      if (lite) { setI(x => x + 1); return }
+      // Still: straight to the next one
+      if (still) { setI(x => x + 1); return }
       setOut(true)
       swap = setTimeout(() => { setI(x => x + 1); setOut(false) }, PANEL_FADE_MS)
     }, PANEL_MS)
@@ -1739,7 +1746,7 @@ const MemoFeaturePanel = memo(FeaturePanel)
 
 // ── The ticker ────────────────────────────────────────────────
 function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; song: NowPlaying | null }) {
-  const lite = useContext(LiteFx)
+  const still = useContext(StillFx)
   const strip = useSongFade(song)
   const items = useMemo(() => {
     const out: string[] = []
@@ -1781,7 +1788,7 @@ function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; 
   return (
     <div className="h-[56px] shrink-0 border-t-2 border-field-800 bg-field-900/90 overflow-hidden flex items-center">
       {strip.shown && <SongStrip song={strip.shown} leaving={strip.leaving} />}
-      {lite ? <TickerSteps items={items} /> : (
+      {still ? <TickerSteps items={items} /> : (
       <>
       <style>{'@keyframes tv-ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }'}</style>
       {/* Its own lane, so the scrolling text never runs under the song */}
@@ -1800,10 +1807,10 @@ function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; 
   )
 }
 
-/** How long each ticker item shows on lighter effects. */
+/** How long each ticker item shows when nothing moves (?fx=still). */
 const TICKER_STEP_MS = 7000
 
-/** Lite: the ticker one item at a time, a few seconds each, instead of a scroll that never stops. */
+/** Still: the ticker one item at a time, a few seconds each, instead of a scroll that never stops. */
 function TickerSteps({ items }: { items: string[] }) {
   const [i, setI] = useState(0)
   useEffect(() => {
@@ -2012,19 +2019,19 @@ const CHAT_PREVIEW = [
 ]
 
 /** This TV's presence on its channel, for the commissioner's remote: on lighter effects, and its Spotify speaker. */
-const tvPresence = (since: string, lite: boolean, speaker: SpeakerState, perf: TvPerf | null) =>
-  ({ on: true, since, fx: lite ? 'lite' : 'full', speaker, fps: perf?.fps ?? null, slow: perf?.slow ?? null, silk: SILK })
+const tvPresence = (since: string, lite: boolean, still: boolean, speaker: SpeakerState, perf: TvPerf | null) =>
+  ({ on: true, since, fx: still ? 'still' : lite ? 'lite' : 'full', speaker, fps: perf?.fps ?? null, slow: perf?.slow ?? null, silk: SILK })
 
-function LiveFromPhones({ code, lite, speaker, perf }: { code: string; lite: boolean; speaker: SpeakerState; perf: TvPerf | null }) {
+function LiveFromPhones({ code, lite, still, speaker, perf }: { code: string; lite: boolean; still: boolean; speaker: SpeakerState; perf: TvPerf | null }) {
   const [floaters, setFloaters] = useState<Floater[]>([])
   const [chats, setChats] = useState<ChatPop[]>([])
   // What the remote sees of this TV: on since when, on lighter effects, its speaker
   const joined = useRef<{ channel: ReturnType<typeof supabase.channel>; since: string } | null>(null)
-  const now = useRef({ lite, speaker, perf })
+  const now = useRef({ lite, still, speaker, perf })
   useEffect(() => {
-    now.current = { lite, speaker, perf }
-    if (joined.current) void joined.current.channel.track(tvPresence(joined.current.since, lite, speaker, perf))
-  }, [lite, speaker, perf])
+    now.current = { lite, still, speaker, perf }
+    if (joined.current) void joined.current.channel.track(tvPresence(joined.current.since, lite, still, speaker, perf))
+  }, [lite, still, speaker, perf])
   useEffect(() => {
     let n = 0
     const timers: ReturnType<typeof setTimeout>[] = []
@@ -2045,6 +2052,9 @@ function LiveFromPhones({ code, lite, speaker, perf }: { code: string; lite: boo
       }
       // Four on screen at most: a burst drops the oldest
       setChats(list => [...list.slice(-3), c])
+      window.dispatchEvent(new CustomEvent<TvChatEvent>(TV_CHAT, {
+        detail: { id: c.msgId ?? `live-${c.id}`, name: c.name, text: c.text, gif: c.gif, at: new Date().toISOString() },
+      }))
       timers.push(setTimeout(() => setChats(list => list.filter(x => x.id !== c.id)), c.dur))
     }
     // Private: only the database posts here (tv_broadcast); presence tells
@@ -2072,6 +2082,7 @@ function LiveFromPhones({ code, lite, speaker, perf }: { code: string; lite: boo
         const id = (payload as { id?: string })?.id
         if (!id) return
         setChats(list => list.filter(c => c.msgId !== id))
+        window.dispatchEvent(new CustomEvent<TvChatEvent>(TV_CHAT, { detail: { deleted: id } }))
         window.dispatchEvent(new Event(TV_REFRESH))
       })
       // Votes on a poll (league_poll_votes_to_tv), for the poll on screen
@@ -2088,7 +2099,7 @@ function LiveFromPhones({ code, lite, speaker, perf }: { code: string; lite: boo
       .subscribe(status => {
         if (status !== 'SUBSCRIBED') return
         joined.current = { channel, since: joined.current?.since ?? new Date().toISOString() }
-        void channel.track(tvPresence(joined.current.since, now.current.lite, now.current.speaker, now.current.perf))
+        void channel.track(tvPresence(joined.current.since, now.current.lite, now.current.still, now.current.speaker, now.current.perf))
       })
     if (new URLSearchParams(window.location.search).get('preview') === 'chat') {
       CHAT_PREVIEW.forEach((p, i) => timers.push(setTimeout(() => onChat(p), 1500 + i * 2500)))
@@ -2316,15 +2327,15 @@ function useSongFade(song: NowPlaying | null): { shown: NowPlaying | null; leavi
 
 /** Three bouncing bars: music's on. */
 function Equalizer({ size }: { size: number }) {
-  // Lite: the bars hold still
-  const lite = useContext(LiteFx)
+  // Still: the bars hold still
+  const still = useContext(StillFx)
   return (
     <span className="inline-flex items-end gap-[3px] shrink-0" style={{ height: size }} aria-hidden>
       {[0.9, 0.6, 1.1].map((d, i) => (
         <span
           key={i}
           className="w-[4px] h-full rounded-sm bg-[#1DB954] origin-bottom"
-          style={lite ? { transform: `scaleY(${[0.6, 1, 0.75][i]})` } : { animation: `tv-eq ${d}s ease-in-out ${i * 0.15}s infinite` }}
+          style={still ? { transform: `scaleY(${[0.6, 1, 0.75][i]})` } : { animation: `tv-eq ${d}s ease-in-out ${i * 0.15}s infinite` }}
         />
       ))}
     </span>
@@ -2333,16 +2344,16 @@ function Equalizer({ size }: { size: number }) {
 
 /** How far into the song, run on from when it was asked. */
 function SongProgress({ song }: { song: NowPlaying }) {
-  // Lite: a step every 5 seconds, not a glide every second
-  const lite = useContext(LiteFx)
-  const now = useNow(lite ? 5000 : 1000)
+  // Still: a step every 5 seconds, not a glide every second
+  const still = useContext(StillFx)
+  const now = useNow(still ? 5000 : 1000)
   const done = song.durationMs ? Math.min(1, (song.progressMs + now - song.at) / song.durationMs) : 0
   // Grown with a transform, not its width, so the TV doesn't redo the
   // layout and repaint every frame the whole time music plays
   return (
     <div
       className="absolute left-0 bottom-0 w-full h-[3px] bg-[#1DB954] origin-left"
-      style={{ transform: `scaleX(${done})`, transition: lite ? undefined : 'transform 1s linear' }}
+      style={{ transform: `scaleX(${done})`, transition: still ? undefined : 'transform 1s linear' }}
     />
   )
 }
@@ -2404,14 +2415,16 @@ function SongCard({ song }: { song: NowPlaying | null }) {
 
 // ── The commissioner's remote ─────────────────────────────────
 // Presses from Commish panel → Shop TV (tv_remote): an announcement full
-// screen, the season standings, any moment, back to normal, or a reload.
+// screen, the season standings, the chat, any moment, back to normal, or
+// a reload.
 // The roast and the picks board are the Takeover's and the main view's.
 const ANNOUNCE_MS = 15_000
 const STANDINGS_MS = 20_000
+const CHAT_MS = 25_000
 const NOTE_MS = 6000
 const isMoment = (m: unknown): m is TvMoment => TV_MOMENTS.some(x => x.kind === m)
 
-type RemoteShow = { kind: 'announce' | 'note'; text: string } | { kind: 'standings' }
+type RemoteShow = { kind: 'announce' | 'note'; text: string } | { kind: 'standings' | 'chat' }
 
 function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, string] }) {
   const [show, setShow] = useState<(RemoteShow & { id: number }) | null>(null)
@@ -2431,6 +2444,11 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
         break
       case 'standings':
         put({ kind: 'standings' }, STANDINGS_MS)
+        break
+      case 'chat':
+        put({ kind: 'chat' }, CHAT_MS)
+        // The latest words, not the last poll's
+        window.dispatchEvent(new Event(TV_REFRESH))
         break
       case 'board':
         if (!board.board?.games.some(g => g.locked)) put({ kind: 'note', text: 'The picks board shows once a game locks' }, NOTE_MS)
@@ -2472,6 +2490,7 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
       )}
       {show?.kind === 'announce' && <Announcement key={show.id} text={show.text} />}
       {show?.kind === 'standings' && <StandingsTakeover key={show.id} board={board} />}
+      {show?.kind === 'chat' && <ChatTakeover key={show.id} board={board} />}
       <LivePoll />
       {show?.kind === 'note' && (
         // Centered by the row, not a transform: the fade-in animates transform
@@ -2795,6 +2814,48 @@ function StandingsTakeover({ board }: { board: TvBoard }) {
                 {r.correct}<span className="text-field-500">–{r.played - r.correct}</span>
               </span>
               {!!r.weeksWon && <span className="w-16 text-right text-[22px] font-bold text-gold">🏆 {r.weeksWon}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The chat full screen (the remote's Chat): the week's words from the
+ * league chat and the TV chat, newest at the bottom, and anything said
+ * while it's up lands at the bottom too (the pop-ups are underneath it).
+ */
+function ChatTakeover({ board }: { board: TvBoard }) {
+  const [live, setLive] = useState<{ id: string; name: string; text: string; gif: string | null; at: string }[]>([])
+  const [gone, setGone] = useState<string[]>([])
+  useEffect(() => {
+    const hear = (e: Event) => {
+      const d = (e as CustomEvent<TvChatEvent>).detail
+      if ('deleted' in d) setGone(g => [...g, d.deleted])
+      else setLive(l => [...l, d])
+    }
+    window.addEventListener(TV_CHAT, hear)
+    return () => window.removeEventListener(TV_CHAT, hear)
+  }, [])
+  const saved = [...(board.chat ?? [])].reverse().map(m => ({ id: m.id ?? `${m.name}-${m.at}`, name: m.name, text: m.text, gif: null as string | null, at: m.at }))
+  const known = new Set(saved.map(m => m.id))
+  const msgs = [...saved, ...live.filter(m => !known.has(m.id))].filter(m => !gone.includes(m.id)).slice(-8)
+  return (
+    <div className="absolute inset-0 z-[35] bg-field-950/[0.97] flex flex-col px-24 py-14 rise-in">
+      <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[30px]">{board.league}</p>
+      <p className="font-cond font-black uppercase text-white text-[72px] leading-none mb-8">💬 Trash talk</p>
+      {msgs.length === 0 ? (
+        <p className="text-field-300 text-[36px]">Quiet in here. Say something in the chat, or from the TV button in the app.</p>
+      ) : (
+        // Newest at the bottom; too many and the oldest go off the top
+        <div className="flex-1 min-h-0 flex flex-col justify-end gap-6 overflow-hidden">
+          {msgs.map(m => (
+            <div key={m.id} className="shrink-0 max-w-[1560px] rise-in">
+              <p className="text-[24px]"><span className="font-bold text-gold">{m.name}</span> <span className="text-field-500">{ago(m.at)}</span></p>
+              {m.text && <p className="text-[40px] text-white leading-snug line-clamp-2">{m.text}</p>}
+              {m.gif && <img src={m.gif} alt="" className="mt-2 h-[180px] w-auto rounded-xl" />}
             </div>
           ))}
         </div>

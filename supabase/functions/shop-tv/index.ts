@@ -108,14 +108,14 @@ serve(async (req) => {
       // The latest words in the league chat (text only) and the TV chat
       // (tv_messages: the TV's own), together on the trash talk panel
       admin.from('league_messages')
-        .select('user_id, message, created_at')
+        .select('id, user_id, message, created_at')
         .eq('league_id', tv.league_id).eq('is_system', false).is('game_id', null).is('deleted_at', null)
         .not('message', 'like', 'IMAGE:%').not('message', 'like', 'GIF:%').not('message', 'like', 'POLL:%').gte('created_at', since)
-        .order('created_at', { ascending: false }).limit(8),
+        .order('created_at', { ascending: false }).limit(12),
       admin.from('tv_messages')
-        .select('user_id, message, created_at')
+        .select('id, user_id, message, created_at')
         .eq('league_id', tv.league_id).is('deleted_at', null).gte('created_at', since)
-        .order('created_at', { ascending: false }).limit(8),
+        .order('created_at', { ascending: false }).limit(12),
       admin.from('league_messages')
         .select('message, created_at')
         .eq('league_id', tv.league_id).eq('is_system', true).like('message', 'PICKEM_ROAST:%').gte('created_at', since)
@@ -490,8 +490,8 @@ serve(async (req) => {
     // Chat, the roast and the latest poll
     const chat = [...(chatRows ?? []), ...(tvChatRows ?? [])]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 8)
-      .map(m => ({ name: nameById.get(m.user_id) ?? 'Someone', text: String(m.message).slice(0, 200), at: m.created_at }))
+      .slice(0, 12)
+      .map(m => ({ id: m.id, name: nameById.get(m.user_id) ?? 'Someone', text: String(m.message).slice(0, 200), at: m.created_at }))
     let roast: { week: number; text: string } | null = null
     const raw = roastRows?.[0]?.message as string | undefined
     if (raw) {
