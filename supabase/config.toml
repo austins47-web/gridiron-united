@@ -17,3 +17,12 @@ verify_jwt = false
 # The Shop TV board: a TV can't sign in, so its 8-character code is the key
 [functions.shop-tv]
 verify_jwt = false
+
+# The song on the league's Spotify, for the Shop TV (its code is the key, like shop-tv)
+[functions.tv-now-playing]
+verify_jwt = false
+
+# Connecting Spotify: Spotify sends the commissioner back here without a
+# session; the start (POST) checks their sign-in itself
+[functions.spotify-connect]
+verify_jwt = false

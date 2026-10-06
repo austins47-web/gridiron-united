@@ -117,7 +117,7 @@ interface TvBoard {
   gameReceipts?: TvGameReceipt[]
   replay?: TvReplay | null
   /** The league's logo, and the TV's own accent color (Commish panel → Shop TV). */
-  brand?: { logo: string | null; color?: string | null; theme?: string | null }
+  brand?: { logo: string | null; color?: string | null; theme?: string | null; music?: boolean }
   week: number
   now: string
   started: boolean
@@ -326,6 +326,8 @@ export function ShopTV() {
 
   // Thanksgiving, Christmas, the playoffs, Super Bowl week
   const holiday = useHolidayTheme(board?.week ?? null, board?.brand?.theme)
+  // The song on the league's Spotify, when one's connected
+  const song = useNowPlaying(code, !!board?.brand?.music)
 
   const goFull = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {})
@@ -349,7 +351,7 @@ export function ShopTV() {
       >
         {status === 'gone' ? <Gone />
           : !board ? <Loading />
-          : <Board board={board} offline={status === 'offline'} holiday={holiday} />}
+          : <Board board={board} offline={status === 'offline'} holiday={holiday} song={song} />}
         {board && reveal && reveal.length > 0 && (
           <RevealShow board={board} games={reveal} onDone={() => setReveal(null)} />
         )}
@@ -386,7 +388,7 @@ function Gone() {
   )
 }
 
-function Board({ board, offline, holiday }: { board: TvBoard; offline: boolean; holiday: HolidayTheme | null }) {
+function Board({ board, offline, holiday, song }: { board: TvBoard; offline: boolean; holiday: HolidayTheme | null; song: NowPlaying | null }) {
   const clock = useClock()
   const anyLive = board.games.some(g => g.state === 'live')
   const showWeek = board.started
@@ -465,7 +467,8 @@ function Board({ board, offline, holiday }: { board: TvBoard; offline: boolean; 
         <FeaturePanel board={board} />
       </div>
 
-      <Ticker board={board} greeting={holiday?.greeting.replace('{league}', board.league)} />
+      <Ticker board={board} greeting={holiday?.greeting.replace('{league}', board.league)} song={song} />
+      <SongCard song={song} />
       <Takeover board={board} emoji={holiday?.emoji} />
     </div>
   )
@@ -1308,7 +1311,7 @@ function FeaturePanel({ board }: { board: TvBoard }) {
 }
 
 // ── The ticker ────────────────────────────────────────────────
-function Ticker({ board, greeting }: { board: TvBoard; greeting?: string }) {
+function Ticker({ board, greeting, song }: { board: TvBoard; greeting?: string; song: NowPlaying | null }) {
   const items = useMemo(() => {
     const out: string[] = []
     // A holiday theme's greeting leads
@@ -1343,11 +1346,12 @@ function Ticker({ board, greeting }: { board: TvBoard; greeting?: string }) {
     return out
   }, [board, greeting])
 
-  if (items.length === 0) return <div className="h-[56px] shrink-0" />
+  if (items.length === 0 && !song) return <div className="h-[56px] shrink-0" />
   const text = items.join('     •     ')
   const seconds = Math.max(30, Math.round(text.length * 0.2))
   return (
     <div className="h-[56px] shrink-0 border-t-2 border-field-800 bg-field-900 overflow-hidden flex items-center">
+      {song && <SongStrip song={song} />}
       <style>{'@keyframes tv-ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }'}</style>
       <div className="flex whitespace-nowrap" style={{ animation: `tv-ticker ${seconds}s linear infinite` }}>
         {[0, 1].map(i => (
@@ -1627,6 +1631,130 @@ function LiveFromPhones({ code }: { code: string }) {
       <FloatingReactions items={floaters} />
       <ChatPopups items={chats} />
     </>
+  )
+}
+
+// ── Music: the song on the league's Spotify ───────────────────
+// tv-now-playing, asked again as each song should end and every 30
+// seconds while one's on (a skip shows within half a minute); once a
+// minute when nothing is, every 5 minutes after half an hour of quiet.
+interface NowPlaying {
+  title: string
+  artist: string
+  album: string | null
+  art: string | null
+  progressMs: number
+  durationMs: number
+  /** When it was asked, to run the progress bar from */
+  at: number
+}
+
+// ?preview=music: a sample song, to see the strip and the card without Spotify
+const SAMPLE_SONG = { title: 'Thunderstruck', artist: 'AC/DC', album: 'The Razors Edge', art: null, progressMs: 40_000, durationMs: 292_000 }
+
+function useNowPlaying(code: string, on: boolean): NowPlaying | null {
+  const [song, setSong] = useState<NowPlaying | null>(null)
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('preview') === 'music') { setSong({ ...SAMPLE_SONG, at: Date.now() }); return }
+    if (!on) { setSong(null); return }
+    let alive = true
+    let timer: ReturnType<typeof setTimeout>
+    let quietSince = Date.now()
+    const load = async () => {
+      let next = 60_000
+      try {
+        const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tv-now-playing?token=${encodeURIComponent(code)}`, {
+          headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+          cache: 'no-store',
+        })
+        const d = await r.json()
+        if (!alive) return
+        if (d.playing && d.title) {
+          quietSince = Date.now()
+          setSong({ title: d.title, artist: d.artist ?? '', album: d.album ?? null, art: d.art ?? null, progressMs: d.progressMs ?? 0, durationMs: d.durationMs ?? 0, at: Date.now() })
+          next = Math.max(4000, Math.min(30_000, (d.durationMs ?? 0) - (d.progressMs ?? 0) + 1500))
+        } else {
+          setSong(null)
+          next = d.retryAfterSec ? d.retryAfterSec * 1000
+            : d.connected === false ? 10 * 60_000
+            : Date.now() - quietSince > 30 * 60_000 ? 5 * 60_000 : 60_000
+        }
+      } catch {
+        next = 60_000
+      }
+      if (alive) timer = setTimeout(load, next)
+    }
+    load()
+    return () => { alive = false; clearTimeout(timer) }
+  }, [code, on])
+  return song
+}
+
+const MUSIC_CSS = '@keyframes tv-eq { 0%, 100% { transform: scaleY(.3) } 50% { transform: scaleY(1) } }'
+
+/** Three bouncing bars: music's on. */
+function Equalizer({ size }: { size: number }) {
+  return (
+    <span className="inline-flex items-end gap-[3px] shrink-0" style={{ height: size }} aria-hidden>
+      {[0.9, 0.6, 1.1].map((d, i) => (
+        <span key={i} className="w-[4px] h-full rounded-sm bg-[#1DB954] origin-bottom" style={{ animation: `tv-eq ${d}s ease-in-out ${i * 0.15}s infinite` }} />
+      ))}
+    </span>
+  )
+}
+
+/** How far into the song, run on from when it was asked. */
+function SongProgress({ song }: { song: NowPlaying }) {
+  const now = useNow(1000)
+  const pct = song.durationMs ? Math.min(100, ((song.progressMs + now - song.at) / song.durationMs) * 100) : 0
+  return <div className="absolute left-0 bottom-0 h-[3px] bg-[#1DB954]" style={{ width: `${pct}%`, transition: 'width 1s linear' }} />
+}
+
+/** The song, at the left end of the ticker. */
+function SongStrip({ song }: { song: NowPlaying }) {
+  return (
+    <div className="relative h-full w-[540px] shrink-0 flex items-center gap-3 px-4 bg-black/40 border-r-2 border-field-800 z-[1]">
+      <style>{MUSIC_CSS}</style>
+      {song.art
+        ? <img src={song.art} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
+        : <span className="w-10 h-10 rounded-md bg-field-800 flex items-center justify-center text-[22px] shrink-0">♪</span>}
+      <Equalizer size={22} />
+      <div className="min-w-0 leading-tight">
+        <p className="text-[20px] font-bold text-white truncate">{song.title}</p>
+        <p className="text-[15px] text-field-400 truncate">{song.artist}</p>
+      </div>
+      <SongProgress song={song} />
+    </div>
+  )
+}
+
+/** When the song changes: a bigger card above the ticker, bottom right, for 8 seconds. */
+function SongCard({ song }: { song: NowPlaying | null }) {
+  const key = song ? `${song.title}\u0000${song.artist}` : null
+  const [shown, setShown] = useState<NowPlaying | null>(null)
+  const last = useRef<string | null>(null)
+  useEffect(() => {
+    if (!key || key === last.current) return
+    last.current = key
+    setShown(song)
+    const t = setTimeout(() => setShown(null), 8000)
+    return () => clearTimeout(t)
+    // Only a new song (not every refresh of the same one) shows the card
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  if (!shown) return null
+  return (
+    <div className="absolute right-8 bottom-[76px] z-[27] pointer-events-none rise-in flex items-center gap-5 rounded-2xl border-2 border-[#1DB954]/60 bg-field-900/[0.97] shadow-2xl shadow-black/60 p-4 max-w-[720px]">
+      <style>{MUSIC_CSS}</style>
+      {shown.art
+        ? <img src={shown.art} alt="" className="w-[140px] h-[140px] rounded-xl object-cover shrink-0" />
+        : <span className="w-[140px] h-[140px] rounded-xl bg-field-800 flex items-center justify-center text-[64px] shrink-0">♪</span>}
+      <div className="min-w-0">
+        <p className="flex items-center gap-2 font-cond font-bold uppercase tracking-[0.25em] text-[#1DB954] text-[18px] mb-2"><Equalizer size={16} /> Now playing</p>
+        <p className="font-cond font-black text-white text-[40px] leading-tight line-clamp-2">{shown.title}</p>
+        <p className="text-[24px] text-field-300 truncate mt-1">{shown.artist}</p>
+      </div>
+    </div>
   )
 }
 

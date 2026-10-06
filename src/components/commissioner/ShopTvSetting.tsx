@@ -9,6 +9,7 @@ import { DEFAULT_GOLD } from '@/lib/brand'
 import { ColorPicker } from '@/components/settings/ColorPicker'
 import { HOLIDAY_CHOICES } from '@/lib/holiday'
 import { TvRemote } from './TvRemote'
+import { TvMusicSetting } from './TvMusicSetting'
 import clsx from 'clsx'
 
 /**
@@ -158,6 +159,9 @@ export function ShopTvSetting({ leagueId }: { leagueId: string }) {
         <p className="text-field-400 text-xs mb-3">The accent on the Shop TV only. It doesn't change anyone's own color in the app.</p>
         <ColorPicker value={tvColor} onPick={pickTvColor} disabled={savingColor} idPrefix="tv-color" />
       </div>
+
+      {/* The song on the shop's Spotify */}
+      <TvMusicSetting leagueId={leagueId} />
 
       {/* The holiday theme */}
       <div className="pt-3 border-t border-field-700">

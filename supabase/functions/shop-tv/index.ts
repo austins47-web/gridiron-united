@@ -96,7 +96,7 @@ serve(async (req) => {
     const now = new Date()
     const season = nflSeasonFor(now)
     const since = new Date(now.getTime() - 7 * 24 * 3600_000).toISOString()
-    const [{ data: league }, { data: memberRows }, { data: gameRows }, { data: pin }, { data: chatRows }, { data: roastRows }, { data: pollRows }] = await Promise.all([
+    const [{ data: league }, { data: memberRows }, { data: gameRows }, { data: pin }, { data: chatRows }, { data: roastRows }, { data: pollRows }, { data: spotify }] = await Promise.all([
       admin.from('leagues')
         .select('id, name, league_type, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, brand_logo_url, brand_color, tv_theme')
         .eq('id', tv.league_id).maybeSingle(),
@@ -119,6 +119,7 @@ serve(async (req) => {
         .select('id, question, options, closes_at, created_by, created_at')
         .eq('league_id', tv.league_id).gte('created_at', since)
         .order('created_at', { ascending: false }).limit(1),
+      admin.from('league_spotify').select('league_id').eq('league_id', tv.league_id).maybeSingle(),
     ])
     if (!league || league.league_type !== 'pickem') return json({ error: 'not found' }, 404)
 
@@ -501,7 +502,8 @@ serve(async (req) => {
       league: league.name,
       // brand_color is the TV's own accent (Commish panel → Shop TV)
       // tv_theme: the commissioner's holiday theme (null: by the calendar)
-      brand: { logo: league.brand_logo_url ?? null, color: league.brand_color ?? null, theme: league.tv_theme ?? null },
+      // music: a Spotify is connected (the TV then asks tv-now-playing what's on)
+      brand: { logo: league.brand_logo_url ?? null, color: league.brand_color ?? null, theme: league.tv_theme ?? null, music: !!spotify },
       season,
       week,
       now: now.toISOString(),
