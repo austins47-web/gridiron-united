@@ -28,7 +28,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
 }) {
   const qc = useQueryClient()
   const key = ['conquest', leagueId, CURRENT_SEASON]
-  const { data, isLoading } = useQuery({
+  const { data: raw, isLoading } = useQuery({
     queryKey: key,
     staleTime: 60_000,
     queryFn: async (): Promise<(ConquestData & { log: (ConquestMove & { week: number })[] }) | null> => {
@@ -42,10 +42,6 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
         supabase.from('conquest_moves').select('week, kind, team, from_user, to_user, score_for, score_against, exiled')
           .eq('league_id', leagueId).eq('season', CURRENT_SEASON).order('week', { ascending: false }).order('id'),
       ])
-      const nameOf = (id: string) => {
-        const m = leagueMembers.find((x: any) => x.user_id === id)
-        return m?.profile?.display_name || m?.profile?.username || 'Someone'
-      }
       const log = (moves ?? []).map((m: any) => ({
         week: m.week, kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
         score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: m.exiled,
@@ -53,7 +49,8 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
       return {
         startWeek: war.start_week,
         lastWeek: war.last_resolved_week,
-        players: (players ?? []).map((p: any): ConquestPlayer => ({ userId: p.user_id, color: p.color, capital: p.capital, name: nameOf(p.user_id) })),
+        // Names go on when it's drawn: the member list may still be loading now
+        players: (players ?? []).map((p: any): ConquestPlayer => ({ userId: p.user_id, color: p.color, capital: p.capital, name: '' })),
         owners: Object.fromEntries((cities ?? []).map((c: any) => [c.team, c.owner_id])),
         besieged: Object.fromEntries((cities ?? []).filter((c: any) => c.besieged_by).map((c: any) => [c.team, c.besieged_by])),
         report: null,
@@ -61,6 +58,16 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
       }
     },
   })
+
+  // The war with everyone's name on it
+  const data = useMemo(() => {
+    if (!raw) return raw
+    const nameOf = (id: string) => {
+      const m = leagueMembers.find((x: any) => x.user_id === id)
+      return m?.profile?.display_name || m?.profile?.username || 'Someone'
+    }
+    return { ...raw, players: raw.players.map(p => ({ ...p, name: nameOf(p.userId) })) }
+  }, [raw, leagueMembers])
 
   const [starting, setStarting] = useState(false)
   const start = async () => {
