@@ -1372,15 +1372,18 @@
    The TV's lite effects (Silk on the Fire TV) trade the radar for a scan
    line; still, and anyone who'd rather not have motion, gets none. */
 @keyframes cq-radar { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-.cq-radar { transform: translate(-50%, -50%); animation: cq-radar 10s linear infinite; }
+.cq-radar { transform: translate(-50%, -50%); animation: cq-radar 8s linear infinite; }
 @keyframes cq-scan { from { transform: translateY(-100%); } to { transform: translateY(1000%); } }
 .cq-scan { display: none; animation: cq-scan 8s linear infinite; }
+/* A capital pings as the sweep crosses it: every ping runs on the sweep's
+   8s turn, delayed to its own spot (the radar's angle, or the scan line's
+   height on lite; set per ping, ConquestMap's sweepAt) */
 @keyframes cq-ping {
-  0% { transform: scale(0.25); opacity: 0; }
-  3% { opacity: 0.95; }
-  22%, 100% { transform: scale(1); opacity: 0; }
+  0% { transform: scale(0.25); opacity: 1; }
+  24%, 100% { transform: scale(1); opacity: 0; }
 }
-.cq-ping { opacity: 0; animation: cq-ping 9s ease-out infinite; }
+.cq-ping { opacity: 0; animation: cq-ping 8s ease-out infinite; animation-delay: var(--cq-radar-at, 0s); }
+.tv-lite .cq-ping { animation-delay: var(--cq-scan-at, 0s); }
 @keyframes cq-ping-siege { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1); opacity: 0; } }
 .cq-ping-siege { animation: cq-ping-siege 1.6s ease-out infinite; }
 @keyframes cq-flicker { from { opacity: 1; } to { opacity: 0.25; } }

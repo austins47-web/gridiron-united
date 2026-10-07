@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useState, type CSSProperties, type ReactNode } from 'react'
+import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { TERRITORIES, ADJ } from '../../../supabase/functions/_shared/conquest.ts'
 import { US_MAP, NORTHEAST_CITIES } from './usMap'
@@ -192,7 +192,41 @@ interface Ping { team: string; x: number; y: number; color: string; siege: boole
 interface Arrow { key: string; fromTeam: string; toTeam: string; from: [number, number]; to: [number, number]; color: string; live: boolean }
 interface Hot { team: string; color: string; siege: boolean }
 
-const PING_S = 9
+/** One turn of the radar, one pass of the scan line (index.css's cq-radar, cq-scan and cq-ping) */
+const SWEEP_S = 8
+
+/**
+ * When the sweep crosses a point, as a ping's delay into each turn: the
+ * radar's beam goes clockwise from 12 o'clock around the map's center;
+ * the scan line's bright edge goes from the top to 110% of the way down.
+ */
+const sweepAt = (x: number, y: number) => {
+  const deg = ((Math.atan2(x - M.width / 2, -(y - M.height / 2)) * 180) / Math.PI + 360) % 360
+  return { radar: (deg / 360) * SWEEP_S, scan: (y / M.height / 1.1) * SWEEP_S }
+}
+
+/**
+ * Puts the sweep and the pings on the page's one animation clock, so a
+ * ping goes off as the sweep crosses it however late either one started
+ * (a capital retaken, the TV switching effects).
+ */
+function useOnSweep() {
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || !el.getAnimations) return
+    const align = () => {
+      for (const a of el.getAnimations({ subtree: true })) {
+        const name = (a as CSSAnimation).animationName
+        if ((name === 'cq-radar' || name === 'cq-scan' || name === 'cq-ping') && a.startTime !== 0) a.startTime = 0
+      }
+    }
+    align()
+    el.addEventListener('animationstart', align)
+    return () => el.removeEventListener('animationstart', align)
+  })
+  return ref
+}
 
 /**
  * The moving layers over one window of the map (map space, at `zoom` for
@@ -283,19 +317,23 @@ function Motion({ win, zoom, P, pings, ringR, hot, arrows, radar, lanes }: {
         </svg>
       )}
 
-      {/* Capitals pinging, one after another (a besieged one, fast and red) */}
-      {pings.map((p, i) => (
-        <div
-          key={p.team}
-          className={p.siege ? 'cq-ping-siege' : 'cq-ping'}
-          style={{
-            ...at(p.x - ringR, p.y - ringR, ringR * 2, ringR * 2),
-            borderRadius: '50%',
-            border: `2px solid ${p.siege ? SIEGE : p.color}`,
-            animationDelay: p.siege ? undefined : `${(-(i * PING_S) / pings.length).toFixed(2)}s`,
-          }}
-        />
-      ))}
+      {/* Capitals ping as the sweep crosses them (a besieged one, fast and red, all the time) */}
+      {pings.map(p => {
+        const when = sweepAt(p.x, p.y)
+        return (
+          <div
+            key={p.team}
+            className={p.siege ? 'cq-ping-siege' : 'cq-ping'}
+            style={{
+              ...at(p.x - ringR, p.y - ringR, ringR * 2, ringR * 2),
+              borderRadius: '50%',
+              border: `2px solid ${p.siege ? SIEGE : p.color}`,
+              ['--cq-radar-at' as string]: `${when.radar.toFixed(2)}s`,
+              ['--cq-scan-at' as string]: `${when.scan.toFixed(2)}s`,
+            }}
+          />
+        )
+      })}
     </>
   )
 }
@@ -322,6 +360,7 @@ export const ConquestMap = memo(function ConquestMap({
 }) {
   const P = useLight() ? LIGHT : DARK
   const uid = useId().replace(/:/g, '')
+  const motion = useOnSweep()
   const byId = new Map(players.map(p => [p.userId, p]))
   const ownerAt = (t: string) => (owners[t] ? byId.get(owners[t]!) : undefined)
   const colorOf = (t: string) => ownerAt(t)?.color ?? null
@@ -415,7 +454,7 @@ export const ConquestMap = memo(function ConquestMap({
         )}
       </svg>
 
-      <div className="absolute inset-0 pointer-events-none" aria-hidden>
+      <div ref={motion} className="absolute inset-0 pointer-events-none" aria-hidden>
         <div style={frame(MAIN, 10)}>
           <Motion
             win={MAIN} zoom={1} P={P} radar lanes
