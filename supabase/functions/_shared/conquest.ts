@@ -378,7 +378,8 @@ export interface Title {
   label: string
   /** what it's for */
   blurb: string
-  userId: string
+  /** who holds it: the leader, or everyone still tied for it */
+  holders: string[]
   value: number
 }
 
@@ -394,8 +395,8 @@ const TITLE_INFO: Record<Title['key'], { icon: string; label: string; blurb: str
 /**
  * The season's titles from the war log and the map as it stands: who
  * leads each (the race during the season; crowned after the last week).
- * A title nobody's earned (a count of 0) isn't given. Ties go to whoever
- * holds more cities, then alphabetically by id, so it never wobbles.
+ * A title nobody's earned (a count of 0) isn't given. A tie goes to the
+ * bigger empire; still tied, they share it (nobody's out in front yet).
  */
 export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Record<string, string | null>, players: string[]): Title[] {
   const cities = (u: string) => citiesOf(owners, u).length
@@ -414,11 +415,13 @@ export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Reco
   }
   const out: Title[] = []
   for (const key of Object.keys(TITLE_INFO) as Title['key'][]) {
-    const best = players
-      .map(u => ({ u, v: tallies[key][u] ?? 0 }))
-      .filter(x => x.v > 0)
-      .sort((a, b) => b.v - a.v || cities(b.u) - cities(a.u) || a.u.localeCompare(b.u))[0]
-    if (best) out.push({ key, ...TITLE_INFO[key], userId: best.u, value: best.v })
+    const ranked = players.map(u => ({ u, v: tallies[key][u] ?? 0, c: cities(u) })).filter(x => x.v > 0)
+    if (!ranked.length) continue
+    const top = Math.max(...ranked.map(x => x.v))
+    let lead = ranked.filter(x => x.v === top)
+    const most = Math.max(...lead.map(x => x.c))
+    lead = lead.filter(x => x.c === most)
+    out.push({ key, ...TITLE_INFO[key], holders: lead.map(x => x.u).sort(), value: top })
   }
   return out
 }

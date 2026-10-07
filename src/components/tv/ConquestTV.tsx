@@ -63,7 +63,7 @@ export function ConquestPanelBody({ war, battles, week }: { war: ConquestData; b
     <div className="h-full flex flex-col gap-3">
       <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} contested={contested(war, battles)} className="w-full h-auto" />
       {war.crowned?.[0] && (
-        <p className="text-[19px] font-bold text-gold">{war.crowned[0].icon} {war.players.find(p => p.userId === war.crowned![0].userId)?.name ?? 'Someone'} is {war.crowned[0].label}</p>
+        <p className="text-[19px] font-bold text-gold">{war.crowned[0].icon} {war.crowned[0].label}: {war.crowned[0].holders.map(nameFrom(war)).join(' & ')}</p>
       )}
       {week < war.startWeek ? (
         <p className="text-[18px] text-field-300">The war begins Week {war.startWeek}. Every empire attacks the neighbor it picks most differently from.</p>
@@ -283,29 +283,31 @@ export function ConquestMapShow({ b }: { b: WarBoard }) {
 /** The war's over: the Emperor, full screen, and the season's other titles. */
 function Coronation({ war, league }: { war: ConquestData; league: string }) {
   const [emperor, ...rest] = war.crowned!
-  const p = war.players.find(x => x.userId === emperor.userId)
+  const nameOf = nameFrom(war), colorOf = colorFrom(war)
+  const co = emperor.holders.length > 1
   return (
     <div className="absolute inset-0 z-[36] bg-field-950/[0.98] flex flex-col items-center justify-center px-20 text-center">
       <p className="font-cond font-bold uppercase tracking-[0.35em] text-gold text-[30px]">{league} · Conquest is over</p>
       <p className="mt-6 text-[130px] leading-none rise-in">👑</p>
-      <p className="mt-4 font-cond font-black uppercase text-[110px] leading-none rise-in" style={{ color: p?.color ?? '#fff' }}>{p?.name ?? 'Someone'}</p>
+      <p className={clsx('mt-4 font-cond font-black uppercase leading-none rise-in', co ? 'text-[80px]' : 'text-[110px]')}>
+        {emperor.holders.map((id, i) => (
+          <span key={id}>{i > 0 && <span className="text-field-500"> & </span>}<span style={{ color: colorOf(id) }}>{nameOf(id)}</span></span>
+        ))}
+      </p>
       <p className="mt-3 font-cond font-black uppercase text-white text-[52px] tracking-wide">
-        {emperor.label} · {emperor.value} {emperor.value === 1 ? 'city' : 'cities'}
+        {co ? `Co-${emperor.label}s` : emperor.label} · {emperor.value} {emperor.value === 1 ? 'city' : 'cities'}
       </p>
       {rest.length > 0 && (
         <div className="mt-12 grid grid-cols-2 gap-x-16 gap-y-4 text-left">
-          {rest.map(t => {
-            const h = war.players.find(x => x.userId === t.userId)
-            return (
-              <div key={t.key} className="flex items-center gap-4 text-[30px]">
-                <span className="w-10 text-center">{t.icon}</span>
-                <span className="font-bold text-white w-[260px]">{t.label}</span>
-                <span className="w-5 h-5 rounded-sm shrink-0" style={{ background: h?.color ?? '#666' }} />
-                <span className="font-bold text-field-200">{h?.name ?? 'Someone'}</span>
-                <span className="text-field-500 text-[22px]">{t.value}</span>
-              </div>
-            )
-          })}
+          {rest.map(t => (
+            <div key={t.key} className="flex items-center gap-4 text-[30px]">
+              <span className="w-10 text-center">{t.icon}</span>
+              <span className="font-bold text-white w-[260px]">{t.label}</span>
+              <span className="w-5 h-5 rounded-sm shrink-0" style={{ background: colorOf(t.holders[0]) }} />
+              <span className="font-bold text-field-200">{t.holders.map(nameOf).join(' & ')}</span>
+              <span className="text-field-500 text-[22px]">{t.value}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

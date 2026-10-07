@@ -366,15 +366,26 @@ function TitleRace({ war, userId }: { war: War; userId: string | undefined }) {
         <Crown className="w-4 h-4 text-gold" /> {war.crowned ? 'Crowned' : `Title race · crowned after Week ${war.finalWeek ?? 18}`}
       </p>
       <ul className="space-y-1.5">
-        {list.map(t => (
-          <li key={t.key} className={clsx('flex items-center gap-2 text-sm rounded-md px-2 py-1', t.userId === userId && 'bg-gold/10')}>
-            <span className="w-6 text-center">{t.icon}</span>
-            <span className="font-bold text-white w-28 shrink-0">{t.label}</span>
-            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: player(t.userId)?.color ?? '#666' }} />
-            <span className="font-bold text-field-200 truncate">{player(t.userId)?.name ?? 'Someone'}</span>
-            <span className="ml-auto shrink-0 text-[11px] text-field-400">{t.value} · {t.blurb}</span>
-          </li>
-        ))}
+        {list.map(t => {
+          const tied = t.holders.length > 1
+          return (
+            <li key={t.key} className={clsx('flex items-center gap-2 text-sm rounded-md px-2 py-1', !!userId && t.holders.includes(userId) && 'bg-gold/10')}>
+              <span className="w-6 text-center">{t.icon}</span>
+              <span className="font-bold text-white w-28 shrink-0">{t.label}</span>
+              {tied ? (
+                <span className="text-field-400 truncate">
+                  {t.holders.length <= 3 ? `${t.holders.map(id => player(id)?.name ?? 'Someone').join(' & ')}, tied` : `${t.holders.length}-way tie`}
+                </span>
+              ) : (
+                <>
+                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: player(t.holders[0])?.color ?? '#666' }} />
+                  <span className="font-bold text-field-200 truncate">{player(t.holders[0])?.name ?? 'Someone'}</span>
+                </>
+              )}
+              <span className="ml-auto shrink-0 text-[11px] text-field-400">{t.value} · {t.blurb}</span>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
