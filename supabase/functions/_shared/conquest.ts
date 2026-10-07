@@ -394,11 +394,44 @@ export function assignCapitals(
 }
 
 /** Colors that read on the TV and stand apart from their neighbors' (a golden-angle walk round the wheel). */
+/**
+ * The empires' colors, picked by hand to tell apart: sixteen solid, then
+ * eight lighter ones that carry a texture (stripes or dots) so they can't
+ * be mistaken for a solid one, colorblind or not.
+ */
+export const PALETTE: { color: string; pattern?: 'stripes' | 'dots' }[] = [
+  { color: 'hsl(4 86% 58%)' },     // red
+  { color: 'hsl(27 96% 55%)' },    // orange
+  { color: 'hsl(47 96% 54%)' },    // amber
+  { color: 'hsl(78 68% 48%)' },    // lime
+  { color: 'hsl(140 62% 44%)' },   // green
+  { color: 'hsl(172 72% 40%)' },   // teal
+  { color: 'hsl(192 88% 52%)' },   // cyan
+  { color: 'hsl(213 92% 62%)' },   // azure
+  { color: 'hsl(234 78% 66%)' },   // blue
+  { color: 'hsl(262 74% 66%)' },   // violet
+  { color: 'hsl(287 68% 58%)' },   // purple
+  { color: 'hsl(312 74% 60%)' },   // magenta
+  { color: 'hsl(338 84% 64%)' },   // pink
+  { color: 'hsl(18 55% 46%)' },    // rust
+  { color: 'hsl(58 42% 46%)' },    // olive
+  { color: 'hsl(200 22% 62%)' },   // steel
+  { color: 'hsl(150 58% 72%)', pattern: 'stripes' },  // mint
+  { color: 'hsl(48 90% 74%)', pattern: 'stripes' },   // cream
+  { color: 'hsl(10 92% 76%)', pattern: 'stripes' },   // salmon
+  { color: 'hsl(222 72% 80%)', pattern: 'stripes' },  // periwinkle
+  { color: 'hsl(275 55% 78%)', pattern: 'dots' },     // lavender
+  { color: 'hsl(185 60% 68%)', pattern: 'dots' },     // aqua
+  { color: 'hsl(95 50% 68%)', pattern: 'dots' },      // pale lime
+  { color: 'hsl(330 70% 80%)', pattern: 'dots' },     // rose
+]
+
 export function empireColor(i: number): string {
-  const hue = Math.round((i * 137.508 + 12) % 360)
-  const light = [56, 64, 48][i % 3]
-  return `hsl(${hue} 72% ${light}%)`
+  return PALETTE[i % PALETTE.length].color
 }
+
+/** An empire color's texture, if it has one. */
+export const patternOf = (color: string) => PALETTE.find(p => p.color === color)?.pattern ?? null
 
 // ── The titles ────────────────────────────────────────────────
 export interface Title {

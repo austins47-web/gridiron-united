@@ -1,16 +1,24 @@
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import clsx from 'clsx'
-import { TERRITORIES, ADJ } from '../../../supabase/functions/_shared/conquest.ts'
-import { US_MAP, NORTHEAST_CITIES } from './usMap'
+import { TERRITORIES, ADJ, citiesOf, patternOf } from '../../../supabase/functions/_shared/conquest.ts'
+import { NORTHEAST_CITIES } from './usMap'
+import { M, NE, NE_SET, insetBox, viewOf, empireLabel, spreadLabels, type MapLayout, type Rect, type LabelBox } from './mapGeometry'
+import { ICON, type IconName } from './icons'
 import type { ConquestPlayer, LiveBattle } from './conquestView'
 
+export type { MapLayout } from './mapGeometry'
+
 // The Conquest map, war-room style: the lower 48 with each NFL city's
-// territory (the counties nearest its stadium), owned ones washed in their
-// empire's color with a glowing edge, a faint grid and state lines, a
-// marker on each capital its owner still holds (ringed red under siege),
-// dotted sea lanes (Risk style: they count as borders), and a zoomed
-// Northeast where the cities are too small to read. The glow
-// is layered strokes, not a blur filter, so a Fire TV can draw it.
+// territory (the counties nearest its stadium). An empire reads as one
+// country: its cities washed in its color (some colors carry stripes or
+// dots, so no two get confused), one glowing border around the lot, faint
+// lines between its own cities, and its name written across its land once
+// it holds two or more. Where two empires meet, the border burns as a
+// front line. A star marks each capital its owner still holds (a flame
+// when it's under siege), dotted sea lanes count as borders (Risk style),
+// and the Northeast gets a zoomed inset. City labels nudge apart so none
+// overlap. The glow is layered strokes, not a blur filter, so a Fire TV
+// can draw it.
 //
 // The map itself never moves (redrawing it is what a Fire TV can't keep
 // up with). The motion is separate layers laid over it: a radar sweep,
@@ -20,10 +28,7 @@ import type { ConquestPlayer, LiveBattle } from './conquestView'
 //
 // Light mode (the app's, not the TV's) draws it as a daylight ops table.
 
-const M = US_MAP
-const NE = M.northeast
-const NE_SET = new Set(NORTHEAST_CITIES)
-const MONO = "ui-monospace, 'Cascadia Mono', Consolas, 'Roboto Mono', monospace"
+const MONO ="ui-monospace, 'Cascadia Mono', Consolas, 'Roboto Mono', monospace"
 const SIEGE = '#ff4d3d'
 
 interface Palette {
@@ -55,6 +60,8 @@ interface Palette {
   name: (color: string) => string
   /** a battle arrow, in the attacker's color (a little darker on light) */
   arrow: (color: string) => string
+  /** a border between two empires: a wide glow and a bright core */
+  front: { glow: string; glowOpacity: number; core: string }
 }
 
 const DARK: Palette = {
@@ -71,6 +78,7 @@ const DARK: Palette = {
   under: 'rgba(0, 0, 0, 0.6)',
   name: c => c,
   arrow: c => c,
+  front: { glow: '#ff3d1f', glowOpacity: 0.22, core: '#ff8a65' },
 }
 
 /** An empire's color darkened to a lightness that reads on white. */
@@ -93,6 +101,7 @@ const LIGHT: Palette = {
   under: 'rgba(255, 255, 255, 0.85)',
   name: c => inked(c, 30),
   arrow: c => inked(c, 40),
+  front: { glow: '#ff3d1f', glowOpacity: 0.16, core: '#d4380d' },
 }
 
 /** The app's light mode (the TV always runs dark). */
@@ -107,30 +116,33 @@ function useLight(): boolean {
   return light
 }
 
-/** Where the Northeast zoom sits: beside the map (wide screens), below it (narrow), or not at all. */
-export type MapLayout = 'side' | 'below' | 'none'
-
-const GAP = 14
-const SIDE_W = 420
-const BELOW_W = 680
-const insetBox = (layout: MapLayout) => {
-  if (layout === 'side') return { x: M.width + GAP, y: 40, w: SIDE_W, h: SIDE_W * NE.h / NE.w }
-  if (layout === 'below') return { x: (M.width - BELOW_W) / 2, y: M.height + GAP, w: BELOW_W, h: BELOW_W * NE.h / NE.w }
-  return null
-}
-const viewOf = (layout: MapLayout) => {
-  const box = insetBox(layout)
-  if (layout === 'side') return { w: M.width + GAP + SIDE_W, h: M.height }
-  if (layout === 'below' && box) return { w: M.width, h: box.y + box.h + 4 }
-  return { w: M.width, h: M.height }
-}
-
 const shortName = (name: string) => {
   const first = name.trim().split(/\s+/)[0] ?? ''
   return first.length > 9 ? first.slice(0, 8) + '…' : first
 }
 
-type Rect = { x: number; y: number; w: number; h: number }
+/** One of Conquest's symbols drawn on the map, centered on a point at a size (map units). */
+function MapIcon({ name, x, y, size, color, outline }: { name: IconName; x: number; y: number; size: number; color: string; outline?: string }) {
+  const icon = ICON[name]
+  const k = size / 24
+  return (
+    <g transform={`translate(${x - 12 * k} ${y - 12 * k}) scale(${k})`}>
+      {'fill' in icon && <path d={icon.fill} fill={color} stroke={outline} strokeWidth={outline ? 2.4 : undefined} strokeLinejoin="round" paintOrder="stroke" />}
+      {'stroke' in icon && (
+        <>
+          {outline && <path d={icon.stroke} fill="none" stroke={outline} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />}
+          <path d={icon.stroke} fill="none" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      )}
+      {'dot' in icon && <circle cx={12} cy={12} r={2} fill={color} />}
+    </g>
+  )
+}
+
+/** The borders around a set of cities (the coast and every border with a city outside it), as one path. */
+const outlineOf = (cities: Set<string>) =>
+  M.borders.filter(b => cities.has(b.a) !== cities.has(b.b)).map(b => b.d).join('')
+  + [...cities].map(t => M.coasts[t]).join('')
 
 /** Each territory's bounds (map space), padded for its glow: where its flicker layer goes. */
 const BOUNDS: Record<string, Rect> = Object.fromEntries(TERRITORIES.map(t => {
@@ -146,44 +158,82 @@ const BOUNDS: Record<string, Rect> = Object.fromEntries(TERRITORIES.map(t => {
 
 const pct = (v: number, of: number) => `${(v / of) * 100}%`
 
-/** The territories, grid lines and borders, at a zoom (`z` keeps lines the same width zoomed in). */
-function Lands({ owners, colorOf, you, highlight, highlightColor, P, z = 1 }: {
+/**
+ * The land at a zoom (`z` keeps lines the same width zoomed in): each
+ * city's fill (textured for some colors), then the borders, drawn once
+ * each from the shared borders: open land's, the faint ones inside an
+ * empire, one glowing border around each empire, and the front lines
+ * where two empires meet. Only the fills take taps (they carry the city).
+ */
+function Lands({ owners, colorOf, patternFill, you, target, flag, flagColor, highlight, highlightColor, P, z = 1 }: {
   owners: Record<string, string | null>
   colorOf: (k: string) => string | null
+  /** a city's texture fill, if its empire's color has one */
+  patternFill: (k: string) => string | null
   you?: string | null
+  /** your chosen attack and flag (the app's map, before kickoff) */
+  target?: string | null
+  flag?: string | null
+  flagColor?: string
   highlight?: string | null
   highlightColor?: string
   P: Palette
   z?: number
 }) {
+  const own = (t: string) => owners[t] ?? null
+  const empires = [...new Set(TERRITORIES.map(own).filter((o): o is string => !!o))]
+  const free = M.borders.filter(b => !own(b.a) && !own(b.b)).map(b => b.d).join('')
+    + TERRITORIES.filter(t => !own(t)).map(t => M.coasts[t]).join('')
+  const fronts = M.borders.filter(b => own(b.a) && own(b.b) && own(b.a) !== own(b.b)).map(b => b.d).join('')
   return (
     <>
-      {P.land && TERRITORIES.filter(t => colorOf(t)).map(t => <path key={`land-${t}`} d={M.territories[t]} fill={P.land!} />)}
+      {P.land && TERRITORIES.filter(t => colorOf(t)).map(t => <path key={`land-${t}`} d={M.territories[t]} fill={P.land!} pointerEvents="none" />)}
       {TERRITORIES.map(t => {
         const c = colorOf(t)
-        return <path key={t} d={M.territories[t]} fill={c ?? P.free} fillOpacity={c ? P.owned : 1} />
+        return <path key={t} data-team={t} d={M.territories[t]} fill={c ?? P.free} fillOpacity={c ? P.owned : 1} />
       })}
-      <path d={M.states} fill="none" stroke={P.states} strokeOpacity={P.statesOpacity} strokeWidth={0.6 / z} />
-      {TERRITORIES.map(t => {
-        const c = colorOf(t)
-        if (!c) return <path key={t} d={M.territories[t]} fill="none" stroke={P.freeEdge} strokeOpacity={P.freeEdgeOpacity} strokeWidth={0.8 / z} />
-        return (
-          <g key={t} fill="none" stroke={c} strokeLinejoin="round">
-            <path d={M.territories[t]} strokeOpacity={0.16} strokeWidth={5.5 / z} />
-            <path d={M.territories[t]} strokeOpacity={0.4} strokeWidth={2.6 / z} />
-            <path d={M.territories[t]} strokeWidth={1.2 / z} />
-          </g>
-        )
-      })}
-      {you && TERRITORIES.filter(t => owners[t] === you).map(t => (
-        <path key={`you-${t}`} d={M.territories[t]} fill="none" stroke={P.ink} strokeOpacity={0.9} strokeWidth={1.4 / z} strokeDasharray={`${4 / z} ${3 / z}`} />
-      ))}
-      {highlight && M.territories[highlight] && (
-        <g fill="none" strokeLinejoin="round">
-          <path d={M.territories[highlight]} stroke={highlightColor ?? P.ink} strokeWidth={6 / z} strokeOpacity={0.55} />
-          <path d={M.territories[highlight]} stroke={P.ink} strokeWidth={1.8 / z} />
-        </g>
-      )}
+      <g pointerEvents="none" fill="none" strokeLinejoin="round">
+        {TERRITORIES.map(t => {
+          const f = patternFill(t)
+          return f ? <path key={`tex-${t}`} d={M.territories[t]} fill={f} stroke="none" /> : null
+        })}
+        <path d={M.states} stroke={P.states} strokeOpacity={P.statesOpacity} strokeWidth={0.6 / z} />
+        {free && <path d={free} stroke={P.freeEdge} strokeOpacity={P.freeEdgeOpacity} strokeWidth={0.8 / z} />}
+        {empires.map(e => {
+          const c = colorOf(TERRITORIES.find(t => own(t) === e)!)!
+          const inner = M.borders.filter(b => own(b.a) === e && own(b.b) === e).map(b => b.d).join('')
+          const edge = outlineOf(new Set(TERRITORIES.filter(t => own(t) === e)))
+          return (
+            <g key={e} stroke={c}>
+              {inner && <path d={inner} strokeOpacity={0.45} strokeWidth={0.7 / z} strokeDasharray={`${2 / z} ${2.5 / z}`} />}
+              <path d={edge} strokeOpacity={0.16} strokeWidth={5.5 / z} />
+              <path d={edge} strokeOpacity={0.4} strokeWidth={2.6 / z} />
+              <path d={edge} strokeWidth={1.2 / z} />
+            </g>
+          )
+        })}
+        {fronts && (
+          <>
+            <path d={fronts} stroke={P.front.glow} strokeOpacity={P.front.glowOpacity} strokeWidth={6 / z} />
+            <path d={fronts} stroke={P.front.core} strokeWidth={1.5 / z} />
+          </>
+        )}
+        {you && empires.includes(you) && (
+          <path d={outlineOf(new Set(TERRITORIES.filter(t => own(t) === you)))} stroke={P.ink} strokeOpacity={0.9} strokeWidth={1.4 / z} strokeDasharray={`${4 / z} ${3 / z}`} />
+        )}
+        {target && empires.includes(target) && (
+          <path d={outlineOf(new Set(TERRITORIES.filter(t => own(t) === target)))} stroke={SIEGE} strokeWidth={2.2 / z} strokeDasharray={`${7 / z} ${4 / z}`} />
+        )}
+        {flag && M.territories[flag] && (
+          <path d={M.territories[flag]} fill={flagColor} fillOpacity={0.25} stroke={flagColor ?? P.ink} strokeWidth={2 / z} strokeDasharray={`${5 / z} ${3 / z}`} />
+        )}
+        {highlight && M.territories[highlight] && (
+          <>
+            <path d={M.territories[highlight]} stroke={highlightColor ?? P.ink} strokeWidth={6 / z} strokeOpacity={0.55} />
+            <path d={M.territories[highlight]} stroke={P.ink} strokeWidth={1.8 / z} />
+          </>
+        )}
+      </g>
     </>
   )
 }
@@ -339,13 +389,15 @@ function Motion({ win, zoom, P, pings, ringR, hot, arrows, radar, lanes }: {
 }
 
 export const ConquestMap = memo(function ConquestMap({
-  owners, besieged = {}, players, you, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, battles = [], className,
+  owners, besieged = {}, players, you, orders, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, battles = [], className,
 }: {
   owners: Record<string, string | null>
   besieged?: Record<string, string>
   players: ConquestPlayer[]
   /** your cities get a dashed outline */
   you?: string | null
+  /** your chosen attack (an empire) and flag (an open city), marked on the map */
+  orders?: { target?: string | null; flag?: string | null }
   /** a city to ring (the war report's move) */
   highlight?: string | null
   highlightColor?: string
@@ -366,33 +418,130 @@ export const ConquestMap = memo(function ConquestMap({
   const colorOf = (t: string) => ownerAt(t)?.color ?? null
   const view = viewOf(layout)
   const box = insetBox(layout)
+  const z = box ? box.w / NE.w : 1
+  const toInset = ([x, y]: [number, number]): [number, number] => box ? [box.x + (x - NE.x) * z, box.y + (y - NE.y) * z] : [x, y]
+  const ownersKey = TERRITORIES.map(t => owners[t] ?? '-').join(',')
 
-  /** A city's capital marker and name, at a point (already zoomed for the inset). */
-  const cityMark = (t: string, [lx, ly]: [number, number], [sx, sy]: [number, number], size: number): ReactNode => {
+  // Textured colors: one pattern each, in the empire's color
+  const textured = players.filter(p => patternOf(p.color))
+  const patternFill = (t: string) => {
+    const o = ownerAt(t)
+    return o && patternOf(o.color) ? `url(#cq-tex-${uid}-${textured.indexOf(o)})` : null
+  }
+
+  // Empires of two cities or more write their name across their land (and stop naming each city)
+  const named = useMemo(() => {
+    const out: { id: string; name: string; color: string; x: number; y: number; angle: number; size: number }[] = []
+    for (const p of players) {
+      const name = p.name.trim().toUpperCase()
+      const at = empireLabel(owners, p.userId, name, Math.sqrt(labelScale))
+      if (at) out.push({ id: p.userId, name, color: p.color, ...at })
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownersKey, players, labelScale])
+  const namedIds = new Set(named.map(n => n.id))
+
+  // City labels nudged apart so none overlap: the main map's, and the inset's (in its own space)
+  const spots = useMemo(() => {
+    const boxFor = (t: string, [x, y]: [number, number], size: number): LabelBox => {
+      const o = ownerAt(t)
+      const showName = labels === 'names' && !!o && !namedIds.has(o.userId)
+      const name = showName ? shortName(o!.name) : ''
+      return {
+        key: t, x, y,
+        w: Math.max(t.length * 0.62 * size, name.length * 0.62 * 0.72 * size) + size * 0.3,
+        up: size * 0.8,
+        down: showName ? size * 1.15 : size * 0.25,
+      }
+    }
+    // Each capital's star (and the flame beside it) stays put; labels move off it
+    const starFor = (t: string, [x, y]: [number, number], size: number): LabelBox | null => {
+      const o = ownerAt(t)
+      if (!o || o.capital !== t) return null
+      const siege = !!besieged[t]
+      return { key: `star-${t}`, x: x + (siege ? size * 0.45 : 0), y, w: size * (siege ? 2.6 : 1.7), up: size * (siege ? 1.35 : 0.85), down: size * 0.85, fixed: true }
+    }
+    const lay = (cities: string[], at: (t: string, p: [number, number]) => [number, number], size: number, bounds: Rect) => spreadLabels([
+      ...cities.map(t => boxFor(t, at(t, M.label[t]), size)),
+      ...cities.map(t => starFor(t, at(t, M.stadium[t]), size)).filter((b): b is LabelBox => !!b),
+    ], bounds)
+    const main = lay(TERRITORIES.filter(t => !(box && NE_SET.has(t))), (_, p) => p, 12 * labelScale, { x: 4, y: 4, w: M.width - 8, h: M.height - 8 })
+    const inset = box
+      ? lay(NORTHEAST_CITIES, (_, p) => toInset(p), 14 * labelScale, { x: box.x + 4, y: box.y + 24, w: box.w - 8, h: box.h - 28 })
+      : {}
+    return { ...main, ...inset }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownersKey, Object.keys(besieged).sort().join(','), players, labels, labelScale, layout, named])
+
+  const flagColor = you ? byId.get(you)?.color : undefined
+
+  /** A city's marker and label: the capital's star (a flame beside it under siege), the code, and its owner's name. */
+  const cityMark = (t: string, [sx, sy]: [number, number], size: number): ReactNode => {
     const o = ownerAt(t)
     const capital = !!o && o.capital === t
     const siege = !!besieged[t]
+    const [lx, ly] = spots[t]
     return (
       <g key={`mark-${t}`}>
         {capital && (
           <>
-            <circle cx={sx} cy={sy} r={size * 0.75} fill="none" stroke={siege ? SIEGE : o!.color} strokeWidth={1.2} strokeOpacity={0.85} strokeDasharray={siege ? '2 1.6' : undefined} />
-            <circle cx={sx} cy={sy} r={size * 0.36} fill={o!.color} />
+            <circle cx={sx} cy={sy} r={size * 0.78} fill="none" stroke={siege ? SIEGE : o!.color} strokeWidth={1.2} strokeOpacity={0.85} strokeDasharray={siege ? '2 1.6' : undefined} />
+            <MapIcon name="capital" x={sx} y={sy} size={size * 1.05} color={o!.color} outline={P.under} />
           </>
         )}
-        {siege && <text x={sx + size * 0.9} y={sy - size * 0.5} fontSize={size * 1.1}>🔥</text>}
+        {siege && <MapIcon name="siege" x={sx + size * 0.95} y={sy - size * 0.75} size={size * 1.1} color={SIEGE} outline={P.under} />}
         <text x={lx} y={ly} textAnchor="middle" fontFamily={MONO} fontWeight={700} fontSize={size} fill={o ? P.code : P.codeFree}>{t}</text>
-        {labels === 'names' && o && (
+        {labels === 'names' && o && !namedIds.has(o.userId) && (
           <text x={lx} y={ly + size * 0.95} textAnchor="middle" fontFamily={MONO} fontWeight={P === LIGHT ? 700 : 400} fontSize={size * 0.72} fill={P.name(o.color)}>
             {shortName(o.name).toUpperCase()}
           </text>
         )}
+        {orders?.flag === t && <MapIcon name="flag" x={lx + size * 1.5} y={ly - size * 0.9} size={size * 1.2} color={flagColor ?? P.ink} outline={P.under} />}
       </g>
     )
   }
 
-  const z = box ? box.w / NE.w : 1
-  const toInset = ([x, y]: [number, number]): [number, number] => box ? [box.x + (x - NE.x) * z, box.y + (y - NE.y) * z] : [x, y]
+  /** The chosen attack's crosshairs: on the target's capital, or its city nearest yours. */
+  const targetAt = (() => {
+    const id = orders?.target
+    if (!id) return null
+    const p = byId.get(id)
+    if (p?.capital && owners[p.capital] === id) return p.capital
+    const mine = you ? citiesOf(owners, you) : []
+    return citiesOf(owners, id).find(t => mine.some(m => ADJ[t].includes(m))) ?? citiesOf(owners, id)[0] ?? null
+  })()
+
+  /**
+   * An empire's name across its land, at a zoom (smaller in the inset than
+   * the zoom alone would make it), shrunk and nudged to stay inside its frame.
+   */
+  const empireName = (n: (typeof named)[number], [x0, y0]: [number, number], k: number, frame: Rect) => {
+    const a = (Math.abs(n.angle) * Math.PI) / 180
+    let size = n.size * k
+    const extent = (s: number) => {
+      const w = n.name.length * s * 0.9, h = s
+      return { hx: (w / 2) * Math.cos(a) + (h / 2) * Math.sin(a), hy: (w / 2) * Math.sin(a) + (h / 2) * Math.cos(a) }
+    }
+    const room = frame.w - 16
+    if (extent(size).hx * 2 > room) size *= room / (extent(size).hx * 2)
+    const { hx, hy } = extent(size)
+    const x = Math.max(frame.x + 8 + hx, Math.min(frame.x + frame.w - 8 - hx, x0))
+    const y = Math.max(frame.y + 8 + hy, Math.min(frame.y + frame.h - 8 - hy, y0))
+    return (
+      <text
+        key={`name-${n.id}`}
+        x={x} y={y + size * 0.35}
+        transform={n.angle ? `rotate(${n.angle.toFixed(1)} ${x} ${y})` : undefined}
+        textAnchor="middle" className="font-cond" fontWeight={800}
+        fontSize={size} letterSpacing={size * 0.28}
+        fill={P.name(n.color)} fillOpacity={P === LIGHT ? 0.55 : 0.6}
+      >
+        {n.name}
+      </text>
+    )
+  }
+  const inNE = (x: number, y: number) => x >= NE.x && x <= NE.x + NE.w && y >= NE.y && y <= NE.y + NE.h
 
   // The motion: capitals still held, cities changing hands, and each battle's arrow
   const pings: Ping[] = players
@@ -424,32 +573,61 @@ export const ConquestMap = memo(function ConquestMap({
             <stop offset="0" stopColor={P.sea[0]} />
             <stop offset="1" stopColor={P.sea[1]} />
           </radialGradient>
+          <clipPath id={`cq-main-${uid}`}><rect x={0} y={0} width={M.width} height={M.height} rx={10} /></clipPath>
           {box && <clipPath id={`cq-ne-${uid}`}><rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} /></clipPath>}
+          {textured.map((p, i) => (
+            <pattern key={p.userId} id={`cq-tex-${uid}-${i}`} patternUnits="userSpaceOnUse" width={6} height={6} patternTransform="rotate(45)">
+              {patternOf(p.color) === 'stripes'
+                ? <rect x={0} y={0} width={2.2} height={6} fill={p.color} fillOpacity={0.55} />
+                : <circle cx={3} cy={3} r={1.25} fill={p.color} fillOpacity={0.7} />}
+            </pattern>
+          ))}
         </defs>
         <rect x={0} y={0} width={M.width} height={M.height} rx={10} fill={`url(#cq-bg-${uid})`} />
-        <path d={M.grid} fill="none" stroke={P.grid} strokeOpacity={P.gridOpacity} strokeWidth={0.6} />
-        <Lands owners={owners} colorOf={colorOf} you={you} highlight={highlight} highlightColor={highlightColor} P={P} />
-        {/* Sea lanes */}
-        {M.lanes.map(l => (
-          <g key={`${l.a}-${l.b}`}>
-            <path d={l.d} fill="none" stroke={P.accent} strokeOpacity={0.65} strokeWidth={1.6} strokeDasharray="3 4" strokeLinecap="round" />
-            {l.ends.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={2.6} fill={P.accent} />)}
-          </g>
-        ))}
-        {TERRITORIES.filter(t => !(box && NE_SET.has(t))).map(t => cityMark(t, M.label[t], M.stadium[t], 12 * labelScale))}
+        <path d={M.grid} fill="none" stroke={P.grid} strokeOpacity={P.gridOpacity} strokeWidth={0.6} pointerEvents="none" clipPath={`url(#cq-main-${uid})`} />
+        <Lands
+          owners={owners} colorOf={colorOf} patternFill={patternFill} you={you}
+          target={orders?.target} flag={orders?.flag} flagColor={flagColor}
+          highlight={highlight} highlightColor={highlightColor} P={P}
+        />
+        <g pointerEvents="none">
+          {/* Sea lanes */}
+          {M.lanes.map(l => (
+            <g key={`${l.a}-${l.b}`}>
+              <path d={l.d} fill="none" stroke={P.accent} strokeOpacity={0.65} strokeWidth={1.6} strokeDasharray="3 4" strokeLinecap="round" />
+              {l.ends.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={2.6} fill={P.accent} />)}
+            </g>
+          ))}
+          {named.filter(n => !(box && inNE(n.x, n.y))).map(n => empireName(n, [n.x, n.y], 1, { x: 0, y: 0, w: M.width, h: M.height }))}
+          {TERRITORIES.filter(t => !(box && NE_SET.has(t))).map(t => cityMark(t, M.stadium[t], 12 * labelScale))}
+          {targetAt && !(box && NE_SET.has(targetAt)) && <MapIcon name="target" x={M.stadium[targetAt][0]} y={M.stadium[targetAt][1]} size={12 * labelScale * 2.2} color={SIEGE} outline={P.under} />}
+        </g>
         {box && (
           <>
-            <rect x={NE.x} y={NE.y} width={NE.w} height={NE.h} fill="none" stroke={P.accent} strokeOpacity={0.55} strokeWidth={1} strokeDasharray="4 3" />
+            <rect x={NE.x} y={NE.y} width={NE.w} height={NE.h} fill="none" stroke={P.accent} strokeOpacity={0.55} strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
             <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} fill={P.insetBg} />
             <g clipPath={`url(#cq-ne-${uid})`}>
               <g transform={`translate(${box.x} ${box.y}) scale(${z}) translate(${-NE.x} ${-NE.y})`}>
-                <path d={M.grid} fill="none" stroke={P.grid} strokeOpacity={P.gridOpacity} strokeWidth={0.6 / z} />
-                <Lands owners={owners} colorOf={colorOf} you={you} highlight={highlight} highlightColor={highlightColor} P={P} z={z} />
+                <path d={M.grid} fill="none" stroke={P.grid} strokeOpacity={P.gridOpacity} strokeWidth={0.6 / z} pointerEvents="none" />
+                <Lands
+                  owners={owners} colorOf={colorOf} patternFill={patternFill} you={you}
+                  target={orders?.target} flag={orders?.flag} flagColor={flagColor}
+                  highlight={highlight} highlightColor={highlightColor} P={P} z={z}
+                />
               </g>
-              {NORTHEAST_CITIES.map(t => cityMark(t, toInset(M.label[t]), toInset(M.stadium[t]), 14 * labelScale))}
+              <g pointerEvents="none">
+                {named.filter(n => inNE(n.x, n.y)).map(n => empireName(n, toInset([n.x, n.y]), z * 0.6, { ...box, y: box.y + 22, h: box.h - 22 }))}
+                {NORTHEAST_CITIES.map(t => cityMark(t, toInset(M.stadium[t]), 14 * labelScale))}
+                {targetAt && NE_SET.has(targetAt) && (() => {
+                  const [x, y] = toInset(M.stadium[targetAt])
+                  return <MapIcon name="target" x={x} y={y} size={14 * labelScale * 2.2} color={SIEGE} outline={P.under} />
+                })()}
+              </g>
             </g>
-            <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} fill="none" stroke={P.accent} strokeOpacity={0.55} strokeWidth={1.2} />
-            <text x={box.x + 10} y={box.y + 20} fontFamily={MONO} fontWeight={700} fontSize={13} letterSpacing={2} fill={P.accent}>NORTHEAST</text>
+            <g pointerEvents="none">
+              <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} fill="none" stroke={P.accent} strokeOpacity={0.55} strokeWidth={1.2} />
+              <text x={box.x + 10} y={box.y + 20} fontFamily={MONO} fontWeight={700} fontSize={13} letterSpacing={2} fill={P.accent}>NORTHEAST</text>
+            </g>
           </>
         )}
       </svg>

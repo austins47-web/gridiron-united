@@ -1,12 +1,21 @@
 // What the app and the Shop TV show of Conquest (the rules themselves:
 // supabase/functions/_shared/conquest.ts): the empires, this week's
 // battles as they stand, and the war log's headlines.
+import type { CSSProperties } from 'react'
 import {
-  CITY, citiesOf, plannedBattles, ADJ,
+  CITY, citiesOf, plannedBattles, ADJ, patternOf,
   type ConquestState, type WeekScores, type MoveKind, type Orders, type Claims, type Title,
 } from '../../../supabase/functions/_shared/conquest.ts'
 
 export { titles, type Title } from '../../../supabase/functions/_shared/conquest.ts'
+
+/** An empire's color swatch, with the same stripes or dots its land has on the map. */
+export function swatch(color: string): CSSProperties {
+  const p = patternOf(color)
+  if (p === 'stripes') return { backgroundColor: color, backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.38) 0 1.5px, transparent 1.5px 4px)' }
+  if (p === 'dots') return { backgroundColor: color, backgroundImage: 'radial-gradient(rgba(0,0,0,0.42) 0.9px, transparent 1.2px)', backgroundSize: '3.5px 3.5px' }
+  return { background: color }
+}
 
 export interface ConquestPlayer { userId: string; color: string; capital: string | null; name: string; avatarUrl?: string | null }
 

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { CITY } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from '@/components/conquest/ConquestMap'
-import { empires, liveBattles, headline, ownersBefore, type ConquestData, type ConquestMove, type LiveBattle } from '@/components/conquest/conquestView'
+import { empires, liveBattles, headline, ownersBefore, swatch, type ConquestData, type ConquestMove, type LiveBattle } from '@/components/conquest/conquestView'
+import { ConquestIcon } from '@/components/conquest/ConquestIcon'
+import { pointOf, viewOf } from '@/components/conquest/mapGeometry'
 
 // Conquest on the Shop TV: a panel in the rotation, the remote's Map
 // (full screen), and the War Report, which plays once for each week the
@@ -39,15 +41,17 @@ function BattleLine({ war, b, big }: { war: ConquestData; b: LiveBattle; big?: b
   const ahead = b.score[0] > b.score[1]
   return (
     <div className={clsx('flex items-center gap-2', big ? 'text-[22px]' : 'text-[17px]')}>
-      <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: colorOf(b.attacker) }} />
+      <span className="w-3 h-3 rounded-sm shrink-0" style={swatch(colorOf(b.attacker))} />
       <span className="font-bold text-white truncate max-w-[34%]">{nameOf(b.attacker)}</span>
-      <span className="text-field-500" title={b.ordered ? 'A chosen attack' : undefined}>{b.ordered ? '🎯' : '⚔'}</span>
-      <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: colorOf(b.defender) }} />
+      {b.ordered
+        ? <ConquestIcon name="target" title="A chosen attack" className={clsx('text-red-400 shrink-0', big ? 'w-6 h-6' : 'w-5 h-5')} />
+        : <span className="text-field-500">⚔</span>}
+      <span className="w-3 h-3 rounded-sm shrink-0" style={swatch(colorOf(b.defender))} />
       <span className="font-bold text-white truncate max-w-[34%]">{nameOf(b.defender)}</span>
       <span className={clsx('ml-auto font-cond font-black tabular-nums', ahead ? 'text-emerald-300' : 'text-field-400')}>{b.score[0]}–{b.score[1]}</span>
       {b.outcome !== 'hold' && b.city && (
         <span className={clsx('shrink-0 font-bold', b.outcome === 'siege' ? 'text-amber-300' : 'text-gold')}>
-          {b.outcome === 'siege' ? '🔥' : '→'} {b.city}
+          {b.outcome === 'siege' ? <ConquestIcon name="siege" className="inline w-[1em] h-[1em] -mt-1 text-red-400" /> : '→'} {b.city}
         </span>
       )}
     </div>
@@ -77,9 +81,9 @@ export function ConquestPanelBody({ war, battles, week }: { war: ConquestData; b
         {ranks.slice(0, 5).map((e, i) => (
           <div key={e.userId} className="flex items-center gap-2.5 text-[19px]">
             <span className="w-5 text-right font-cond font-black text-field-500 tabular-nums">{i + 1}</span>
-            <span className="w-4 h-4 rounded-sm shrink-0" style={{ background: e.color }} />
+            <span className="w-4 h-4 rounded-sm shrink-0" style={swatch(e.color)} />
             <span className="font-bold text-white truncate">{e.name}</span>
-            {e.besieged && <span>🔥</span>}
+            {e.besieged && <ConquestIcon name="siege" className="w-[1em] h-[1em] text-red-400 shrink-0" />}
             <span className="ml-auto font-cond font-black text-white tabular-nums">{e.cities}</span>
           </div>
         ))}
@@ -107,6 +111,7 @@ export function ConquestTakeover({ war, battles, league, week }: { war: Conquest
       {/* The map, full width; the week's battles sit under the Northeast zoom */}
       <div className="relative w-full mt-3">
         <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} battles={battles} className="w-full" />
+        <MapLegend />
         {shown.length > 0 && (
           <div className="absolute" style={{ left: '71.2%', top: '64%', width: '28.6%' }}>
             <p className="font-mono text-[16px] text-[#3fd0ff] mb-1.5">// THIS WEEK, AS IT STANDS</p>
@@ -118,13 +123,50 @@ export function ConquestTakeover({ war, battles, league, week }: { war: Conquest
       <div className="mt-auto flex flex-wrap gap-x-7 gap-y-2 text-[21px]">
         {ranks.map(e => (
           <span key={e.userId} className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded-sm shrink-0" style={{ background: e.color }} />
+            <span className="w-4 h-4 rounded-sm shrink-0" style={swatch(e.color)} />
             <span className={clsx('font-bold', e.exiled ? 'text-field-500' : 'text-white')}>{e.name}</span>
-            {e.besieged && <span>🔥</span>}
+            {e.besieged && <ConquestIcon name="siege" className="w-[1em] h-[1em] text-red-400 shrink-0" />}
             <span className="font-cond font-black text-field-400 tabular-nums">{e.exiled ? 'exile' : e.cities}</span>
           </span>
         ))}
       </div>
+    </div>
+  )
+}
+
+/** What the War map's symbols mean, for anyone walking past. */
+function MapLegend() {
+  const line = (stroke: string, extra: Record<string, string | number> = {}) => (
+    <svg viewBox="0 0 34 10" className="w-[34px] h-[10px] shrink-0"><path d="M2 5H32" stroke={stroke} strokeWidth={2.2} strokeLinecap="round" fill="none" {...extra} /></svg>
+  )
+  const items: [JSX.Element, string][] = [
+    [<ConquestIcon name="capital" className="w-[18px] h-[18px] text-white shrink-0" />, 'Capital'],
+    [<ConquestIcon name="siege" className="w-[18px] h-[18px] text-[#ff4d3d] shrink-0" />, 'Under siege'],
+    [
+      <svg viewBox="0 0 34 10" className="w-[34px] h-[10px] shrink-0">
+        <path d="M2 5H32" stroke="#ff3d1f" strokeOpacity={0.3} strokeWidth={6} strokeLinecap="round" />
+        <path d="M2 5H32" stroke="#ff8a65" strokeWidth={1.8} strokeLinecap="round" />
+      </svg>,
+      'Front line',
+    ],
+    [line('#3fd0ff', { strokeDasharray: '3 4' }), 'Sea lane'],
+    [
+      <svg viewBox="0 0 34 12" className="w-[34px] h-[12px] shrink-0">
+        <path d="M2 8Q14 1 26 6" stroke="#fff" strokeWidth={2} strokeDasharray="4 3" fill="none" strokeLinecap="round" />
+        <path d="M32 7.5L24 9.5L26 2.5Z" fill="#fff" />
+      </svg>,
+      'This week’s attacks',
+    ],
+    [<ConquestIcon name="target" className="w-[18px] h-[18px] text-[#ff4d3d] shrink-0" />, 'Chosen attack'],
+  ]
+  return (
+    <div className="absolute left-[1.2%] bottom-[2.5%] rounded-xl border border-[#3fd0ff]/25 bg-[#03070a]/80 px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2">
+      {items.map(([icon, label]) => (
+        <div key={label} className="flex items-center gap-2.5 text-[16px] text-field-200">
+          <span className="w-[34px] flex justify-center">{icon}</span>
+          {label}
+        </div>
+      ))}
     </div>
   )
 }
@@ -204,12 +246,23 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
     report.moves.slice(0, upTo).filter(m => m.kind === 'siege').map(m => [m.team, m.to]),
   )
   const ranks = empires({ ...war, owners, besieged })
+  const camera = (team: string | null) => {
+    if (!team) return 'translate(0px, 0px) scale(1)'
+    const W = 1600, view = viewOf('side'), H = (W * view.h) / view.w
+    const p = pointOf(team, 'side')
+    const s = p.inset ? 1.5 : 2
+    const x = Math.min(0, Math.max(W - W * s, W / 2 - p.x * W * s))
+    const y = Math.min(0, Math.max(H - H * s, H / 2 - p.y * H * s))
+    return `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${s})`
+  }
 
   return (
     <div className="absolute inset-0 z-[36] bg-field-950/[0.97] flex flex-col items-center px-20 py-12">
       <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[30px]">{league} · Conquest</p>
       <p className="font-cond font-black uppercase text-white text-[72px] leading-none mb-6">⚔️ Week {report.week} War Report</p>
       <div className="flex-1 min-h-0 w-full flex items-center justify-center gap-12">
+        <div className={clsx('overflow-hidden rounded-[14px] shrink-0', step.kind === 'finale' ? 'w-[1280px]' : 'w-[1600px]')}>
+        <div className="cq-camera" style={{ transform: camera(step.kind === 'move' ? step.move.team : null), transformOrigin: '0 0' }}>
         <ConquestMap
           owners={owners}
           besieged={besieged}
@@ -219,17 +272,19 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
           labelScale={1.5}
           highlight={step.kind === 'move' ? step.move.team : null}
           highlightColor={step.kind === 'move' ? colorOf(step.move.to) : undefined}
-          className={step.kind === 'finale' ? 'w-[1280px]' : 'w-[1600px]'}
+          className="w-full"
         />
+        </div>
+        </div>
         {step.kind === 'finale' && (
           <div className="w-[480px] shrink-0 space-y-2">
             <p className="font-cond font-bold uppercase tracking-wider text-field-400 text-[22px]">After Week {report.week}</p>
             {ranks.slice(0, 8).map((e, i) => (
               <div key={e.userId} className="flex items-center gap-3 text-[26px]">
                 <span className="w-7 text-right font-cond font-black text-field-500 tabular-nums">{e.exiled ? '–' : i + 1}</span>
-                <span className="w-5 h-5 rounded-sm shrink-0" style={{ background: e.color }} />
+                <span className="w-5 h-5 rounded-sm shrink-0" style={swatch(e.color)} />
                 <span className="font-bold text-white truncate">{e.name}</span>
-                {e.besieged && <span>🔥</span>}
+                {e.besieged && <ConquestIcon name="siege" className="w-[1em] h-[1em] text-red-400 shrink-0" />}
                 <span className="ml-auto font-cond font-black text-white tabular-nums">{e.cities}</span>
               </div>
             ))}
@@ -303,7 +358,7 @@ function Coronation({ war, league }: { war: ConquestData; league: string }) {
             <div key={t.key} className="flex items-center gap-4 text-[30px]">
               <span className="w-10 text-center">{t.icon}</span>
               <span className="font-bold text-white w-[260px]">{t.label}</span>
-              <span className="w-5 h-5 rounded-sm shrink-0" style={{ background: colorOf(t.holders[0]) }} />
+              <span className="w-5 h-5 rounded-sm shrink-0" style={swatch(colorOf(t.holders[0]))} />
               <span className="font-bold text-field-200">{t.holders.map(nameOf).join(' & ')}</span>
               <span className="text-field-500 text-[22px]">{t.value}</span>
             </div>

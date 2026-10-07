@@ -7,7 +7,9 @@ import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
 import { CITY, ADJ, TERRITORIES, citiesOf, neighborsOf } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from '@/components/conquest/ConquestMap'
-import { empires, liveBattles, headline, titles, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
+import { ZoomPan } from '@/components/conquest/ZoomPan'
+import { empires, liveBattles, headline, titles, swatch, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
+import { ConquestIcon } from '@/components/conquest/ConquestIcon'
 
 /**
  * Conquest in the app (Pick'Em → Map): the war map, your empire, this
@@ -111,6 +113,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
   }, [data, week, battleWeek, games, allPicks, weekRows, deadline])
 
   const [rules, setRules] = useState(false)
+  const sender = useOrderSender(leagueId, () => qc.invalidateQueries({ queryKey: key }))
   const [allLog, setAllLog] = useState(false)
 
   if (isLoading) return <div className="panel p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-field-400" /></div>
@@ -136,6 +139,29 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
   }
 
   const ranks = empires(data)
+  // Your orders on the map: tap an enemy on your border to attack it, open land beside you for your flag
+  const myCities = userId ? citiesOf(data.owners, userId) : []
+  const lockAt = data.lockAt ? new Date(data.lockAt) : null
+  const ordersOpen = !!userId && myCities.length > 0 && battleWeek != null && battleWeek <= (data.finalWeek ?? 18)
+    && week === battleWeek && !(lockAt && Date.now() >= lockAt.getTime())
+  const myTarget = userId ? data.orders?.[userId] ?? null : null
+  const myClaim = userId ? data.claims?.[userId] ?? null : null
+  const phone = typeof window !== 'undefined' && window.innerWidth < 640
+  const tapCity = (team: string | null) => {
+    if (!team) return
+    const owner = data.owners[team] ?? null
+    const what = `${CITY[team] ?? team}: ${owner ? (owner === userId ? 'yours' : data.players.find(p => p.userId === owner)?.name ?? 'Someone') : 'open land'}`
+    if (!ordersOpen || owner === userId) { toast(what, { id: 'cq-tap' }); return }
+    if (owner && neighborsOf(data.owners, userId!).includes(owner)) {
+      sender.attack(myTarget === owner ? null : owner, data.players.find(p => p.userId === owner)?.name)
+      return
+    }
+    if (!owner && ADJ[team].some(n => myCities.includes(n))) {
+      sender.flag(myClaim === team ? null : team)
+      return
+    }
+    toast(`${what} (not on your border)`, { id: 'cq-tap' })
+  }
   const nameOf = (id: string | null) => data.players.find(p => p.userId === id)?.name ?? 'Someone'
   const colorOf = (id: string) => data.players.find(p => p.userId === id)?.color ?? '#666'
   const me = ranks.find(e => e.userId === userId)
@@ -150,14 +176,14 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
     const ahead = b.score[0] > b.score[1]
     return (
       <li key={b.attacker} className={clsx('flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm', (b.attacker === userId || b.defender === userId) ? 'bg-gold/10 border border-gold/30' : 'bg-field-800/60')}>
-        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorOf(b.attacker) }} />
+        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={swatch(colorOf(b.attacker))} />
         <span className="font-bold text-white truncate">{nameOf(b.attacker)}</span>
-        {b.ordered ? <span title="Chose this attack" className="shrink-0">🎯</span> : <Swords className="w-3.5 h-3.5 text-field-500 shrink-0" />}
-        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorOf(b.defender) }} />
+        {b.ordered ? <ConquestIcon name="target" title="Chose this attack" className="w-3.5 h-3.5 text-red-400 shrink-0" /> : <Swords className="w-3.5 h-3.5 text-field-500 shrink-0" />}
+        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={swatch(colorOf(b.defender))} />
         <span className="font-bold text-white truncate">{nameOf(b.defender)}</span>
         <span className={clsx('ml-auto shrink-0 font-cond font-black tabular-nums', ahead ? 'text-nfl' : 'text-field-300')}>{b.score[0]}–{b.score[1]}</span>
         <span className="shrink-0 text-[11px] text-field-400 w-[7.5rem] text-right">
-          {b.outcome === 'take' ? `takes ${city}` : b.outcome === 'siege' ? `🔥 besieges ${city}` : 'holds'}
+          {b.outcome === 'take' ? `takes ${city}` : b.outcome === 'siege' ? <><ConquestIcon name="siege" className="inline w-3 h-3 -mt-0.5 text-red-400" /> besieges {city}</> : 'holds'}
         </span>
       </li>
     )
@@ -179,7 +205,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
           <ul className="text-xs text-field-300 space-y-1 mt-2 mb-3 list-disc pl-4">
             <li>Each week your empire attacks one neighbor: the one you choose below (before the week’s first kickoff), or else the one you picked most differently from. Everyone’s choices come out at kickoff.</li>
             <li>Beat their score for the week and take one of their cities on your border. Ties go to the defender.</li>
-            <li>A capital (★) doesn’t fall the first time: it goes under siege 🔥. Lose again while besieged and it falls; a week nobody beats you and the siege lifts.</li>
+            <li>A capital (<ConquestIcon name="capital" className="inline w-3 h-3 -mt-0.5 text-gold" />) doesn’t fall the first time: it goes under siege (<ConquestIcon name="siege" className="inline w-3 h-3 -mt-0.5 text-red-400" />). Lose again while besieged and it falls; a week nobody beats you and the siege lifts.</li>
             <li>The top half of the week each plant a flag in an open city next to them: the one you choose below, or else automatic. Best scores claim first; if yours is gone, you get your next open city.</li>
             <li>Level scores are settled like Pick’Em: the closer tiebreaker guess, then the better season win %. A battle that ends level still goes to the defender.</li>
             <li>Dotted lines on the map are sea lanes: the cities at each end border each other, like Risk.</li>
@@ -192,16 +218,25 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
           <p className="text-sm text-field-300">
             {me.exiled
               ? <>You’re in exile. Outscore whoever holds <span className="font-bold text-white">{me.capital ? CITY[me.capital] : 'your capital'}</span> to take it back.</>
-              : <>Your empire: <span className="font-bold text-white">{me.cities} {me.cities === 1 ? 'city' : 'cities'}</span>{me.capital ? <>, capital <span className="font-bold text-white">{CITY[me.capital]}</span></> : null}{me.besieged ? <span className="text-amber-300"> · under siege 🔥</span> : null}</>}
+              : <>Your empire: <span className="font-bold text-white">{me.cities} {me.cities === 1 ? 'city' : 'cities'}</span>{me.capital ? <>, capital <span className="font-bold text-white">{CITY[me.capital]}</span></> : null}{me.besieged ? <span className="text-amber-300"> · under siege <ConquestIcon name="siege" className="inline w-3.5 h-3.5 -mt-0.5 text-red-400" /></span> : null}</>}
           </p>
         )}
-        <div className="mt-3 -mx-1 overflow-x-auto rounded-xl">
-          <ConquestMap owners={data.owners} besieged={data.besieged} players={data.players} you={userId} labels="names" layout="below" labelScale={1.5} battles={battles} className="w-full min-w-[620px] sm:min-w-0" />
-        </div>
+        {ordersOpen && (
+          <p className="mt-2 text-[11px] text-field-400">
+            Tap an enemy to attack it, or open land next to you to plant your flag. Tap it again to go back to automatic.
+          </p>
+        )}
+        <ZoomPan className="mt-2" onTap={tapCity}>
+          <ConquestMap
+            owners={data.owners} besieged={data.besieged} players={data.players} you={userId}
+            orders={{ target: myTarget, flag: myClaim }}
+            labels="names" layout="below" labelScale={phone ? 2.1 : 1.5} battles={battles} className="w-full"
+          />
+        </ZoomPan>
       </div>
 
       {userId && battleWeek != null && battleWeek <= (data.finalWeek ?? 18) && week === battleWeek && (
-        <OrdersCard leagueId={leagueId} war={data} userId={userId} week={battleWeek} onSaved={() => qc.invalidateQueries({ queryKey: key })} />
+        <OrdersCard war={data} userId={userId} week={battleWeek} sender={sender} />
       )}
 
       {started && week === battleWeek && battleWeek <= (data.finalWeek ?? 18) && (
@@ -226,9 +261,9 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
           {ranks.map((e, i) => (
             <li key={e.userId} className={clsx('flex items-center gap-2 text-sm rounded-md px-2 py-1', e.userId === userId && 'bg-gold/10')}>
               <span className="w-5 text-right font-cond font-black text-field-500 tabular-nums">{e.exiled ? '–' : i + 1}</span>
-              <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: e.color }} />
+              <span className="w-3 h-3 rounded-sm shrink-0" style={swatch(e.color)} />
               <span className={clsx('truncate font-bold', e.exiled ? 'text-field-500' : 'text-white')}>{e.name}</span>
-              {e.besieged && <span title="Capital under siege">🔥</span>}
+              {e.besieged && <ConquestIcon name="siege" title="Capital under siege" className="w-3.5 h-3.5 text-red-400 shrink-0" />}
               <span className="ml-auto shrink-0 text-field-300 tabular-nums">
                 {e.exiled ? 'in exile' : `${e.cities} ${e.cities === 1 ? 'city' : 'cities'}`}
               </span>
@@ -269,6 +304,32 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
 
 type War = ConquestData & { log: (ConquestMove & { week: number })[] }
 
+type OrderSender = ReturnType<typeof useOrderSender>
+
+/** Saves your attack and flag for the week (the orders card and the map both use it). */
+function useOrderSender(leagueId: string, onSaved: () => void) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const send = async (key: string, body: Record<string, unknown>, done: string) => {
+    setBusy(key)
+    const { error } = await supabase.functions.invoke('conquest', { body: { league_id: leagueId, ...body } })
+    setBusy(null)
+    if (error) {
+      const msg = await (error as any)?.context?.json?.().then((b: any) => b?.error).catch(() => null)
+      toast.error(msg ?? 'Couldn’t save your orders')
+      return
+    }
+    toast.success(done)
+    onSaved()
+  }
+  return {
+    busy,
+    attack: (id: string | null, name?: string) => send(`atk:${id ?? 'auto'}`, { action: 'target', target: id },
+      id ? `You’re attacking ${name ?? 'them'} this week` : 'Attack back to automatic'),
+    flag: (team: string | null) => send(`flag:${team ?? 'auto'}`, { action: 'claim', team },
+      team ? `Your flag goes to ${CITY[team] ?? team} if you finish in the top half` : 'Flag back to automatic'),
+  }
+}
+
 /**
  * Your orders for the week, both optional: the attack (any empire on your
  * border; automatic is the one you pick most differently from) and the
@@ -276,8 +337,8 @@ type War = ConquestData & { log: (ConquestMove & { week: number })[] }
  * one touching most of your cities). Locks at the week's first kickoff,
  * when everyone's choices come out.
  */
-function OrdersCard({ leagueId, war, userId, week, onSaved }: { leagueId: string; war: War; userId: string; week: number; onSaved: () => void }) {
-  const [busy, setBusy] = useState<string | null>(null)
+function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; week: number; sender: OrderSender }) {
+  const { busy, attack, flag } = sender
   const mine = citiesOf(war.owners, userId)
   if (!mine.length) return null
   const lockAt = war.lockAt ? new Date(war.lockAt) : null
@@ -305,23 +366,6 @@ function OrdersCard({ leagueId, war, userId, week, onSaved }: { leagueId: string
     .map(t => ({ team: t, rivals: [...new Set(ADJ[t].map(n => war.owners[n]).filter((o): o is string => !!o && o !== userId))] }))
   const autoClaim = open[0]?.team ?? null
   const claim = war.claims?.[userId] && open.some(o => o.team === war.claims![userId]) ? war.claims[userId] : null
-
-  const send = async (key: string, body: Record<string, unknown>, done: string) => {
-    setBusy(key)
-    const { error } = await supabase.functions.invoke('conquest', { body: { league_id: leagueId, ...body } })
-    setBusy(null)
-    if (error) {
-      const msg = await (error as any)?.context?.json?.().then((b: any) => b?.error).catch(() => null)
-      toast.error(msg ?? 'Couldn’t save your orders')
-      return
-    }
-    toast.success(done)
-    onSaved()
-  }
-  const attack = (id: string | null) => send(`atk:${id ?? 'auto'}`, { action: 'target', target: id },
-    id ? `You’re attacking ${player(id)?.name ?? 'them'} this week` : 'Attack back to automatic')
-  const flag = (team: string | null) => send(`flag:${team ?? 'auto'}`, { action: 'claim', team },
-    team ? `Your flag goes to ${CITY[team] ?? team} if you finish in the top half` : 'Flag back to automatic')
 
   const row = (on: boolean) => clsx('w-full flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm text-left', on ? 'border-gold bg-gold/10' : 'border-field-700 bg-field-800/60 hover:border-field-500')
   const spin = <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
@@ -360,10 +404,10 @@ function OrdersCard({ leagueId, war, userId, week, onSaved }: { leagueId: string
               <span className="text-[11px] text-field-500 truncate">the neighbor you pick most differently from</span>
             </button>
             {neighbors.map(n => (
-              <button key={n.id} onClick={() => attack(n.id)} disabled={!!busy} className={row(target === n.id)}>
-                {busy === `atk:${n.id}` ? spin : <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: n.color }} />}
+              <button key={n.id} onClick={() => attack(n.id, n.name)} disabled={!!busy} className={row(target === n.id)}>
+                {busy === `atk:${n.id}` ? spin : <span className="w-3 h-3 rounded-sm shrink-0" style={swatch(n.color)} />}
                 <span className="font-bold text-white truncate">{n.name}</span>
-                {n.weak && <span className="shrink-0 text-[11px] font-bold text-amber-300">🔥 capital under siege</span>}
+                {n.weak && <span className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-amber-300"><ConquestIcon name="siege" className="w-3 h-3 text-red-400" /> capital under siege</span>}
                 <span className="ml-auto shrink-0 text-[11px] text-field-400">
                   {n.cities} {n.cities === 1 ? 'city' : 'cities'} · via {n.via.map(t => CITY[t] ?? t).join(', ')}
                 </span>
@@ -424,7 +468,7 @@ function TitleRace({ war, userId }: { war: War; userId: string | undefined }) {
                 </span>
               ) : (
                 <>
-                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: player(t.holders[0])?.color ?? '#666' }} />
+                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={swatch(player(t.holders[0])?.color ?? '#666')} />
                   <span className="font-bold text-field-200 truncate">{player(t.holders[0])?.name ?? 'Someone'}</span>
                 </>
               )}

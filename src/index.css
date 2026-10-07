@@ -1410,6 +1410,11 @@
   .cq-march, .cq-flicker { animation: none !important; }
 }
 
+/* The War Report's camera: glides from city to city (a cut on still) */
+.cq-camera { transition: transform 1.2s cubic-bezier(0.45, 0, 0.2, 1); }
+.tv-still .cq-camera { transition: none; }
+@media (prefers-reduced-motion: reduce) { .cq-camera { transition: none; } }
+
 /* The Map tab in light mode: the few colors the app-wide remaps miss */
 [data-theme="light"] .cq-tab .text-amber-300 { color: #b45309 !important; }
 [data-theme="light"] .cq-tab .text-nfl { color: #1d6fd6 !important; }
