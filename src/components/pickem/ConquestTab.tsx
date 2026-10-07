@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
 import { CITY, ADJ, TERRITORIES, citiesOf, neighborsOf } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from '@/components/conquest/ConquestMap'
-import { empires, liveBattles, headline, contested, titles, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
+import { empires, liveBattles, headline, titles, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
 
 /**
  * Conquest in the app (Pick'Em → Map): the war map, your empire, this
@@ -164,7 +164,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
   }
 
   return (
-    <div className="space-y-3">
+    <div className="cq-tab space-y-3">
       <div className="panel p-4">
         <div className="flex items-center gap-2 mb-1">
           <Swords className="w-4 h-4 text-gold" />
@@ -196,7 +196,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
           </p>
         )}
         <div className="mt-3 -mx-1 overflow-x-auto rounded-xl">
-          <ConquestMap owners={data.owners} besieged={data.besieged} players={data.players} you={userId} labels="names" layout="below" labelScale={1.5} contested={contested(data, battles)} className="w-full min-w-[620px] sm:min-w-0 h-auto" />
+          <ConquestMap owners={data.owners} besieged={data.besieged} players={data.players} you={userId} labels="names" layout="below" labelScale={1.5} battles={battles} className="w-full min-w-[620px] sm:min-w-0" />
         </div>
       </div>
 

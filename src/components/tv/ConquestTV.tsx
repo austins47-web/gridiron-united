@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { CITY } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from '@/components/conquest/ConquestMap'
-import { empires, liveBattles, headline, ownersBefore, contested, type ConquestData, type ConquestMove, type LiveBattle } from '@/components/conquest/conquestView'
+import { empires, liveBattles, headline, ownersBefore, type ConquestData, type ConquestMove, type LiveBattle } from '@/components/conquest/conquestView'
 
 // Conquest on the Shop TV: a panel in the rotation, the remote's Map
 // (full screen), and the War Report, which plays once for each week the
@@ -61,7 +61,7 @@ export function ConquestPanelBody({ war, battles, week }: { war: ConquestData; b
   const swinging = battles.filter(b => b.outcome !== 'hold').length
   return (
     <div className="h-full flex flex-col gap-3">
-      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} contested={contested(war, battles)} className="w-full h-auto" />
+      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} battles={battles} className="w-full" />
       {war.crowned?.[0] && (
         <p className="text-[19px] font-bold text-gold">{war.crowned[0].icon} {war.crowned[0].label}: {war.crowned[0].holders.map(nameFrom(war)).join(' & ')}</p>
       )}
@@ -106,7 +106,7 @@ export function ConquestTakeover({ war, battles, league, week }: { war: Conquest
       </div>
       {/* The map, full width; the week's battles sit under the Northeast zoom */}
       <div className="relative w-full mt-3">
-        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} contested={contested(war, battles)} className="w-full h-auto" />
+        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} battles={battles} className="w-full" />
         {shown.length > 0 && (
           <div className="absolute" style={{ left: '71.2%', top: '64%', width: '28.6%' }}>
             <p className="font-mono text-[16px] text-[#3fd0ff] mb-1.5">// THIS WEEK, AS IT STANDS</p>
@@ -219,7 +219,7 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
           labelScale={1.5}
           highlight={step.kind === 'move' ? step.move.team : null}
           highlightColor={step.kind === 'move' ? colorOf(step.move.to) : undefined}
-          className={clsx('h-full max-h-[700px] w-auto', step.kind === 'finale' ? 'max-w-[1280px]' : 'max-w-[1720px]')}
+          className={step.kind === 'finale' ? 'w-[1280px]' : 'w-[1600px]'}
         />
         {step.kind === 'finale' && (
           <div className="w-[480px] shrink-0 space-y-2">

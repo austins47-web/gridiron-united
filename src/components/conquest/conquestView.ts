@@ -92,9 +92,10 @@ export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'pla
   for (const b of order) {
     const winning = b.score[0] > b.score[1]
     const mine = new Set(citiesOf(war.owners, b.attacker))
+    const bordering = (t: string) => ADJ[t].filter(n => mine.has(n)).length
     const options = citiesOf(war.owners, b.defender)
-      .filter(t => !taken.has(t) && ADJ[t].some(n => mine.has(n)))
-      .sort((x, y) => Number(x === capitals[b.defender]) - Number(y === capitals[b.defender]) || x.localeCompare(y))
+      .filter(t => !taken.has(t) && bordering(t) > 0)
+      .sort((x, y) => Number(x === capitals[b.defender]) - Number(y === capitals[b.defender]) || bordering(y) - bordering(x) || x.localeCompare(y))
     const city = options[0] ?? null
     if (winning && city) taken.add(city)
     const outcome: LiveBattle['outcome'] = !winning || !city ? 'hold'
@@ -128,11 +129,4 @@ export function ownersBefore(owners: Record<string, string | null>, moves: Conqu
     if (m.kind === 'capture' || m.kind === 'claim' || m.kind === 'rebellion') before[m.team] = m.from
   }
   return before
-}
-
-/** The cities that change hands if the week ended now, in the attacker's color (the map's flicker). */
-export function contested(war: Pick<ConquestData, 'players'>, battles: LiveBattle[]): { team: string; color: string; siege: boolean }[] {
-  return battles
-    .filter(b => b.outcome !== 'hold' && b.city)
-    .map(b => ({ team: b.city!, color: war.players.find(p => p.userId === b.attacker)?.color ?? '#fff', siege: b.outcome === 'siege' }))
 }

@@ -1363,10 +1363,51 @@
   .holiday-particle { display: none; }
 }
 
-/* Conquest: a city changing hands as the week stands pulses on the map.
-   Held still on the TV's lighter effects (a Fire TV redraws the whole map
-   for every frame of it). */
+/* Conquest's map in motion (ConquestMap.tsx). The map never moves; these
+   are layers over it, each its own element:
+   - the radar sweep, capitals pinging, the scan line and contested cities
+     flickering only turn or fade (the GPU moves them on its own);
+   - ships on the sea lanes and the battle arrows' marching dashes redraw
+     their own small layer, so they stay off the TV's lighter effects.
+   The TV's lite effects (Silk on the Fire TV) trade the radar for a scan
+   line; still, and anyone who'd rather not have motion, gets none. */
+@keyframes cq-radar { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+.cq-radar { transform: translate(-50%, -50%); animation: cq-radar 10s linear infinite; }
+@keyframes cq-scan { from { transform: translateY(-100%); } to { transform: translateY(1000%); } }
+.cq-scan { display: none; animation: cq-scan 8s linear infinite; }
+@keyframes cq-ping {
+  0% { transform: scale(0.25); opacity: 0; }
+  3% { opacity: 0.95; }
+  22%, 100% { transform: scale(1); opacity: 0; }
+}
+.cq-ping { opacity: 0; animation: cq-ping 9s ease-out infinite; }
+@keyframes cq-ping-siege { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1); opacity: 0; } }
+.cq-ping-siege { animation: cq-ping-siege 1.6s ease-out infinite; }
 @keyframes cq-flicker { from { opacity: 1; } to { opacity: 0.25; } }
 .cq-flicker { animation: cq-flicker 1.1s ease-in-out infinite alternate; }
-.tv-lite .cq-flicker,
+@keyframes cq-march { to { stroke-dashoffset: var(--cq-dash, -12); } }
+.cq-march { animation: cq-march 0.9s linear infinite; }
+@keyframes cq-flow { to { stroke-dashoffset: -48; } }
+.cq-flow { animation: cq-flow 3.2s linear infinite; }
+
+.tv-lite .cq-radar,
+.tv-lite .cq-flow { display: none; }
+.tv-lite .cq-scan { display: block; }
+.tv-lite .cq-march { animation: none; }
+
+.tv-still .cq-radar,
+.tv-still .cq-scan,
+.tv-still .cq-ping,
+.tv-still .cq-ping-siege,
+.tv-still .cq-flow { display: none; }
+.tv-still .cq-march,
 .tv-still .cq-flicker { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .cq-radar, .cq-scan, .cq-ping, .cq-ping-siege, .cq-flow { display: none !important; }
+  .cq-march, .cq-flicker { animation: none !important; }
+}
+
+/* The Map tab in light mode: the few colors the app-wide remaps miss */
+[data-theme="light"] .cq-tab .text-amber-300 { color: #b45309 !important; }
+[data-theme="light"] .cq-tab .text-nfl { color: #1d6fd6 !important; }
+[data-theme="light"] .cq-tab .hover\:text-white:hover { color: #111827 !important; }
