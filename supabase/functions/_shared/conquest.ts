@@ -14,8 +14,11 @@
 // - A capital doesn't fall at the first defeat: it goes under siege. The
 //   next one to beat its owner while it's besieged takes it; a week with
 //   nobody beating them and the siege lifts.
-// - The top half of the week each grow into one unclaimed city next to
-//   them, best score first.
+// - The top half of the week each plant a flag in one unclaimed city
+//   next to them, best score first: the one they chose (before the
+//   week's first kickoff) if it's still free, or else automatic.
+// - Level scores: the closer guess on the week's tiebreaker game goes
+//   first, then the better season win %.
 // - Lose your last city and you're in exile: outscore whoever holds your
 //   capital in any week to take it back (a rebellion).
 // - Sea lanes (dotted on the map) count as borders, Risk style.
@@ -157,10 +160,17 @@ export interface WeekScores {
   correct: Record<string, number>
   /** user id → game id → the team they picked (only games that count, or that can be seen) */
   picks: Record<string, Record<string, string>>
+  /** user id → how far their guess on the week's tiebreaker game was from its total (no guess: not here) */
+  tiebreak?: Record<string, number>
+  /** user id → season win % through the week (0–1) */
+  winPct?: Record<string, number>
 }
 
 /** Attack orders for a week: attacker → the empire they chose to attack. */
 export type Orders = Record<string, string>
+
+/** Flag orders for a week: player → the unclaimed city they chose to claim. */
+export type Claims = Record<string, string>
 
 export interface Battle {
   attacker: string
@@ -186,6 +196,8 @@ export interface Move {
   score: [number, number]
   /** the loser lost their last city */
   exiled?: boolean
+  /** a claim: the city the player chose (not the automatic one) */
+  chosen?: boolean
 }
 
 export const citiesOf = (owners: Record<string, string | null>, user: string): string[] =>
@@ -210,6 +222,18 @@ export function disagreements(week: WeekScores, a: string, b: string): number {
 }
 
 const correctOf = (week: WeekScores, u: string) => week.correct[u] ?? 0
+
+/**
+ * Level scores, settled the Pick'Em way: the closer tiebreaker guess (no
+ * guess ranks last), then the better season win %. Negative when a goes
+ * first; 0 when even that's level.
+ */
+export function tiebreak(week: WeekScores, a: string, b: string): number {
+  const da = week.tiebreak?.[a] ?? Infinity, db = week.tiebreak?.[b] ?? Infinity
+  if (da !== db) return da < db ? -1 : 1
+  const pa = week.winPct?.[a] ?? 0, pb = week.winPct?.[b] ?? 0
+  return pb - pa
+}
 
 function median(values: number[]): number {
   if (!values.length) return 0
@@ -248,7 +272,7 @@ export function plannedBattles(state: ConquestState, week: WeekScores, players: 
 
 /** Settles a week: the moves, who owns what after them, and which capitals are under siege. */
 export function resolveWeek(
-  state: ConquestState, week: WeekScores, players: string[], orders: Orders = {},
+  state: ConquestState, week: WeekScores, players: string[], orders: Orders = {}, claims: Claims = {},
 ): { moves: Move[]; owners: Record<string, string | null>; besieged: Record<string, string> } {
   const start = state.owners
   const owners: Record<string, string | null> = { ...start }
@@ -274,10 +298,13 @@ export function resolveWeek(
     moves.push({ kind: 'rebellion', team: cap, from: holder ?? null, to: p, score: [c(p), holder ? c(holder) : mid] })
   }
 
-  // 2. Battles, the biggest wins first
+  // 2. Battles, the biggest wins first (the same margin: the better week)
   const wins = plannedBattles(state, week, players, orders)
     .filter(b => b.score[0] > b.score[1])
-    .sort((x, y) => (y.score[0] - y.score[1]) - (x.score[0] - x.score[1]) || x.attacker.localeCompare(y.attacker))
+    .sort((x, y) => (y.score[0] - y.score[1]) - (x.score[0] - x.score[1])
+      || y.score[0] - x.score[0]
+      || tiebreak(week, x.attacker, y.attacker)
+      || x.attacker.localeCompare(y.attacker))
   for (const b of wins) {
     beaten.add(b.defender)
     const mine = new Set(citiesOf(start, b.attacker))
@@ -312,21 +339,23 @@ export function resolveWeek(
     else moves.push({ kind: 'relief', team: t, from: owner, to: owner, score: [correctOf(week, owner), correctOf(week, by)] })
   }
 
-  // 3. The top half each grow into one unclaimed neighbor, best score first
+  // 3. The top half each plant a flag next to them, best score first: the
+  //    city they chose if it's still free, or else the one touching the
+  //    most of their cities
   const growers = sorted
     .filter(p => citiesOf(start, p).length && c(p) >= mid)
-    .sort((x, y) => c(y) - c(x) || citiesOf(start, x).length - citiesOf(start, y).length || x.localeCompare(y))
+    .sort((x, y) => c(y) - c(x) || tiebreak(week, x, y) || citiesOf(start, x).length - citiesOf(start, y).length || x.localeCompare(y))
   for (const p of growers) {
     const mine = new Set(citiesOf(start, p))
     const bordering = (t: string) => ADJ[t].filter(n => mine.has(n)).length
     const options = TERRITORIES
       .filter(t => start[t] == null && owners[t] == null && bordering(t) > 0)
-      .sort((x, y) => bordering(y) - bordering(x) || x.localeCompare(y))
+      .sort((x, y) => Number(y === claims[p]) - Number(x === claims[p]) || bordering(y) - bordering(x) || x.localeCompare(y))
     const t = options[0]
     if (!t) continue
     owners[t] = p
     changed.add(t)
-    moves.push({ kind: 'claim', team: t, from: null, to: p, score: [c(p), mid] })
+    moves.push({ kind: 'claim', team: t, from: null, to: p, score: [c(p), mid], ...(t === claims[p] ? { chosen: true } : {}) })
   }
 
   return { moves, owners, besieged }

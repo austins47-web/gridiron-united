@@ -3,7 +3,7 @@
 // battles as they stand, and the war log's headlines.
 import {
   CITY, citiesOf, plannedBattles, ADJ,
-  type ConquestState, type WeekScores, type MoveKind, type Orders, type Title,
+  type ConquestState, type WeekScores, type MoveKind, type Orders, type Claims, type Title,
 } from '../../../supabase/functions/_shared/conquest.ts'
 
 export { titles, type Title } from '../../../supabase/functions/_shared/conquest.ts'
@@ -33,6 +33,8 @@ export interface ConquestData {
   lockAt?: string | null
   /** This week's attack orders, attacker → target (public once they lock) */
   orders?: Orders
+  /** This week's flag orders, player → the open city they'd claim (yours, and everyone's once they lock) */
+  claims?: Claims
   /** The season's titles, once the war's over */
   crowned?: Title[] | null
 }

@@ -8,6 +8,9 @@
 //   attack this week (target: the empire's user id, or null for the
 //   automatic pick). Only an empire on your border, and only before the
 //   week's first kickoff.
+// POST { action: 'claim', league_id, team } — the same for your flag: the
+//   unclaimed city next to you you'd claim if you finish in the top half
+//   (null: automatic).
 // POST { action: 'resolve' } — anyone (the hourly conquest-resolve cron):
 //   settles every war's finished weeks, oldest first, up to its final week
 //   (then crowns the season's titles). Each week settles once (claimed by
@@ -16,11 +19,11 @@
 // ══════════════════════════════════════════════════════════════
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { isFinal, isVoid, isWeekComplete, winnerOf, nflSeasonFor, type Game } from '../_shared/pickemCore.ts'
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2'
+import { isFinal, isVoid, isWeekComplete, winnerOf, nflSeasonFor, tiebreakerTotal, type Game } from '../_shared/pickemCore.ts'
 import {
   TERRITORIES, POS, assignCapitals, empireColor, resolveWeek, citiesOf, neighborsOf, titles,
-  type ConquestState, type WeekScores, type Orders, type Move,
+  ADJ, type ConquestState, type WeekScores, type Orders, type Claims, type Move,
 } from '../_shared/conquest.ts'
 
 const CORS = {
@@ -35,17 +38,19 @@ serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const admin = createClient(url, serviceKey)
-  const body = await req.json().catch(() => ({})) as { action?: string; league_id?: string; start_week?: number; restart?: boolean; target?: string | null }
+  const body = await req.json().catch(() => ({})) as { action?: string; league_id?: string; start_week?: number; restart?: boolean; target?: string | null; team?: string | null }
 
   try {
     if (body.action === 'resolve') return json(await resolveAll(admin))
 
-    if (body.action === 'target') {
+    if (body.action === 'target' || body.action === 'claim') {
       if (typeof body.league_id !== 'string') return json({ error: 'league_id required' }, 400)
       const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
       const { data: { user } } = await userClient.auth.getUser()
       if (!user) return json({ error: 'Sign in first' }, 401)
-      return await setTarget(admin, body.league_id, user.id, typeof body.target === 'string' ? body.target : null)
+      return body.action === 'target'
+        ? await setOrder(admin, body.league_id, user.id, { target: typeof body.target === 'string' ? body.target : null })
+        : await setOrder(admin, body.league_id, user.id, { claim: typeof body.team === 'string' ? body.team : null })
     }
 
     if (body.action === 'start') {
@@ -125,8 +130,12 @@ async function start(admin: SupabaseClient, leagueId: string, startWeek: number 
   return json({ started: true, season, start_week: week, players: members.length, capitals })
 }
 
-/** Your attack this week: an empire on your border, before the first kickoff (null: back to automatic). */
-async function setTarget(admin: SupabaseClient, leagueId: string, userId: string, target: string | null) {
+/**
+ * Your orders this week, before the first kickoff: the attack (an empire
+ * on your border) or the flag (an unclaimed city next to you). Null puts
+ * that one back to automatic; the other is kept.
+ */
+async function setOrder(admin: SupabaseClient, leagueId: string, userId: string, change: { target?: string | null; claim?: string | null }) {
   const season = nflSeasonFor(new Date())
   const { data: war } = await admin.from('conquest_games').select('start_week, last_resolved_week, final_week')
     .eq('league_id', leagueId).eq('season', season).maybeSingle()
@@ -136,21 +145,28 @@ async function setTarget(admin: SupabaseClient, leagueId: string, userId: string
   const { data: first } = await admin.from('nfl_games').select('game_date')
     .eq('season', season).eq('week', week).order('game_date').limit(1).maybeSingle()
   if (first && new Date(first.game_date).getTime() <= Date.now()) {
-    return json({ error: 'Attacks lock at the week’s first kickoff' }, 409)
+    return json({ error: 'Orders lock at the week’s first kickoff' }, 409)
   }
   const { data: cities } = await admin.from('conquest_territories').select('team, owner_id').eq('league_id', leagueId).eq('season', season)
   const owners: Record<string, string | null> = Object.fromEntries(TERRITORIES.map(t => [t, null]))
   for (const c of cities ?? []) owners[c.team] = c.owner_id
   if (!citiesOf(owners, userId).length) return json({ error: 'You’re in exile: retake your capital first' }, 409)
-  if (target == null) {
-    await admin.from('conquest_orders').delete().eq('league_id', leagueId).eq('season', season).eq('week', week).eq('user_id', userId)
-    return json({ week, target: null })
+  if (change.target && !neighborsOf(owners, userId).includes(change.target)) return json({ error: 'That empire isn’t on your border' }, 400)
+  if (change.claim) {
+    const mine = new Set(citiesOf(owners, userId))
+    if (!(change.claim in owners) || owners[change.claim] != null || !ADJ[change.claim].some(n => mine.has(n))) {
+      return json({ error: 'That city isn’t open on your border' }, 400)
+    }
   }
-  if (!neighborsOf(owners, userId).includes(target)) return json({ error: 'That empire isn’t on your border' }, 400)
-  const { error } = await admin.from('conquest_orders')
-    .upsert({ league_id: leagueId, season, week, user_id: userId, target_id: target, created_at: new Date().toISOString() })
+  const key = { league_id: leagueId, season, week, user_id: userId }
+  const { data: had } = await admin.from('conquest_orders').select('target_id, claim').match(key).maybeSingle()
+  const target = 'target' in change ? change.target ?? null : had?.target_id ?? null
+  const claim = 'claim' in change ? change.claim ?? null : had?.claim ?? null
+  const { error } = target == null && claim == null
+    ? await admin.from('conquest_orders').delete().match(key)
+    : await admin.from('conquest_orders').upsert({ ...key, target_id: target, claim, created_at: new Date().toISOString() })
   if (error) throw error
-  return json({ week, target })
+  return json({ week, target, claim })
 }
 
 async function resolveAll(admin: SupabaseClient) {
@@ -163,7 +179,7 @@ async function resolveAll(admin: SupabaseClient) {
       const week = (prev ?? war.start_week - 1) + 1
       if (week > war.final_week) break
       const { data: games } = await admin.from('nfl_games')
-        .select('id, week, season, home_team, away_team, home_score, away_score, status, game_date')
+        .select('id, week, season, home_team, away_team, home_score, away_score, status, game_date, is_tiebreaker')
         .eq('season', war.season).eq('week', week)
       if (!games?.length || !isWeekComplete(games as Game[])) break
 
@@ -188,7 +204,7 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
     admin.from('conquest_players').select('user_id, capital, color').eq('league_id', leagueId).eq('season', season),
     admin.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', season),
     membersOf(admin, leagueId),
-    admin.from('pickem_picks').select('user_id, game_id, picked_team').eq('league_id', leagueId).eq('season', season).eq('week', week),
+    admin.from('pickem_picks').select('user_id, game_id, picked_team, tiebreaker_score').eq('league_id', leagueId).eq('season', season).eq('week', week),
   ])
   const owners: Record<string, string | null> = Object.fromEntries(TERRITORIES.map(t => [t, null]))
   const besieged: Record<string, string> = {}
@@ -237,6 +253,14 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
     scores.picks[p.user_id][p.game_id] = p.picked_team
     if (winnerOf(g) === p.picked_team) scores.correct[p.user_id]++
   }
+  // Level scores: the closer tiebreaker guess, then the better season win %
+  const total = tiebreakerTotal(games)
+  scores.tiebreak = {}
+  for (const p of picks ?? []) {
+    if (total != null && p.tiebreaker_score != null && p.user_id in scores.picks) scores.tiebreak[p.user_id] = Math.abs(p.tiebreaker_score - total)
+  }
+  // (a week has already been claimed by now: a hiccup here just skips this tiebreaker)
+  scores.winPct = await seasonWinPct(admin, leagueId, season, week).catch(() => ({}))
 
   const state: ConquestState = {
     owners,
@@ -244,10 +268,12 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
     besieged,
   }
   // The week's attack orders (anyone's no longer on a border falls back to automatic)
-  const { data: orderRows } = await admin.from('conquest_orders').select('user_id, target_id')
+  // The week's orders: attacks and flags (one no longer possible falls back to automatic)
+  const { data: orderRows } = await admin.from('conquest_orders').select('user_id, target_id, claim')
     .eq('league_id', leagueId).eq('season', season).eq('week', week)
-  const orders: Orders = Object.fromEntries((orderRows ?? []).map(o => [o.user_id, o.target_id]))
-  const after = resolveWeek(state, scores, roster, orders)
+  const orders: Orders = Object.fromEntries((orderRows ?? []).filter(o => o.target_id).map(o => [o.user_id, o.target_id]))
+  const claims: Claims = Object.fromEntries((orderRows ?? []).filter(o => o.claim).map(o => [o.user_id, o.claim]))
+  const after = resolveWeek(state, scores, roster, orders, claims)
   const moves = after.moves
   // Who owns what, and which capitals are under siege, after the week
   for (const t of TERRITORIES) {
@@ -266,6 +292,29 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
     if (error) throw error
   }
   return moves.length
+}
+
+/** Everyone's season win % through a week: correct picks over picks on finished games. */
+async function seasonWinPct(admin: SupabaseClient, leagueId: string, season: number, week: number): Promise<Record<string, number>> {
+  const { data: games } = await admin.from('nfl_games')
+    .select('id, week, season, home_team, away_team, home_score, away_score, status, game_date')
+    .eq('season', season).lte('week', week)
+  const counted = new Map((games ?? []).filter(g => !isVoid(g as Game) && isFinal(g as Game)).map(g => [g.id, g as Game]))
+  const tally: Record<string, { won: number; played: number }> = {}
+  for (let from = 0; ; from += 1000) {
+    const { data: page, error } = await admin.from('pickem_picks').select('user_id, game_id, picked_team')
+      .eq('league_id', leagueId).eq('season', season).lte('week', week).order('id').range(from, from + 999)
+    if (error) throw error
+    for (const p of page ?? []) {
+      const g = counted.get(p.game_id)
+      if (!g || !p.picked_team) continue
+      const t = tally[p.user_id] ??= { won: 0, played: 0 }
+      t.played++
+      if (winnerOf(g) === p.picked_team) t.won++
+    }
+    if (!page || page.length < 1000) break
+  }
+  return Object.fromEntries(Object.entries(tally).map(([u, t]) => [u, t.played ? t.won / t.played : 0]))
 }
 
 /** The war's over: the season's titles, from the war log and the final map, kept for good. */

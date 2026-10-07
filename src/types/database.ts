@@ -687,9 +687,9 @@ export interface Database {
         Update: never
         Relationships: []
       }
-      /** Attack orders: yours always readable, everyone's once the week's first kickoff passes */
+      /** Attack and flag orders: yours always readable, everyone's once the week's first kickoff passes */
       conquest_orders: {
-        Row: { league_id: string; season: number; week: number; user_id: string; target_id: string; created_at: string }
+        Row: { league_id: string; season: number; week: number; user_id: string; target_id: string | null; claim: string | null; created_at: string }
         Insert: never
         Update: never
         Relationships: []

@@ -15,7 +15,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2'
 import {
   nflSeasonFor, isVoid, isFinal, isLive, computeWeek, computeWinOdds, recentSlateLabel, computeUpsetWatch, computeBelt,
   computeStandings, weekWinners, isWeekComplete, homeWinChance, gameClockLabel, winnerOf,
@@ -596,7 +596,8 @@ async function conquestOf(admin: ReturnType<typeof createClient>, leagueId: stri
     lastWeek,
     finalWeek: war.final_week as number,
     lockAt: lockAt ?? null,
-    orders: Object.fromEntries((orders ?? []).map(o => [o.user_id, o.target_id])) as Record<string, string>,
+    // Attacks only (a row can be just a flag order)
+    orders: Object.fromEntries((orders ?? []).filter(o => o.target_id).map(o => [o.user_id, o.target_id])) as Record<string, string>,
     crowned: (war.crowned ?? null) as unknown,
     players: (players ?? []).map(p => ({ userId: p.user_id as string, color: p.color as string, capital: p.capital as string | null })),
     owners: Object.fromEntries((cities ?? []).map(c => [c.team, c.owner_id])) as Record<string, string | null>,
