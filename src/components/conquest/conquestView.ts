@@ -3,8 +3,10 @@
 // battles as they stand, and the war log's headlines.
 import {
   CITY, citiesOf, plannedBattles, ADJ,
-  type ConquestState, type WeekScores, type MoveKind,
+  type ConquestState, type WeekScores, type MoveKind, type Orders, type Title,
 } from '../../../supabase/functions/_shared/conquest.ts'
+
+export { titles, type Title } from '../../../supabase/functions/_shared/conquest.ts'
 
 export interface ConquestPlayer { userId: string; color: string; capital: string | null; name: string; avatarUrl?: string | null }
 
@@ -25,6 +27,14 @@ export interface ConquestData {
   owners: Record<string, string | null>
   besieged: Record<string, string>
   report: { week: number; moves: ConquestMove[] } | null
+  /** The war's last week (18, the regular season's) */
+  finalWeek?: number
+  /** When this week's attacks lock (its first kickoff) */
+  lockAt?: string | null
+  /** This week's attack orders, attacker → target (public once they lock) */
+  orders?: Orders
+  /** The season's titles, once the war's over */
+  crowned?: Title[] | null
 }
 
 export interface Empire {
@@ -55,6 +65,8 @@ export function empires(war: Pick<ConquestData, 'owners' | 'besieged' | 'players
 export interface LiveBattle {
   attacker: string
   defender: string
+  /** the attacker chose this one (an order), rather than the automatic pick */
+  ordered?: boolean
   score: [number, number]
   /** the city that changes hands if it ends like this (null: nothing to take) */
   city: string | null
@@ -67,11 +79,11 @@ export interface LiveBattle {
  * picks so far) and what happens if it ends like this. A city wanted
  * twice goes to the bigger win, as when the week's settled.
  */
-export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'players'>, week: WeekScores): LiveBattle[] {
+export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'players' | 'orders'>, week: WeekScores): LiveBattle[] {
   const capitals = Object.fromEntries(war.players.filter(p => p.capital).map(p => [p.userId, p.capital!]))
   const state: ConquestState = { owners: war.owners, capitals, besieged: war.besieged }
   const players = war.players.map(p => p.userId)
-  const battles = plannedBattles(state, week, players)
+  const battles = plannedBattles(state, week, players, war.orders ?? {})
   const taken = new Set<string>()
   const order = [...battles].sort((a, b) => (b.score[0] - b.score[1]) - (a.score[0] - a.score[1]))
   const out = new Map<string, LiveBattle>()
@@ -85,7 +97,7 @@ export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'pla
     if (winning && city) taken.add(city)
     const outcome: LiveBattle['outcome'] = !winning || !city ? 'hold'
       : city === capitals[b.defender] && !war.besieged[city] ? 'siege' : 'take'
-    out.set(b.attacker, { attacker: b.attacker, defender: b.defender, score: b.score, city, outcome })
+    out.set(b.attacker, { attacker: b.attacker, defender: b.defender, ordered: b.ordered, score: b.score, city, outcome })
   }
   return battles.map(b => out.get(b.attacker)!)
 }
@@ -114,4 +126,11 @@ export function ownersBefore(owners: Record<string, string | null>, moves: Conqu
     if (m.kind === 'capture' || m.kind === 'claim' || m.kind === 'rebellion') before[m.team] = m.from
   }
   return before
+}
+
+/** The cities that change hands if the week ended now, in the attacker's color (the map's flicker). */
+export function contested(war: Pick<ConquestData, 'players'>, battles: LiveBattle[]): { team: string; color: string; siege: boolean }[] {
+  return battles
+    .filter(b => b.outcome !== 'hold' && b.city)
+    .map(b => ({ team: b.city!, color: war.players.find(p => p.userId === b.attacker)?.color ?? '#fff', siege: b.outcome === 'siege' }))
 }

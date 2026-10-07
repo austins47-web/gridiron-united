@@ -670,7 +670,7 @@ export interface Database {
       }
       /** Conquest (supabase/functions/_shared/conquest.ts): written by the conquest function only. */
       conquest_games: {
-        Row: { league_id: string; season: number; start_week: number; last_resolved_week: number | null; created_at: string }
+        Row: { league_id: string; season: number; start_week: number; last_resolved_week: number | null; final_week: number; crowned: unknown; created_at: string }
         Insert: never
         Update: never
         Relationships: []
@@ -683,6 +683,13 @@ export interface Database {
       }
       conquest_territories: {
         Row: { league_id: string; season: number; team: string; owner_id: string | null; since_week: number | null; besieged_by: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      /** Attack orders: yours always readable, everyone's once the week's first kickoff passes */
+      conquest_orders: {
+        Row: { league_id: string; season: number; week: number; user_id: string; target_id: string; created_at: string }
         Insert: never
         Update: never
         Relationships: []

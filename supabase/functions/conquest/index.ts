@@ -4,18 +4,23 @@
 // POST { action: 'start', league_id, start_week?, restart? } — signed in
 //   as the commissioner: hands out capitals and colors and starts the war
 //   (at the next week to kick off, unless start_week says otherwise).
+// POST { action: 'target', league_id, target } — signed in, at war: your
+//   attack this week (target: the empire's user id, or null for the
+//   automatic pick). Only an empire on your border, and only before the
+//   week's first kickoff.
 // POST { action: 'resolve' } — anyone (the hourly conquest-resolve cron):
-//   settles every war's finished weeks, oldest first. Each week settles
-//   once (claimed by moving last_resolved_week on), so calling it again,
-//   or twice at once, does nothing more.
+//   settles every war's finished weeks, oldest first, up to its final week
+//   (then crowns the season's titles). Each week settles once (claimed by
+//   moving last_resolved_week on), so calling it again, or twice at once,
+//   does nothing more.
 // ══════════════════════════════════════════════════════════════
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isFinal, isVoid, isWeekComplete, winnerOf, nflSeasonFor, type Game } from '../_shared/pickemCore.ts'
 import {
-  TERRITORIES, POS, assignCapitals, empireColor, resolveWeek,
-  type ConquestState, type WeekScores,
+  TERRITORIES, POS, assignCapitals, empireColor, resolveWeek, citiesOf, neighborsOf, titles,
+  type ConquestState, type WeekScores, type Orders, type Move,
 } from '../_shared/conquest.ts'
 
 const CORS = {
@@ -30,10 +35,18 @@ serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const admin = createClient(url, serviceKey)
-  const body = await req.json().catch(() => ({})) as { action?: string; league_id?: string; start_week?: number; restart?: boolean }
+  const body = await req.json().catch(() => ({})) as { action?: string; league_id?: string; start_week?: number; restart?: boolean; target?: string | null }
 
   try {
     if (body.action === 'resolve') return json(await resolveAll(admin))
+
+    if (body.action === 'target') {
+      if (typeof body.league_id !== 'string') return json({ error: 'league_id required' }, 400)
+      const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
+      const { data: { user } } = await userClient.auth.getUser()
+      if (!user) return json({ error: 'Sign in first' }, 401)
+      return await setTarget(admin, body.league_id, user.id, typeof body.target === 'string' ? body.target : null)
+    }
 
     if (body.action === 'start') {
       if (typeof body.league_id !== 'string') return json({ error: 'league_id required' }, 400)
@@ -112,6 +125,34 @@ async function start(admin: SupabaseClient, leagueId: string, startWeek: number 
   return json({ started: true, season, start_week: week, players: members.length, capitals })
 }
 
+/** Your attack this week: an empire on your border, before the first kickoff (null: back to automatic). */
+async function setTarget(admin: SupabaseClient, leagueId: string, userId: string, target: string | null) {
+  const season = nflSeasonFor(new Date())
+  const { data: war } = await admin.from('conquest_games').select('start_week, last_resolved_week, final_week')
+    .eq('league_id', leagueId).eq('season', season).maybeSingle()
+  if (!war) return json({ error: 'No war going on' }, 404)
+  const week = (war.last_resolved_week ?? war.start_week - 1) + 1
+  if (week > war.final_week) return json({ error: 'The war is over' }, 409)
+  const { data: first } = await admin.from('nfl_games').select('game_date')
+    .eq('season', season).eq('week', week).order('game_date').limit(1).maybeSingle()
+  if (first && new Date(first.game_date).getTime() <= Date.now()) {
+    return json({ error: 'Attacks lock at the week’s first kickoff' }, 409)
+  }
+  const { data: cities } = await admin.from('conquest_territories').select('team, owner_id').eq('league_id', leagueId).eq('season', season)
+  const owners: Record<string, string | null> = Object.fromEntries(TERRITORIES.map(t => [t, null]))
+  for (const c of cities ?? []) owners[c.team] = c.owner_id
+  if (!citiesOf(owners, userId).length) return json({ error: 'You’re in exile: retake your capital first' }, 409)
+  if (target == null) {
+    await admin.from('conquest_orders').delete().eq('league_id', leagueId).eq('season', season).eq('week', week).eq('user_id', userId)
+    return json({ week, target: null })
+  }
+  if (!neighborsOf(owners, userId).includes(target)) return json({ error: 'That empire isn’t on your border' }, 400)
+  const { error } = await admin.from('conquest_orders')
+    .upsert({ league_id: leagueId, season, week, user_id: userId, target_id: target, created_at: new Date().toISOString() })
+  if (error) throw error
+  return json({ week, target })
+}
+
 async function resolveAll(admin: SupabaseClient) {
   const { data: wars, error } = await admin.from('conquest_games').select('*')
   if (error) throw error
@@ -120,6 +161,7 @@ async function resolveAll(admin: SupabaseClient) {
     for (;;) {
       const prev: number | null = war.last_resolved_week
       const week = (prev ?? war.start_week - 1) + 1
+      if (week > war.final_week) break
       const { data: games } = await admin.from('nfl_games')
         .select('id, week, season, home_team, away_team, home_score, away_score, status, game_date')
         .eq('season', war.season).eq('week', week)
@@ -135,6 +177,7 @@ async function resolveAll(admin: SupabaseClient) {
 
       const moves = await settleWeek(admin, war.league_id, war.season, week, games as Game[])
       settled.push({ league: war.league_id, week, moves })
+      if (week === war.final_week) await crown(admin, war.league_id, war.season)
     }
   }
   return { settled }
@@ -200,7 +243,11 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
     capitals: Object.fromEntries(roster.map(u => [u, inWar.get(u)!.capital as string]).filter(([, c]) => !!c)),
     besieged,
   }
-  const after = resolveWeek(state, scores, roster)
+  // The week's attack orders (anyone's no longer on a border falls back to automatic)
+  const { data: orderRows } = await admin.from('conquest_orders').select('user_id, target_id')
+    .eq('league_id', leagueId).eq('season', season).eq('week', week)
+  const orders: Orders = Object.fromEntries((orderRows ?? []).map(o => [o.user_id, o.target_id]))
+  const after = resolveWeek(state, scores, roster, orders)
   const moves = after.moves
   // Who owns what, and which capitals are under siege, after the week
   for (const t of TERRITORIES) {
@@ -219,4 +266,17 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
     if (error) throw error
   }
   return moves.length
+}
+
+/** The war's over: the season's titles, from the war log and the final map, kept for good. */
+async function crown(admin: SupabaseClient, leagueId: string, season: number) {
+  const [{ data: moves }, { data: cities }, { data: players }] = await Promise.all([
+    admin.from('conquest_moves').select('kind, from_user, to_user').eq('league_id', leagueId).eq('season', season),
+    admin.from('conquest_territories').select('team, owner_id').eq('league_id', leagueId).eq('season', season),
+    admin.from('conquest_players').select('user_id').eq('league_id', leagueId).eq('season', season),
+  ])
+  const owners: Record<string, string | null> = Object.fromEntries((cities ?? []).map(c => [c.team, c.owner_id]))
+  const log = (moves ?? []).map(m => ({ kind: m.kind as Move['kind'], from: m.from_user as string | null, to: m.to_user as string }))
+  const crowned = titles(log, owners, (players ?? []).map(p => p.user_id as string))
+  await admin.from('conquest_games').update({ crowned }).eq('league_id', leagueId).eq('season', season)
 }

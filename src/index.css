@@ -1362,3 +1362,11 @@
 @media (prefers-reduced-motion: reduce) {
   .holiday-particle { display: none; }
 }
+
+/* Conquest: a city changing hands as the week stands pulses on the map.
+   Held still on the TV's lighter effects (a Fire TV redraws the whole map
+   for every frame of it). */
+@keyframes cq-flicker { from { opacity: 1; } to { opacity: 0.25; } }
+.cq-flicker { animation: cq-flicker 1.1s ease-in-out infinite alternate; }
+.tv-lite .cq-flicker,
+.tv-still .cq-flicker { animation: none; }

@@ -1,19 +1,20 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Swords, Loader2, ChevronDown } from 'lucide-react'
+import { Swords, Loader2, ChevronDown, Crosshair, Crown, Lock } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
-import { CITY } from '../../../supabase/functions/_shared/conquest.ts'
+import { CITY, ADJ, citiesOf, neighborsOf } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from '@/components/conquest/ConquestMap'
-import { empires, liveBattles, headline, type ConquestData, type ConquestMove, type ConquestPlayer } from '@/components/conquest/conquestView'
+import { empires, liveBattles, headline, contested, titles, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
 
 /**
  * Conquest in the app (Pick'Em → Map): the war map, your empire, this
  * week's battles as they stand (only from picks everyone can already
- * see), the empires, and the war log. The commissioner starts the war
- * here (the conquest function); the server settles each finished week.
+ * see), your attack for the week (before its first kickoff), the season's
+ * title race, the empires, and the war log. The commissioner starts the
+ * war here (the conquest function); the server settles each finished week.
  */
 export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueMembers, userId, deadline, isCommissioner }: {
   leagueId: string
@@ -32,15 +33,19 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
     queryKey: key,
     staleTime: 60_000,
     queryFn: async (): Promise<(ConquestData & { log: (ConquestMove & { week: number })[] }) | null> => {
-      const { data: war, error } = await supabase.from('conquest_games').select('start_week, last_resolved_week')
+      const { data: war, error } = await supabase.from('conquest_games').select('start_week, last_resolved_week, final_week, crowned')
         .eq('league_id', leagueId).eq('season', CURRENT_SEASON).maybeSingle()
       if (error) throw error
       if (!war) return null
-      const [{ data: players }, { data: cities }, { data: moves }] = await Promise.all([
+      const battleWeek = (war.last_resolved_week ?? war.start_week - 1) + 1
+      // This week's orders: yours, and everyone's once the first kickoff reveals them
+      const [{ data: players }, { data: cities }, { data: moves }, { data: first }, { data: orders }] = await Promise.all([
         supabase.from('conquest_players').select('user_id, color, capital').eq('league_id', leagueId).eq('season', CURRENT_SEASON),
         supabase.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', CURRENT_SEASON),
         supabase.from('conquest_moves').select('week, kind, team, from_user, to_user, score_for, score_against, exiled')
           .eq('league_id', leagueId).eq('season', CURRENT_SEASON).order('week', { ascending: false }).order('id'),
+        supabase.from('nfl_games').select('game_date').eq('season', CURRENT_SEASON).eq('week', battleWeek).order('game_date').limit(1).maybeSingle(),
+        supabase.from('conquest_orders').select('user_id, target_id').eq('league_id', leagueId).eq('season', CURRENT_SEASON).eq('week', battleWeek),
       ])
       const log = (moves ?? []).map((m: any) => ({
         week: m.week, kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
@@ -54,6 +59,10 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
         owners: Object.fromEntries((cities ?? []).map((c: any) => [c.team, c.owner_id])),
         besieged: Object.fromEntries((cities ?? []).filter((c: any) => c.besieged_by).map((c: any) => [c.team, c.besieged_by])),
         report: null,
+        finalWeek: war.final_week,
+        lockAt: first?.game_date ?? null,
+        orders: Object.fromEntries((orders ?? []).map((o: any) => [o.user_id, o.target_id])),
+        crowned: (war.crowned as Title[] | null) ?? null,
         log,
       }
     },
@@ -86,7 +95,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
   // This week's battles, from the picks everyone can see (kicked off, or past the deadline)
   const battleWeek = data ? (data.lastWeek ?? data.startWeek - 1) + 1 : null
   const battles = useMemo(() => {
-    if (!data || week !== battleWeek) return []
+    if (!data || week !== battleWeek || battleWeek > (data.finalWeek ?? 18)) return []
     const now = Date.now()
     const seen = new Set(games
       .filter((g: any) => now >= new Date(g.game_date).getTime() || (!!deadline && now >= new Date(deadline).getTime()))
@@ -142,7 +151,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
       <li key={b.attacker} className={clsx('flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm', (b.attacker === userId || b.defender === userId) ? 'bg-gold/10 border border-gold/30' : 'bg-field-800/60')}>
         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorOf(b.attacker) }} />
         <span className="font-bold text-white truncate">{nameOf(b.attacker)}</span>
-        <Swords className="w-3.5 h-3.5 text-field-500 shrink-0" />
+        {b.ordered ? <span title="Chose this attack" className="shrink-0">🎯</span> : <Swords className="w-3.5 h-3.5 text-field-500 shrink-0" />}
         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorOf(b.defender) }} />
         <span className="font-bold text-white truncate">{nameOf(b.defender)}</span>
         <span className={clsx('ml-auto shrink-0 font-cond font-black tabular-nums', ahead ? 'text-nfl' : 'text-field-300')}>{b.score[0]}–{b.score[1]}</span>
@@ -167,13 +176,14 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
         </div>
         {rules && (
           <ul className="text-xs text-field-300 space-y-1 mt-2 mb-3 list-disc pl-4">
-            <li>Each week your empire attacks the neighbor you picked most differently from.</li>
+            <li>Each week your empire attacks one neighbor: the one you choose below (before the week’s first kickoff), or else the one you picked most differently from. Everyone’s choices come out at kickoff.</li>
             <li>Beat their score for the week and take one of their cities on your border. Ties go to the defender.</li>
             <li>A capital (★) doesn’t fall the first time: it goes under siege 🔥. Lose again while besieged and it falls; a week nobody beats you and the siege lifts.</li>
             <li>The top half of the week each plant a flag in an unclaimed city next to them.</li>
             <li>Dotted lines on the map are sea lanes: the cities at each end border each other, like Risk.</li>
             <li>Lose everything and you’re in exile: outscore whoever holds your capital any week to take it back.</li>
-            <li>Weeks settle once every game is final. Biggest empire after Week 18 is crowned Emperor.</li>
+            <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire), Warlord, Siege Master, Unbreakable, Comeback Kid and Pioneer.</li>
+            <li>Cities that would change hands if the week ended now pulse on the map.</li>
           </ul>
         )}
         {me && (
@@ -184,11 +194,15 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
           </p>
         )}
         <div className="mt-3 -mx-1 overflow-x-auto rounded-xl">
-          <ConquestMap owners={data.owners} besieged={data.besieged} players={data.players} you={userId} labels="names" layout="below" labelScale={1.5} className="w-full min-w-[620px] sm:min-w-0 h-auto" />
+          <ConquestMap owners={data.owners} besieged={data.besieged} players={data.players} you={userId} labels="names" layout="below" labelScale={1.5} contested={contested(data, battles)} className="w-full min-w-[620px] sm:min-w-0 h-auto" />
         </div>
       </div>
 
-      {started && week === battleWeek && (
+      {userId && battleWeek != null && battleWeek <= (data.finalWeek ?? 18) && week === battleWeek && (
+        <AttackPicker leagueId={leagueId} war={data} userId={userId} week={battleWeek} onSaved={() => qc.invalidateQueries({ queryKey: key })} />
+      )}
+
+      {started && week === battleWeek && battleWeek <= (data.finalWeek ?? 18) && (
         <div className="panel p-4">
           <p className="font-cond font-bold text-sm uppercase tracking-wider text-white mb-2">This week’s battles</p>
           {battles.length === 0 ? (
@@ -201,6 +215,8 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
           )}
         </div>
       )}
+
+      <TitleRace war={data} userId={userId} />
 
       <div className="panel p-4">
         <p className="font-cond font-bold text-sm uppercase tracking-wider text-white mb-2">Empires</p>
@@ -245,6 +261,121 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+type War = ConquestData & { log: (ConquestMove & { week: number })[] }
+
+/**
+ * Your attack for the week: any empire on your border, or automatic (the
+ * one you pick most differently from). Locks at the week's first kickoff,
+ * when everyone's choices come out.
+ */
+function AttackPicker({ leagueId, war, userId, week, onSaved }: { leagueId: string; war: War; userId: string; week: number; onSaved: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const mine = citiesOf(war.owners, userId)
+  if (!mine.length) return null
+  const lockAt = war.lockAt ? new Date(war.lockAt) : null
+  const locked = !!lockAt && Date.now() >= lockAt.getTime()
+  const chosen = war.orders?.[userId] ?? null
+  const player = (id: string) => war.players.find(p => p.userId === id)
+  const mineSet = new Set(mine)
+  const neighbors = neighborsOf(war.owners, userId).map(id => {
+    const theirs = citiesOf(war.owners, id)
+    const p = player(id)
+    return {
+      id, name: p?.name ?? 'Someone', color: p?.color ?? '#666', cities: theirs.length,
+      // Your cities on that border
+      via: theirs.flatMap(t => ADJ[t].filter(n => mineSet.has(n))).filter((v, i, a) => a.indexOf(v) === i),
+      // Their capital's under siege: one more win and it falls
+      weak: !!p?.capital && war.owners[p.capital] === id && !!war.besieged[p.capital],
+    }
+  }).sort((a, b) => Number(b.weak) - Number(a.weak) || a.cities - b.cities || a.name.localeCompare(b.name))
+
+  const choose = async (target: string | null) => {
+    setBusy(target ?? 'auto')
+    const { error } = await supabase.functions.invoke('conquest', { body: { action: 'target', league_id: leagueId, target } })
+    setBusy(null)
+    if (error) {
+      const msg = await (error as any)?.context?.json?.().then((b: any) => b?.error).catch(() => null)
+      toast.error(msg ?? 'Couldn’t set your attack')
+      return
+    }
+    toast.success(target ? `You’re attacking ${player(target)?.name ?? 'them'} this week` : 'Back to automatic')
+    onSaved()
+  }
+
+  const lockLabel = lockAt?.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+  return (
+    <div className="panel p-4">
+      <div className="flex items-center gap-2 mb-1">
+        <Crosshair className="w-4 h-4 text-gold" />
+        <p className="font-cond font-bold text-sm uppercase tracking-wider text-white">Your attack · Week {week}</p>
+        <span className="ml-auto flex items-center gap-1 text-[11px] text-field-400">
+          <Lock className="w-3 h-3" /> {locked ? 'Locked' : `Locks ${lockLabel ?? 'at the first kickoff'}`}
+        </span>
+      </div>
+      {locked ? (
+        <p className="text-sm text-field-300">
+          {chosen ? <>You chose to attack <span className="font-bold text-white">{player(chosen)?.name ?? 'Someone'}</span>.</> : 'Automatic: you attack the neighbor you pick most differently from.'}
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-field-400 mb-2.5">Pick a neighbor to attack, or leave it automatic. Nobody sees your choice until kickoff.</p>
+          <div className="space-y-1.5">
+            <button
+              onClick={() => choose(null)}
+              disabled={!!busy}
+              className={clsx('w-full flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm text-left', !chosen ? 'border-gold bg-gold/10 text-white' : 'border-field-700 bg-field-800/60 text-field-300 hover:text-white')}
+            >
+              {busy === 'auto' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Swords className="w-3.5 h-3.5 text-field-400" />}
+              <span className="font-bold">Automatic</span>
+              <span className="text-[11px] text-field-500">the neighbor you pick most differently from</span>
+            </button>
+            {neighbors.map(n => (
+              <button
+                key={n.id}
+                onClick={() => choose(n.id)}
+                disabled={!!busy}
+                className={clsx('w-full flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm text-left', chosen === n.id ? 'border-gold bg-gold/10' : 'border-field-700 bg-field-800/60 hover:border-field-500')}
+              >
+                {busy === n.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: n.color }} />}
+                <span className="font-bold text-white truncate">{n.name}</span>
+                {n.weak && <span className="shrink-0 text-[11px] font-bold text-amber-300">🔥 capital under siege</span>}
+                <span className="ml-auto shrink-0 text-[11px] text-field-400">
+                  {n.cities} {n.cities === 1 ? 'city' : 'cities'} · via {n.via.map(t => CITY[t] ?? t).join(', ')}
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** The season's titles: the race as it stands, or the crowned ones once the war's over. */
+function TitleRace({ war, userId }: { war: War; userId: string | undefined }) {
+  const list = war.crowned ?? titles(war.log, war.owners, war.players.map(p => p.userId))
+  if (!list.length) return null
+  const player = (id: string) => war.players.find(p => p.userId === id)
+  return (
+    <div className={clsx('panel p-4', war.crowned && 'border-gold/40')}>
+      <p className="flex items-center gap-2 font-cond font-bold text-sm uppercase tracking-wider text-white mb-2">
+        <Crown className="w-4 h-4 text-gold" /> {war.crowned ? 'Crowned' : `Title race · crowned after Week ${war.finalWeek ?? 18}`}
+      </p>
+      <ul className="space-y-1.5">
+        {list.map(t => (
+          <li key={t.key} className={clsx('flex items-center gap-2 text-sm rounded-md px-2 py-1', t.userId === userId && 'bg-gold/10')}>
+            <span className="w-6 text-center">{t.icon}</span>
+            <span className="font-bold text-white w-28 shrink-0">{t.label}</span>
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: player(t.userId)?.color ?? '#666' }} />
+            <span className="font-bold text-field-200 truncate">{player(t.userId)?.name ?? 'Someone'}</span>
+            <span className="ml-auto shrink-0 text-[11px] text-field-400">{t.value} · {t.blurb}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

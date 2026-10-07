@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { CITY } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from '@/components/conquest/ConquestMap'
-import { empires, liveBattles, headline, ownersBefore, type ConquestData, type ConquestMove, type LiveBattle } from '@/components/conquest/conquestView'
+import { empires, liveBattles, headline, ownersBefore, contested, type ConquestData, type ConquestMove, type LiveBattle } from '@/components/conquest/conquestView'
 
 // Conquest on the Shop TV: a panel in the rotation, the remote's Map
 // (full screen), and the War Report, which plays once for each week the
@@ -21,7 +21,7 @@ function useLiveBattles(war: ConquestData | null | undefined, b: BoardLike): Liv
   return useMemo(() => {
     if (!war) return []
     const battleWeek = (war.lastWeek ?? war.startWeek - 1) + 1
-    if (b.week !== battleWeek) return []
+    if (b.week !== battleWeek || battleWeek > (war.finalWeek ?? 18)) return []
     const correct = Object.fromEntries(b.week_table.map(r => [r.userId, r.correct]))
     const picks: Record<string, Record<string, string>> = {}
     for (const row of b.board?.rows ?? []) {
@@ -41,7 +41,7 @@ function BattleLine({ war, b, big }: { war: ConquestData; b: LiveBattle; big?: b
     <div className={clsx('flex items-center gap-2', big ? 'text-[22px]' : 'text-[17px]')}>
       <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: colorOf(b.attacker) }} />
       <span className="font-bold text-white truncate max-w-[34%]">{nameOf(b.attacker)}</span>
-      <span className="text-field-500">⚔</span>
+      <span className="text-field-500" title={b.ordered ? 'A chosen attack' : undefined}>{b.ordered ? '🎯' : '⚔'}</span>
       <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: colorOf(b.defender) }} />
       <span className="font-bold text-white truncate max-w-[34%]">{nameOf(b.defender)}</span>
       <span className={clsx('ml-auto font-cond font-black tabular-nums', ahead ? 'text-emerald-300' : 'text-field-400')}>{b.score[0]}–{b.score[1]}</span>
@@ -61,7 +61,10 @@ export function ConquestPanelBody({ war, battles, week }: { war: ConquestData; b
   const swinging = battles.filter(b => b.outcome !== 'hold').length
   return (
     <div className="h-full flex flex-col gap-3">
-      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} className="w-full h-auto" />
+      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} contested={contested(war, battles)} className="w-full h-auto" />
+      {war.crowned?.[0] && (
+        <p className="text-[19px] font-bold text-gold">{war.crowned[0].icon} {war.players.find(p => p.userId === war.crowned![0].userId)?.name ?? 'Someone'} is {war.crowned[0].label}</p>
+      )}
       {week < war.startWeek ? (
         <p className="text-[18px] text-field-300">The war begins Week {war.startWeek}. Every empire attacks the neighbor it picks most differently from.</p>
       ) : (
@@ -103,7 +106,7 @@ export function ConquestTakeover({ war, battles, league, week }: { war: Conquest
       </div>
       {/* The map, full width; the week's battles sit under the Northeast zoom */}
       <div className="relative w-full mt-3">
-        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} className="w-full h-auto" />
+        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} contested={contested(war, battles)} className="w-full h-auto" />
         {shown.length > 0 && (
           <div className="absolute" style={{ left: '71.2%', top: '64%', width: '28.6%' }}>
             <p className="font-mono text-[16px] text-[#3fd0ff] mb-1.5">// THIS WEEK, AS IT STANDS</p>
@@ -132,6 +135,7 @@ const INTRO_MS = 3500
 const STEP_MS = 4200
 const CLAIMS_MS = 5000
 const FINALE_MS = 7000
+const CORONATION_MS = 14_000
 /** The most moves it plays one by one; the rest of the claims go in one step. */
 const MAX_STEPS = 10
 
@@ -140,6 +144,7 @@ type Step =
   | { kind: 'move'; move: ConquestMove; upTo: number }
   | { kind: 'claims'; moves: ConquestMove[]; upTo: number }
   | { kind: 'finale' }
+  | { kind: 'coronation' }
 
 /**
  * Once for every week the server settles: the week's war, move by move on
@@ -173,8 +178,10 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
     const claims = moves.filter(m => m.kind === 'claim')
     if (claims.length) out.push({ step: { kind: 'claims', moves: claims, upTo: moves.length }, ms: CLAIMS_MS })
     out.push({ step: { kind: 'finale' }, ms: FINALE_MS })
+    // The war's last week: the titles are crowned
+    if (report.week === war.finalWeek && war.crowned?.length) out.push({ step: { kind: 'coronation' }, ms: CORONATION_MS })
     return out
-  }, [report])
+  }, [report, war.finalWeek, war.crowned])
 
   const [at, setAt] = useState(0)
   useEffect(() => {
@@ -187,6 +194,7 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
   if (!playing || !report || at >= steps.length) return null
   const step = steps[at].step
   const nameOf = nameFrom(war), colorOf = colorFrom(war)
+  if (step.kind === 'coronation' && war.crowned?.length) return <Coronation war={war} league={league} />
   // The map as of this step: the week undone, then the moves so far redone
   const start = ownersBefore(war.owners, report.moves)
   const upTo = step.kind === 'move' || step.kind === 'claims' ? step.upTo : step.kind === 'finale' ? report.moves.length : 0
@@ -270,4 +278,36 @@ export function ConquestPanel({ b }: { b: WarBoard }) {
 export function ConquestMapShow({ b }: { b: WarBoard }) {
   const battles = useLiveBattles(b.conquest, b)
   return b.conquest ? <ConquestTakeover war={b.conquest} battles={battles} league={b.league} week={b.week} /> : null
+}
+
+/** The war's over: the Emperor, full screen, and the season's other titles. */
+function Coronation({ war, league }: { war: ConquestData; league: string }) {
+  const [emperor, ...rest] = war.crowned!
+  const p = war.players.find(x => x.userId === emperor.userId)
+  return (
+    <div className="absolute inset-0 z-[36] bg-field-950/[0.98] flex flex-col items-center justify-center px-20 text-center">
+      <p className="font-cond font-bold uppercase tracking-[0.35em] text-gold text-[30px]">{league} · Conquest is over</p>
+      <p className="mt-6 text-[130px] leading-none rise-in">👑</p>
+      <p className="mt-4 font-cond font-black uppercase text-[110px] leading-none rise-in" style={{ color: p?.color ?? '#fff' }}>{p?.name ?? 'Someone'}</p>
+      <p className="mt-3 font-cond font-black uppercase text-white text-[52px] tracking-wide">
+        {emperor.label} · {emperor.value} {emperor.value === 1 ? 'city' : 'cities'}
+      </p>
+      {rest.length > 0 && (
+        <div className="mt-12 grid grid-cols-2 gap-x-16 gap-y-4 text-left">
+          {rest.map(t => {
+            const h = war.players.find(x => x.userId === t.userId)
+            return (
+              <div key={t.key} className="flex items-center gap-4 text-[30px]">
+                <span className="w-10 text-center">{t.icon}</span>
+                <span className="font-bold text-white w-[260px]">{t.label}</span>
+                <span className="w-5 h-5 rounded-sm shrink-0" style={{ background: h?.color ?? '#666' }} />
+                <span className="font-bold text-field-200">{h?.name ?? 'Someone'}</span>
+                <span className="text-field-500 text-[22px]">{t.value}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }

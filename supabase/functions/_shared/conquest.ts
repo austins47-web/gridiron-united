@@ -7,7 +7,8 @@
 //
 // The rules, all from the picks people already make:
 // - Everyone starts with a capital. Each week every empire attacks one
-//   neighbor: the one it picked most differently from that week. Beat
+//   neighbor: the one it ordered an attack on (before the week's first
+//   kickoff), or else the one it picked most differently from. Beat
 //   their week's score (ties go to the defender) and take one of their
 //   cities along your border, an outlying city before their capital.
 // - A capital doesn't fall at the first defeat: it goes under siege. The
@@ -158,9 +159,14 @@ export interface WeekScores {
   picks: Record<string, Record<string, string>>
 }
 
+/** Attack orders for a week: attacker → the empire they chose to attack. */
+export type Orders = Record<string, string>
+
 export interface Battle {
   attacker: string
   defender: string
+  /** chosen by an order (not the automatic pick) */
+  ordered?: boolean
   /** games the two picked differently */
   disagree: number
   /** [attacker's correct, defender's correct] */
@@ -213,14 +219,20 @@ function median(values: number[]): number {
 }
 
 /**
- * This week's battles: every empire against the neighbor it picked most
- * differently from (the bigger empire on a tie). None for an empire that
- * agreed with every neighbor on everything.
+ * This week's battles: every empire against the neighbor it ordered an
+ * attack on, if that one's still on its border; otherwise the neighbor it
+ * picked most differently from (the bigger empire on a tie). No automatic
+ * battle for an empire that agreed with every neighbor on everything.
  */
-export function plannedBattles(state: ConquestState, week: WeekScores, players: string[]): Battle[] {
+export function plannedBattles(state: ConquestState, week: WeekScores, players: string[], orders: Orders = {}): Battle[] {
   const out: Battle[] = []
   for (const a of [...players].sort()) {
     if (!citiesOf(state.owners, a).length) continue
+    const target = orders[a]
+    if (target && neighborsOf(state.owners, a).includes(target)) {
+      out.push({ attacker: a, defender: target, ordered: true, disagree: disagreements(week, a, target), score: [correctOf(week, a), correctOf(week, target)] })
+      continue
+    }
     let best: { b: string; d: number; size: number } | null = null
     for (const b of neighborsOf(state.owners, a)) {
       const d = disagreements(week, a, b)
@@ -236,7 +248,7 @@ export function plannedBattles(state: ConquestState, week: WeekScores, players: 
 
 /** Settles a week: the moves, who owns what after them, and which capitals are under siege. */
 export function resolveWeek(
-  state: ConquestState, week: WeekScores, players: string[],
+  state: ConquestState, week: WeekScores, players: string[], orders: Orders = {},
 ): { moves: Move[]; owners: Record<string, string | null>; besieged: Record<string, string> } {
   const start = state.owners
   const owners: Record<string, string | null> = { ...start }
@@ -263,7 +275,7 @@ export function resolveWeek(
   }
 
   // 2. Battles, the biggest wins first
-  const wins = plannedBattles(state, week, players)
+  const wins = plannedBattles(state, week, players, orders)
     .filter(b => b.score[0] > b.score[1])
     .sort((x, y) => (y.score[0] - y.score[1]) - (x.score[0] - x.score[1]) || x.attacker.localeCompare(y.attacker))
   for (const b of wins) {
@@ -357,4 +369,56 @@ export function empireColor(i: number): string {
   const hue = Math.round((i * 137.508 + 12) % 360)
   const light = [56, 64, 48][i % 3]
   return `hsl(${hue} 72% ${light}%)`
+}
+
+// ── The titles ────────────────────────────────────────────────
+export interface Title {
+  key: 'emperor' | 'warlord' | 'siege' | 'unbreakable' | 'comeback' | 'pioneer'
+  icon: string
+  label: string
+  /** what it's for */
+  blurb: string
+  userId: string
+  value: number
+}
+
+const TITLE_INFO: Record<Title['key'], { icon: string; label: string; blurb: string }> = {
+  emperor: { icon: '👑', label: 'Emperor', blurb: 'the biggest empire' },
+  warlord: { icon: '⚔️', label: 'Warlord', blurb: 'the most cities taken' },
+  siege: { icon: '🔥', label: 'Siege Master', blurb: 'the most sieges laid' },
+  unbreakable: { icon: '🛡️', label: 'Unbreakable', blurb: 'the most sieges survived' },
+  comeback: { icon: '✊', label: 'Comeback Kid', blurb: 'the most rebellions' },
+  pioneer: { icon: '🚩', label: 'Pioneer', blurb: 'the most flags planted' },
+}
+
+/**
+ * The season's titles from the war log and the map as it stands: who
+ * leads each (the race during the season; crowned after the last week).
+ * A title nobody's earned (a count of 0) isn't given. Ties go to whoever
+ * holds more cities, then alphabetically by id, so it never wobbles.
+ */
+export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Record<string, string | null>, players: string[]): Title[] {
+  const cities = (u: string) => citiesOf(owners, u).length
+  const count = (pred: (m: Pick<Move, 'kind' | 'to' | 'from'>) => boolean) => {
+    const n: Record<string, number> = {}
+    for (const m of moves) if (pred(m)) n[m.to] = (n[m.to] ?? 0) + 1
+    return n
+  }
+  const tallies: Record<Title['key'], Record<string, number>> = {
+    emperor: Object.fromEntries(players.map(u => [u, cities(u)])),
+    warlord: count(m => m.kind === 'capture' || m.kind === 'rebellion'),
+    siege: count(m => m.kind === 'siege'),
+    unbreakable: count(m => m.kind === 'relief'),
+    comeback: count(m => m.kind === 'rebellion'),
+    pioneer: count(m => m.kind === 'claim'),
+  }
+  const out: Title[] = []
+  for (const key of Object.keys(TITLE_INFO) as Title['key'][]) {
+    const best = players
+      .map(u => ({ u, v: tallies[key][u] ?? 0 }))
+      .filter(x => x.v > 0)
+      .sort((a, b) => b.v - a.v || cities(b.u) - cities(a.u) || a.u.localeCompare(b.u))[0]
+    if (best) out.push({ key, ...TITLE_INFO[key], userId: best.u, value: best.v })
+  }
+  return out
 }

@@ -81,8 +81,23 @@ function Lands({ owners, colorOf, you, highlight, highlightColor, z = 1 }: {
   )
 }
 
+/** Contested cities: a pulsing edge in the attacker's color (dashed red for a siege). */
+function Contested({ items, z = 1 }: { items: { team: string; color: string; siege: boolean }[]; z?: number }) {
+  if (!items.length) return null
+  return (
+    <g className="cq-flicker" fill="none" strokeLinejoin="round">
+      {items.map(c => (
+        <g key={c.team}>
+          <path d={M.territories[c.team]} stroke={c.color} strokeWidth={7 / z} strokeOpacity={0.4} />
+          <path d={M.territories[c.team]} stroke={c.siege ? '#ff4d3d' : '#ffffff'} strokeWidth={2 / z} strokeDasharray={`${5 / z} ${3 / z}`} />
+        </g>
+      ))}
+    </g>
+  )
+}
+
 export const ConquestMap = memo(function ConquestMap({
-  owners, besieged = {}, players, you, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, className,
+  owners, besieged = {}, players, you, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, contested = [], className,
 }: {
   owners: Record<string, string | null>
   besieged?: Record<string, string>
@@ -97,6 +112,8 @@ export const ConquestMap = memo(function ConquestMap({
   layout?: MapLayout
   /** bigger city labels, for a map drawn small */
   labelScale?: number
+  /** cities changing hands as the week stands: they flicker (held still on lighter effects) */
+  contested?: { team: string; color: string; siege: boolean }[]
   className?: string
 }) {
   const byId = new Map(players.map(p => [p.userId, p]))
@@ -144,6 +161,7 @@ export const ConquestMap = memo(function ConquestMap({
       <rect x={0} y={0} width={M.width} height={M.height} rx={10} fill="url(#cq-bg)" />
       <path d={M.grid} fill="none" stroke={CYAN} strokeOpacity={0.07} strokeWidth={0.6} />
       <Lands owners={owners} colorOf={colorOf} you={you} highlight={highlight} highlightColor={highlightColor} />
+      <Contested items={contested} />
       {/* Sea lanes */}
       {M.lanes.map(l => (
         <g key={`${l.a}-${l.b}`}>
@@ -160,6 +178,7 @@ export const ConquestMap = memo(function ConquestMap({
             <g transform={`translate(${box.x} ${box.y}) scale(${z}) translate(${-NE.x} ${-NE.y})`}>
               <path d={M.grid} fill="none" stroke={CYAN} strokeOpacity={0.07} strokeWidth={0.6 / z} />
               <Lands owners={owners} colorOf={colorOf} you={you} highlight={highlight} highlightColor={highlightColor} z={z} />
+              <Contested items={contested.filter(c => NE_SET.has(c.team))} z={z} />
             </g>
             {NORTHEAST_CITIES.map(t => cityMark(t, toInset(M.label[t]), toInset(M.stadium[t]), 14 * labelScale))}
           </g>

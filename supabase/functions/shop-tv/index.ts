@@ -565,23 +565,39 @@ serve(async (req) => {
   }
 })
 
-/** The league's Conquest war this season, if there is one: who owns what, and the last week's moves. */
+/**
+ * The league's Conquest war this season, if there is one: who owns what,
+ * the last week's moves, this week's attack orders (once they're public
+ * at the week's first kickoff), and the titles once the war's over.
+ */
 async function conquestOf(admin: ReturnType<typeof createClient>, leagueId: string, season: number) {
-  const { data: war } = await admin.from('conquest_games').select('start_week, last_resolved_week')
+  const { data: war } = await admin.from('conquest_games').select('start_week, last_resolved_week, final_week, crowned')
     .eq('league_id', leagueId).eq('season', season).maybeSingle()
   if (!war) return null
   const lastWeek = war.last_resolved_week as number | null
-  const [{ data: players }, { data: cities }, { data: moves }] = await Promise.all([
+  const battleWeek = (lastWeek ?? (war.start_week as number) - 1) + 1
+  const { data: first } = await admin.from('nfl_games').select('game_date')
+    .eq('season', season).eq('week', battleWeek).order('game_date').limit(1).maybeSingle()
+  const lockAt = first?.game_date as string | undefined
+  const open = !!lockAt && new Date(lockAt).getTime() <= Date.now()
+  const [{ data: players }, { data: cities }, { data: moves }, { data: orders }] = await Promise.all([
     admin.from('conquest_players').select('user_id, color, capital').eq('league_id', leagueId).eq('season', season),
     admin.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', season),
     lastWeek == null
       ? Promise.resolve({ data: [] as never[] })
       : admin.from('conquest_moves').select('kind, team, from_user, to_user, score_for, score_against, exiled')
         .eq('league_id', leagueId).eq('season', season).eq('week', lastWeek).order('id'),
+    open
+      ? admin.from('conquest_orders').select('user_id, target_id').eq('league_id', leagueId).eq('season', season).eq('week', battleWeek)
+      : Promise.resolve({ data: [] as never[] }),
   ])
   return {
     startWeek: war.start_week as number,
     lastWeek,
+    finalWeek: war.final_week as number,
+    lockAt: lockAt ?? null,
+    orders: Object.fromEntries((orders ?? []).map(o => [o.user_id, o.target_id])) as Record<string, string>,
+    crowned: (war.crowned ?? null) as unknown,
     players: (players ?? []).map(p => ({ userId: p.user_id as string, color: p.color as string, capital: p.capital as string | null })),
     owners: Object.fromEntries((cities ?? []).map(c => [c.team, c.owner_id])) as Record<string, string | null>,
     besieged: Object.fromEntries((cities ?? []).filter(c => c.besieged_by).map(c => [c.team, c.besieged_by])) as Record<string, string>,
