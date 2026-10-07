@@ -132,7 +132,7 @@ export function ZoomPan({ children, onTap, onZoom, className }: {
         onPointerUp={up}
         onPointerCancel={up}
       >
-        <div style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`, transformOrigin: '0 0' }}>
+        <div style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`, transformOrigin: '0 0', ['--cq-s' as string]: view.s }}>
           {children}
         </div>
       </div>
