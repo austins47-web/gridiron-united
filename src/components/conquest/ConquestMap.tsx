@@ -128,6 +128,9 @@ const shortName = (name: string) => {
   return first.length > 9 ? first.slice(0, 8) + '…' : first
 }
 
+/** Where a city's label sits: in its middle, or hanging off its capital's star */
+type Place = 'free' | 'below' | 'above' | 'right'
+
 /** One of Conquest's symbols drawn on the map, centered on a point at a size (map units). */
 function MapIcon({ name, x, y, size, color, outline }: { name: IconName; x: number; y: number; size: number; color: string; outline?: string }) {
   const icon = ICON[name]
@@ -496,60 +499,95 @@ export const ConquestMap = memo(function ConquestMap({
     return mine.length ? mine.reduce((a, b) => (M.size[b] > M.size[a] ? b : a)) : null
   })()
 
-  // City labels: which show (decluttered, most important first) and where, nudged apart so none
-  // overlap. The main map's, and the inset's (in its own space)
+  // City labels: which show, and where. The app's map (declutter): every label has one spot that
+  // never changes (a capital's hangs off its star, any other city's sits in its middle), and one
+  // that would overlap waits, least important first, until zooming in makes room. The TV's (all
+  // shown): nudged apart so none overlap. The main map's, and the inset's (in its own space).
   const spots = useMemo(() => {
     const hasName = (t: string) => {
       const o = ownerAt(t)
       return labels === 'names' && !!o && !namedIds.has(o.userId)
     }
-    const boxFor = (t: string, [x, y]: [number, number], size: number, withName = true): LabelBox => {
-      const o = ownerAt(t)
-      const showName = withName && hasName(t)
-      const name = showName ? shortName(o!.name) : ''
-      return {
-        key: t, x, y,
-        w: Math.max(t.length * 0.62 * size, name.length * 0.62 * 0.72 * size) + size * 0.3,
-        up: size * 0.8,
-        down: showName ? size * 1.15 : size * 0.25,
-      }
-    }
-    // Each capital's star (and the flame beside it) stays put; labels move off it
-    const starFor = (t: string, [x, y]: [number, number], size: number): LabelBox | null => {
-      const o = ownerAt(t)
-      if (t === youAt) return { key: `star-${t}`, x, y: y - size * 0.55, w: size * 2.9, up: size * 1.95, down: size * 1.4, fixed: true }
-      if (!o || o.capital !== t) return null
-      const siege = !!besieged[t]
-      return { key: `star-${t}`, x: x + (siege ? size * 0.45 : 0), y, w: size * (siege ? 2.6 : 1.7), up: size * (siege ? 1.35 : 0.85), down: size * 0.85, fixed: true }
-    }
+    const widthOf = (t: string, size: number, withName: boolean) =>
+      Math.max(t.length * 0.62 * size, withName && hasName(t) ? shortName(ownerAt(t)!.name).length * 0.62 * 0.72 * size : 0) + size * 0.3
+    const starred = (t: string) => t === youAt || (!!ownerAt(t) && ownerAt(t)!.capital === t)
     // Yours first, then capitals, then other owned cities, then open land; bigger cities first
     const rank = (t: string) => {
       const o = owners[t]
       const tier = t === youAt ? 0 : o && o === you ? 1 : o && byId.get(o)?.capital === t ? 2 : o ? 3 : 4
       return tier * 1e7 - M.size[t]
     }
-    const lay = (cities: string[], at: (t: string, p: [number, number]) => [number, number], size: number, bounds: Rect) => {
-      const placed: LabelBox[] = []
-      const show: Record<string, 'full' | 'code' | 'none'> = {}
-      const pad = size * 0.2
-      const clear = (b: LabelBox) => !placed.some(p =>
-        (b.w + p.w) / 2 + pad - Math.abs(b.x - p.x) > 0
-        && Math.min(b.y + b.down, p.y + p.down) + pad - Math.max(b.y - b.up, p.y - p.up) > 0)
-      for (const t of [...cities].sort((a, b) => rank(a) - rank(b))) {
-        const full = boxFor(t, at(t, M.label[t]), size)
-        const code = boxFor(t, at(t, M.label[t]), size, false)
-        if (!declutter || clear(full)) { placed.push(full); show[t] = hasName(t) ? 'full' : 'code' }
-        else if (clear(code)) { placed.push(code); show[t] = 'code' }
-        else show[t] = 'none'
+    type Spot = { at: [number, number]; show: 'full' | 'code' | 'none'; place: Place }
+
+    // The TV's way: every label, nudged apart and off the stars
+    const nudged = (cities: string[], at: (p: [number, number]) => [number, number], size: number, bounds: Rect): Record<string, Spot> => {
+      const boxes: LabelBox[] = cities.map(t => {
+        const [x, y] = at(M.label[t])
+        return { key: t, x, y, w: widthOf(t, size, true), up: size * 0.8, down: hasName(t) ? size * 1.15 : size * 0.25 }
+      })
+      for (const t of cities) {
+        if (!starred(t)) continue
+        const [x, y] = at(M.stadium[t])
+        const siege = !!besieged[t]
+        boxes.push(t === youAt
+          ? { key: `star-${t}`, x, y: y - size * 0.55, w: size * 2.9, up: size * 1.95, down: size * 1.4, fixed: true }
+          : { key: `star-${t}`, x: x + (siege ? size * 0.45 : 0), y, w: size * (siege ? 2.6 : 1.7), up: size * (siege ? 1.35 : 0.85), down: size * 0.85, fixed: true })
       }
-      const pos = spreadLabels([...placed, ...cities.map(t => starFor(t, at(t, M.stadium[t]), size)).filter((b): b is LabelBox => !!b)], bounds)
-      return Object.fromEntries(cities.map(t => [t, { at: pos[t] ?? at(t, M.label[t]), show: show[t] }]))
+      const pos = spreadLabels(boxes, bounds)
+      return Object.fromEntries(cities.map(t => [t, { at: pos[t], show: hasName(t) ? 'full' : 'code', place: 'free' }]))
     }
-    const main = lay(mainCities, (_, p) => p, 12 * LS, { x: 4, y: 4, w: M.width - 8, h: M.height - 8 })
-    const inset = box
-      ? lay(NORTHEAST_CITIES, (_, p) => toInset(p), 14 * LS, { x: box.x + 4, y: box.y + 24, w: box.w - 8, h: box.h - 28 })
-      : {}
-    return { main, inset: inset as typeof main }
+
+    // The app's way: fixed spots; what doesn't fit at this zoom waits
+    const fixed = (cities: string[], at: (p: [number, number]) => [number, number], size: number, bounds: Rect): Record<string, Spot> => {
+      type Box = { x0: number; x1: number; y0: number; y1: number; own?: string }
+      const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+      // The stars (and the YOU tag, and a siege's flame) are always there; labels keep off them
+      const stars: Box[] = cities.filter(starred).map(t => {
+        const [x, y] = at(M.stadium[t])
+        const siege = !!besieged[t]
+        return { own: t, x0: x - size * 0.95, x1: x + size * (siege ? 1.75 : 0.95), y0: y - size * (t === youAt ? 2.15 : siege ? 1.5 : 0.95), y1: y + size * 0.95 }
+      })
+      // Where a capital's label hangs, decided at full size (so zooming never moves it): under the
+      // star, or above it at the map's bottom edge, or beside it if your YOU tag is above
+      const placeOf = (t: string): Place => {
+        if (!starred(t)) return 'free'
+        const big = size * zoom
+        const [, y] = at(M.stadium[t])
+        if (y + big * 2.95 <= bounds.y + bounds.h) return 'below'
+        return t === youAt ? 'right' : 'above'
+      }
+      const boxOf = (t: string, withName: boolean, place: Place): Box => {
+        const w = widthOf(t, size, withName), named = withName && hasName(t)
+        if (place === 'free') {
+          const [x, y] = at(M.label[t])
+          return { x0: x - w / 2, x1: x + w / 2, y0: y - size * 0.8, y1: y + (named ? size * 1.15 : size * 0.25) }
+        }
+        const [x, y] = at(M.stadium[t])
+        if (place === 'below') return { x0: x - w / 2, x1: x + w / 2, y0: y + size, y1: y + size * (named ? 2.95 : 2) }
+        if (place === 'above') return { x0: x - w / 2, x1: x + w / 2, y0: y - size * (named ? 2.85 : 1.9), y1: y - size * 0.9 }
+        const left = x + size * (besieged[t] ? 1.9 : 1.15)
+        return { x0: left, x1: left + w, y0: y - size * 0.5, y1: y + size * (named ? 1.5 : 0.55) }
+      }
+      const placed: Box[] = []
+      const out: Record<string, Spot> = {}
+      const fits = (b: Box, t: string) =>
+        b.x0 >= bounds.x && b.x1 <= bounds.x + bounds.w && b.y0 >= bounds.y && b.y1 <= bounds.y + bounds.h
+        && !placed.some(p => overlaps(b, p)) && !stars.some(st => st.own !== t && overlaps(b, st))
+      for (const t of [...cities].sort((a, b) => rank(a) - rank(b))) {
+        const place = placeOf(t)
+        const at0: [number, number] = place === 'free' ? at(M.label[t]) : at(M.stadium[t])
+        const full = boxOf(t, true, place), code = boxOf(t, false, place)
+        if (hasName(t) && fits(full, t)) { placed.push(full); out[t] = { at: at0, show: 'full', place } }
+        else if (fits(code, t)) { placed.push(code); out[t] = { at: at0, show: 'code', place } }
+        else out[t] = { at: at0, show: 'none', place }
+      }
+      return out
+    }
+
+    const lay = declutter ? fixed : nudged
+    const main = lay(mainCities, p => p, 12 * LS, { x: 4, y: 4, w: M.width - 8, h: M.height - 8 })
+    const inset = box ? lay(NORTHEAST_CITIES, p => toInset(p), 14 * LS, { x: box.x + 4, y: box.y + 24, w: box.w - 8, h: box.h - 28 }) : {}
+    return { main, inset }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownersKey, Object.keys(besieged).sort().join(','), players, labels, LS, layout, named, youAt, declutter, you, mainCities.length])
 
@@ -560,16 +598,35 @@ export const ConquestMap = memo(function ConquestMap({
    * siege, your YOU tag above), the code, and its owner's name. Each is
    * drawn around its own point and kept its size on screen as the map
    * zooms (.cq-k, from the zoom's --cq-s), so nothing grows with the land.
+   * A capital's label hangs off its star, inside the star's own group, so
+   * the two move as one.
    */
   const cityMark = (t: string, [sx, sy]: [number, number], size: number, where: 'main' | 'inset'): ReactNode => {
     const o = ownerAt(t)
     const capital = !!o && o.capital === t
     const siege = !!besieged[t]
-    const { at: [lx, ly], show } = spots[where][t]
+    const { at: [lx, ly], show, place } = spots[where][t]
     const held = (x: number, y: number, body: ReactNode) => <g transform={`translate(${x} ${y})`}><g className="cq-k">{body}</g></g>
+    // The code and the owner's name, from a point: the label's middle, or off the star
+    const text = (x: number, codeY: number, nameY: number, anchor: 'middle' | 'start') => show !== 'none' && (
+      <>
+        <text className="cq-label" x={x} y={codeY} textAnchor={anchor} fontFamily={MONO} fontWeight={700} fontSize={size} fill={o ? P.code : P.codeFree}>{t}</text>
+        {show === 'full' && o && (
+          <text className="cq-label" x={x} y={nameY} textAnchor={anchor} fontFamily={MONO} fontWeight={P === LIGHT ? 700 : 400} fontSize={size * 0.72} fill={P.name(o.color)}>
+            {shortName(o.name).toUpperCase()}
+          </text>
+        )}
+      </>
+    )
+    const caption =
+      place === 'below' ? text(0, size * 1.75, size * 2.7, 'middle')
+      // Above: the code right over the star, the name over it, so the code stays put when the name appears
+      : place === 'above' ? text(0, -size * 1.15, -size * 2.1, 'middle')
+      : place === 'right' ? text(size * (siege ? 1.9 : 1.15), size * 0.3, size * 1.25, 'start')
+      : null
     return (
       <g key={`mark-${t}`}>
-        {(capital || siege || t === youAt) && held(sx, sy, (
+        {(capital || siege || t === youAt || caption) && held(sx, sy, (
           <>
             {capital && (
               <>
@@ -587,18 +644,10 @@ export const ConquestMap = memo(function ConquestMap({
                 </g>
               )
             })()}
+            {caption}
           </>
         ))}
-        {show !== 'none' && held(lx, ly, (
-          <>
-            <text className="cq-label" x={0} y={0} textAnchor="middle" fontFamily={MONO} fontWeight={700} fontSize={size} fill={o ? P.code : P.codeFree}>{t}</text>
-            {show === 'full' && o && (
-              <text className="cq-label" x={0} y={size * 0.95} textAnchor="middle" fontFamily={MONO} fontWeight={P === LIGHT ? 700 : 400} fontSize={size * 0.72} fill={P.name(o.color)}>
-                {shortName(o.name).toUpperCase()}
-              </text>
-            )}
-          </>
-        ))}
+        {place === 'free' && show !== 'none' && held(lx, ly, text(0, 0, size * 0.95, 'middle'))}
         {orders?.flag === t && held(lx, ly, <MapIcon name="flag" x={size * 1.5} y={-size * 0.9} size={size * 1.2} color={flagColor ?? P.ink} outline={P.under} />)}
       </g>
     )
