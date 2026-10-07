@@ -17,6 +17,7 @@
 //   them, best score first.
 // - Lose your last city and you're in exile: outscore whoever holds your
 //   capital in any week to take it back (a rebellion).
+// - Sea lanes (dotted on the map) count as borders, Risk style.
 // - A city changes hands at most once a week; everything is decided on
 //   the map as it stood when the week began.
 // ══════════════════════════════════════════════════════════════
@@ -69,8 +70,8 @@ export const CITY: Record<string, string> = {
 
 export const TERRITORIES = Object.keys(POS).sort()
 
-/** Each city's neighbors: territories whose counties share a border (water doesn't count). */
-export const ADJ: Record<string, string[]> = {
+/** Each city's land borders: territories whose counties share a border (water doesn't count). */
+const LAND_BORDERS: Record<string, string[]> = {
   ARI: ["DAL","DEN","LAC","LV"],
   ATL: ["CAR","JAX","NO","TEN"],
   BAL: ["BUF","PHI","PIT","WSH"],
@@ -104,6 +105,25 @@ export const ADJ: Record<string, string[]> = {
   TEN: ["ATL","CAR","CIN","DAL","IND","KC","NO"],
   WSH: ["BAL","CAR","PIT"],
 }
+
+/**
+ * Sea lanes, Risk style: routes across water that count as a border, so
+ * the Florida cities (a peninsula with Miami a dead end) aren't boxed in.
+ * The map draws them as dotted lines.
+ */
+export const SEA_LANES: [string, string][] = [
+  ['CAR', 'MIA'], // the Atlantic, up the coast
+  ['HOU', 'MIA'], // the southern Gulf
+  ['NO', 'TB'],   // the northern Gulf
+]
+
+/** Each city's neighbors: its land borders and its sea lanes. */
+export const ADJ: Record<string, string[]> = Object.fromEntries(
+  Object.entries(LAND_BORDERS).map(([t, land]) => [t, [...new Set([
+    ...land,
+    ...SEA_LANES.filter(l => l.includes(t)).map(([a, b]) => (a === t ? b : a)),
+  ])].sort()]),
+)
 
 /** How many steps apart two cities are on the map. */
 export function steps(a: string, b: string): number {

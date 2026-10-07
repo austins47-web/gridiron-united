@@ -171,6 +171,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
             <li>Beat their score for the week and take one of their cities on your border. Ties go to the defender.</li>
             <li>A capital (★) doesn’t fall the first time: it goes under siege 🔥. Lose again while besieged and it falls; a week nobody beats you and the siege lifts.</li>
             <li>The top half of the week each plant a flag in an unclaimed city next to them.</li>
+            <li>Dotted lines on the map are sea lanes: the cities at each end border each other, like Risk.</li>
             <li>Lose everything and you’re in exile: outscore whoever holds your capital any week to take it back.</li>
             <li>Weeks settle once every game is final. Biggest empire after Week 18 is crowned Emperor.</li>
           </ul>

@@ -7,7 +7,8 @@ import type { ConquestPlayer } from './conquestView'
 // territory (the counties nearest its stadium), owned ones washed in their
 // empire's color with a glowing edge, a faint grid and state lines, a
 // marker on each capital its owner still holds (ringed red under siege),
-// and a zoomed Northeast where the cities are too small to read. The glow
+// dotted sea lanes (Risk style: they count as borders), and a zoomed
+// Northeast where the cities are too small to read. The glow
 // is layered strokes, not a blur filter, so a Fire TV can draw it.
 
 const M = US_MAP
@@ -143,6 +144,13 @@ export const ConquestMap = memo(function ConquestMap({
       <rect x={0} y={0} width={M.width} height={M.height} rx={10} fill="url(#cq-bg)" />
       <path d={M.grid} fill="none" stroke={CYAN} strokeOpacity={0.07} strokeWidth={0.6} />
       <Lands owners={owners} colorOf={colorOf} you={you} highlight={highlight} highlightColor={highlightColor} />
+      {/* Sea lanes */}
+      {M.lanes.map(l => (
+        <g key={`${l.a}-${l.b}`}>
+          <path d={l.d} fill="none" stroke={CYAN} strokeOpacity={0.65} strokeWidth={1.6} strokeDasharray="3 4" strokeLinecap="round" />
+          {l.ends.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={2.6} fill={CYAN} />)}
+        </g>
+      ))}
       {TERRITORIES.filter(t => !(box && NE_SET.has(t))).map(t => cityMark(t, M.label[t], M.stadium[t], 12 * labelScale))}
       {box && (
         <>
