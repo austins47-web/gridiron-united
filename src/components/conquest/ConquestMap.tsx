@@ -2,7 +2,7 @@ import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, typ
 import clsx from 'clsx'
 import { TERRITORIES, ADJ, citiesOf, patternOf } from '../../../supabase/functions/_shared/conquest.ts'
 import { NORTHEAST_CITIES } from './usMap'
-import { M, NE, NE_SET, insetBox, viewOf, empireLabel, spreadLabels, type MapLayout, type Rect, type LabelBox } from './mapGeometry'
+import { M, NE, NE_SET, insetBox, viewOf, empireLabel, spreadLabels, frontTeeth, type MapLayout, type Rect, type LabelBox } from './mapGeometry'
 import { ICON, type IconName } from './icons'
 import type { ConquestPlayer, LiveBattle } from './conquestView'
 
@@ -13,8 +13,10 @@ export type { MapLayout } from './mapGeometry'
 // country: its cities washed in its color (some colors carry stripes or
 // dots, so no two get confused), one glowing border around the lot, faint
 // lines between its own cities, and its name written across its land once
-// it holds two or more. Where two empires meet, the border burns as a
-// front line. A star marks each capital its owner still holds (a flame
+// it holds two or more. Where two empires meet, each side of the border
+// glows in its own color with a dark seam between, two armies facing off;
+// where a battle's on this week, the attacker's teeth line that border,
+// pointing into the city at stake. A star marks each capital its owner still holds (a flame
 // when it's under siege), dotted sea lanes count as borders (Risk style),
 // and the Northeast gets a zoomed inset. City labels nudge apart so none
 // overlap. The glow is layered strokes, not a blur filter, so a Fire TV
@@ -61,7 +63,8 @@ interface Palette {
   /** a battle arrow, in the attacker's color (a little darker on light) */
   arrow: (color: string) => string
   /** a border between two empires: a wide glow and a bright core */
-  front: { glow: string; glowOpacity: number; core: string }
+  /** the thin line between two empires' colors where they meet */
+  seam: string
 }
 
 const DARK: Palette = {
@@ -78,7 +81,7 @@ const DARK: Palette = {
   under: 'rgba(0, 0, 0, 0.6)',
   name: c => c,
   arrow: c => c,
-  front: { glow: '#ff3d1f', glowOpacity: 0.22, core: '#ff8a65' },
+  seam: 'rgba(2, 6, 10, 0.85)',
 }
 
 /** An empire's color darkened to a lightness that reads on white. */
@@ -101,7 +104,7 @@ const LIGHT: Palette = {
   under: 'rgba(255, 255, 255, 0.85)',
   name: c => inked(c, 30),
   arrow: c => inked(c, 40),
-  front: { glow: '#ff3d1f', glowOpacity: 0.16, core: '#d4380d' },
+  seam: 'rgba(255, 255, 255, 0.95)',
 }
 
 /** The app's light mode (the TV always runs dark). */
@@ -139,6 +142,9 @@ function MapIcon({ name, x, y, size, color, outline }: { name: IconName; x: numb
   )
 }
 
+/** The Northeast and its neighbors: the only cities whose empires' borders the inset needs to draw */
+const NE_NEAR = new Set([...NE_SET, ...[...NE_SET].flatMap(t => ADJ[t])])
+
 /** The borders around a set of cities (the coast and every border with a city outside it), as one path. */
 const outlineOf = (cities: Set<string>) =>
   M.borders.filter(b => cities.has(b.a) !== cities.has(b.b)).map(b => b.d).join('')
@@ -162,12 +168,19 @@ const pct = (v: number, of: number) => `${(v / of) * 100}%`
  * The land at a zoom (`z` keeps lines the same width zoomed in): each
  * city's fill (textured for some colors), then the borders, drawn once
  * each from the shared borders: open land's, the faint ones inside an
- * empire, one glowing border around each empire, and the front lines
- * where two empires meet. Only the fills take taps (they carry the city).
+ * empire, and one glowing border around each empire. Where it meets
+ * another empire, its glow stays on its own side (clipped to its land),
+ * so the border shows both colors with a dark seam down the middle.
+ * Only the fills take taps (they carry the city).
  */
-function Lands({ owners, colorOf, patternFill, you, target, flag, flagColor, highlight, highlightColor, P, z = 1 }: {
+function Lands({ owners, colorOf, clipOf, near, patternFill, you, target, flag, flagColor, highlight, highlightColor, P, z = 1 }: {
   owners: Record<string, string | null>
   colorOf: (k: string) => string | null
+  /** an empire's land, as a clip (url) */
+  clipOf: (empire: string) => string
+  /** only the empires holding one of these cities get borders (the inset: just the Northeast's) */
+  near?: Set<string>
+
   /** a city's texture fill, if its empire's color has one */
   patternFill: (k: string) => string | null
   you?: string | null
@@ -181,10 +194,10 @@ function Lands({ owners, colorOf, patternFill, you, target, flag, flagColor, hig
   z?: number
 }) {
   const own = (t: string) => owners[t] ?? null
-  const empires = [...new Set(TERRITORIES.map(own).filter((o): o is string => !!o))]
+  const empires = [...new Set(TERRITORIES.filter(t => !near || near.has(t)).map(own).filter((o): o is string => !!o))]
   const free = M.borders.filter(b => !own(b.a) && !own(b.b)).map(b => b.d).join('')
     + TERRITORIES.filter(t => !own(t)).map(t => M.coasts[t]).join('')
-  const fronts = M.borders.filter(b => own(b.a) && own(b.b) && own(b.a) !== own(b.b)).map(b => b.d).join('')
+  const seams = M.borders.filter(b => own(b.a) && own(b.b) && own(b.a) !== own(b.b)).map(b => b.d).join('')
   return (
     <>
       {P.land && TERRITORIES.filter(t => colorOf(t)).map(t => <path key={`land-${t}`} d={M.territories[t]} fill={P.land!} pointerEvents="none" />)}
@@ -201,23 +214,33 @@ function Lands({ owners, colorOf, patternFill, you, target, flag, flagColor, hig
         {free && <path d={free} stroke={P.freeEdge} strokeOpacity={P.freeEdgeOpacity} strokeWidth={0.8 / z} />}
         {empires.map(e => {
           const c = colorOf(TERRITORIES.find(t => own(t) === e)!)!
-          const inner = M.borders.filter(b => own(b.a) === e && own(b.b) === e).map(b => b.d).join('')
-          const edge = outlineOf(new Set(TERRITORIES.filter(t => own(t) === e)))
+          const mine = (t: string) => own(t) === e
+          const inner = M.borders.filter(b => mine(b.a) && mine(b.b)).map(b => b.d).join('')
+          // Its edge to open land and the coast glows both ways; its edge to another empire, only inward
+          const open = M.borders.filter(b => mine(b.a) !== mine(b.b) && !own(mine(b.a) ? b.b : b.a)).map(b => b.d).join('')
+            + TERRITORIES.filter(mine).map(t => M.coasts[t]).join('')
+          const facing = M.borders.filter(b => mine(b.a) !== mine(b.b) && own(mine(b.a) ? b.b : b.a)).map(b => b.d).join('')
           return (
             <g key={e} stroke={c}>
               {inner && <path d={inner} strokeOpacity={0.45} strokeWidth={0.7 / z} strokeDasharray={`${2 / z} ${2.5 / z}`} />}
-              <path d={edge} strokeOpacity={0.16} strokeWidth={5.5 / z} />
-              <path d={edge} strokeOpacity={0.4} strokeWidth={2.6 / z} />
-              <path d={edge} strokeWidth={1.2 / z} />
+              {open && (
+                <>
+                  <path d={open} strokeOpacity={0.16} strokeWidth={5.5 / z} />
+                  <path d={open} strokeOpacity={0.4} strokeWidth={2.6 / z} />
+                  <path d={open} strokeWidth={1.2 / z} />
+                </>
+              )}
+              {facing && (
+                <g clipPath={clipOf(e)}>
+                  <path d={facing} strokeOpacity={0.22} strokeWidth={10 / z} />
+                  <path d={facing} strokeOpacity={0.5} strokeWidth={5 / z} />
+                  <path d={facing} strokeWidth={2.6 / z} />
+                </g>
+              )}
             </g>
           )
         })}
-        {fronts && (
-          <>
-            <path d={fronts} stroke={P.front.glow} strokeOpacity={P.front.glowOpacity} strokeWidth={6 / z} />
-            <path d={fronts} stroke={P.front.core} strokeWidth={1.5 / z} />
-          </>
-        )}
+        {seams && <path d={seams} stroke={P.seam} strokeWidth={0.9 / z} />}
         {you && empires.includes(you) && (
           <path d={outlineOf(new Set(TERRITORIES.filter(t => own(t) === you)))} stroke={P.ink} strokeOpacity={0.9} strokeWidth={1.4 / z} strokeDasharray={`${4 / z} ${3 / z}`} />
         )}
@@ -241,6 +264,8 @@ function Lands({ owners, colorOf, patternFill, you, target, flag, flagColor, hig
 interface Ping { team: string; x: number; y: number; color: string; siege: boolean }
 interface Arrow { key: string; fromTeam: string; toTeam: string; from: [number, number]; to: [number, number]; color: string; live: boolean }
 interface Hot { team: string; color: string; siege: boolean }
+/** A battle's front: the attacker's teeth along the border, into the city at stake */
+interface Front { key: string; d: string; box: Rect; color: string; live: boolean }
 
 /** One turn of the radar, one pass of the scan line (index.css's cq-radar, cq-scan and cq-ping) */
 const SWEEP_S = 8
@@ -283,13 +308,14 @@ function useOnSweep() {
  * the Northeast inset). Each is its own element, so moving it never
  * redraws the map under it.
  */
-function Motion({ win, zoom, P, pings, ringR, hot, arrows, radar, lanes }: {
+function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes }: {
   win: Rect
   zoom: number
   P: Palette
   pings: Ping[]
   ringR: number
   hot: Hot[]
+  fronts: Front[]
   arrows: Arrow[]
   radar: boolean
   lanes: boolean
@@ -329,6 +355,16 @@ function Motion({ win, zoom, P, pings, ringR, hot, arrows, radar, lanes }: {
           </svg>
         )
       })}
+
+      {/* This week's battle fronts: each its own layer, pulsing (faint while the attacker's losing) */}
+      {fronts.map(f => (
+        <svg
+          key={f.key} className="cq-front" viewBox={`${f.box.x} ${f.box.y} ${f.box.w} ${f.box.h}`}
+          style={{ ...at(f.box.x, f.box.y, f.box.w, f.box.h), opacity: f.live ? undefined : 0.4 }} overflow="visible"
+        >
+          <path d={f.d} fill={f.color} stroke={P.under} strokeWidth={1.4 / zoom} strokeLinejoin="round" paintOrder="stroke" />
+        </svg>
+      ))}
 
       {(arrows.length > 0 || lanes) && (
         <svg viewBox={`${win.x} ${win.y} ${win.w} ${win.h}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
@@ -558,6 +594,18 @@ export const ConquestMap = memo(function ConquestMap({
     const fromTeam = ADJ[b.city].filter(n => owners[n] === b.attacker).sort((p, q) => dist(p) - dist(q))[0]
     return fromTeam ? [{ key: b.attacker, fromTeam, toTeam: b.city, from: M.stadium[fromTeam], to, color: P.arrow(colorOfUser(b.attacker)), live: b.outcome !== 'hold' }] : []
   })
+  /** Each battle's front at a tooth size: along the city at stake's border with the attacker's land */
+  const frontsAt = (scale: number, only?: (team: string) => boolean): Front[] => battles.flatMap(b => {
+    if (!b.city || (only && !only(b.city))) return []
+    // Two empires attacking each other across the same border: one's teeth go in between the other's
+    const mutual = battles.some(o => o.attacker === b.defender && o.defender === b.attacker && o.attacker < b.attacker)
+    const teeth = frontTeeth(b.city, new Set(citiesOf(owners, b.attacker)), scale, mutual)
+    return teeth ? [{ key: b.attacker, ...teeth, color: P.arrow(colorOfUser(b.attacker)), live: b.outcome !== 'hold' }] : []
+  })
+
+  // Each empire's land as a clip, so its glow stays on its side where it meets another
+  const holders = players.filter(p => TERRITORIES.some(t => owners[t] === p.userId))
+  const clipOf = (e: string) => `url(#cq-own-${uid}-${holders.findIndex(p => p.userId === e)})`
 
   const frame = (r: Rect, rx: number): CSSProperties => ({
     position: 'absolute', left: pct(r.x, view.w), top: pct(r.y, view.h), width: pct(r.w, view.w), height: pct(r.h, view.h),
@@ -575,6 +623,11 @@ export const ConquestMap = memo(function ConquestMap({
           </radialGradient>
           <clipPath id={`cq-main-${uid}`}><rect x={0} y={0} width={M.width} height={M.height} rx={10} /></clipPath>
           {box && <clipPath id={`cq-ne-${uid}`}><rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} /></clipPath>}
+          {holders.map((p, i) => (
+            <clipPath key={p.userId} id={`cq-own-${uid}-${i}`}>
+              {TERRITORIES.filter(t => owners[t] === p.userId).map(t => <path key={t} d={M.territories[t]} />)}
+            </clipPath>
+          ))}
           {textured.map((p, i) => (
             <pattern key={p.userId} id={`cq-tex-${uid}-${i}`} patternUnits="userSpaceOnUse" width={6} height={6} patternTransform="rotate(45)">
               {patternOf(p.color) === 'stripes'
@@ -586,7 +639,7 @@ export const ConquestMap = memo(function ConquestMap({
         <rect x={0} y={0} width={M.width} height={M.height} rx={10} fill={`url(#cq-bg-${uid})`} />
         <path d={M.grid} fill="none" stroke={P.grid} strokeOpacity={P.gridOpacity} strokeWidth={0.6} pointerEvents="none" clipPath={`url(#cq-main-${uid})`} />
         <Lands
-          owners={owners} colorOf={colorOf} patternFill={patternFill} you={you}
+          owners={owners} colorOf={colorOf} clipOf={clipOf} patternFill={patternFill} you={you}
           target={orders?.target} flag={orders?.flag} flagColor={flagColor}
           highlight={highlight} highlightColor={highlightColor} P={P}
         />
@@ -610,7 +663,7 @@ export const ConquestMap = memo(function ConquestMap({
               <g transform={`translate(${box.x} ${box.y}) scale(${z}) translate(${-NE.x} ${-NE.y})`}>
                 <path d={M.grid} fill="none" stroke={P.grid} strokeOpacity={P.gridOpacity} strokeWidth={0.6 / z} pointerEvents="none" />
                 <Lands
-                  owners={owners} colorOf={colorOf} patternFill={patternFill} you={you}
+                  owners={owners} colorOf={colorOf} clipOf={clipOf} near={NE_NEAR} patternFill={patternFill} you={you}
                   target={orders?.target} flag={orders?.flag} flagColor={flagColor}
                   highlight={highlight} highlightColor={highlightColor} P={P} z={z}
                 />
@@ -639,6 +692,7 @@ export const ConquestMap = memo(function ConquestMap({
             pings={pings.filter(p => !(box && NE_SET.has(p.team)))}
             ringR={12 * labelScale * 1.9}
             hot={hot}
+            fronts={frontsAt(1)}
             arrows={arrows}
           />
         </div>
@@ -649,6 +703,7 @@ export const ConquestMap = memo(function ConquestMap({
               pings={pings.filter(p => NE_SET.has(p.team))}
               ringR={(14 * labelScale * 1.9) / z}
               hot={hot.filter(h => NE_SET.has(h.team))}
+              fronts={frontsAt(1.3 / z, t => NE_SET.has(t))}
               arrows={arrows.filter(a => NE_SET.has(a.fromTeam) && NE_SET.has(a.toTeam))}
             />
           </div>

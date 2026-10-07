@@ -56,6 +56,90 @@ export function insideTerritory(t: string, x: number, y: number): boolean {
   return hit
 }
 
+type Pt = [number, number]
+
+/** Joins line pieces that meet end to end (either way round) into as few lines as possible. */
+function stitch(pieces: Pt[][]): Pt[][] {
+  const left = pieces.filter(l => l.length > 1).map(l => [...l])
+  const same = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.6
+  const out: Pt[][] = []
+  while (left.length) {
+    let cur = left.shift()!
+    for (let grew = true; grew;) {
+      grew = false
+      for (let i = 0; i < left.length; i++) {
+        const l = left[i], s = cur[0], e = cur[cur.length - 1]
+        if (same(e, l[0])) cur = cur.concat(l.slice(1))
+        else if (same(e, l[l.length - 1])) cur = cur.concat([...l].reverse().slice(1))
+        else if (same(s, l[l.length - 1])) cur = l.concat(cur.slice(1))
+        else if (same(s, l[0])) cur = [...l].reverse().concat(cur.slice(1))
+        else continue
+        left.splice(i, 1)
+        grew = true
+        break
+      }
+    }
+    out.push(cur)
+  }
+  return out
+}
+
+// Each shared border as continuous lines of points (the generator hands them over in pieces)
+const BORDER_LINES = M.borders.map(b => ({
+  a: b.a, b: b.b,
+  lines: stitch(b.d.split('M').filter(Boolean).map(l => l.split('L').map(p => p.split(',').map(Number) as Pt))),
+}))
+
+/**
+ * A battle front, the military-map way: a row of teeth along the border
+ * between the attacker's cities and the city at stake, each pointing into
+ * it. One path (map units), and the box it sits in. `scale` sizes the teeth
+ * (smaller in the zoomed inset); `between` puts them halfway between the
+ * usual spots, so two empires attacking each other across one border
+ * alternate instead of colliding.
+ */
+export function frontTeeth(target: string, attacker: Set<string>, scale = 1, between = false): { d: string; box: Rect } | null {
+  const spacing = 16 * scale, size = 8 * scale, half = 4.4 * scale
+  let d = ''
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (const border of BORDER_LINES) {
+    if (!((border.a === target && attacker.has(border.b)) || (border.b === target && attacker.has(border.a)))) continue
+    for (const line of border.lines) {
+      // How far along the line each point is, and the spot at any distance
+      const at: number[] = [0]
+      for (let i = 1; i < line.length; i++) at.push(at[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]))
+      const total = at[at.length - 1]
+      const spot = (dist: number): [number, number] => {
+        const s = Math.max(0, Math.min(total, dist))
+        let i = 1
+        while (i < at.length - 1 && at[i] < s) i++
+        const k = at[i] > at[i - 1] ? (s - at[i - 1]) / (at[i] - at[i - 1]) : 0
+        return [line[i - 1][0] + (line[i][0] - line[i - 1][0]) * k, line[i - 1][1] + (line[i][1] - line[i - 1][1]) * k]
+      }
+      // A tooth every `spacing` along the line, starting half a step in (or a whole one), each
+      // facing square to the border's general run there (not the little county-line steps)
+      for (let dist = between ? spacing : spacing / 2; dist <= total; dist += spacing) {
+        const [px, py] = spot(dist)
+        const [ax, ay] = spot(dist - spacing * 0.6), [bx, by] = spot(dist + spacing * 0.6)
+        const len = Math.hypot(bx - ax, by - ay)
+        if (!len) continue
+        const ux = (bx - ax) / len, uy = (by - ay) / len
+        // Point it into the city at stake
+        let nx = -uy, ny = ux
+        if (!insideTerritory(target, px + nx * 3, py + ny * 3)) { nx = -nx; ny = -ny }
+        const tip: [number, number] = [px + nx * size, py + ny * size]
+        d += `M${(px - ux * half).toFixed(1)} ${(py - uy * half).toFixed(1)}L${tip[0].toFixed(1)} ${tip[1].toFixed(1)}L${(px + ux * half).toFixed(1)} ${(py + uy * half).toFixed(1)}Z`
+        for (const [x, y] of [tip, [px - ux * half, py - uy * half], [px + ux * half, py + uy * half]]) {
+          x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y)
+        }
+      }
+    }
+  }
+  if (!d) return null
+  const pad = 3
+  return { d, box: { x: x0 - pad, y: y0 - pad, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2 } }
+}
+
 export interface EmpireLabel { x: number; y: number; angle: number; size: number }
 
 /**

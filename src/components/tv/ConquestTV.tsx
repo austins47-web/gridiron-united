@@ -143,11 +143,19 @@ function MapLegend() {
     [<ConquestIcon name="capital" className="w-[18px] h-[18px] text-white shrink-0" />, 'Capital'],
     [<ConquestIcon name="siege" className="w-[18px] h-[18px] text-[#ff4d3d] shrink-0" />, 'Under siege'],
     [
-      <svg viewBox="0 0 34 10" className="w-[34px] h-[10px] shrink-0">
-        <path d="M2 5H32" stroke="#ff3d1f" strokeOpacity={0.3} strokeWidth={6} strokeLinecap="round" />
-        <path d="M2 5H32" stroke="#ff8a65" strokeWidth={1.8} strokeLinecap="round" />
+      <svg viewBox="0 0 34 12" className="w-[34px] h-[12px] shrink-0">
+        <rect x={2} y={1} width={30} height={5} fill="#3d8bfd" />
+        <rect x={2} y={6} width={30} height={5} fill="#e8743b" />
+        <path d="M2 6H32" stroke="#02060a" strokeWidth={1.2} />
       </svg>,
-      'Front line',
+      'Border between empires',
+    ],
+    [
+      <svg viewBox="0 0 34 12" className="w-[34px] h-[12px] shrink-0">
+        <path d="M2 4H32" stroke="#e8743b" strokeWidth={1.2} />
+        {[5, 14, 23].map(x => <path key={x} d={`M${x} 4L${x + 3.5} 11L${x + 7} 4Z`} fill="#3d8bfd" stroke="#02060a" strokeWidth={0.8} />)}
+      </svg>,
+      'Battle front (pushing in)',
     ],
     [line('#3fd0ff', { strokeDasharray: '3 4' }), 'Sea lane'],
     [
