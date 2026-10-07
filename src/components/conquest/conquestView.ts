@@ -139,3 +139,59 @@ export function ownersBefore(owners: Record<string, string | null>, moves: Conqu
   }
   return before
 }
+
+/** A move in the war log, with the week it was made */
+export type LoggedMove = ConquestMove & { week: number }
+
+const changesHands = (m: ConquestMove) => m.kind === 'capture' || m.kind === 'claim' || m.kind === 'rebellion'
+
+/** The log oldest first: week by week, and within a week in the order the moves were made */
+export function chronological(log: LoggedMove[]): LoggedMove[] {
+  const weeks = [...new Set(log.map(m => m.week))].sort((a, b) => a - b)
+  return weeks.flatMap(w => log.filter(m => m.week === w))
+}
+
+/**
+ * The map as it stood after a week (the week before the war's first: the
+ * opening map): who owned what, with the moves since undone (latest
+ * first), and which capitals were under siege, played forward to then.
+ */
+export function mapAfter(owners: Record<string, string | null>, log: LoggedMove[], week: number): { owners: Record<string, string | null>; besieged: Record<string, string> } {
+  const then = { ...owners }
+  const later = chronological(log).filter(m => m.week > week)
+  for (let i = later.length - 1; i >= 0; i--) if (changesHands(later[i])) then[later[i].team] = later[i].from
+  return { owners: then, besieged: siegesAfter(chronological(log).filter(m => m.week <= week)) }
+}
+
+/** The capitals under siege after some moves (oldest first): laid by a siege, over at a relief or a fall. */
+export function siegesAfter(moves: ConquestMove[], from: Record<string, string> = {}): Record<string, string> {
+  const besieged = { ...from }
+  for (const m of moves) {
+    if (m.kind === 'siege') besieged[m.team] = m.to
+    else if (m.kind === 'relief' || changesHands(m)) delete besieged[m.team]
+  }
+  return besieged
+}
+
+/** Who owned a city after some moves (oldest first). */
+export function ownersAfter(owners: Record<string, string | null>, moves: ConquestMove[]): Record<string, string | null> {
+  const after = { ...owners }
+  for (const m of moves) if (changesHands(m)) after[m.team] = m.to
+  return after
+}
+
+export interface CityStory {
+  /** everyone who's held it, oldest first, and the week they took it (null: since the war began) */
+  holders: { userId: string | null; since: number | null }[]
+  /** everything that happened there, oldest first */
+  events: LoggedMove[]
+}
+
+/** A city's story from the war log: who's held it, and what happened there. */
+export function cityStory(owners: Record<string, string | null>, log: LoggedMove[], team: string): CityStory {
+  const events = chronological(log).filter(m => m.team === team)
+  const changes = events.filter(changesHands)
+  const holders: CityStory['holders'] = [{ userId: changes.length ? changes[0].from : owners[team] ?? null, since: null }]
+  for (const m of changes) holders.push({ userId: m.to, since: m.week })
+  return { holders, events }
+}

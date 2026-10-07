@@ -210,12 +210,12 @@ function Lands({ owners, colorOf, clipOf, near, patternFill, you, target, flag, 
       {P.land && TERRITORIES.filter(t => colorOf(t)).map(t => <path key={`land-${t}`} d={M.territories[t]} fill={P.land!} pointerEvents="none" />)}
       {TERRITORIES.map(t => {
         const c = colorOf(t)
-        return <path key={t} data-team={t} d={M.territories[t]} fill={c ?? P.free} fillOpacity={c ? (you && own(t) === you ? P.ownedYou : P.owned) : 1} />
+        return <path key={t} data-team={t} className="cq-land" d={M.territories[t]} style={{ fill: c ?? P.free, fillOpacity: c ? (you && own(t) === you ? P.ownedYou : P.owned) : 1 }} />
       })}
       <g pointerEvents="none" fill="none" strokeLinejoin="round">
         {TERRITORIES.map(t => {
           const f = patternFill(t)
-          return f ? <path key={`tex-${t}`} d={M.territories[t]} fill={f} stroke="none" /> : null
+          return f ? <path key={`tex-${t}-${own(t)}`} className="cq-fade" d={M.territories[t]} fill={f} stroke="none" /> : null
         })}
         <path d={M.states} stroke={P.states} strokeOpacity={P.statesOpacity} strokeWidth={0.6 / z} />
         {free && <path d={free} stroke={P.freeEdge} strokeOpacity={P.freeEdgeOpacity} strokeWidth={0.8 / z} />}

@@ -6,8 +6,7 @@ import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
 import { CITY, ADJ, TERRITORIES, citiesOf, neighborsOf } from '../../../supabase/functions/_shared/conquest.ts'
-import { ConquestMap } from '@/components/conquest/ConquestMap'
-import { ZoomPan } from '@/components/conquest/ZoomPan'
+import { WarMap } from '@/components/conquest/WarMap'
 import { empires, liveBattles, headline, titles, swatch, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
 import { ConquestIcon } from '@/components/conquest/ConquestIcon'
 
@@ -114,8 +113,6 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
 
   const [rules, setRules] = useState(false)
   const sender = useOrderSender(leagueId, () => qc.invalidateQueries({ queryKey: key }))
-  // How far the map's zoomed in (in quarter steps): more labels fit, and show, as it grows
-  const [mapZoom, setMapZoom] = useState(1)
   const [allLog, setAllLog] = useState(false)
 
   if (isLoading) return <div className="panel p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-field-400" /></div>
@@ -149,21 +146,6 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
   const myTarget = userId ? data.orders?.[userId] ?? null : null
   const myClaim = userId ? data.claims?.[userId] ?? null : null
   const phone = typeof window !== 'undefined' && window.innerWidth < 640
-  const tapCity = (team: string | null) => {
-    if (!team) return
-    const owner = data.owners[team] ?? null
-    const what = `${CITY[team] ?? team}: ${owner ? (owner === userId ? 'yours' : data.players.find(p => p.userId === owner)?.name ?? 'Someone') : 'open land'}`
-    if (!ordersOpen || owner === userId) { toast(what, { id: 'cq-tap' }); return }
-    if (owner && neighborsOf(data.owners, userId!).includes(owner)) {
-      sender.attack(myTarget === owner ? null : owner, data.players.find(p => p.userId === owner)?.name)
-      return
-    }
-    if (!owner && ADJ[team].some(n => myCities.includes(n))) {
-      sender.flag(myClaim === team ? null : team)
-      return
-    }
-    toast(`${what} (not on your border)`, { id: 'cq-tap' })
-  }
   const nameOf = (id: string | null) => data.players.find(p => p.userId === id)?.name ?? 'Someone'
   const colorOf = (id: string) => data.players.find(p => p.userId === id)?.color ?? '#666'
   const me = ranks.find(e => e.userId === userId)
@@ -223,18 +205,12 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
               : <>Your empire: <span className="font-bold text-white">{me.cities} {me.cities === 1 ? 'city' : 'cities'}</span>{me.capital ? <>, capital <span className="font-bold text-white">{CITY[me.capital]}</span></> : null}{me.besieged ? <span className="text-amber-300"> · under siege <ConquestIcon name="siege" className="inline w-3.5 h-3.5 -mt-0.5 text-red-400" /></span> : null}</>}
           </p>
         )}
-        {ordersOpen && (
-          <p className="mt-2 text-[11px] text-field-400">
-            Tap an enemy to attack it, or open land next to you to plant your flag. Tap it again to go back to automatic.
-          </p>
-        )}
-        <ZoomPan className="mt-2" onTap={tapCity} onZoom={s => setMapZoom(Math.round(s * 4) / 4)}>
-          <ConquestMap
-            owners={data.owners} besieged={data.besieged} players={data.players} you={userId}
-            orders={{ target: myTarget, flag: myClaim }}
-            labels="names" layout="none" labelScale={phone ? 2.1 : 1.5} battles={battles} zoom={mapZoom} declutter className="w-full"
-          />
-        </ZoomPan>
+        <WarMap
+          war={data} log={data.log} userId={userId} battles={battles}
+          ordersOpen={ordersOpen} myTarget={myTarget} myClaim={myClaim}
+          onAttack={sender.attack} onFlag={sender.flag} busy={sender.busy}
+          seenKey={`gu-conquest-replay-${leagueId}-${CURRENT_SEASON}`} labelScale={phone ? 2.1 : 1.5}
+        />
       </div>
 
       {userId && battleWeek != null && battleWeek <= (data.finalWeek ?? 18) && week === battleWeek && (

@@ -1421,6 +1421,15 @@
 .cq-kn { transform: scale(min(1, calc(1.6 / var(--cq-s, 1)))); transform-origin: 0 0; }
 .cq-k-html { position: absolute; transform: scale(calc(1 / var(--cq-s, 1))); }
 
+/* A city changing hands: its color blends into the new owner's (a texture
+   fades in); held still on the TV's lighter effects */
+.cq-land { transition: fill 0.9s ease, fill-opacity 0.9s ease; }
+@keyframes cq-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.cq-fade { animation: cq-fade-in 0.9s ease both; }
+.tv-lite .cq-land, .tv-still .cq-land { transition: none; }
+.tv-lite .cq-fade, .tv-still .cq-fade { animation: none; }
+@media (prefers-reduced-motion: reduce) { .cq-land { transition: none; } .cq-fade { animation: none; } }
+
 /* A map label fading in as you zoom far enough for it to fit */
 @keyframes cq-label-in { from { opacity: 0; } to { opacity: 1; } }
 .cq-label { animation: cq-label-in 0.35s ease-out both; }
