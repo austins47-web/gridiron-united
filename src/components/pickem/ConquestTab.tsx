@@ -232,7 +232,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
           <ConquestMap
             owners={data.owners} besieged={data.besieged} players={data.players} you={userId}
             orders={{ target: myTarget, flag: myClaim }}
-            labels="names" layout="below" labelScale={phone ? 2.1 : 1.5} battles={battles} zoom={mapZoom} declutter className="w-full"
+            labels="names" layout="none" labelScale={phone ? 2.1 : 1.5} battles={battles} zoom={mapZoom} declutter className="w-full"
           />
         </ZoomPan>
       </div>

@@ -766,13 +766,6 @@ export const ConquestMap = memo(function ConquestMap({
               {l.ends.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={2.6} fill={P.accent} />)}
             </g>
           ))}
-          {named.filter(n => !(box && inNE(n.x, n.y))).map(n => empireName(n, [n.x, n.y], 1, { x: 0, y: 0, w: M.width, h: M.height }))}
-          {mainCities.map(t => cityMark(t, M.stadium[t], 12 * labelScale, 'main'))}
-          {targetAt && mainCities.includes(targetAt) && (
-            <g transform={`translate(${M.stadium[targetAt][0]} ${M.stadium[targetAt][1]})`}>
-              <g className="cq-k"><MapIcon name="target" x={0} y={0} size={12 * labelScale * 2.2} color={SIEGE} outline={P.under} /></g>
-            </g>
-          )}
         </g>
         {box && (
           <>
@@ -787,20 +780,39 @@ export const ConquestMap = memo(function ConquestMap({
                   highlight={highlight} highlightColor={highlightColor} P={P} z={z}
                 />
               </g>
-              <g pointerEvents="none">
-                {named.filter(n => inNE(n.x, n.y)).map(n => empireName(n, toInset([n.x, n.y]), z * 0.6, { ...box, y: box.y + 22, h: box.h - 22 }))}
-                {NORTHEAST_CITIES.map(t => cityMark(t, toInset(M.stadium[t]), 14 * labelScale, 'inset'))}
-                {targetAt && NE_SET.has(targetAt) && (() => {
-                  const [x, y] = toInset(M.stadium[targetAt])
-                  return <g transform={`translate(${x} ${y})`}><g className="cq-k"><MapIcon name="target" x={0} y={0} size={14 * labelScale * 2.2} color={SIEGE} outline={P.under} /></g></g>
-                })()}
-              </g>
             </g>
             <g pointerEvents="none">
               <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} fill="none" stroke={P.accent} strokeOpacity={0.55} strokeWidth={1.2} />
               <text x={box.x + 10} y={box.y + 20} fontFamily={MONO} fontWeight={700} fontSize={13} letterSpacing={2} fill={P.accent}>NORTHEAST</text>
             </g>
           </>
+        )}
+      </svg>
+
+      {/* The names, labels, stars and crosshairs: their own drawing over the land's, so holding
+          their size through a pinch only ever redraws them (on the zoomable map, on a GPU layer
+          of their own); the land under them just stretches */}
+      <svg
+        viewBox={`0 0 ${view.w} ${view.h}`} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden
+        style={declutter ? { willChange: 'transform' } : undefined}
+      >
+        {box && <defs><clipPath id={`cq-nem-${uid}`}><rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} /></clipPath></defs>}
+        {named.filter(n => !(box && inNE(n.x, n.y))).map(n => empireName(n, [n.x, n.y], 1, { x: 0, y: 0, w: M.width, h: M.height }))}
+        {mainCities.map(t => cityMark(t, M.stadium[t], 12 * labelScale, 'main'))}
+        {targetAt && mainCities.includes(targetAt) && (
+          <g transform={`translate(${M.stadium[targetAt][0]} ${M.stadium[targetAt][1]})`}>
+            <g className="cq-k"><MapIcon name="target" x={0} y={0} size={12 * labelScale * 2.2} color={SIEGE} outline={P.under} /></g>
+          </g>
+        )}
+        {box && (
+          <g clipPath={`url(#cq-nem-${uid})`}>
+            {named.filter(n => inNE(n.x, n.y)).map(n => empireName(n, toInset([n.x, n.y]), z * 0.6, { ...box, y: box.y + 22, h: box.h - 22 }))}
+            {NORTHEAST_CITIES.map(t => cityMark(t, toInset(M.stadium[t]), 14 * labelScale, 'inset'))}
+            {targetAt && NE_SET.has(targetAt) && (() => {
+              const [x, y] = toInset(M.stadium[targetAt])
+              return <g transform={`translate(${x} ${y})`}><g className="cq-k"><MapIcon name="target" x={0} y={0} size={14 * labelScale * 2.2} color={SIEGE} outline={P.under} /></g></g>
+            })()}
+          </g>
         )}
       </svg>
 
