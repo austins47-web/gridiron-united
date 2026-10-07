@@ -48,6 +48,8 @@ interface Palette {
   freeEdgeOpacity: number
   /** owned land's wash of its empire's color */
   owned: number
+  /** your own land's wash: deeper than everyone else's */
+  ownedYou: number
   /** your outline, highlights, contested edges */
   ink: string
   code: string
@@ -74,6 +76,7 @@ const DARK: Palette = {
   states: '#3fd0ff', statesOpacity: 0.12,
   free: '#0d1820', freeEdge: '#2a6f86', freeEdgeOpacity: 0.6,
   owned: 0.3,
+  ownedYou: 0.5,
   ink: '#ffffff',
   code: '#e8fbff', codeFree: '#4f8ea3',
   accent: '#3fd0ff', accentRgb: '63, 208, 255',
@@ -97,6 +100,7 @@ const LIGHT: Palette = {
   states: '#24475a', statesOpacity: 0.2,
   free: '#f6f9fb', freeEdge: '#8fadbe', freeEdgeOpacity: 0.95,
   owned: 0.42,
+  ownedYou: 0.62,
   ink: '#0f172a',
   code: '#0f172a', codeFree: '#5d7d8e',
   accent: '#0e7490', accentRgb: '14, 116, 144',
@@ -203,7 +207,7 @@ function Lands({ owners, colorOf, clipOf, near, patternFill, you, target, flag, 
       {P.land && TERRITORIES.filter(t => colorOf(t)).map(t => <path key={`land-${t}`} d={M.territories[t]} fill={P.land!} pointerEvents="none" />)}
       {TERRITORIES.map(t => {
         const c = colorOf(t)
-        return <path key={t} data-team={t} d={M.territories[t]} fill={c ?? P.free} fillOpacity={c ? P.owned : 1} />
+        return <path key={t} data-team={t} d={M.territories[t]} fill={c ?? P.free} fillOpacity={c ? (you && own(t) === you ? P.ownedYou : P.owned) : 1} />
       })}
       <g pointerEvents="none" fill="none" strokeLinejoin="round">
         {TERRITORIES.map(t => {
@@ -241,9 +245,6 @@ function Lands({ owners, colorOf, clipOf, near, patternFill, you, target, flag, 
           )
         })}
         {seams && <path d={seams} stroke={P.seam} strokeWidth={0.9 / z} />}
-        {you && empires.includes(you) && (
-          <path d={outlineOf(new Set(TERRITORIES.filter(t => own(t) === you)))} stroke={P.ink} strokeOpacity={0.9} strokeWidth={1.4 / z} strokeDasharray={`${4 / z} ${3 / z}`} />
-        )}
         {target && empires.includes(target) && (
           <path d={outlineOf(new Set(TERRITORIES.filter(t => own(t) === target)))} stroke={SIEGE} strokeWidth={2.2 / z} strokeDasharray={`${7 / z} ${4 / z}`} />
         )}
@@ -430,7 +431,7 @@ export const ConquestMap = memo(function ConquestMap({
   owners: Record<string, string | null>
   besieged?: Record<string, string>
   players: ConquestPlayer[]
-  /** your cities get a dashed outline */
+  /** your land gets a deeper wash, and a YOU tag on your capital */
   you?: string | null
   /** your chosen attack (an empire) and flag (an open city), marked on the map */
   orders?: { target?: string | null; flag?: string | null }
@@ -478,6 +479,15 @@ export const ConquestMap = memo(function ConquestMap({
   }, [ownersKey, players, labelScale])
   const namedIds = new Set(named.map(n => n.id))
 
+  // Where your YOU tag goes: your capital if you hold it, or else your biggest city
+  const youAt = (() => {
+    if (!you) return null
+    const cap = byId.get(you)?.capital
+    if (cap && owners[cap] === you) return cap
+    const mine = citiesOf(owners, you)
+    return mine.length ? mine.reduce((a, b) => (M.size[b] > M.size[a] ? b : a)) : null
+  })()
+
   // City labels nudged apart so none overlap: the main map's, and the inset's (in its own space)
   const spots = useMemo(() => {
     const boxFor = (t: string, [x, y]: [number, number], size: number): LabelBox => {
@@ -494,6 +504,7 @@ export const ConquestMap = memo(function ConquestMap({
     // Each capital's star (and the flame beside it) stays put; labels move off it
     const starFor = (t: string, [x, y]: [number, number], size: number): LabelBox | null => {
       const o = ownerAt(t)
+      if (t === youAt) return { key: `star-${t}`, x, y: y - size * 0.55, w: size * 2.9, up: size * 1.95, down: size * 1.4, fixed: true }
       if (!o || o.capital !== t) return null
       const siege = !!besieged[t]
       return { key: `star-${t}`, x: x + (siege ? size * 0.45 : 0), y, w: size * (siege ? 2.6 : 1.7), up: size * (siege ? 1.35 : 0.85), down: size * 0.85, fixed: true }
@@ -508,7 +519,7 @@ export const ConquestMap = memo(function ConquestMap({
       : {}
     return { ...main, ...inset }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownersKey, Object.keys(besieged).sort().join(','), players, labels, labelScale, layout, named])
+  }, [ownersKey, Object.keys(besieged).sort().join(','), players, labels, labelScale, layout, named, youAt])
 
   const flagColor = you ? byId.get(you)?.color : undefined
 
@@ -533,6 +544,15 @@ export const ConquestMap = memo(function ConquestMap({
             {shortName(o.name).toUpperCase()}
           </text>
         )}
+        {t === youAt && o && (() => {
+          const h = size * 0.95, w = size * 2.6, top = sy - size * 0.78 - size * 0.3 - h
+          return (
+            <g>
+              <rect x={sx - w / 2} y={top} width={w} height={h} rx={h / 2} fill={o.color} stroke={P.under} strokeWidth={size * 0.12} />
+              <text x={sx} y={top + h * 0.72} textAnchor="middle" fontFamily={MONO} fontWeight={800} fontSize={size * 0.62} letterSpacing={size * 0.06} fill="#0b1220">YOU</text>
+            </g>
+          )
+        })()}
         {orders?.flag === t && <MapIcon name="flag" x={lx + size * 1.5} y={ly - size * 0.9} size={size * 1.2} color={flagColor ?? P.ink} outline={P.under} />}
       </g>
     )
