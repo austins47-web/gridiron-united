@@ -14,13 +14,22 @@ type View = { s: number; x: number; y: number }
  * swipe still scrolls the page. On a computer: the + and − buttons, or a
  * trackpad pinch.
  */
-export function ZoomPan({ children, onTap, className }: {
+export function ZoomPan({ children, onTap, onZoom, className }: {
   children: ReactNode
   onTap?: (team: string | null) => void
+  /** the zoom once it settles (a pinch done, a button pressed): for what to draw at that size */
+  onZoom?: (s: number) => void
   className?: string
 }) {
   const box = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<View>({ s: 1, x: 0, y: 0 })
+  // Tell the map the zoom once it's held still a moment (not on every frame of a pinch)
+  const onZoomRef = useRef(onZoom)
+  onZoomRef.current = onZoom
+  useEffect(() => {
+    const t = setTimeout(() => onZoomRef.current?.(view.s), 140)
+    return () => clearTimeout(t)
+  }, [view.s])
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const gesture = useRef<{ start: View; d0: number; mid0: { x: number; y: number }; p0: { x: number; y: number }; moved: boolean; multi: boolean } | null>(null)
 

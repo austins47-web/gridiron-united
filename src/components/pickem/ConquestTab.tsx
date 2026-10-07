@@ -114,6 +114,8 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
 
   const [rules, setRules] = useState(false)
   const sender = useOrderSender(leagueId, () => qc.invalidateQueries({ queryKey: key }))
+  // How far the map's zoomed in (in quarter steps): more labels fit, and show, as it grows
+  const [mapZoom, setMapZoom] = useState(1)
   const [allLog, setAllLog] = useState(false)
 
   if (isLoading) return <div className="panel p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-field-400" /></div>
@@ -226,11 +228,11 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
             Tap an enemy to attack it, or open land next to you to plant your flag. Tap it again to go back to automatic.
           </p>
         )}
-        <ZoomPan className="mt-2" onTap={tapCity}>
+        <ZoomPan className="mt-2" onTap={tapCity} onZoom={s => setMapZoom(Math.round(s * 4) / 4)}>
           <ConquestMap
             owners={data.owners} besieged={data.besieged} players={data.players} you={userId}
             orders={{ target: myTarget, flag: myClaim }}
-            labels="names" layout="below" labelScale={phone ? 2.1 : 1.5} battles={battles} className="w-full"
+            labels="names" layout="below" labelScale={phone ? 2.1 : 1.5} battles={battles} zoom={mapZoom} declutter className="w-full"
           />
         </ZoomPan>
       </div>
