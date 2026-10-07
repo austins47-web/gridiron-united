@@ -22,14 +22,35 @@ export function ZoomPan({ children, onTap, onZoom, className }: {
   className?: string
 }) {
   const box = useRef<HTMLDivElement>(null)
+  const inner = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<View>({ s: 1, x: 0, y: 0 })
-  // Tell the map the zoom once it's held still a moment (not on every frame of a pinch)
+  // The size the map is actually laid out at. A pinch stretches the picture (quick, a little soft);
+  // once the zoom holds still a moment the map's laid out at that size for real, so the browser
+  // draws it sharp again, labels and all. And the map hears the zoom then too (not every frame).
+  const [base, setBase] = useState(1)
+  const baseRef = useRef(1)
+  baseRef.current = base
   const onZoomRef = useRef(onZoom)
   onZoomRef.current = onZoom
   useEffect(() => {
-    const t = setTimeout(() => onZoomRef.current?.(view.s), 140)
+    const t = setTimeout(() => {
+      // The map's unzoomed height, measured right as it's laid out bigger (so the frame never collapses)
+      const el = inner.current
+      if (el) setNatural(el.offsetHeight / baseRef.current)
+      setBase(view.s)
+      onZoomRef.current?.(view.s)
+    }, 140)
     return () => clearTimeout(t)
   }, [view.s])
+  // The frame keeps the map's unzoomed height while the map inside is laid out bigger
+  const [natural, setNatural] = useState<number | null>(null)
+  useEffect(() => {
+    const el = inner.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([entry]) => setNatural(entry.contentRect.height / baseRef.current))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const gesture = useRef<{ start: View; d0: number; mid0: { x: number; y: number }; p0: { x: number; y: number }; moved: boolean; multi: boolean } | null>(null)
 
@@ -126,13 +147,21 @@ export function ZoomPan({ children, onTap, onZoom, className }: {
       <div
         ref={box}
         className="relative overflow-hidden rounded-xl select-none"
-        style={{ touchAction: zoomed ? 'none' : 'pan-y' }}
+        style={{ touchAction: zoomed ? 'none' : 'pan-y', height: base > 1 && natural ? natural : undefined }}
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
         onPointerCancel={up}
       >
-        <div style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`, transformOrigin: '0 0', ['--cq-s' as string]: view.s }}>
+        <div
+          ref={inner}
+          style={{
+            ...(base > 1 ? { position: 'absolute', left: 0, top: 0, width: `${base * 100}%` } : {}),
+            transform: `translate(${view.x}px, ${view.y}px) scale(${view.s / base})`,
+            transformOrigin: '0 0',
+            ['--cq-s' as string]: view.s,
+          }}
+        >
           {children}
         </div>
       </div>
