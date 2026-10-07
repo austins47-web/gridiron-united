@@ -182,7 +182,9 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
               : <>Your empire: <span className="font-bold text-white">{me.cities} {me.cities === 1 ? 'city' : 'cities'}</span>{me.capital ? <>, capital <span className="font-bold text-white">{CITY[me.capital]}</span></> : null}{me.besieged ? <span className="text-amber-300"> · under siege 🔥</span> : null}</>}
           </p>
         )}
-        <ConquestMap owners={data.owners} besieged={data.besieged} players={data.players} you={userId} className="w-full h-auto mt-3" />
+        <div className="mt-3 -mx-1 overflow-x-auto rounded-xl">
+          <ConquestMap owners={data.owners} besieged={data.besieged} players={data.players} you={userId} labels="names" layout="below" labelScale={1.5} className="w-full min-w-[620px] sm:min-w-0 h-auto" />
+        </div>
       </div>
 
       {started && week === battleWeek && (

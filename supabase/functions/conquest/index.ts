@@ -14,7 +14,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isFinal, isVoid, isWeekComplete, winnerOf, nflSeasonFor, type Game } from '../_shared/pickemCore.ts'
 import {
-  TERRITORIES, MAP, hexCenter, assignCapitals, empireColor, resolveWeek,
+  TERRITORIES, POS, assignCapitals, empireColor, resolveWeek,
   type ConquestState, type WeekScores,
 } from '../_shared/conquest.ts'
 
@@ -93,9 +93,9 @@ async function start(admin: SupabaseClient, leagueId: string, startWeek: number 
   }
 
   const members = await membersOf(admin, leagueId)
-  const capitals = assignCapitals(members.map(m => ({ userId: m.userId, favorite: m.favorite && MAP[m.favorite] ? m.favorite : null })))
+  const capitals = assignCapitals(members.map(m => ({ userId: m.userId, favorite: m.favorite && POS[m.favorite] ? m.favorite : null })))
   // Colors walk the wheel west to east, so neighbors never look alike
-  const byPlace = Object.entries(capitals).sort(([, a], [, b]) => hexCenter(a)[0] - hexCenter(b)[0] || hexCenter(a)[1] - hexCenter(b)[1])
+  const byPlace = Object.entries(capitals).sort(([, a], [, b]) => POS[a][0] - POS[b][0] || POS[a][1] - POS[b][1])
   const color = new Map(byPlace.map(([u], i) => [u, empireColor(i)]))
 
   const { error: gErr } = await admin.from('conquest_games').insert({ league_id: leagueId, season, start_week: week })
@@ -168,11 +168,11 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
   // exile with a capital to rebel for (their favorite team's, or one dealt them)
   const joiners = members.filter(m => !inWar.has(m.userId))
   if (joiners.length) {
-    const capitals = assignCapitals(joiners.map(m => ({ userId: m.userId, favorite: m.favorite && MAP[m.favorite] ? m.favorite : null })), owners)
+    const capitals = assignCapitals(joiners.map(m => ({ userId: m.userId, favorite: m.favorite && POS[m.favorite] ? m.favorite : null })), owners)
     let i = inWar.size
     for (const m of joiners) {
       const capital = capitals[m.userId]
-        ?? (m.favorite && MAP[m.favorite] ? m.favorite : TERRITORIES[[...m.userId].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % TERRITORIES.length])
+        ?? (m.favorite && POS[m.favorite] ? m.favorite : TERRITORIES[[...m.userId].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % TERRITORIES.length])
       const row = { league_id: leagueId, season, user_id: m.userId, color: empireColor(i++), capital, joined_week: week }
       await admin.from('conquest_players').insert(row)
       inWar.set(m.userId, row)

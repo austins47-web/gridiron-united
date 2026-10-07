@@ -61,7 +61,7 @@ export function ConquestPanelBody({ war, battles, week }: { war: ConquestData; b
   const swinging = battles.filter(b => b.outcome !== 'hold').length
   return (
     <div className="h-full flex flex-col gap-3">
-      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} className="w-full h-auto" />
+      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} className="w-full h-auto" />
       {week < war.startWeek ? (
         <p className="text-[18px] text-field-300">The war begins Week {war.startWeek}. Every empire attacks the neighbor it picks most differently from.</p>
       ) : (
@@ -88,35 +88,39 @@ export function ConquestPanelBody({ war, battles, week }: { war: ConquestData; b
 /** The remote's Map: the war full screen. */
 export function ConquestTakeover({ war, battles, league, week }: { war: ConquestData; battles: LiveBattle[]; league: string; week: number }) {
   const ranks = empires(war)
-  const shown = [...battles].sort((a, b) => Number(b.outcome !== 'hold') - Number(a.outcome !== 'hold') || Math.abs(a.score[0] - a.score[1]) - Math.abs(b.score[0] - b.score[1])).slice(0, 8)
+  const unclaimed = Object.values(war.owners).filter(o => !o).length
+  const shown = [...battles].sort((a, b) => Number(b.outcome !== 'hold') - Number(a.outcome !== 'hold') || Math.abs(a.score[0] - a.score[1]) - Math.abs(b.score[0] - b.score[1])).slice(0, 6)
   return (
-    <div className="absolute inset-0 z-[35] bg-field-950/[0.97] flex gap-10 px-16 py-12 rise-in">
-      <div className="w-[1180px] shrink-0 flex flex-col">
-        <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[28px]">{league}</p>
-        <p className="font-cond font-black uppercase text-white text-[66px] leading-none mb-6">⚔️ Conquest · Week {Math.max(week, war.startWeek)}</p>
-        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" className="w-full h-auto" />
-      </div>
-      <div className="flex-1 min-w-0 flex flex-col gap-6 pt-4">
+    <div className="absolute inset-0 z-[35] bg-field-950/[0.97] flex flex-col px-10 pt-7 pb-6 rise-in">
+      <div className="flex items-end justify-between gap-6">
         <div>
-          <p className="font-cond font-bold uppercase tracking-wider text-field-400 text-[20px] mb-2">Empires</p>
-          <div className="space-y-1">
-            {ranks.slice(0, 12).map((e, i) => (
-              <div key={e.userId} className="flex items-center gap-2.5 text-[22px]">
-                <span className="w-6 text-right font-cond font-black text-field-500 tabular-nums">{e.exiled ? '–' : i + 1}</span>
-                <span className="w-4 h-4 rounded-sm shrink-0" style={{ background: e.color }} />
-                <span className={clsx('font-bold truncate', e.exiled ? 'text-field-500' : 'text-white')}>{e.name}</span>
-                {e.besieged && <span>🔥</span>}
-                <span className="ml-auto font-cond font-black tabular-nums text-white">{e.exiled ? 'exile' : e.cities}</span>
-              </div>
-            ))}
-          </div>
+          <p className="font-cond font-bold uppercase tracking-[0.3em] text-gold text-[26px]">{league}</p>
+          <p className="font-cond font-black uppercase text-white text-[62px] leading-none">⚔️ Conquest · Week {Math.max(week, war.startWeek)}</p>
         </div>
+        <p className="pb-2 font-mono text-[20px] text-[#3fd0ff]">
+          {ranks.filter(e => !e.exiled).length} EMPIRES // {unclaimed} UNCLAIMED{battles.length ? ` // ${battles.length} BATTLES` : ''}
+        </p>
+      </div>
+      {/* The map, full width; the week's battles sit under the Northeast zoom */}
+      <div className="relative w-full mt-3">
+        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} className="w-full h-auto" />
         {shown.length > 0 && (
-          <div>
-            <p className="font-cond font-bold uppercase tracking-wider text-field-400 text-[20px] mb-2">This week’s battles, as they stand</p>
-            <div className="space-y-1.5">{shown.map(b => <BattleLine key={b.attacker} war={war} b={b} big />)}</div>
+          <div className="absolute" style={{ left: '71.2%', top: '64%', width: '28.6%' }}>
+            <p className="font-mono text-[16px] text-[#3fd0ff] mb-1.5">// THIS WEEK, AS IT STANDS</p>
+            <div className="space-y-1">{shown.map(b => <BattleLine key={b.attacker} war={war} b={b} />)}</div>
           </div>
         )}
+      </div>
+      {/* Every empire along the bottom */}
+      <div className="mt-auto flex flex-wrap gap-x-7 gap-y-2 text-[21px]">
+        {ranks.map(e => (
+          <span key={e.userId} className="flex items-center gap-2">
+            <span className="w-4 h-4 rounded-sm shrink-0" style={{ background: e.color }} />
+            <span className={clsx('font-bold', e.exiled ? 'text-field-500' : 'text-white')}>{e.name}</span>
+            {e.besieged && <span>🔥</span>}
+            <span className="font-cond font-black text-field-400 tabular-nums">{e.exiled ? 'exile' : e.cities}</span>
+          </span>
+        ))}
       </div>
     </div>
   )
@@ -203,9 +207,11 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
           besieged={besieged}
           players={war.players}
           labels="names"
+          layout="side"
+          labelScale={1.5}
           highlight={step.kind === 'move' ? step.move.team : null}
           highlightColor={step.kind === 'move' ? colorOf(step.move.to) : undefined}
-          className="h-full max-h-[700px] w-auto max-w-[1250px]"
+          className={clsx('h-full max-h-[700px] w-auto', step.kind === 'finale' ? 'max-w-[1280px]' : 'max-w-[1720px]')}
         />
         {step.kind === 'finale' && (
           <div className="w-[480px] shrink-0 space-y-2">

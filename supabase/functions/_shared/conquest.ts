@@ -1,5 +1,7 @@
 // ══════════════════════════════════════════════════════════════
-// Conquest: the league as a war over a hex map of the 32 NFL cities.
+// Conquest: the league as a war over a map of the 32 NFL cities: each
+// city's territory is the counties nearest its stadium (the app draws it
+// from src/components/conquest/usMap.ts, built from the same borders).
 // Shared by the conquest edge function (which settles each finished
 // week) and the app and Shop TV (which show this week's battles live).
 //
@@ -19,12 +21,40 @@
 //   the map as it stood when the week began.
 // ══════════════════════════════════════════════════════════════
 
-/** Where each city sits: [column, row] on a pointy-top hex grid, odd rows shifted half a hex right. */
-export const MAP: Record<string, [number, number]> = {
-  SEA: [1, 2], SF: [0, 3], LAR: [0, 4], LAC: [1, 4], LV: [1, 3], ARI: [2, 4], DEN: [2, 3], KC: [3, 3],
-  DAL: [4, 4], HOU: [3, 5], MIN: [4, 1], GB: [5, 1], CHI: [5, 2], DET: [6, 1], IND: [4, 3], CIN: [5, 3],
-  CLE: [6, 2], PIT: [6, 3], BUF: [7, 1], TEN: [5, 4], ATL: [6, 4], NO: [4, 5], JAX: [6, 5], TB: [5, 5],
-  MIA: [6, 6], CAR: [7, 4], WSH: [8, 4], BAL: [7, 3], PHI: [7, 2], NYG: [8, 2], NYJ: [8, 3], NE: [9, 2],
+/** Each stadium on the map (the app's map space, 1000×620): for ordering, never for borders. */
+export const POS: Record<string, [number, number]> = {
+  ARI: [204.9,398.2],
+  ATL: [728,405.9],
+  BAL: [846.7,257.7],
+  BUF: [795.1,185.9],
+  CAR: [788.7,363.1],
+  CHI: [651.4,226.5],
+  CIN: [711.1,284.2],
+  CLE: [751.6,222.7],
+  DAL: [489.5,442.2],
+  DEN: [353.9,274],
+  DET: [726.5,207],
+  GB: [638.9,166.9],
+  HOU: [522,512.3],
+  IND: [680.8,272.2],
+  JAX: [791.4,476.5],
+  KC: [536.9,297.2],
+  LAC: [111.3,397],
+  LAR: [94.9,365.6],
+  LV: [162.6,330.3],
+  MIA: [834.8,570],
+  MIN: [554.5,160.8],
+  NE: [921.2,173.7],
+  NO: [627,502.6],
+  NYG: [882.1,213.7],
+  NYJ: [893.6,212.3],
+  PHI: [868.4,238.4],
+  PIT: [783.9,242.2],
+  SEA: [107.9,45.7],
+  SF: [50.3,272.1],
+  TB: [782.1,531.9],
+  TEN: [678.3,355.6],
+  WSH: [844.2,266.9],
 }
 
 /** The city names, for headlines ("seizes Kansas City"). */
@@ -37,28 +67,46 @@ export const CITY: Record<string, string> = {
   NYJ: 'New York', NE: 'New England',
 }
 
-export const TERRITORIES = Object.keys(MAP).sort()
+export const TERRITORIES = Object.keys(POS).sort()
 
-const around = (c: number, r: number): [number, number][] => (r % 2 === 0
-  ? [[c - 1, r], [c + 1, r], [c - 1, r - 1], [c, r - 1], [c - 1, r + 1], [c, r + 1]]
-  : [[c - 1, r], [c + 1, r], [c, r - 1], [c + 1, r - 1], [c, r + 1], [c + 1, r + 1]])
-
-/** Each city's neighbors on the map. */
-export const ADJ: Record<string, string[]> = (() => {
-  const at = new Map(Object.entries(MAP).map(([t, [c, r]]) => [`${c},${r}`, t]))
-  return Object.fromEntries(Object.entries(MAP).map(([t, [c, r]]) => [
-    t, around(c, r).map(([a, b]) => at.get(`${a},${b}`)).filter((x): x is string => !!x).sort(),
-  ]))
-})()
-
-/** A hex's center, in hex widths (rows are √3/2 apart). */
-export function hexCenter(team: string): [number, number] {
-  const [c, r] = MAP[team]
-  return [c + (r % 2 ? 0.5 : 0), r * Math.sqrt(3) / 2]
+/** Each city's neighbors: territories whose counties share a border (water doesn't count). */
+export const ADJ: Record<string, string[]> = {
+  ARI: ["DAL","DEN","LAC","LV"],
+  ATL: ["CAR","JAX","NO","TEN"],
+  BAL: ["BUF","PHI","PIT","WSH"],
+  BUF: ["BAL","CLE","NE","NYG","PHI","PIT"],
+  CAR: ["ATL","CIN","JAX","PIT","TEN","WSH"],
+  CHI: ["DET","GB","IND","KC","MIN"],
+  CIN: ["CAR","CLE","DET","IND","PIT","TEN"],
+  CLE: ["BUF","CIN","DET","PIT"],
+  DAL: ["ARI","DEN","HOU","KC","NO","TEN"],
+  DEN: ["ARI","DAL","KC","LV","MIN","SEA"],
+  DET: ["CHI","CIN","CLE","GB","IND"],
+  GB: ["CHI","DET","MIN"],
+  HOU: ["DAL","NO"],
+  IND: ["CHI","CIN","DET","KC","TEN"],
+  JAX: ["ATL","CAR","NO","TB"],
+  KC: ["CHI","DAL","DEN","IND","MIN","TEN"],
+  LAC: ["ARI","LAR","LV"],
+  LAR: ["LAC","LV","SF"],
+  LV: ["ARI","DEN","LAC","LAR","SEA","SF"],
+  MIA: ["TB"],
+  MIN: ["CHI","DEN","GB","KC"],
+  NE: ["BUF","NYG","NYJ"],
+  NO: ["ATL","DAL","HOU","JAX","TEN"],
+  NYG: ["BUF","NE","NYJ","PHI"],
+  NYJ: ["NE","NYG"],
+  PHI: ["BAL","BUF","NYG"],
+  PIT: ["BAL","BUF","CAR","CIN","CLE","WSH"],
+  SEA: ["DEN","LV","SF"],
+  SF: ["LAR","LV","SEA"],
+  TB: ["JAX","MIA"],
+  TEN: ["ATL","CAR","CIN","DAL","IND","KC","NO"],
+  WSH: ["BAL","CAR","PIT"],
 }
 
 /** How many steps apart two cities are on the map. */
-export function hexDistance(a: string, b: string): number {
+export function steps(a: string, b: string): number {
   if (a === b) return 0
   const seen = new Set([a])
   let frontier = [a], d = 0
@@ -264,19 +312,19 @@ export function assignCapitals(
   const capitals: Record<string, string> = {}
   const free = () => TERRITORIES.filter(t => owners[t] == null)
   const place = (u: string, t: string) => { owners[t] = u; capitals[u] = t }
-  for (const { userId, favorite } of order.filter(o => o.favorite && MAP[o.favorite])) {
+  for (const { userId, favorite } of order.filter(o => o.favorite && POS[o.favorite])) {
     const options = free()
     if (!options.length) break
     const fav = favorite!
     const t = owners[fav] == null ? fav
-      : options.sort((x, y) => hexDistance(fav, x) - hexDistance(fav, y) || x.localeCompare(y))[0]
+      : options.sort((x, y) => steps(fav, x) - steps(fav, y) || x.localeCompare(y))[0]
     place(userId, t)
   }
-  for (const { userId } of order.filter(o => !o.favorite || !MAP[o.favorite])) {
+  for (const { userId } of order.filter(o => !o.favorite || !POS[o.favorite])) {
     const options = free()
     if (!options.length) break
     const held = TERRITORIES.filter(t => owners[t] != null)
-    const room = (t: string) => (held.length ? Math.min(...held.map(h => hexDistance(t, h))) : 0)
+    const room = (t: string) => (held.length ? Math.min(...held.map(h => steps(t, h))) : 0)
     // Farthest from everyone; on a tie, a spread that depends on who it is
     const spin = (t: string) => [...(userId + t)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7)
     place(userId, options.sort((x, y) => room(y) - room(x) || spin(x) - spin(y))[0])
