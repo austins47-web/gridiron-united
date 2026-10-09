@@ -1,6 +1,7 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { logProblem } from '@/lib/problemLog'
+import { isStaleChunk, reloadForStaleChunk } from '@/lib/staleChunk'
 
 interface Props { children: ReactNode; label?: string }
 interface State { error: Error | null; info: ErrorInfo | null }
@@ -11,26 +12,8 @@ interface State { error: Error | null; info: ErrorInfo | null }
 // index.html points at a chunk that no longer exists on the server.
 // It isn't a real bug; a reload picks up the current build and
 // resolves it every time.
-const STALE_CHUNK_PATTERNS = [
-  /Failed to fetch dynamically imported module/i,
-  /Importing a module script failed/i,
-  /Loading chunk [\w-]+ failed/i,
-  /Unable to preload CSS/i,
-]
-
-const RELOAD_GUARD_KEY = 'gu_stale_chunk_reload'
-// Give up after one attempt so a genuinely broken deploy still shows
-// the real error instead of reload-looping forever.
-const RELOAD_GUARD_WINDOW_MS = 15_000
-
-function isStaleChunkError(error: Error): boolean {
-  return STALE_CHUNK_PATTERNS.some(re => re.test(error.message))
-}
-
-function alreadyTriedReload(): boolean {
-  const last = Number(sessionStorage.getItem(RELOAD_GUARD_KEY) ?? 0)
-  return Date.now() - last < RELOAD_GUARD_WINDOW_MS
-}
+// (Which errors those are, and the once-only reload: src/lib/staleChunk.ts)
+const isStaleChunkError = (error: Error) => isStaleChunk(error.message)
 
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null, info: null }
@@ -51,10 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
       })
     }
 
-    if (isStaleChunkError(error) && !alreadyTriedReload()) {
-      sessionStorage.setItem(RELOAD_GUARD_KEY, String(Date.now()))
-      window.location.reload()
-    }
+    if (isStaleChunkError(error)) reloadForStaleChunk()
   }
 
   render() {

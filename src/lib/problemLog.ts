@@ -10,6 +10,8 @@
 // over a sender with startProblemLog.
 // ══════════════════════════════════════════════════════════════
 
+import { isStaleChunk, reloadForStaleChunk } from './staleChunk'
+
 interface ProblemRow {
   kind: string
   message: string
@@ -54,14 +56,19 @@ export function logProblem(kind: string, message: string, detail?: Record<string
 /** Starts the log: `sender` writes one row; also catches crashes nothing else did. */
 export function startProblemLog(sender: (row: ProblemRow) => Promise<unknown>) {
   send = sender
+  // An old tab after a deploy asking for a chunk that's gone isn't a bug: pick up the
+  // current build instead (src/lib/staleChunk.ts). Vite says so itself for what it fetches ahead.
+  window.addEventListener('vite:preloadError', e => { e.preventDefault(); reloadForStaleChunk() })
   window.addEventListener('error', e => {
     // Errors from other origins (extensions, embeds) carry no detail
     if (!e.message || e.message === 'Script error.') return
+    if (isStaleChunk(e.message)) { reloadForStaleChunk(); return }
     logProblem('crash', e.message, { source: e.filename, line: e.lineno, col: e.colno, stack: e.error?.stack?.slice(0, 1500) })
   })
   window.addEventListener('unhandledrejection', e => {
     const r = e.reason
     const message = r instanceof Error ? r.message : typeof r === 'string' ? r : JSON.stringify(r ?? null)?.slice(0, 300)
+    if (isStaleChunk(message)) { reloadForStaleChunk(); return }
     logProblem('promise', message ?? 'unknown', r instanceof Error ? { stack: r.stack?.slice(0, 1500) } : undefined)
   })
 }
