@@ -1407,8 +1407,11 @@ function StandingsPanel({ board, rows, week }: { board: TvBoard; rows: TvRow[]; 
                   </span>
                 </span>
               )}
-              {!week && (r.weeksWon ?? 0) > 0 && (
-                <span className="text-[15px] font-bold text-gold whitespace-nowrap">{r.weeksWon}×🏆</span>
+              {/* Every row keeps the trophy's slot (empty if none), so the scores line up in one column */}
+              {!week && (
+                <span className="w-[54px] shrink-0 text-right text-[15px] font-bold text-gold whitespace-nowrap">
+                  {(r.weeksWon ?? 0) > 0 ? `${r.weeksWon}×🏆` : ''}
+                </span>
               )}
             </div>
           )
@@ -2970,7 +2973,8 @@ function StandingsTakeover({ board }: { board: TvBoard }) {
               <span className="font-cond font-black text-[34px] text-white tabular-nums">
                 {r.correct}<span className="text-field-500">–{r.played - r.correct}</span>
               </span>
-              {!!r.weeksWon && <span className="w-16 text-right text-[22px] font-bold text-gold">🏆 {r.weeksWon}</span>}
+              {/* The trophy's slot on every row (empty if none), so the records line up */}
+              <span className="w-16 shrink-0 text-right text-[22px] font-bold text-gold">{r.weeksWon ? `🏆 ${r.weeksWon}` : ''}</span>
             </div>
           ))}
         </div>
