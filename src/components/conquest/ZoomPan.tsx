@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react'
-import { Minus, Plus, Maximize2 } from 'lucide-react'
+import { Minus, Plus, Shrink, Expand } from 'lucide-react'
 import clsx from 'clsx'
 
 const MAX = 5
@@ -20,9 +20,11 @@ type View = { s: number; x: number; y: number }
  * size for real, so the browser draws it sharp again. `--cq-s` carries the
  * live zoom for the map's labels to hold their size by.
  */
-export function ZoomPan({ children, onTap, onZoom, className }: {
+export function ZoomPan({ children, onTap, onZoom, onExpand, className }: {
   children: ReactNode
   onTap?: (team: string | null) => void
+  /** shows a button to open the map full screen */
+  onExpand?: () => void
   /** the zoom once it settles (a pinch done, a button pressed): for what to draw at that size */
   onZoom?: (s: number) => void
   className?: string
@@ -195,6 +197,11 @@ export function ZoomPan({ children, onTap, onZoom, className }: {
         </div>
       </div>
       <div className="absolute right-2 bottom-2 flex flex-col gap-1">
+        {onExpand && (
+          <button type="button" onClick={onExpand} aria-label="Open the map full screen" title="Bigger map" className="w-8 h-8 rounded-lg bg-gold/90 border border-gold text-field-950 flex items-center justify-center mb-1">
+            <Expand className="w-4 h-4" />
+          </button>
+        )}
         <button type="button" onClick={() => step(1.6)} disabled={view.s >= MAX} aria-label="Zoom in" className="w-8 h-8 rounded-lg bg-field-900/85 border border-field-600 text-white flex items-center justify-center disabled:opacity-40">
           <Plus className="w-4 h-4" />
         </button>
@@ -203,7 +210,7 @@ export function ZoomPan({ children, onTap, onZoom, className }: {
         </button>
         {zoomed && (
           <button type="button" onClick={() => put({ s: 1, x: 0, y: 0 })} aria-label="Show the whole map" className="w-8 h-8 rounded-lg bg-field-900/85 border border-field-600 text-white flex items-center justify-center">
-            <Maximize2 className="w-3.5 h-3.5" />
+            <Shrink className="w-3.5 h-3.5" />
           </button>
         )}
       </div>

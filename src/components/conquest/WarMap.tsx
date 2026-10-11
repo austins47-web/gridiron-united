@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { X, Loader2, History, Play, Swords, Flag } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { X, Loader2, History, Play, Swords, Flag, RotateCw } from 'lucide-react'
 import clsx from 'clsx'
 import { CITY, ADJ, citiesOf, neighborsOf } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from './ConquestMap'
@@ -18,7 +19,8 @@ const STEP_MS = 1900
  * before the week's first kickoff, to attack it or plant your flag), drag
  * the slider back through the weeks to see the map as it stood, and the
  * first time you open it after a week settles, that week plays out on it,
- * move by move.
+ * move by move. The corner button opens it full screen (sideways on a
+ * phone, where the browser allows it).
  */
 export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClaim, onAttack, onFlag, busy, seenKey, labelScale }: {
   war: ConquestData
@@ -95,15 +97,62 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
     setCard(c => (team && team !== c ? team : null))
   }
 
-  return (
-    <div>
+  // ── Full screen ──────────────────────────────────────────────
+  const [expanded, setExpanded] = useState(false)
+  const vp = useViewport(expanded)
+  const wentFullscreen = useRef(false)
+  const open = () => {
+    setMapZoom(1)
+    setExpanded(true)
+    // A phone held upright: the browser's own full screen, turned sideways, where it allows it (not iPhones)
+    const upright = window.matchMedia('(pointer: coarse)').matches && window.innerHeight > window.innerWidth
+    const root = document.documentElement
+    if (upright && root.requestFullscreen) {
+      root.requestFullscreen()
+        .then(() => {
+          wentFullscreen.current = true
+          return (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape')
+        })
+        .catch(() => { /* fine: the map still fills the screen it has */ })
+    }
+  }
+  const close = () => {
+    setMapZoom(1)
+    setExpanded(false)
+    if (wentFullscreen.current && document.fullscreenElement) {
+      try { screen.orientation.unlock() } catch { /* fine */ }
+      document.exitFullscreen().catch(() => {})
+    }
+    wentFullscreen.current = false
+  }
+  const closeRef = useRef(close)
+  closeRef.current = close
+  // While it's open: Esc closes it, and the page behind it doesn't scroll
+  useEffect(() => {
+    if (!expanded) return
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current() }
+    const before = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', key)
+    return () => {
+      document.body.style.overflow = before
+      window.removeEventListener('keydown', key)
+    }
+  }, [expanded])
+  // As big as the screen allows: the full width, or the full height (less the bars above and below)
+  const fullWidth = Math.max(280, Math.min(vp.w - 16, ((vp.h - 150) * 1000) / 620))
+  const upright = vp.h > vp.w
+
+  /** The map and what goes with it: inline in the tab, or full screen */
+  const mapBlock = (full: boolean) => (
+    <>
       {replay && (
         <ReplayBanner
           week={replay.week} at={replay.at} steps={stepsOf(replay.week)} nameOf={nameOf}
           onSkip={() => setReplay(null)} onAgain={() => setReplay({ week: replay.week, at: -1 })}
         />
       )}
-      {!replay && live && ordersOpen && (
+      {!replay && live && ordersOpen && !full && (
         <p className="mt-2 text-[11px] text-field-400">Tap a city for its story, or to attack it or plant your flag there.</p>
       )}
       {past && (
@@ -114,18 +163,18 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
         </div>
       )}
 
-      <ZoomPan className="mt-2" onTap={tap} onZoom={s => setMapZoom(Math.round(s * 4) / 4)}>
+      <ZoomPan key={full ? 'full' : 'inline'} className="mt-2" onTap={tap} onZoom={s => setMapZoom(Math.round(s * 4) / 4)} onExpand={full ? undefined : open}>
         <ConquestMap
           owners={shown.owners} besieged={shown.besieged} players={war.players} you={userId}
           orders={live ? { target: myTarget, flag: myClaim } : undefined}
           highlight={stepCity?.team ?? card}
           highlightColor={stepCity ? colorOf(stepCity.to) : undefined}
-          labels="names" layout="none" labelScale={labelScale}
+          labels="names" layout="none" labelScale={full ? (fullWidth < 640 ? 2.1 : 1.5) : labelScale}
           battles={live ? battles : []} zoom={mapZoom} declutter className="w-full"
         />
       </ZoomPan>
 
-      {card && !replay && (
+      {card && !replay && !full && (
         <CityCard
           team={card} war={war} owners={shown.owners} besieged={shown.besieged} log={log}
           userId={userId} canOrder={live && ordersOpen} myTarget={myTarget} myClaim={myClaim}
@@ -157,8 +206,67 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
           )}
         </div>
       )}
+    </>
+  )
+
+  return (
+    <div>
+      {expanded ? (
+        // The map's open full screen: one map at a time, so it isn't drawn twice
+        <button onClick={close} className="mt-2 w-full rounded-xl border border-dashed border-field-600 py-6 text-sm text-field-400 hover:text-white">
+          The map is open full screen · tap to close it
+        </button>
+      ) : mapBlock(false)}
+
+      {expanded && createPortal(
+        <div className="fixed inset-0 z-[70] bg-field-950 flex flex-col" role="dialog" aria-modal="true" aria-label="The war map, full screen">
+          <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-field-800">
+            <Swords className="w-4 h-4 text-gold" />
+            <p className="font-cond font-black uppercase text-white tracking-wide">Conquest</p>
+            {upright && (
+              <span className="ml-1 flex items-center gap-1 text-[11px] text-field-400">
+                <RotateCw className="w-3.5 h-3.5" /> Turn sideways for a bigger map
+              </span>
+            )}
+            <button onClick={close} aria-label="Close the full-screen map" className="ml-auto w-8 h-8 rounded-lg flex items-center justify-center text-field-300 hover:text-white hover:bg-field-800">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-3">
+            <div className="mx-auto" style={{ width: fullWidth }}>{mapBlock(true)}</div>
+          </div>
+          {/* A city's card comes up from the bottom, over the map */}
+          {card && !replay && (
+            <div className="absolute inset-x-0 bottom-0 flex justify-center px-2 pb-2 pointer-events-none">
+              <div className="w-full max-w-[560px] max-h-[45vh] overflow-y-auto pointer-events-auto rounded-xl shadow-2xl">
+                <CityCard
+                  team={card} war={war} owners={shown.owners} besieged={shown.besieged} log={log}
+                  userId={userId} canOrder={live && ordersOpen} myTarget={myTarget} myClaim={myClaim}
+                  onAttack={onAttack} onFlag={onFlag} busy={busy} nameOf={nameOf} colorOf={colorOf}
+                  onClose={() => setCard(null)}
+                />
+              </div>
+            </div>
+          )}
+        </div>,
+        document.body,
+      )}
     </div>
   )
+}
+
+/** The window's size, kept up to date while `active` (a phone turning sideways). */
+function useViewport(active: boolean) {
+  const read = () => ({ w: typeof window === 'undefined' ? 1000 : window.innerWidth, h: typeof window === 'undefined' ? 800 : window.innerHeight })
+  const [vp, setVp] = useState(read)
+  useEffect(() => {
+    if (!active) return
+    const on = () => setVp(read())
+    on()
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [active])
+  return vp
 }
 
 /** The replay's running commentary over the map: the move being made, then the week's tally. */
