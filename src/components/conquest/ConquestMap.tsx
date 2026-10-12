@@ -67,7 +67,20 @@ interface Palette {
   /** a border between two empires: a wide glow and a bright core */
   /** the thin line between two empires' colors where they meet */
   seam: string
+  /** dark type on a light ground (bolder, and empire names a little fainter) */
+  onLight: boolean
+  /** the labels' face */
+  font: string
 }
+
+/** How the war map's drawn: the radar screen, an old parchment map, or the war room's table */
+export type MapLook = 'radar' | 'parchment' | 'warroom'
+export const MAP_LOOKS: { key: MapLook; label: string }[] = [
+  { key: 'radar', label: 'Radar' },
+  { key: 'parchment', label: 'Parchment' },
+  { key: 'warroom', label: 'War room' },
+]
+const SERIF = "'IM Fell English', 'Iowan Old Style', Georgia, 'Times New Roman', serif"
 
 const DARK: Palette = {
   sea: ['#0b1a24', '#03070a'],
@@ -85,6 +98,8 @@ const DARK: Palette = {
   name: c => c,
   arrow: c => c,
   seam: 'rgba(2, 6, 10, 0.85)',
+  onLight: false,
+  font: MONO,
 }
 
 /** An empire's color darkened to a lightness that reads on white. */
@@ -109,6 +124,50 @@ const LIGHT: Palette = {
   name: c => inked(c, 30),
   arrow: c => inked(c, 40),
   seam: 'rgba(255, 255, 255, 0.95)',
+  onLight: true,
+  font: MONO,
+}
+
+/** An old map in brown ink on aged paper */
+const PARCHMENT: Palette = {
+  sea: ['#e4cf9f', '#b39264'],
+  land: '#f1e4c2',
+  grid: '#6b4a25', gridOpacity: 0.12,
+  states: '#6b4a25', statesOpacity: 0.3,
+  free: '#ecdcb3', freeEdge: '#6b4a25', freeEdgeOpacity: 0.75,
+  owned: 0.4,
+  ownedYou: 0.58,
+  ink: '#3a2611',
+  code: '#3a2611', codeFree: '#7a5a33',
+  accent: '#7a2e1f', accentRgb: '122, 46, 31',
+  insetBg: '#ead9ad',
+  under: 'rgba(241, 228, 194, 0.88)',
+  name: c => inked(c, 30),
+  arrow: c => inked(c, 36),
+  seam: 'rgba(58, 38, 17, 0.8)',
+  onLight: true,
+  font: SERIF,
+}
+
+/** The war room's table: a printed operations map under a lamp, wooden blocks on it */
+const WARROOM: Palette = {
+  sea: ['#a9bcb3', '#62786f'],
+  land: '#e6dab8',
+  grid: '#2e3a33', gridOpacity: 0.1,
+  states: '#4a4030', statesOpacity: 0.28,
+  free: '#ddd0aa', freeEdge: '#5a4c35', freeEdgeOpacity: 0.8,
+  owned: 0.42,
+  ownedYou: 0.6,
+  ink: '#1e1a12',
+  code: '#1e1a12', codeFree: '#6b5c40',
+  accent: '#8a5a12', accentRgb: '138, 90, 18',
+  insetBg: '#d8cba3',
+  under: 'rgba(230, 218, 184, 0.88)',
+  name: c => inked(c, 30),
+  arrow: c => inked(c, 36),
+  seam: 'rgba(30, 26, 18, 0.85)',
+  onLight: true,
+  font: MONO,
 }
 
 /** The app's light mode (the TV always runs dark). */
@@ -262,6 +321,87 @@ function Lands({ owners, colorOf, clipOf, near, patternFill, you, target, flag, 
         )}
       </g>
     </>
+  )
+}
+
+/** Under the land: the paper's mottling and fibers, or the printed board's wear */
+function LookGround({ look, uid }: { look: MapLook; uid: string }) {
+  return (
+    <g pointerEvents="none">
+      <defs>
+        <filter id={`cq-paper-${uid}`} x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency={look === 'parchment' ? '0.012 0.02' : '0.02'} numOctaves={3} seed={7} result="blot" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves={1} seed={3} result="fiber" />
+          <feComposite in="blot" in2="fiber" operator="arithmetic" k1="0" k2="0.75" k3="0.35" k4="0" />
+          <feColorMatrix values={look === 'parchment'
+            ? '0 0 0 0 .32  0 0 0 0 .2  0 0 0 0 .08  0 0 0 -1.6 1.25'
+            : '0 0 0 0 .15  0 0 0 0 .14  0 0 0 0 .1  0 0 0 -1.4 1.05'} />
+        </filter>
+      </defs>
+      <rect x={0} y={0} width={M.width} height={M.height} rx={10} filter={`url(#cq-paper-${uid})`} opacity={look === 'parchment' ? 0.5 : 0.35} />
+    </g>
+  )
+}
+
+/** Over the land: the parchment's compass rose and inked border, or the lamp over the table and its wooden frame */
+function LookFrame({ look, uid }: { look: MapLook; uid: string }) {
+  if (look === 'parchment') {
+    const cx = 72, cy = 548, r = 34
+    const ray = (deg: number, len: number, wide: number) => {
+      const a = (deg * Math.PI) / 180, b = ((deg + 90) * Math.PI) / 180
+      const tip = [cx + Math.sin(a) * len, cy - Math.cos(a) * len], l = [cx + Math.sin(b) * wide, cy - Math.cos(b) * wide], rr = [cx - Math.sin(b) * wide, cy + Math.cos(b) * wide]
+      return { dark: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${l[0]} ${l[1]}Z`, light: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${rr[0]} ${rr[1]}Z` }
+    }
+    return (
+      <g pointerEvents="none">
+        <rect x={6} y={6} width={M.width - 12} height={M.height - 12} rx={6} fill="none" stroke="#3a2611" strokeOpacity={0.55} strokeWidth={2} />
+        <rect x={11} y={11} width={M.width - 22} height={M.height - 22} rx={4} fill="none" stroke="#3a2611" strokeOpacity={0.35} strokeWidth={0.8} />
+        <circle cx={cx} cy={cy} r={r * 0.62} fill="none" stroke="#3a2611" strokeOpacity={0.55} strokeWidth={0.8} />
+        {[45, 135, 225, 315].map(d => { const p = ray(d, r * 0.6, 4); return <g key={d}><path d={p.dark} fill="#3a2611" fillOpacity={0.55} /><path d={p.light} fill="#f1e4c2" stroke="#3a2611" strokeOpacity={0.5} strokeWidth={0.5} /></g> })}
+        {[0, 90, 180, 270].map(d => { const p = ray(d, r, 6); return <g key={d}><path d={p.dark} fill="#3a2611" fillOpacity={0.85} /><path d={p.light} fill="#f1e4c2" stroke="#3a2611" strokeWidth={0.6} /></g> })}
+        <text x={cx} y={cy - r - 4} textAnchor="middle" fontFamily={SERIF} fontSize={13} fontWeight={700} fill="#3a2611">N</text>
+      </g>
+    )
+  }
+  return (
+    <g pointerEvents="none">
+      <defs>
+        <radialGradient id={`cq-lamp-${uid}`} cx="48%" cy="42%" r="70%">
+          <stop offset="0" stopColor="#fff3cf" stopOpacity={0.18} />
+          <stop offset="0.55" stopColor="#000" stopOpacity={0} />
+          <stop offset="1" stopColor="#120c04" stopOpacity={0.5} />
+        </radialGradient>
+        <linearGradient id={`cq-wood-${uid}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#6b4423" /><stop offset=".4" stopColor="#8a5a2f" /><stop offset=".7" stopColor="#5a381b" /><stop offset="1" stopColor="#7a4e27" />
+        </linearGradient>
+      </defs>
+      <rect x={0} y={0} width={M.width} height={M.height} rx={10} fill={`url(#cq-lamp-${uid})`} />
+      <rect x={4} y={4} width={M.width - 8} height={M.height - 8} rx={8} fill="none" stroke={`url(#cq-wood-${uid})`} strokeWidth={9} />
+      <rect x={9} y={9} width={M.width - 18} height={M.height - 18} rx={5} fill="none" stroke="#2b1a0b" strokeOpacity={0.6} strokeWidth={1} />
+    </g>
+  )
+}
+
+/** The war room's markers: a wooden block in its empire's color on every held city, a taller one on a capital */
+function Blocks({ owners, colorOf, capitalOf, skip }: { owners: Record<string, string | null>; colorOf: (t: string) => string | null; capitalOf: (t: string) => boolean; skip: Set<string> | null }) {
+  return (
+    <g pointerEvents="none">
+      {TERRITORIES.filter(t => owners[t] && !skip?.has(t)).map(t => {
+        const c = colorOf(t) ?? '#888'
+        const [x, y] = M.stadium[t]
+        const cap = capitalOf(t)
+        const w = cap ? 24 : 17, top = cap ? 10 : 8, side = cap ? 8 : 6
+        return (
+          <g key={t} transform={`translate(${x - w / 2} ${y - top / 2 - side / 2})`}>
+            <rect x={1.2} y={side + 1.4} width={w} height={top} rx={1.6} fill="#000" opacity={0.28} />
+            <rect x={0} y={top * 0.5} width={w} height={side + top * 0.5} rx={1.4} fill={c} />
+            <rect x={0} y={top * 0.5} width={w} height={side + top * 0.5} rx={1.4} fill="#2b1a0b" opacity={0.42} />
+            <rect x={0} y={0} width={w} height={top} rx={1.4} fill={c} stroke="#2b1a0b" strokeOpacity={0.55} strokeWidth={0.6} />
+            <rect x={0.8} y={0.6} width={w - 1.6} height={1.2} rx={0.6} fill="#fff" opacity={0.3} />
+          </g>
+        )
+      })}
+    </g>
   )
 }
 
@@ -432,7 +572,7 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
 }
 
 export const ConquestMap = memo(function ConquestMap({
-  owners, besieged = {}, players, you, orders, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, battles = [], zoom = 1, declutter = false, className,
+  owners, besieged = {}, players, you, orders, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, battles = [], zoom = 1, declutter = false, look = 'radar', className,
 }: {
   owners: Record<string, string | null>
   besieged?: Record<string, string>
@@ -455,9 +595,21 @@ export const ConquestMap = memo(function ConquestMap({
   zoom?: number
   /** labels that don't fit give way, least important first, and appear as you zoom in */
   declutter?: boolean
+  /** how it's drawn: the radar screen (light or dark with the app), parchment, or the war room's table */
+  look?: MapLook
   className?: string
 }) {
-  const P = useLight() ? LIGHT : DARK
+  const light = useLight()
+  const P = look === 'parchment' ? PARCHMENT : look === 'warroom' ? WARROOM : light ? LIGHT : DARK
+  // The parchment's old-map lettering, fetched only when it's used
+  useEffect(() => {
+    if (look !== 'parchment' || document.getElementById('gu-parchment-font')) return
+    const link = document.createElement('link')
+    link.id = 'gu-parchment-font'
+    link.rel = 'stylesheet'
+    link.href = 'https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap'
+    document.head.appendChild(link)
+  }, [look])
   const uid = useId().replace(/:/g, '')
   const motion = useOnSweep()
   const byId = new Map(players.map(p => [p.userId, p]))
@@ -612,9 +764,9 @@ export const ConquestMap = memo(function ConquestMap({
     // The code and the owner's name, from a point: the label's middle, or off the star
     const text = (x: number, codeY: number, nameY: number, anchor: 'middle' | 'start') => show !== 'none' && (
       <>
-        <text className="cq-label" x={x} y={codeY} textAnchor={anchor} fontFamily={MONO} fontWeight={700} fontSize={size} fill={o ? P.code : P.codeFree}>{t}</text>
+        <text className="cq-label" x={x} y={codeY} textAnchor={anchor} fontFamily={P.font} fontWeight={700} fontSize={size} fill={o ? P.code : P.codeFree}>{t}</text>
         {show === 'full' && o && (
-          <text className="cq-label" x={x} y={nameY} textAnchor={anchor} fontFamily={MONO} fontWeight={P === LIGHT ? 700 : 400} fontSize={size * 0.72} fill={P.name(o.color)}>
+          <text className="cq-label" x={x} y={nameY} textAnchor={anchor} fontFamily={P.font} fontWeight={P.onLight ? 700 : 400} fontSize={size * 0.72} fill={P.name(o.color)}>
             {shortName(o.name).toUpperCase()}
           </text>
         )}
@@ -687,7 +839,7 @@ export const ConquestMap = memo(function ConquestMap({
           x={0} y={size * 0.35}
           textAnchor="middle" className="font-cond cq-kn" fontWeight={800}
           fontSize={size} letterSpacing={size * 0.28}
-          fill={P.name(n.color)} fillOpacity={P === LIGHT ? 0.55 : 0.6}
+          fill={P.name(n.color)} fillOpacity={P.onLight ? 0.55 : 0.6}
         >
           {n.name}
         </text>
@@ -754,12 +906,14 @@ export const ConquestMap = memo(function ConquestMap({
           ))}
         </defs>
         <rect x={0} y={0} width={M.width} height={M.height} rx={10} fill={`url(#cq-bg-${uid})`} />
+        {look !== 'radar' && <LookGround look={look} uid={uid} />}
         <path d={M.grid} fill="none" stroke={P.grid} strokeOpacity={P.gridOpacity} strokeWidth={0.6} pointerEvents="none" clipPath={`url(#cq-main-${uid})`} />
         <Lands
           owners={owners} colorOf={colorOf} clipOf={clipOf} patternFill={patternFill} you={you}
           target={orders?.target} flag={orders?.flag} flagColor={flagColor}
           highlight={highlight} highlightColor={highlightColor} P={P}
         />
+        {look === 'warroom' && <Blocks owners={owners} colorOf={colorOf} capitalOf={t => ownerAt(t)?.capital === t} skip={box ? NE_SET : null} />}
         <g pointerEvents="none">
           {/* Sea lanes */}
           {M.lanes.map(l => (
@@ -769,6 +923,7 @@ export const ConquestMap = memo(function ConquestMap({
             </g>
           ))}
         </g>
+        {look !== 'radar' && <LookFrame look={look} uid={uid} />}
         {box && (
           <>
             <rect x={NE.x} y={NE.y} width={NE.w} height={NE.h} fill="none" stroke={P.accent} strokeOpacity={0.55} strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
@@ -785,7 +940,7 @@ export const ConquestMap = memo(function ConquestMap({
             </g>
             <g pointerEvents="none">
               <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} fill="none" stroke={P.accent} strokeOpacity={0.55} strokeWidth={1.2} />
-              <text x={box.x + 10} y={box.y + 20} fontFamily={MONO} fontWeight={700} fontSize={13} letterSpacing={2} fill={P.accent}>NORTHEAST</text>
+              <text x={box.x + 10} y={box.y + 20} fontFamily={P.font} fontWeight={700} fontSize={13} letterSpacing={2} fill={P.accent}>NORTHEAST</text>
             </g>
           </>
         )}
@@ -821,8 +976,8 @@ export const ConquestMap = memo(function ConquestMap({
       <div ref={motion} className="absolute inset-0 pointer-events-none" aria-hidden>
         <div style={frame(MAIN, 10)}>
           <Motion
-            win={MAIN} zoom={1} P={P} radar lanes
-            pings={pings.filter(p => mainCities.includes(p.team))}
+            win={MAIN} zoom={1} P={P} radar={look === 'radar'} lanes
+            pings={pings.filter(p => mainCities.includes(p.team) && (look === 'radar' || p.siege))}
             ringR={12 * labelScale * 1.9}
             hot={hot}
             fronts={frontsAt(1)}
@@ -833,7 +988,7 @@ export const ConquestMap = memo(function ConquestMap({
           <div style={frame(box, 8)}>
             <Motion
               win={NE} zoom={z} P={P} radar={false} lanes={false}
-              pings={pings.filter(p => NE_SET.has(p.team))}
+              pings={pings.filter(p => NE_SET.has(p.team) && (look === 'radar' || p.siege))}
               ringR={(14 * labelScale * 1.9) / z}
               hot={hot.filter(h => NE_SET.has(h.team))}
               fronts={frontsAt(1.3 / z, t => NE_SET.has(t))}

@@ -5,6 +5,7 @@ import { useWarFonts } from './WarPoster'
 import { WHOLE_MAP, cityName, mapAfterMoves, type WarStory } from './warStory'
 import { createFilmSound, createNarrator, type FilmSound, type Narrator } from '@/lib/filmSound'
 import { MedalBadge } from './MedalBadge'
+import { FilmLook, FILM_TONE, FILM_TONE_SOFT } from './FilmLook'
 import { MEDAL_INFO } from '../../../supabase/functions/_shared/conquest.ts'
 import type { ConquestData } from './conquestView'
 import { fetchVoices, type VoiceFrom } from './newsreelVoice'
@@ -143,11 +144,9 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
   const arrows = phase === 'line' ? story.lines.slice(0, line + 1).flatMap((l, i) => l.arrows.map(a => ({ ...a, now: i === line, key: `${i}${a.from}${a.to}` }))) : []
   const hatches = [...new Set(Object.values(sieges))]
 
-  // The camera, the leader's sweep and the film's flicker and grain run frame by frame
+  // The camera and the leader's sweep run frame by frame (the film's damage is FilmLook's)
   const box = useRef<HTMLDivElement>(null)
   const svg = useRef<SVGSVGElement>(null)
-  const film = useRef<HTMLDivElement>(null)
-  const grain = useRef<HTMLCanvasElement>(null)
   const sweep = useRef<SVGPathElement>(null)
   const shotRef = useRef({ shot: WHOLE_MAP, since: 0, len: 1 })
   shotRef.current = current
@@ -160,8 +159,7 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
   useEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let cam = { ...WHOLE_MAP }
-    let last = performance.now(), lastFx = 0, raf = 0
-    const g = grain.current?.getContext('2d') ?? null
+    let last = performance.now(), lastShown = 0, raf = 0
     const tick = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
@@ -169,37 +167,21 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
       const drift = since ? 1 + 0.06 * Math.min(1, (now - since) / len) : 1
       const k = 1 - Math.exp(-dt * (reduce ? 8 : 2.1))
       cam = { x: cam.x + (shot.x - cam.x) * k, y: cam.y + (shot.y - cam.y) * k, z: cam.z + (shot.z * drift - cam.z) * k }
-      const w = ((M.height * 16) / 9) / cam.z, h = (w * 9) / 16
-      svg.current?.setAttribute('viewBox', `${cam.x - w / 2} ${cam.y - h / 2} ${w} ${h}`)
+      // Shown at about 16 frames a second, like hand-cranked film
+      if (reduce || now - lastShown > 62) {
+        lastShown = now
+        const w = ((M.height * 16) / 9) / cam.z, h = (w * 9) / 16
+        svg.current?.setAttribute('viewBox', `${cam.x - w / 2} ${cam.y - h / 2} ${w} ${h}`)
+      }
       if (phaseRef.current === 'leader' && sweep.current) {
         const s = ((now - leaderAt.current) / 1000) % 1, a = s * Math.PI * 2 - Math.PI / 2
         sweep.current.setAttribute('d', `M80 45 L80 -60 A105 105 0 ${s > 0.5 ? 1 : 0} 1 ${80 + 105 * Math.cos(a)} ${45 + 105 * Math.sin(a)} Z`)
-      }
-      const playing = phaseRef.current !== 'ready' && phaseRef.current !== 'done'
-      if (!reduce && !lite && playing && now - lastFx > 55) {
-        lastFx = now
-        if (film.current) {
-          film.current.style.filter = `grayscale(1) contrast(1.18) brightness(${(0.9 + Math.random() * 0.12).toFixed(3)})`
-          film.current.style.transform = `translate(${((Math.random() - 0.5) * 0.25).toFixed(2)}%, ${((Math.random() - 0.5) * 0.35).toFixed(2)}%)`
-        }
-        if (g && grain.current) {
-          const img = g.createImageData(grain.current.width, grain.current.height)
-          for (let i = 0; i < img.data.length; i += 4) {
-            const v = Math.random() * 255
-            img.data[i] = img.data[i + 1] = img.data[i + 2] = v
-            img.data[i + 3] = 255
-          }
-          g.putImageData(img, 0, 0)
-          g.fillStyle = '#fff'
-          if (Math.random() < 0.35) g.fillRect(Math.random() * grain.current.width, 0, 0.6, grain.current.height)
-          if (Math.random() < 0.25) { g.beginPath(); g.arc(Math.random() * grain.current.width, Math.random() * grain.current.height, 0.8 + Math.random() * 1.6, 0, 7); g.fill() }
-        }
       }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [lite])
+  }, [])
 
   // Type sized to the frame (1u = 1% of its width)
   const [u, setU] = useState(10)
@@ -227,7 +209,7 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
         .gu-reel-march { animation: gu-reel-march .5s linear infinite; }
         @media (prefers-reduced-motion: reduce) { .gu-reel-ring, .gu-reel-march { animation: none } }
       `}</style>
-      <div ref={film} className="absolute -inset-[0.5%]" style={{ filter: 'grayscale(1) contrast(1.18)' }}>
+      <div className="gu-film-weave absolute -inset-[0.5%]" style={{ filter: lite ? FILM_TONE : FILM_TONE_SOFT }}>
         <svg ref={svg} viewBox={START_VIEW} className="absolute inset-[0.5%] w-[99%] h-[99%]" style={{ background: '#161616' }} preserveAspectRatio="xMidYMid slice" aria-hidden>
           <defs>
             {hatches.map(by => (
@@ -319,8 +301,7 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
           </p>
         )}
       </div>
-      {!lite && <canvas ref={grain} width={240} height={135} className="absolute inset-0 w-full h-full pointer-events-none" style={{ opacity: 0.2, mixBlendMode: 'screen' }} />}
-      <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at center, transparent 55%, #000000c0 100%)' }} />
+      <FilmLook lite={lite} cue={phase === 'end'} />
 
       {phase === 'ready' && (
         <button

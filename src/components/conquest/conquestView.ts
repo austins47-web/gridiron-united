@@ -45,6 +45,8 @@ export interface ConquestData {
   orders?: Orders
   /** Before they lock: who's sealed an attack order (not on whom) */
   sealed?: string[]
+  /** How the league has its map drawn (the TV's, and phones' until they pick): radar, parchment or the war room */
+  mapLook?: 'radar' | 'parchment' | 'warroom'
   /** This week's flag orders, player → the open city they'd claim (yours, and everyone's once they lock) */
   claims?: Claims
   /** The season's titles, once the war's over */

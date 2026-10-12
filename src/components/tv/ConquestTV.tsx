@@ -70,7 +70,7 @@ export function ConquestPanelBody({ war, battles, week }: { war: ConquestData; b
   const swinging = battles.filter(b => b.outcome !== 'hold').length
   return (
     <div className="h-full flex flex-col gap-3">
-      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} battles={battles} className="w-full" />
+      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} battles={battles} look={war.mapLook} className="w-full" />
       {war.crowned?.[0] && (
         <p className="text-[19px] font-bold text-gold">{war.crowned[0].icon} {war.crowned[0].label}: {war.crowned[0].holders.map(nameFrom(war)).join(' & ')}</p>
       )}
@@ -116,7 +116,7 @@ export function ConquestTakeover({ war, battles, league, week }: { war: Conquest
       </div>
       {/* The map, full width; the week's battles sit under the Northeast zoom */}
       <div className="relative w-full mt-3">
-        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} battles={battles} className="w-full" />
+        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} battles={battles} look={war.mapLook} className="w-full" />
         <MapLegend />
         {shown.length > 0 && (
           <div className="absolute" style={{ left: '71.2%', top: '64%', width: '28.6%' }}>
@@ -286,6 +286,7 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
           labelScale={1.5}
           highlight={step.kind === 'move' ? step.move.team : null}
           highlightColor={step.kind === 'move' ? colorOf(step.move.to) : undefined}
+          look={war.mapLook}
           className="w-full"
         />
         </div>

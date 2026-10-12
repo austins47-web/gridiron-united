@@ -8,6 +8,9 @@ import { weekStory, type WarStory } from '@/components/conquest/warStory'
 import { fetchSoFar, warAsItStands } from '@/components/conquest/warSoFar'
 import { WarPoster } from '@/components/conquest/WarPoster'
 import { Newsreel } from '@/components/conquest/Newsreel'
+import { MAP_LOOKS, type MapLook } from '@/components/conquest/ConquestMap'
+import { useAppStore } from '@/store/appStore'
+import toast from 'react-hot-toast'
 import { fetchVoices } from '@/components/conquest/newsreelVoice'
 import type { ConquestData } from '@/components/conquest/conquestView'
 
@@ -63,6 +66,20 @@ export function WarOfficeRemote({ leagueId, busy, onShow }: {
   const [chosen, setChosen] = useState<'final' | 'sofar' | null>(null)
   const pick = picks.find(p => p.key === chosen) ?? picks[0] ?? null
   const [preview, setPreview] = useState(false)
+
+  // The TV's map style (and everyone's on their phone until they pick their own)
+  const { activeLeague, myMembership, setActiveLeague } = useAppStore()
+  const tvLook = ((activeLeague as { conquest_map_style?: MapLook } | null)?.conquest_map_style) ?? 'radar'
+  const [savingLook, setSavingLook] = useState<MapLook | null>(null)
+  const setTvLook = async (look: MapLook) => {
+    if (look === tvLook) return
+    setSavingLook(look)
+    const { error } = await supabase.from('leagues').update({ conquest_map_style: look }).eq('id', leagueId)
+    setSavingLook(null)
+    if (error) { toast.error(`Couldn't change it: ${error.message}`); return }
+    if (activeLeague && activeLeague.id === leagueId) setActiveLeague({ ...activeLeague, conquest_map_style: look } as typeof activeLeague, myMembership)
+    toast.success(`The TV's war map is ${MAP_LOOKS.find(l => l.key === look)!.label.toLowerCase()} now (it changes within a minute)`)
+  }
 
   // The announcer records the week's lines as soon as the remote's open (a
   // minute or so the first time, kept after that), so the TV's newsreel
@@ -145,6 +162,21 @@ export function WarOfficeRemote({ leagueId, busy, onShow }: {
           </div>
         </div>
       )}
+      <div className="mt-2.5 flex items-center gap-1.5 flex-wrap" role="group" aria-label="The TV's war map style">
+        <span className="text-[11px] text-field-400 mr-0.5">TV map</span>
+        {MAP_LOOKS.map(l => (
+          <button
+            key={l.key}
+            type="button"
+            onClick={() => void setTvLook(l.key)}
+            disabled={!!savingLook}
+            aria-pressed={tvLook === l.key}
+            className={clsx('flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold disabled:opacity-60', tvLook === l.key ? 'bg-gold text-field-950 border-gold' : 'border-field-700 text-field-400 hover:text-white')}
+          >
+            {savingLook === l.key && <Loader2 className="w-3 h-3 animate-spin" />}{l.label}
+          </button>
+        ))}
+      </div>
       {preview && pick && <WarOfficePreview pick={pick} leagueId={leagueId} onClose={() => setPreview(false)} onShow={show} busy={busy} />}
     </div>
   )

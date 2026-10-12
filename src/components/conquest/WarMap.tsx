@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { X, Loader2, History, Play, Swords, Flag } from 'lucide-react'
 import clsx from 'clsx'
 import { CITY, ADJ, citiesOf, neighborsOf } from '../../../supabase/functions/_shared/conquest.ts'
-import { ConquestMap } from './ConquestMap'
+import { ConquestMap, MAP_LOOKS, type MapLook } from './ConquestMap'
+import { useAppStore } from '@/store/appStore'
 import { ZoomPan } from './ZoomPan'
 import { ConquestIcon } from './ConquestIcon'
 import { M } from './mapGeometry'
@@ -14,6 +15,9 @@ import {
 
 const INTRO_MS = 1400
 const STEP_MS = 1900
+
+/** Your own choice of map style, on this device */
+const LOOK_KEY = 'gu-conquest-look'
 
 /**
  * The app's war map, with what's around it: tap a city for its story (and,
@@ -42,6 +46,19 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
   labelScale: number
 }) {
   const [mapZoom, setMapZoom] = useState(1)
+  // How the map's drawn: your pick (kept on this device), else the league's (the TV's)
+  const leagueLook = (useAppStore(st => st.activeLeague) as { conquest_map_style?: MapLook } | null)?.conquest_map_style
+  const [myLook, setMyLook] = useState<MapLook | null>(() => {
+    try {
+      const v = localStorage.getItem(LOOK_KEY)
+      return MAP_LOOKS.some(l => l.key === v) ? (v as MapLook) : null
+    } catch { return null }
+  })
+  const look: MapLook = myLook ?? war.mapLook ?? leagueLook ?? 'radar'
+  const pickLook = (l: MapLook) => {
+    setMyLook(l)
+    try { localStorage.setItem(LOOK_KEY, l) } catch { /* just for now, then */ }
+  }
   const [card, setCard] = useState<string | null>(null)
   const [viewWeek, setViewWeek] = useState<number | null>(null)
   const [replay, setReplay] = useState<{ week: number; at: number } | null>(null)
@@ -171,9 +188,25 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
           highlight={stepCity?.team ?? card}
           highlightColor={stepCity ? colorOf(stepCity.to) : undefined}
           labels="names" layout="none" labelScale={full ? (vp.w < 640 ? 2.6 : vp.w < 1100 ? 1.8 : 1.5) : labelScale}
-          battles={live ? battles : []} zoom={mapZoom} declutter className="w-full"
+          battles={live ? battles : []} zoom={mapZoom} declutter look={look} className="w-full"
         />
       </ZoomPan>
+
+      {/* How the map's drawn: yours to pick (the league's until you do) */}
+      <div className={clsx('mt-2 flex items-center gap-1.5', full && 'shrink-0')} role="group" aria-label="Map style">
+        <span className="text-[11px] text-field-500 mr-0.5">Map</span>
+        {MAP_LOOKS.map(l => (
+          <button
+            key={l.key}
+            type="button"
+            onClick={() => pickLook(l.key)}
+            aria-pressed={look === l.key}
+            className={clsx('rounded-full border px-2.5 py-0.5 text-[11px] font-bold', look === l.key ? 'bg-gold text-field-950 border-gold' : 'border-field-700 text-field-400 hover:text-white')}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
 
       {card && !replay && !full && (
         <CityCard

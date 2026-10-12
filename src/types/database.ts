@@ -1660,6 +1660,8 @@ export type League = ScoringRules & RosterSlotConfig & {
   roast_notes?: string | null
   /** Pick'Em: the Commish posts an upset poll to chat each week (on unless turned off). */
   weekly_poll?: boolean
+  /** Conquest: how the war map's drawn on the TV, and on phones until people pick their own. */
+  conquest_map_style?: 'radar' | 'parchment' | 'warroom'
   /** The league's own logo and accent color (the app and the Shop TV). */
   brand_logo_url?: string | null
   brand_color?: string | null
