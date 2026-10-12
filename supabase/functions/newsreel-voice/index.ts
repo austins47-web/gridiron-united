@@ -1,11 +1,14 @@
 // ══════════════════════════════════════════════════════════════
 // newsreel-voice — the Conquest newsreel's narrator
 //
-// POST { token, lines } (the Shop TV) or { league_id, lines } (signed in,
-// a member): the lines read by an old-time newsreel announcer, as links to
-// MP3s. The voice is Clyde, a vintage radio announcer from ElevenLabs'
-// library; if ElevenLabs can't (no plan for library voices yet, or the
-// month's characters are spent), an OpenAI voice told to sound like one.
+// POST { token, lines, voice? } (the Shop TV) or { league_id, lines, voice? }
+// (signed in, a member): the lines read aloud, as links to MP3s.
+//   voice 'newsreel' (the default): Clyde, a vintage radio announcer from
+//     ElevenLabs' library, for the Conquest newsreel.
+//   voice 'roast': the commissioner's own "Old Asian Woman" voice (made in
+//     their ElevenLabs account), for the weekly roast on the TV.
+// If ElevenLabs can't (no characters left this month, say), an OpenAI
+// voice directed to sound like it.
 // Each line is recorded once per voice and kept (the newsreel-voice bucket,
 // named by a hash of the line and the voice), so a newsreel played again
 // costs nothing; a league records at most DAILY_LINES new lines a day.
@@ -28,21 +31,42 @@ const MAX_LINES = 16
 const MAX_CHARS = 400
 const DAILY_LINES = 120
 
-// Clyde - Vintage and Warm Radio Announcer, a little quick and very expressive
-const ELEVEN = {
-  voice: 'QMJTqaMXmGnG8TCm8WQG',
-  model: 'eleven_multilingual_v2',
-  settings: { stability: 0.3, similarity_boost: 0.8, style: 0.65, use_speaker_boost: true, speed: 1.1 },
+interface Profile {
+  eleven: { voice: string; model: string; settings: Record<string, unknown> }
+  /** the stand-in: OpenAI, directed to sound like it */
+  openai: { model: string; voice: string; instructions: string }
 }
-// The stand-in: OpenAI, directed to sound like one
-const OPENAI = {
-  model: 'gpt-4o-mini-tts',
-  voice: 'ash',
-  instructions: [
-    'Affect: the most extravagant newsreel narrator of the 1940s, a flamboyant showman of the silver screen, wildly over the top: bombastic, florid and melodramatic.',
-    'Accent: a strong Transatlantic (Mid-Atlantic) accent, half upper-class British and half American; drop the R after vowels, broad A, crisp T sounds.',
-    'Pacing: fast and driving, with a dramatic swell on each headline and a thunderous landing at the end of every sentence.',
-  ].join(' '),
+const PROFILES: Record<string, Profile> = {
+  // Clyde - Vintage and Warm Radio Announcer, a little quick and very expressive
+  newsreel: {
+    eleven: {
+      voice: 'QMJTqaMXmGnG8TCm8WQG',
+      model: 'eleven_multilingual_v2',
+      settings: { stability: 0.3, similarity_boost: 0.8, style: 0.65, use_speaker_boost: true, speed: 1.1 },
+    },
+    openai: {
+      model: 'gpt-4o-mini-tts',
+      voice: 'ash',
+      instructions: [
+        'Affect: the most extravagant newsreel narrator of the 1940s, a flamboyant showman of the silver screen, wildly over the top: bombastic, florid and melodramatic.',
+        'Accent: a strong Transatlantic (Mid-Atlantic) accent, half upper-class British and half American; drop the R after vowels, broad A, crisp T sounds.',
+        'Pacing: fast and driving, with a dramatic swell on each headline and a thunderous landing at the end of every sentence.',
+      ].join(' '),
+    },
+  },
+  // The commissioner's "Old Asian Woman" (a voice they designed in ElevenLabs)
+  roast: {
+    eleven: {
+      voice: 'Zs4u8Ek9Yu8UWq0rxk1J',
+      model: 'eleven_multilingual_v2',
+      settings: { stability: 0.45, similarity_boost: 0.85, style: 0.45, use_speaker_boost: true, speed: 1.0 },
+    },
+    openai: {
+      model: 'gpt-4o-mini-tts',
+      voice: 'sage',
+      instructions: 'Voice: an elderly woman, warm and gently wavering. Tone: a sweet grandmother delivering a savage roast, with deadpan comic timing and a little relish on every insult.',
+    },
+  },
 }
 
 interface Voice {
@@ -61,7 +85,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   const url = Deno.env.get('SUPABASE_URL')!
   const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const body = await req.json().catch(() => ({})) as { token?: string; league_id?: string; lines?: unknown }
+  const body = await req.json().catch(() => ({})) as { token?: string; league_id?: string; lines?: unknown; voice?: string }
 
   try {
     // Who's asking: the league's TV, or one of its members
@@ -81,7 +105,9 @@ serve(async (req) => {
     const lines = Array.isArray(body.lines) ? body.lines.filter((l): l is string => typeof l === 'string').map(l => l.trim().slice(0, MAX_CHARS)) : []
     if (!lines.length || lines.length > MAX_LINES) return json({ error: `Send 1 to ${MAX_LINES} lines` }, 400)
 
-    const voices = voicesAvailable()
+    const profile = PROFILES[typeof body.voice === 'string' ? body.voice : 'newsreel']
+    if (!profile) return json({ error: 'Unknown voice' }, 400)
+    const voices = voicesAvailable(profile)
     if (!voices.length) return json({ voices: null, reason: 'no-key' })
 
     const publicUrl = (p: string) => `${url}/storage/v1/object/public/${BUCKET}/${p}`
@@ -135,7 +161,7 @@ serve(async (req) => {
 })
 
 /** The voices there are keys for, the one we want first */
-function voicesAvailable(): Voice[] {
+function voicesAvailable({ eleven: ELEVEN, openai: OPENAI }: Profile): Voice[] {
   const out: Voice[] = []
   const xi = Deno.env.get('ELEVENLABS_API_KEY')
   if (xi) {

@@ -16,6 +16,7 @@ import { HolidayScene, PlayMoment, MOMENT_CSS, MOMENT_MS } from './HolidayScene'
 import { ACHIEVEMENTS } from '@/components/pickem/standings'
 import { ACHIEVEMENT_ICONS } from '@/components/pickem/achievementIcons'
 import { TV_DUCK } from '@/components/conquest/Newsreel'
+import { readAloud } from '@/lib/readAloud'
 
 // ══════════════════════════════════════════════════════════════
 // Shop TV — the league's live Pick'Em board, full screen on a TV
@@ -1982,6 +1983,7 @@ function TickerSteps({ items }: { items: string[] }) {
 // week's final.
 const TAKEOVER_EVERY = 5 * 60_000
 // The roast's turn on screen: long enough to catch, not to read all of it
+// (from the remote, it stays while it's read aloud)
 const TAKEOVER_FOR = 20_000
 
 function Takeover({ board, emoji }: { board: TvBoard; emoji?: string }) {
@@ -1991,18 +1993,49 @@ function Takeover({ board, emoji }: { board: TvBoard; emoji?: string }) {
   const roast = board.roast?.text ? board.roast : null
   const champ = board.complete && board.winners.length ? board.winners : null
   const [on, setOn] = useState(false)
-  // The remote: the roast now, or clear the screen
+  // The remote: the roast now, read aloud in the commissioner's roast voice
+  // (newsreel-voice's 'roast'), or clear the screen
+  const { code = '' } = useParams()
   const [forced, setForced] = useState(false)
   const forcedTimer = useRef<ReturnType<typeof setTimeout>>()
+  const reading = useRef<{ stop: () => void } | null>(null)
+  const [muted, setMuted] = useState(false)
+  const stopReading = () => { reading.current?.stop(); reading.current = null }
+  const read = (text: string) => {
+    stopReading()
+    setMuted(false)
+    const r = readAloud(text, { token: code }, 'roast')
+    reading.current = r
+    void r.done.then(result => {
+      if (reading.current !== r) return
+      reading.current = null
+      if (result === 'played') { clearTimeout(forcedTimer.current); forcedTimer.current = setTimeout(() => setForced(false), 2500) }
+      if (result === 'blocked') setMuted(true)
+    })
+  }
   useTvRemote(r => {
     if (r.action === 'roast' && roast) {
       setForced(true)
       clearTimeout(forcedTimer.current)
-      forcedTimer.current = setTimeout(() => setForced(false), TAKEOVER_FOR)
+      // Down after a while, unless it's still being read
+      const later = () => { forcedTimer.current = setTimeout(() => (reading.current ? later() : setForced(false)), reading.current ? 2000 : TAKEOVER_FOR) }
+      later()
+      read(roast.text)
     }
-    if (r.action === 'clear') { clearTimeout(forcedTimer.current); setForced(false); setOn(false) }
+    if (r.action === 'clear') { clearTimeout(forcedTimer.current); stopReading(); setForced(false); setOn(false) }
   })
-  useEffect(() => () => clearTimeout(forcedTimer.current), [])
+  useEffect(() => { if (!forced) { stopReading(); setMuted(false) } }, [forced])
+  useEffect(() => () => { clearTimeout(forcedTimer.current); stopReading() }, [])
+  // The browser's holding the sound back: OK on the TV's remote (a click) and she reads it
+  const readRef = useRef(read)
+  readRef.current = read
+  useEffect(() => {
+    if (!muted || !roast) return
+    const go = () => readRef.current(roast.text)
+    window.addEventListener('click', go, true)
+    window.addEventListener('keydown', go, true)
+    return () => { window.removeEventListener('click', go, true); window.removeEventListener('keydown', go, true) }
+  }, [muted, roast])
   const kind = forced ? 'roast' : urgent ? 'shame' : roast || champ ? 'roast' : null
   useEffect(() => {
     if (!kind) { setOn(false); return }
@@ -2037,7 +2070,10 @@ function Takeover({ board, emoji }: { board: TvBoard; emoji?: string }) {
       )}
       {roast && (
         <div className="w-full max-w-[1600px]">
-          <p className="font-cond font-black uppercase tracking-[0.2em] text-gold text-[30px] mb-4">{emoji ?? '🎙️'} The Commish · {weekTitle(roast.week)} roast</p>
+          <p className="font-cond font-black uppercase tracking-[0.2em] text-gold text-[30px] mb-4">
+            {emoji ?? '🎙️'} The Commish · {weekTitle(roast.week)} roast
+            {forced && muted && <span className="ml-6 normal-case tracking-normal font-bold text-[24px] text-amber-300">🔇 Press OK on the TV&apos;s remote to hear it</span>}
+          </p>
           <p className="text-[27px] leading-[1.45] text-white whitespace-pre-line" style={{ columnCount: roast.text.length > 700 ? 2 : 1, columnGap: 64 }}>
             {roast.text}
           </p>
