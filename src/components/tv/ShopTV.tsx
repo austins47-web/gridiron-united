@@ -1993,8 +1993,8 @@ function Takeover({ board, emoji }: { board: TvBoard; emoji?: string }) {
   const roast = board.roast?.text ? board.roast : null
   const champ = board.complete && board.winners.length ? board.winners : null
   const [on, setOn] = useState(false)
-  // The remote: the roast now, read aloud in the commissioner's roast voice
-  // (newsreel-voice's 'roast'), or clear the screen
+  // The remote: the roast now, read aloud in the roast voice (newsreel-voice's
+  // 'roast') with a gong between paragraphs, or clear the screen
   const { code = '' } = useParams()
   const [forced, setForced] = useState(false)
   const forcedTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -2004,7 +2004,7 @@ function Takeover({ board, emoji }: { board: TvBoard; emoji?: string }) {
   const read = (text: string) => {
     stopReading()
     setMuted(false)
-    const r = readAloud(text, { token: code }, 'roast')
+    const r = readAloud(text, { token: code }, 'roast', '/sounds/roast-gong.mp3')
     reading.current = r
     void r.done.then(result => {
       if (reading.current !== r) return
