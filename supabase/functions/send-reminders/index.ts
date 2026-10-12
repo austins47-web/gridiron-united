@@ -289,7 +289,7 @@ serve(async (req) => {
       { data: profiles },
       { data: prefsRows },
     ] = await Promise.all([
-      supabase.from('leagues').select('id, name, league_type, player_pool, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, ai_recap, roast_notes'),
+      supabase.from('leagues').select('id, name, league_type, player_pool, season, draft_status, pick_lock_type, pick_deadline_day, pick_deadline_time, pick_deadline_tz, ai_recap, roast_notes, weekly_poll'),
       supabase.from('league_members').select('id, league_id, user_id, team_name, joined_at'),
       supabase.from('profiles').select('id, username, display_name'),
       supabase.from('notification_preferences').select('*'),
@@ -1193,7 +1193,8 @@ serve(async (req) => {
       // first kickoff), the Commish asks every Pick'Em league which
       // underdog wins outright: the week's four biggest underdogs (3+
       // points), with voting closing at the first of their kickoffs.
-      // Once per league per week (league_polls' weekly index). Lines
+      // Once per league per week (league_polls' weekly index), in leagues
+      // whose commissioner hasn't turned it off (leagues.weekly_poll). Lines
       // come from the schedule, or the odds cache (sync-odds reads next
       // week's too) before the schedule has them.
       {
@@ -1226,7 +1227,7 @@ serve(async (req) => {
             const askedIn = new Set((asked ?? []).map(r => r.league_id))
 
             for (const lg of leagues ?? []) {
-              if (lg.league_type !== 'pickem' || askedIn.has(lg.id)) continue
+              if (lg.league_type !== 'pickem' || lg.weekly_poll === false || askedIn.has(lg.id)) continue
               weeklyPolls.push({ league: lg.name, week: wk, options })
               if (dryRun) continue
               const { data: poll } = await supabase.from('league_polls').insert({

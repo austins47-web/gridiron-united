@@ -8,6 +8,7 @@ import { buildSlotDefs } from '@/types/database'
 import { CfbPostseasonManager } from './CfbPostseasonManager'
 import { PickDeadlineSettings } from './PickDeadlineSettings'
 import { AiRecapSetting } from './AiRecapSetting'
+import { WeeklyPollSetting } from './WeeklyPollSetting'
 import { ShopTvSetting } from './ShopTvSetting'
 import { BrandingSetting } from './BrandingSetting'
 import type { League, Player, PlayerStatus, RosterSlotConfig } from '@/types/database'
@@ -193,6 +194,7 @@ export function CommissionerPanel() {
       {tab === 'extras' && (
         <div className="space-y-6">
           <AiRecapSetting leagueId={activeLeagueId!} />
+          {isPickem && <WeeklyPollSetting leagueId={activeLeagueId!} />}
           <ShopTvSetting leagueId={activeLeagueId!} />
         </div>
       )}

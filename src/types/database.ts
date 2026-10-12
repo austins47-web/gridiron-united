@@ -1654,6 +1654,8 @@ export type League = ScoringRules & RosterSlotConfig & {
   ai_recap?: boolean
   /** The commissioner's note about the league, for the weekly roast. */
   roast_notes?: string | null
+  /** Pick'Em: the Commish posts an upset poll to chat each week (on unless turned off). */
+  weekly_poll?: boolean
   /** The league's own logo and accent color (the app and the Shop TV). */
   brand_logo_url?: string | null
   brand_color?: string | null
