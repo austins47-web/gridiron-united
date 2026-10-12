@@ -60,7 +60,8 @@ export type ReadAloud = 'played' | 'blocked' | 'none' | 'stopped'
 
 /**
  * Reads the text aloud in `voice`, with the `between` sound (a file's URL)
- * between paragraphs. Resolves 'played' once it's done, 'blocked' if the
+ * at the start, between paragraphs and at the end. Resolves 'played' once
+ * it's done, 'blocked' if the
  * browser won't make sound yet, 'none' if there's no recording to be had,
  * 'stopped' if `stop` was called first.
  */
@@ -103,6 +104,11 @@ export function readAloud(text: string, from: VoiceFrom, voice: string, between?
     const pause = (ms: number) => new Promise(r => setTimeout(r, ms))
     window.dispatchEvent(new CustomEvent(TV_DUCK, { detail: true }))
     try {
+      // The gong to open, ringing on under the first words
+      if (sting) {
+        play(sting, 0.6)
+        await pause(1500)
+      }
       for (let i = 0; i < buffers.length; i++) {
         const b = buffers[i]
         if (!b) continue
@@ -119,6 +125,12 @@ export function readAloud(text: string, from: VoiceFrom, voice: string, between?
         } else {
           await pause(250)
         }
+      }
+      // And to close, rung all the way out
+      if (sting && !stopped) {
+        await pause(300)
+        play(sting, 0.6)
+        await pause(sting.duration * 1000)
       }
     } finally {
       window.dispatchEvent(new CustomEvent(TV_DUCK, { detail: false }))
