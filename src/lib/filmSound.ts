@@ -1,0 +1,195 @@
+// The newsreel's sound, made in the browser: a projector's rattle under film
+// hiss and crackle, the leader's countdown beeps and a bugle call, all run
+// through an old-radio filter; and the narrator, the device's own voice
+// (speechSynthesis), where it has one. A browser only makes sound once the
+// page has been clicked or tapped (on the TV: OK on its remote), so every
+// piece says whether it could.
+
+const SR = 22050
+
+type Filter = (x: number) => number
+function biquad(type: 'lp' | 'hp', f0: number, q = 0.707): Filter {
+  const w = (2 * Math.PI * f0) / SR, a = Math.sin(w) / (2 * q), c = Math.cos(w)
+  const [b0, b1, b2] = type === 'lp' ? [(1 - c) / 2, 1 - c, (1 - c) / 2] : [(1 + c) / 2, -(1 + c), (1 + c) / 2]
+  const a0 = 1 + a, a1 = -2 * c, a2 = 1 - a
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0
+  return x => {
+    const y = (b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0
+    x2 = x1; x1 = x; y2 = y1; y1 = y
+    return y
+  }
+}
+
+/** Telephone-thin and a little overdriven, like a 1940s loudspeaker */
+function radio(sig: Float32Array, drive = 1.6): Float32Array {
+  const h1 = biquad('hp', 320), h2 = biquad('hp', 320), l1 = biquad('lp', 3000), l2 = biquad('lp', 3000)
+  const out = new Float32Array(sig.length)
+  for (let i = 0; i < sig.length; i++) out[i] = (Math.tanh(l2(l1(h2(h1(sig[i])))) * drive) / Math.tanh(drive)) * 0.9
+  return out
+}
+
+/** A bugle call: sawtooth notes with a little vibrato and a third below for harmony */
+function bugle(notes: [number, number][]): Float32Array {
+  const total = notes.reduce((t, n) => t + n[1], 0)
+  const out = new Float32Array(Math.ceil((total + 0.3) * SR))
+  let t0 = 0
+  for (const [f, d] of notes) {
+    const n = Math.floor(d * SR)
+    for (const [ff, g] of [[f, 0.55], [f * 0.8, 0.3]] as const) {
+      let ph = 0
+      for (let i = 0; i < n + SR * 0.12; i++) {
+        const t = i / SR
+        const env = Math.min(1, t / 0.025) * (i < n ? 1 : Math.max(0, 1 - (i - n) / (SR * 0.12))) * (0.85 + 0.15 * Math.exp(-t * 6))
+        ph += (ff * (1 + 0.006 * Math.sin(2 * Math.PI * 5.5 * t))) / SR
+        const k = Math.floor((t0 + t) * SR)
+        if (k < out.length) out[k] += (2 * (ph % 1) - 1) * env * g * 0.5
+      }
+    }
+    t0 += d
+  }
+  return radio(out)
+}
+
+const G4 = 392, C5 = 523.25, E5 = 659.25, G5 = 783.99
+let cache: { fanfare: Float32Array; sting: Float32Array; beep: Float32Array; bed: Float32Array } | null = null
+function sounds() {
+  if (cache) return cache
+  const beep = new Float32Array(Math.floor(0.09 * SR))
+  for (let i = 0; i < beep.length; i++) beep[i] = Math.sin((2 * Math.PI * 1000 * i) / SR) * 0.35
+  // Four seconds of film that loops: hiss, the projector's 24-frame rattle, the odd crackle
+  const bed = new Float32Array(4 * SR)
+  let seed = 7
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647
+  const hissLp = biquad('lp', 5000), hissHp = biquad('hp', 400), rattleLp = biquad('lp', 900)
+  for (let i = 0; i < bed.length; i++) {
+    const t = i / SR, n = rnd() * 2 - 1
+    bed[i] += hissHp(hissLp(n)) * 0.05
+    bed[i] += rattleLp(n) * 0.09 * Math.pow(Math.max(0, Math.sin(2 * Math.PI * 24 * t)), 12)
+    if (rnd() < 0.0009) {
+      const amp = 0.15 + rnd() * 0.4, len = 10 + Math.floor(rnd() * 40)
+      for (let k = 0; k < len && i + k < bed.length; k++) bed[i + k] += (rnd() * 2 - 1) * amp * Math.exp(-k / 8)
+    }
+  }
+  cache = {
+    fanfare: bugle([[G4, 0.16], [C5, 0.16], [E5, 0.16], [G5, 0.6], [E5, 0.18], [G5, 1.1]]),
+    sting: bugle([[C5, 0.14], [E5, 0.14], [G5, 0.14], [C5 * 2, 1.0]]),
+    beep,
+    bed,
+  }
+  return cache
+}
+
+export interface FilmSound {
+  /** whether the browser lets it make sound now */
+  readonly on: boolean
+  /** try to turn the sound on (works inside a click or tap, or once the page has had one) */
+  unlock(): Promise<boolean>
+  beep(): void
+  fanfare(): void
+  sting(): void
+  /** the projector running under everything */
+  bed(on: boolean): void
+  close(): void
+}
+
+export function createFilmSound(): FilmSound {
+  const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  let ctx: AudioContext | null = null
+  try { ctx = AC ? new AC() : null } catch { ctx = null }
+  const buffers = new Map<Float32Array, AudioBuffer>()
+  const bufferOf = (sig: Float32Array) => {
+    let b = buffers.get(sig)
+    if (!b && ctx) {
+      b = ctx.createBuffer(1, sig.length, SR)
+      b.getChannelData(0).set(sig)
+      buffers.set(sig, b)
+    }
+    return b
+  }
+  const play = (sig: Float32Array, gain: number, loop = false) => {
+    if (!ctx || ctx.state !== 'running') return null
+    const src = ctx.createBufferSource()
+    src.buffer = bufferOf(sig) ?? null
+    src.loop = loop
+    const g = ctx.createGain()
+    g.gain.value = gain
+    src.connect(g).connect(ctx.destination)
+    src.start()
+    return src
+  }
+  let bedSrc: AudioBufferSourceNode | null = null
+  let bedOn = false
+  const self: FilmSound = {
+    get on() { return ctx?.state === 'running' },
+    async unlock() {
+      if (!ctx) return false
+      if (ctx.state !== 'running') {
+        // resume() can hang while the browser's holding sound back: don't wait on it forever
+        await Promise.race([ctx.resume().catch(() => {}), new Promise(r => setTimeout(r, 300))])
+      }
+      if (ctx.state === 'running' && bedOn && !bedSrc) bedSrc = play(sounds().bed, 0.55, true)
+      return ctx.state === 'running'
+    },
+    beep() { play(sounds().beep, 0.8) },
+    fanfare() { play(sounds().fanfare, 0.7) },
+    sting() { play(sounds().sting, 0.7) },
+    bed(on) {
+      bedOn = on
+      if (on && !bedSrc) bedSrc = play(sounds().bed, 0.55, true)
+      if (!on && bedSrc) { try { bedSrc.stop() } catch { /* already stopped */ } bedSrc = null }
+    },
+    close() {
+      self.bed(false)
+      void ctx?.close().catch(() => {})
+      ctx = null
+    },
+  }
+  return self
+}
+
+/** The narrator: the device's own voice, deep and a touch quick, the way newsreels sounded. */
+export interface Narrator {
+  /** says it, resolving when it's said, or false if the device wouldn't */
+  say(text: string): Promise<boolean>
+  /** inside a tap: lets phones that need one speak later on their own */
+  prime(): void
+  stop(): void
+}
+
+export function createNarrator(): Narrator | null {
+  const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined
+  if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return null
+  const pick = () => {
+    const voices = synth.getVoices().filter(v => /^en/i.test(v.lang))
+    return voices.find(v => /daniel|david|alex|fred|george|guy|aaron|arthur|james|male/i.test(v.name) && !/female/i.test(v.name))
+      ?? voices.find(v => /en-(US|GB)/i.test(v.lang))
+      ?? voices[0]
+      ?? null
+  }
+  return {
+    say(text) {
+      return new Promise(resolve => {
+        let done = false
+        const finish = (ok: boolean) => { if (!done) { done = true; clearTimeout(guard); resolve(ok) } }
+        const u = new SpeechSynthesisUtterance(text)
+        const v = pick()
+        if (v) u.voice = v
+        u.rate = 1.05
+        u.pitch = 0.8
+        u.onend = () => finish(true)
+        u.onerror = () => finish(false)
+        // Some devices never say they've finished: move on after a generous wait
+        const guard = setTimeout(() => finish(true), 2500 + text.length * 110)
+        try { synth.speak(u) } catch { finish(false) }
+      })
+    },
+    prime() {
+      try {
+        const u = new SpeechSynthesisUtterance(' ')
+        u.volume = 0
+        synth.speak(u)
+      } catch { /* fine */ }
+    },
+    stop() { try { synth.cancel() } catch { /* fine */ } },
+  }
+}

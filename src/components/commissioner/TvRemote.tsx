@@ -7,8 +7,9 @@ import { supabase } from '@/lib/supabase'
 import { TV_MOMENTS, type TvMoment } from '@/lib/holiday'
 import { useTvReactions } from '@/hooks/useTvReactions'
 import { TvChatBox } from '@/components/tv/TvReactions'
+import { WarOfficeRemote } from './WarOfficeRemote'
 
-type Action = 'roast' | 'standings' | 'board' | 'replay' | 'chat' | 'map' | 'sleep' | 'announce' | 'moment' | 'clear' | 'reload'
+type Action = 'roast' | 'standings' | 'board' | 'replay' | 'chat' | 'map' | 'poster' | 'newsreel' | 'sleep' | 'announce' | 'moment' | 'clear' | 'reload'
 
 /** What the TV's Spotify speaker is doing (its presence), worst news first. */
 const SPEAKER_ORDER = ['blocked', 'unsupported', 'premium', 'auth', 'error', 'connecting', 'ready']
@@ -26,7 +27,8 @@ const SPEAKER_NOTES: Record<string, string> = {
  * The commissioner's remote for the Shop TV: put the roast, the season
  * standings, the picks board, the week's replay, a live poll, an
  * announcement or a moment on the TV right now (tv_remote, over the TV's private channel), clear it, or
- * reload it. Shows whether a TV is on (its presence on that channel).
+ * reload it; and the War Office's poster and newsreel of the last settled
+ * week. Shows whether a TV is on (its presence on that channel).
  */
 export function TvRemote({ leagueId }: { leagueId: string }) {
   const { data: hasTv = false } = useQuery({
@@ -139,6 +141,12 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
         {button('chat', 'Chat', <MessageSquare className="w-5 h-5" />, 'The chat is on the TV')}
         {button('map', 'War map', <Swords className="w-5 h-5" />, 'The war map is on the TV')}
       </div>
+
+      <WarOfficeRemote
+        leagueId={leagueId}
+        busy={busy}
+        onShow={a => void press(a, {}, a === 'poster' ? 'The war poster is on the TV' : 'The newsreel is playing on the TV')}
+      />
 
       {/* The TV chat, here: say something on the TV, see what's been said, take anything down */}
       <div className="rounded-xl border border-field-700 bg-field-900/60">

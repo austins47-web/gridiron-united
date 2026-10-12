@@ -1,0 +1,144 @@
+import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Clapperboard, Eye, Loader2, Megaphone, X } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { weekStory } from '@/components/conquest/warStory'
+import { WarPoster } from '@/components/conquest/WarPoster'
+import { Newsreel } from '@/components/conquest/Newsreel'
+import type { ConquestData } from '@/components/conquest/conquestView'
+
+/**
+ * The remote's War Office: the last settled week's war posters and
+ * newsreel, put on the Shop TV only when the commissioner says so (nothing
+ * goes to the league chat), and previewed here first. Made from the same
+ * war the TV has (shop-tv), so the preview is what the TV shows.
+ */
+export function WarOfficeRemote({ leagueId, busy, onShow }: {
+  leagueId: string
+  busy: string | null
+  onShow: (action: 'poster' | 'newsreel') => void
+}) {
+  const { data: war } = useQuery({
+    queryKey: ['tv-war', leagueId],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<ConquestData | null> => {
+      const { data: token } = await supabase.rpc('league_tv_token', { p_league: leagueId })
+      if (!token) return null
+      const r = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/shop-tv?token=${encodeURIComponent(token as string)}`, {
+        headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+        cache: 'no-store',
+      })
+      if (!r.ok) return null
+      return ((await r.json()) as { conquest?: ConquestData | null }).conquest ?? null
+    },
+  })
+  const story = useMemo(() => (war ? weekStory(war) : null), [war])
+  const [preview, setPreview] = useState(false)
+
+  if (!war) return null
+  const nextWeek = (war.lastWeek ?? war.startWeek - 1) + 1
+  const colorOf = (id: string | null) => (id ? war.players.find(p => p.userId === id)?.color ?? null : null)
+
+  return (
+    <div className="rounded-xl border border-field-700 bg-field-900/60 p-3">
+      <div className="flex items-center gap-2">
+        <Megaphone className="w-4 h-4 text-gold" />
+        <span className="text-sm font-bold text-white">War Office</span>
+        {story && <span className="ml-auto text-xs text-field-400">Week {story.week}</span>}
+      </div>
+      {!story ? (
+        <p className="mt-1.5 text-xs text-field-400">
+          A war poster and a newsreel of each week&apos;s battles, for the TV. The first ones come out when Week {nextWeek} settles.
+        </p>
+      ) : (
+        <div className="mt-2 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setPreview(true)}
+            aria-label="Preview the war poster and newsreel"
+            className="shrink-0 w-[72px] rounded overflow-hidden border border-field-700 hover:border-gold/60"
+          >
+            <WarPoster spec={story.posters[0]} owners={war.owners} besieged={war.besieged ?? {}} colorOf={colorOf} className="w-full h-auto block" />
+          </button>
+          <div className="min-w-0 flex-1 flex flex-col gap-1.5">
+            <p className="text-xs text-field-400 leading-snug">
+              {story.posters.length > 1 ? 'Two posters' : 'A poster'} and a one-minute newsreel of Week {story.week}. Only on the TV, and only when you put them there.
+            </p>
+            <div className="grid grid-cols-3 gap-1.5 mt-auto">
+              <button type="button" onClick={() => onShow('poster')} disabled={!!busy} className="flex items-center justify-center gap-1 rounded-lg border border-field-700 bg-field-800 px-2 py-2 text-xs font-bold text-field-200 hover:border-gold/50 hover:text-gold disabled:opacity-50">
+                {busy === 'poster' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Megaphone className="w-3.5 h-3.5" />} Poster
+              </button>
+              <button type="button" onClick={() => onShow('newsreel')} disabled={!!busy} className="flex items-center justify-center gap-1 rounded-lg border border-field-700 bg-field-800 px-2 py-2 text-xs font-bold text-field-200 hover:border-gold/50 hover:text-gold disabled:opacity-50">
+                {busy === 'newsreel' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clapperboard className="w-3.5 h-3.5" />} Newsreel
+              </button>
+              <button type="button" onClick={() => setPreview(true)} className="flex items-center justify-center gap-1 rounded-lg border border-field-700 px-2 py-2 text-xs font-bold text-field-300 hover:text-white">
+                <Eye className="w-3.5 h-3.5" /> Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {preview && story && <WarOfficePreview war={war} story={story} onClose={() => setPreview(false)} onShow={onShow} busy={busy} />}
+    </div>
+  )
+}
+
+/** The poster and the newsreel on your phone, before (or instead of) the TV. */
+function WarOfficePreview({ war, story, onClose, onShow, busy }: {
+  war: ConquestData
+  story: NonNullable<ReturnType<typeof weekStory>>
+  onClose: () => void
+  onShow: (action: 'poster' | 'newsreel') => void
+  busy: string | null
+}) {
+  const colorOf = (id: string | null) => (id ? war.players.find(p => p.userId === id)?.color ?? null : null)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const before = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', key)
+    return () => { document.body.style.overflow = before; window.removeEventListener('keydown', key) }
+  }, [onClose])
+  return createPortal(
+    <div className="fixed inset-0 z-[70] bg-field-950 flex flex-col" role="dialog" aria-modal="true" aria-label={`War Office, Week ${story.week}`}>
+      <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-field-800">
+        <Megaphone className="w-4 h-4 text-gold" />
+        <p className="font-cond font-black uppercase text-white tracking-wide">War Office · Week {story.week}</p>
+        <button onClick={onClose} aria-label="Close the preview" className="ml-auto w-8 h-8 rounded-lg flex items-center justify-center text-field-300 hover:text-white hover:bg-field-800">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4">
+        <div className="mx-auto max-w-3xl space-y-5">
+          <section className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="font-cond font-bold uppercase tracking-wider text-sm text-field-200">Newsreel</h3>
+              <button onClick={() => onShow('newsreel')} disabled={!!busy} className="ml-auto btn-gold !px-3 !py-1.5 !text-xs">
+                {busy === 'newsreel' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clapperboard className="w-3.5 h-3.5" />} Play on the TV
+              </button>
+            </div>
+            <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
+              <Newsreel war={war} story={story} soundHint="Tap for sound" />
+            </div>
+            <p className="text-[11px] text-field-500">The narrator is the device&apos;s own voice. On the TV it talks once the TV has had a click (or OK on its remote) since it last loaded; until then it plays with the captions, and the music dips while it runs.</p>
+          </section>
+          <section className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="font-cond font-bold uppercase tracking-wider text-sm text-field-200">{story.posters.length > 1 ? 'Posters' : 'Poster'}</h3>
+              <button onClick={() => onShow('poster')} disabled={!!busy} className="ml-auto btn-gold !px-3 !py-1.5 !text-xs">
+                {busy === 'poster' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Megaphone className="w-3.5 h-3.5" />} Put on the TV
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {story.posters.map(p => (
+                <WarPoster key={p.key} spec={p} owners={war.owners} besieged={war.besieged ?? {}} colorOf={colorOf} className="w-full h-auto rounded-sm shadow-xl shadow-black/50" />
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}

@@ -5,6 +5,9 @@ import { ConquestMap } from '@/components/conquest/ConquestMap'
 import { empires, liveBattles, headline, ownersBefore, swatch, type ConquestData, type ConquestMove, type LiveBattle } from '@/components/conquest/conquestView'
 import { ConquestIcon } from '@/components/conquest/ConquestIcon'
 import { pointOf, viewOf } from '@/components/conquest/mapGeometry'
+import { weekStory } from '@/components/conquest/warStory'
+import { WarPoster } from '@/components/conquest/WarPoster'
+import { Newsreel } from '@/components/conquest/Newsreel'
 
 // Conquest on the Shop TV: a panel in the rotation, the remote's Map
 // (full screen), and the War Report, which plays once for each week the
@@ -373,6 +376,40 @@ function Coronation({ war, league }: { war: ConquestData; league: string }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── The War Office (the remote's Poster and Newsreel) ─────────
+// Made from the last settled week (warStory), only when the commissioner
+// puts them up: nothing goes to the league chat.
+
+/** The week's war posters, full screen. */
+export function WarPosterShow({ b }: { b: WarBoard }) {
+  const story = useMemo(() => (b.conquest ? weekStory(b.conquest) : null), [b.conquest])
+  if (!b.conquest || !story) return null
+  const war = b.conquest
+  const colorOf = (id: string | null) => (id ? war.players.find(p => p.userId === id)?.color ?? null : null)
+  return (
+    <div className="absolute inset-0 z-[36] bg-field-950 flex flex-col items-center justify-center gap-6">
+      <p className="font-cond font-bold uppercase tracking-[0.35em] text-gold text-[28px]">{b.league} · War Office · Week {story.week}</p>
+      <div className="flex items-center justify-center gap-16">
+        {story.posters.map(p => (
+          <WarPoster key={p.key} spec={p} owners={war.owners} besieged={war.besieged ?? {}} colorOf={colorOf} className="h-[920px] w-auto rise-in shadow-2xl shadow-black/70 rounded-sm" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** The week's newsreel, full screen, then back to the TV. */
+export function NewsreelShow({ b, onDone }: { b: WarBoard; onDone: () => void }) {
+  const story = useMemo(() => (b.conquest ? weekStory(b.conquest) : null), [b.conquest])
+  const [lite] = useState(() => !!document.querySelector('.tv-lite, .tv-still'))
+  if (!b.conquest || !story) return null
+  return (
+    <div className="absolute inset-0 z-[36] bg-black">
+      <Newsreel war={b.conquest} story={story} autoPlay lite={lite} soundHint="Press OK on the TV's remote for sound" onDone={() => setTimeout(onDone, 1500)} />
     </div>
   )
 }

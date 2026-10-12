@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { brandVars, DEFAULT_GOLD } from '@/lib/brand'
 import { weatherLabel, skyNow, type GameWeather } from '@/lib/weather'
 import { teamGlow } from '@/lib/teamColors'
-import { ConquestPanel, ConquestMapShow, WarReport } from './ConquestTV'
+import { ConquestPanel, ConquestMapShow, WarPosterShow, NewsreelShow, WarReport } from './ConquestTV'
 import type { ConquestData } from '@/components/conquest/conquestView'
 import { parseShopHours, isShopOpen, nextShopOpen, backLabel, type ShopHours } from '@/lib/shopHours'
 import { teamLogoUrl } from '@/components/teams/teamIds'
@@ -15,6 +15,7 @@ import { HolidayPill, HolidayParticles } from '@/components/ui/Holiday'
 import { HolidayScene, PlayMoment, MOMENT_CSS, MOMENT_MS } from './HolidayScene'
 import { ACHIEVEMENTS } from '@/components/pickem/standings'
 import { ACHIEVEMENT_ICONS } from '@/components/pickem/achievementIcons'
+import { TV_DUCK } from '@/components/conquest/Newsreel'
 
 // ══════════════════════════════════════════════════════════════
 // Shop TV — the league's live Pick'Em board, full screen on a TV
@@ -2345,6 +2346,7 @@ interface SpotifyPlayer {
   addListener(event: string, cb: (arg: any) => void): boolean
   activateElement?(): Promise<void>
   resume(): Promise<void>
+  setVolume?(volume: number): Promise<void>
 }
 type SpotifyPlayerClass = new (options: { name: string; volume: number; getOAuthToken: (cb: (token: string) => void) => void }) => SpotifyPlayer
 
@@ -2413,10 +2415,14 @@ function useSpotifySpeaker(code: string, on: boolean, name: string): SpeakerStat
     }
     window.addEventListener('click', unlock, true)
     window.addEventListener('keydown', unlock, true)
+    // The newsreel's on: the music drops under the narrator, then comes back
+    const duck = (e: Event) => { void player?.setVolume?.((e as CustomEvent<boolean>).detail ? 0.15 : 1).catch(() => {}) }
+    window.addEventListener(TV_DUCK, duck)
     return () => {
       alive = false
       window.removeEventListener('click', unlock, true)
       window.removeEventListener('keydown', unlock, true)
+      window.removeEventListener(TV_DUCK, duck)
       player?.disconnect()
     }
   }, [code, on, name])
@@ -2576,10 +2582,13 @@ const ANNOUNCE_MS = 15_000
 const STANDINGS_MS = 20_000
 const CHAT_MS = 25_000
 const MAP_MS = 30_000
+const POSTER_MS = 30_000
+/** The newsreel ends itself; this is only in case it never says so */
+const NEWSREEL_MS = 180_000
 const NOTE_MS = 6000
 const isMoment = (m: unknown): m is TvMoment => TV_MOMENTS.some(x => x.kind === m)
 
-type RemoteShow = { kind: 'announce' | 'note'; text: string } | { kind: 'standings' | 'chat' | 'map' }
+type RemoteShow = { kind: 'announce' | 'note'; text: string } | { kind: 'standings' | 'chat' | 'map' | 'poster' | 'newsreel' }
 
 function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, string] }) {
   const [show, setShow] = useState<(RemoteShow & { id: number }) | null>(null)
@@ -2603,6 +2612,11 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
       case 'map':
         if (board.conquest) put({ kind: 'map' }, MAP_MS)
         else put({ kind: 'note', text: 'No war going on yet' }, NOTE_MS)
+        break
+      case 'poster':
+      case 'newsreel':
+        if (board.conquest?.report?.moves.length) put({ kind: r.action }, r.action === 'poster' ? POSTER_MS : NEWSREEL_MS)
+        else put({ kind: 'note', text: `The war ${r.action} comes out once a week settles` }, NOTE_MS)
         break
       case 'chat':
         put({ kind: 'chat' }, CHAT_MS)
@@ -2651,6 +2665,8 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
       {show?.kind === 'standings' && <StandingsTakeover key={show.id} board={board} />}
       {show?.kind === 'chat' && <ChatTakeover key={show.id} board={board} />}
       {show?.kind === 'map' && <ConquestMapShow key={show.id} b={board} />}
+      {show?.kind === 'poster' && <WarPosterShow key={show.id} b={board} />}
+      {show?.kind === 'newsreel' && <NewsreelShow key={show.id} b={board} onDone={() => { const id = show.id; setShow(s => (s?.id === id ? null : s)) }} />}
       <LivePoll />
       {show?.kind === 'note' && (
         // Centered by the row, not a transform: the fade-in animates transform
