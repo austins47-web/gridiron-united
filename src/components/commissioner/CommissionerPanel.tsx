@@ -128,7 +128,7 @@ export function CommissionerPanel() {
         { id: 'league',  label: 'League',   icon: <Shield className="w-4 h-4" /> },
         { id: 'members', label: 'Members',  icon: <Crown className="w-4 h-4" /> },
         { id: 'scoring', label: 'Pick Deadline', icon: <Clock className="w-4 h-4" /> },
-        { id: 'extras',  label: 'Roast & TV', icon: <Tv className="w-4 h-4" /> },
+        { id: 'extras',  label: 'Chat & TV', icon: <Tv className="w-4 h-4" /> },
       ]
     : [
         { id: 'scoring', label: 'Scoring', icon: <TrendingUp className="w-4 h-4" /> },
@@ -193,8 +193,8 @@ export function CommissionerPanel() {
       )}
       {tab === 'extras' && (
         <div className="space-y-6">
-          <AiRecapSetting leagueId={activeLeagueId!} />
           {isPickem && <WeeklyPollSetting leagueId={activeLeagueId!} />}
+          <AiRecapSetting leagueId={activeLeagueId!} />
           <ShopTvSetting leagueId={activeLeagueId!} />
         </div>
       )}
