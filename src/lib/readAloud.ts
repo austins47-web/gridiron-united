@@ -28,6 +28,34 @@ export function passagesOf(text: string, max = 380): { lines: string[]; breaks: 
   return { lines: lines.slice(0, n), breaks: breaks.slice(0, n).map((b, i) => b && i < n - 1) }
 }
 
+/** How a team's abbreviation is said aloud: the city, or the nickname where the city's shared */
+const SAY_TEAM: Record<string, string> = {
+  ARI: 'Arizona', ATL: 'Atlanta', BAL: 'Baltimore', BUF: 'Buffalo', CAR: 'Carolina', CHI: 'Chicago',
+  CIN: 'Cincinnati', CLE: 'Cleveland', DAL: 'Dallas', DEN: 'Denver', DET: 'Detroit', GB: 'Green Bay',
+  HOU: 'Houston', IND: 'Indianapolis', JAX: 'Jacksonville', JAC: 'Jacksonville', KC: 'Kansas City',
+  LV: 'Las Vegas', LAC: 'the Chargers', LAR: 'the Rams', MIA: 'Miami', MIN: 'Minnesota', NE: 'New England',
+  NO: 'New Orleans', NYG: 'the Giants', NYJ: 'the Jets', PHI: 'Philadelphia', PIT: 'Pittsburgh',
+  SF: 'San Francisco', SEA: 'Seattle', TB: 'Tampa Bay', TEN: 'Tennessee', WSH: 'Washington', WAS: 'Washington',
+}
+/** Abbreviations that are also words someone might shout ("NO mercy"): only swapped when they're clearly a team */
+const WORDLIKE = new Set(['NO', 'TEN', 'CAR', 'MIN', 'SEA', 'WAS'])
+const TEAM_CUE_BEFORE = /\b(?:vs\.?|versus|over|at|beat|beats|beating|picked|picking|pick|took|taking|fading|backing|on|with|and|or)\s+$/i
+
+/** The text as it should be said: team abbreviations as names ("ATL" → "Atlanta"), scores as "40 to 24", picks as "5 of 16" */
+export function spoken(text: string): string {
+  return text
+    .replace(/\b([A-Z]{2,3})\b/g, (m, abbr: string, at: number, all: string) => {
+      const say = SAY_TEAM[abbr]
+      if (!say) return m
+      if (!WORDLIKE.has(abbr)) return say
+      const before = all.slice(Math.max(0, at - 14), at)
+      const after = all.slice(at + abbr.length, at + abbr.length + 10)
+      return TEAM_CUE_BEFORE.test(before) || /^\s*(?:vs\.?|over|at|\d)/i.test(after) ? say : m
+    })
+    .replace(/\b(\d{1,2})-(\d{1,2})\b/g, '$1 to $2')
+    .replace(/\b(\d{1,2})\/(\d{1,2})\b/g, '$1 of $2')
+}
+
 export type ReadAloud = 'played' | 'blocked' | 'none' | 'stopped'
 
 /**
@@ -57,7 +85,7 @@ export function readAloud(text: string, from: VoiceFrom, voice: string, between?
       .then(b => (b ? new Promise<AudioBuffer>((resolve, reject) => { (c.decodeAudioData(b, resolve, reject) as Promise<AudioBuffer> | undefined)?.then(resolve, reject) }) : null))
       .catch(() => null)
     const { lines, breaks } = passagesOf(text)
-    const [urls, sting] = await Promise.all([fetchVoices(lines, from, voice), load(between ?? null)])
+    const [urls, sting] = await Promise.all([fetchVoices(lines.map(spoken), from, voice), load(between ?? null)])
     if (stopped) return 'stopped'
     if (!urls) return 'none'
     const buffers = await Promise.all(urls.map(load))
