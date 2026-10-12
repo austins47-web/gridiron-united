@@ -5,8 +5,8 @@
 // (signed in, a member): the lines read aloud, as links to MP3s.
 //   voice 'newsreel' (the default): Clyde, a vintage radio announcer from
 //     ElevenLabs' library, for the Conquest newsreel.
-//   voice 'roast': Tiffy, a Taiwanese bilingual narrator from ElevenLabs'
-//     library, for the weekly roast on the TV.
+//   voice 'roast': Grampa Werthers, an old and cranky American timer from
+//     ElevenLabs' library, for the weekly roast on the TV.
 // If ElevenLabs can't (no characters left this month, say), an OpenAI
 // voice directed to sound like it.
 // Each line is recorded once per voice and kept (the newsreel-voice bucket,
@@ -54,17 +54,17 @@ const PROFILES: Record<string, Profile> = {
       ].join(' '),
     },
   },
-  // Tiffy - Taiwanese Bilingual Narrator
+  // Grampa Werthers - Old & Cranky, taking his time
   roast: {
     eleven: {
-      voice: '1AKkSX7KMPHIWuz76m0n',
+      voice: 'MKlLqCItoCkvdhrxgtLv',
       model: 'eleven_multilingual_v2',
-      settings: { stability: 0.45, similarity_boost: 0.85, style: 0.45, use_speaker_boost: true, speed: 0.85 },
+      settings: { stability: 0.45, similarity_boost: 0.85, style: 0.5, use_speaker_boost: true, speed: 0.9 },
     },
     openai: {
       model: 'gpt-4o-mini-tts',
       voice: 'sage',
-      instructions: 'Voice: a warm, clear young woman. Tone: sweet and bright while delivering a savage roast, with deadpan comic timing and a little relish on every insult.',
+      instructions: 'Voice: a cranky old American grandpa, gravelly and grumbling. Tone: fed up with everybody, delivering a savage roast with deadpan comic timing and a little relish on every insult.',
     },
   },
 }
