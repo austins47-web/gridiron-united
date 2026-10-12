@@ -60,17 +60,19 @@ function sounds() {
   if (cache) return cache
   const beep = new Float32Array(Math.floor(0.09 * SR))
   for (let i = 0; i < beep.length; i++) beep[i] = Math.sin((2 * Math.PI * 1000 * i) / SR) * 0.35
-  // Four seconds of film that loops: hiss, the projector's 24-frame rattle, the odd crackle
+  // Four seconds of film that loops: hiss, the projector's 24-frame rattle and hum, crackle and pops
   const bed = new Float32Array(4 * SR)
   let seed = 7
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647
   const hissLp = biquad('lp', 5000), hissHp = biquad('hp', 400), rattleLp = biquad('lp', 900)
   for (let i = 0; i < bed.length; i++) {
     const t = i / SR, n = rnd() * 2 - 1
-    bed[i] += hissHp(hissLp(n)) * 0.05
-    bed[i] += rattleLp(n) * 0.09 * Math.pow(Math.max(0, Math.sin(2 * Math.PI * 24 * t)), 12)
-    if (rnd() < 0.0009) {
-      const amp = 0.15 + rnd() * 0.4, len = 10 + Math.floor(rnd() * 40)
+    bed[i] += hissHp(hissLp(n)) * 0.08
+    bed[i] += rattleLp(n) * 0.13 * Math.pow(Math.max(0, Math.sin(2 * Math.PI * 24 * t)), 12)
+    // the projector lamp's hum (60 cycles, with a little of its harmonic)
+    bed[i] += (Math.sin(2 * Math.PI * 60 * t) * 0.012 + Math.sin(2 * Math.PI * 120 * t) * 0.006)
+    if (rnd() < 0.0022) {
+      const amp = 0.2 + rnd() * 0.5, len = 10 + Math.floor(rnd() * 50)
       for (let k = 0; k < len && i + k < bed.length; k++) bed[i + k] += (rnd() * 2 - 1) * amp * Math.exp(-k / 8)
     }
   }
@@ -158,7 +160,7 @@ export function createFilmSound(): FilmSound {
         // resume() can hang while the browser's holding sound back: don't wait on it forever
         await Promise.race([ctx.resume().catch(() => {}), new Promise(r => setTimeout(r, 300))])
       }
-      if (ctx.state === 'running' && bedOn && !bedSrc) bedSrc = play(sounds().bed, 0.55, true)
+      if (ctx.state === 'running' && bedOn && !bedSrc) bedSrc = play(sounds().bed, 0.85, true)
       return ctx.state === 'running'
     },
     beep() { play(sounds().beep, 0.8) },
@@ -166,7 +168,7 @@ export function createFilmSound(): FilmSound {
     sting() { play(sounds().sting, 0.7) },
     bed(on) {
       bedOn = on
-      if (on && !bedSrc) bedSrc = play(sounds().bed, 0.55, true)
+      if (on && !bedSrc) bedSrc = play(sounds().bed, 0.85, true)
       if (!on && bedSrc) { try { bedSrc.stop() } catch { /* already stopped */ } bedSrc = null }
     },
     voice(wav) {
