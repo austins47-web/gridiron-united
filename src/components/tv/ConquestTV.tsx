@@ -445,7 +445,7 @@ export function NewsreelShow({ b, code, sofar = false, onDone }: { b: WarBoard; 
   if (!got) return null
   return (
     <div className="absolute inset-0 z-[36] bg-black">
-      <Newsreel war={got.war} story={got.story} autoPlay lite={lite} soundHint="Press OK on the TV's remote for sound" onDone={() => setTimeout(onDone, 1500)} />
+      <Newsreel war={got.war} story={got.story} autoPlay lite={lite} soundHint="Press OK on the TV's remote for sound" voiceFrom={{ token: code }} onDone={() => setTimeout(onDone, 1500)} />
     </div>
   )
 }

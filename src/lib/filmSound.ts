@@ -1,17 +1,19 @@
 // The newsreel's sound, made in the browser: a projector's rattle under film
 // hiss and crackle, the leader's countdown beeps and a bugle call, all run
-// through an old-radio filter; and the narrator: the device's own voice
+// through an old-radio filter; and the narrator: recordings of a
+// Transatlantic newsreel announcer (the newsreel-voice function) through the
+// same filter when there are some, or the device's own voice
 // (speechSynthesis) where it has one that talks, or else (the Fire TV's
 // browser has none) a robot announcer made right here (eSpeak, in
-// public/vendor/mespeak) through the same filter. A browser only makes sound
+// public/vendor/mespeak) through the filter. A browser only makes sound
 // once the page has been clicked or tapped (on the TV: OK on its remote),
 // so every piece says whether it could.
 
 const SR = 22050
 
 type Filter = (x: number) => number
-function biquad(type: 'lp' | 'hp', f0: number, q = 0.707): Filter {
-  const w = (2 * Math.PI * f0) / SR, a = Math.sin(w) / (2 * q), c = Math.cos(w)
+function biquad(type: 'lp' | 'hp', f0: number, q = 0.707, sr = SR): Filter {
+  const w = (2 * Math.PI * f0) / sr, a = Math.sin(w) / (2 * q), c = Math.cos(w)
   const [b0, b1, b2] = type === 'lp' ? [(1 - c) / 2, 1 - c, (1 - c) / 2] : [(1 + c) / 2, -(1 + c), (1 + c) / 2]
   const a0 = 1 + a, a1 = -2 * c, a2 = 1 - a
   let x1 = 0, x2 = 0, y1 = 0, y2 = 0
@@ -23,8 +25,8 @@ function biquad(type: 'lp' | 'hp', f0: number, q = 0.707): Filter {
 }
 
 /** Telephone-thin and a little overdriven, like a 1940s loudspeaker */
-function radio(sig: Float32Array, drive = 1.6): Float32Array {
-  const h1 = biquad('hp', 320), h2 = biquad('hp', 320), l1 = biquad('lp', 3000), l2 = biquad('lp', 3000)
+function radio(sig: Float32Array, drive = 1.6, sr = SR): Float32Array {
+  const h1 = biquad('hp', 320, 0.707, sr), h2 = biquad('hp', 320, 0.707, sr), l1 = biquad('lp', 3000, 0.707, sr), l2 = biquad('lp', 3000, 0.707, sr)
   const out = new Float32Array(sig.length)
   for (let i = 0; i < sig.length; i++) out[i] = (Math.tanh(l2(l1(h2(h1(sig[i])))) * drive) / Math.tanh(drive)) * 0.9
   return out
@@ -93,6 +95,10 @@ export interface FilmSound {
   bed(on: boolean): void
   /** a narrator's line (a WAV file's bytes) through the radio; resolves once it's played, false if it couldn't be */
   voice(wav: ArrayLike<number>): Promise<boolean>
+  /** a recording (an MP3's bytes) made ready to play through the radio, or null if it won't decode */
+  prepare(audio: ArrayBuffer): Promise<AudioBuffer | null>
+  /** plays what prepare made; resolves once it's played, false if it couldn't be */
+  play(ready: AudioBuffer): Promise<boolean>
   close(): void
 }
 
@@ -167,9 +173,29 @@ export function createFilmSound(): FilmSound {
       const pcm = readWav(wav)
       if (!pcm || !pcm.samples.length || !ctx || ctx.state !== 'running') return Promise.resolve(false)
       const buf = ctx.createBuffer(1, pcm.samples.length, pcm.rate)
-      buf.getChannelData(0).set(radio(pcm.samples, 2.2))
+      buf.getChannelData(0).set(radio(pcm.samples, 2.2, pcm.rate))
+      return self.play(buf)
+    },
+    async prepare(audio) {
+      if (!ctx) return null
+      try {
+        // (the callback form too: older browsers don't return a promise)
+        const c = ctx
+        const decoded = await new Promise<AudioBuffer>((resolve, reject) => {
+          const p = c.decodeAudioData(audio, resolve, reject) as Promise<AudioBuffer> | undefined
+          p?.then(resolve, reject)
+        })
+        const out = c.createBuffer(1, decoded.length, decoded.sampleRate)
+        out.getChannelData(0).set(radio(decoded.getChannelData(0), 1.8, decoded.sampleRate))
+        return out
+      } catch {
+        return null
+      }
+    },
+    play(ready) {
+      if (!ctx || ctx.state !== 'running') return Promise.resolve(false)
       const src = ctx.createBufferSource()
-      src.buffer = buf
+      src.buffer = ready
       const g = ctx.createGain()
       g.gain.value = 1.1
       src.connect(g).connect(ctx.destination)

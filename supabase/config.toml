@@ -35,3 +35,8 @@ verify_jwt = false
 # war checks the commissioner itself
 [functions.conquest]
 verify_jwt = false
+
+# The newsreel's narrator: the Shop TV asks with its code (no session); the app
+# asks signed in, and the function checks league membership itself
+[functions.newsreel-voice]
+verify_jwt = false

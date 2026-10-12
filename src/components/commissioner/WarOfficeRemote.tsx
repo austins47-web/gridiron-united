@@ -123,7 +123,7 @@ export function WarOfficeRemote({ leagueId, busy, onShow }: {
           </div>
         </div>
       )}
-      {preview && pick && <WarOfficePreview pick={pick} onClose={() => setPreview(false)} onShow={show} busy={busy} />}
+      {preview && pick && <WarOfficePreview pick={pick} leagueId={leagueId} onClose={() => setPreview(false)} onShow={show} busy={busy} />}
     </div>
   )
 }
@@ -131,8 +131,9 @@ export function WarOfficeRemote({ leagueId, busy, onShow }: {
 const colorFrom = (war: ConquestData) => (id: string | null) => (id ? war.players.find(p => p.userId === id)?.color ?? null : null)
 
 /** The poster and the newsreel on your phone, before (or instead of) the TV. */
-function WarOfficePreview({ pick, onClose, onShow, busy }: {
+function WarOfficePreview({ pick, leagueId, onClose, onShow, busy }: {
   pick: Pick
+  leagueId: string
   onClose: () => void
   onShow: (action: 'poster' | 'newsreel') => void
   busy: string | null
@@ -164,9 +165,9 @@ function WarOfficePreview({ pick, onClose, onShow, busy }: {
               </button>
             </div>
             <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
-              <Newsreel war={war} story={story} soundHint="Tap for sound" />
+              <Newsreel war={war} story={story} soundHint="Tap for sound" voiceFrom={{ leagueId }} />
             </div>
-            <p className="text-[11px] text-field-500">The narrator is the device&apos;s own voice. On the TV it talks once the TV has had a click (or OK on its remote) since it last loaded; until then it plays with the captions, and the music dips while it runs.</p>
+            <p className="text-[11px] text-field-500">The narrator&apos;s a 1940s newsreel announcer. On the TV it talks once the TV has had a click (or OK on its remote) since it last loaded; until then it plays with the captions, and the music dips while it runs.</p>
           </section>
           <section className="space-y-2">
             <div className="flex items-center gap-2">

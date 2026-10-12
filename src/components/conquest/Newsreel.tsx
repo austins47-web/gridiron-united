@@ -5,6 +5,7 @@ import { useWarFonts } from './WarPoster'
 import { WHOLE_MAP, cityName, mapAfterMoves, type WarStory } from './warStory'
 import { createFilmSound, createNarrator, type FilmSound, type Narrator } from '@/lib/filmSound'
 import type { ConquestData } from './conquestView'
+import { fetchVoices, type VoiceFrom } from './newsreelVoice'
 
 /** The TV's music dips while the newsreel talks (ShopTV's Spotify speaker listens). */
 export const TV_DUCK = 'gu-tv-duck'
@@ -19,11 +20,12 @@ class Stopped extends Error {}
 /**
  * The week's newsreel (warStory's lines): a film leader counting down, the
  * title card and a bugle, then the war map in black and white with the
- * camera moving battle to battle while the Commish narrates (the device's
- * voice, with captions always), and the map filling in as it goes. Fills
- * its parent, which sets the 16:9 frame.
+ * camera moving battle to battle while the Commish narrates (the
+ * Transatlantic announcer's recordings, else the device's voice or the
+ * robot one; captions always), and the map filling in as it goes. Fills its
+ * parent, which sets the 16:9 frame.
  */
-export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint, onDone }: {
+export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint, voiceFrom, onDone }: {
   war: ConquestData
   story: WarStory
   /** start straight away (the TV); otherwise it waits for a tap on play */
@@ -32,6 +34,8 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
   lite?: boolean
   /** what to do for sound, if the browser's holding it back */
   soundHint: string
+  /** where to ask for the announcer's recordings: the TV's code, or the league (signed in) */
+  voiceFrom?: VoiceFrom
   onDone?: () => void
 }) {
   useWarFonts()
@@ -61,6 +65,11 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
     const alive = () => run.current === id
     const wait = (ms: number) => new Promise<void>((resolve, reject) => setTimeout(() => (alive() ? resolve() : reject(new Stopped())), ms))
     const s = sound.current
+    // The announcer's recordings, fetched and readied while the leader and title run
+    const recordings: Promise<(AudioBuffer | null)[] | null> = voiceFrom
+      ? fetchVoices(story.lines.map(l => l.text), voiceFrom).then(urls => urls && Promise.all(urls.map(u =>
+        fetch(u).then(r => (r.ok ? r.arrayBuffer() : null)).then(b => (b ? s.prepare(b) : null)).catch(() => null))))
+      : Promise.resolve(null)
     ;(async () => {
       setSoundOff(!(await s.unlock()))
       s.bed(true)
@@ -75,8 +84,14 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
         setPhase('line')
         const text = story.lines[i].text
         const began = Date.now()
-        // The narrator if there is one (and it's allowed to talk), else long enough to read
-        const spoke = voice.current && voiceOk.current ? await voice.current.say(text) : false
+        // The announcer's recording (the first line waits a little for them the first time
+        // they're made), else the device's or the robot's voice, else long enough to read
+        const rec = await Promise.race([
+          recordings.then(r => r?.[i] ?? null),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), i === 0 ? 9000 : 1500)),
+        ])
+        let spoke = false
+        if (voiceOk.current) spoke = rec ? await s.play(rec) : voice.current ? await voice.current.say(text) : false
         if (!spoke) voiceOk.current = false
         const least = spoke ? 900 : 1300 + text.split(' ').length * 330
         await wait(Math.max(0, least - (Date.now() - began)))
