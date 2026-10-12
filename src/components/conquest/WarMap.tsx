@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Loader2, History, Play, Swords, Flag, RotateCw } from 'lucide-react'
+import { X, Loader2, History, Play, Swords, Flag } from 'lucide-react'
 import clsx from 'clsx'
 import { CITY, ADJ, citiesOf, neighborsOf } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from './ConquestMap'
 import { ZoomPan } from './ZoomPan'
 import { ConquestIcon } from './ConquestIcon'
+import { M } from './mapGeometry'
 import {
   headline, mapAfter, ownersAfter, siegesAfter, chronological, cityStory, swatch,
   type ConquestData, type LiveBattle, type LoggedMove,
@@ -19,8 +20,8 @@ const STEP_MS = 1900
  * before the week's first kickoff, to attack it or plant your flag), drag
  * the slider back through the weeks to see the map as it stood, and the
  * first time you open it after a week settles, that week plays out on it,
- * move by move. The corner button opens it full screen (sideways on a
- * phone, where the browser allows it).
+ * move by move. The corner button opens it full screen, filling the
+ * screen edge to edge like a map app (on your capital), to drag around.
  */
 export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClaim, onAttack, onFlag, busy, seenKey, labelScale }: {
   war: ConquestData
@@ -104,25 +105,18 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
   const open = () => {
     setMapZoom(1)
     setExpanded(true)
-    // A phone held upright: the browser's own full screen, turned sideways, where it allows it (not iPhones)
-    const upright = window.matchMedia('(pointer: coarse)').matches && window.innerHeight > window.innerWidth
+    // On a phone, the browser's own full screen too (no address bar), where it allows it (not iPhones)
     const root = document.documentElement
-    if (upright && root.requestFullscreen) {
+    if (window.matchMedia('(pointer: coarse)').matches && root.requestFullscreen) {
       root.requestFullscreen()
-        .then(() => {
-          wentFullscreen.current = true
-          return (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape')
-        })
+        .then(() => { wentFullscreen.current = true })
         .catch(() => { /* fine: the map still fills the screen it has */ })
     }
   }
   const close = () => {
     setMapZoom(1)
     setExpanded(false)
-    if (wentFullscreen.current && document.fullscreenElement) {
-      try { screen.orientation.unlock() } catch { /* fine */ }
-      document.exitFullscreen().catch(() => {})
-    }
+    if (wentFullscreen.current && document.fullscreenElement) document.exitFullscreen().catch(() => {})
     wentFullscreen.current = false
   }
   const closeRef = useRef(close)
@@ -139,9 +133,12 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
       window.removeEventListener('keydown', key)
     }
   }, [expanded])
-  // As big as the screen allows: the full width, or the full height (less the bars above and below)
-  const fullWidth = Math.max(280, Math.min(vp.w - 16, ((vp.h - 150) * 1000) / 620))
   const upright = vp.h > vp.w
+  // Full screen opens on your capital (or the middle of the map)
+  const home = (() => {
+    const cap = userId ? war.players.find(p => p.userId === userId)?.capital : null
+    return cap && shown.owners[cap] === userId ? { x: M.stadium[cap][0] / M.width, y: M.stadium[cap][1] / M.height } : undefined
+  })()
 
   /** The map and what goes with it: inline in the tab, or full screen */
   const mapBlock = (full: boolean) => (
@@ -163,13 +160,17 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
         </div>
       )}
 
-      <ZoomPan key={full ? 'full' : 'inline'} className="mt-2" onTap={tap} onZoom={s => setMapZoom(Math.round(s * 4) / 4)} onExpand={full ? undefined : open}>
+      <ZoomPan
+        key={full ? `full-${upright ? 'upright' : 'sideways'}` : 'inline'}
+        className={full ? 'flex-1 min-h-0 mt-2' : 'mt-2'} fill={full} focus={full ? home : undefined}
+        onTap={tap} onZoom={s => setMapZoom(Math.round(s * 4) / 4)} onExpand={full ? undefined : open}
+      >
         <ConquestMap
           owners={shown.owners} besieged={shown.besieged} players={war.players} you={userId}
           orders={live ? { target: myTarget, flag: myClaim } : undefined}
           highlight={stepCity?.team ?? card}
           highlightColor={stepCity ? colorOf(stepCity.to) : undefined}
-          labels="names" layout="none" labelScale={full ? (fullWidth < 640 ? 2.1 : 1.5) : labelScale}
+          labels="names" layout="none" labelScale={full ? (vp.w < 640 ? 2.6 : vp.w < 1100 ? 1.8 : 1.5) : labelScale}
           battles={live ? battles : []} zoom={mapZoom} declutter className="w-full"
         />
       </ZoomPan>
@@ -184,7 +185,7 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
       )}
 
       {lastWeek != null && !replay && (
-        <div className="mt-3 flex items-center gap-3">
+        <div className={clsx('mt-3 flex items-center gap-3', full && 'shrink-0 mt-2')}>
           <History className="w-4 h-4 text-field-400 shrink-0" />
           <input
             type="range" aria-label="The map after each week"
@@ -223,18 +224,11 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
           <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-field-800">
             <Swords className="w-4 h-4 text-gold" />
             <p className="font-cond font-black uppercase text-white tracking-wide">Conquest</p>
-            {upright && (
-              <span className="ml-1 flex items-center gap-1 text-[11px] text-field-400">
-                <RotateCw className="w-3.5 h-3.5" /> Turn sideways for a bigger map
-              </span>
-            )}
             <button onClick={close} aria-label="Close the full-screen map" className="ml-auto w-8 h-8 rounded-lg flex items-center justify-center text-field-300 hover:text-white hover:bg-field-800">
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-3">
-            <div className="mx-auto" style={{ width: fullWidth }}>{mapBlock(true)}</div>
-          </div>
+          <div className="flex-1 min-h-0 flex flex-col px-2 pb-2">{mapBlock(true)}</div>
           {/* A city's card comes up from the bottom, over the map */}
           {card && !replay && (
             <div className="absolute inset-x-0 bottom-0 flex justify-center px-2 pb-2 pointer-events-none">
