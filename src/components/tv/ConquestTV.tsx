@@ -440,7 +440,8 @@ export function WarPosterShow({ b, code, sofar = false }: { b: WarBoard; code: s
 /** The week's newsreel, full screen, then back to the TV. */
 export function NewsreelShow({ b, code, sofar = false, onDone }: { b: WarBoard; code: string; sofar?: boolean; onDone: () => void }) {
   const got = useWarStory(b, code, sofar)
-  const [lite] = useState(() => !!document.querySelector('.tv-lite, .tv-still'))
+  // The Fire TV's film is the light one, whatever effects the TV's on
+  const [lite] = useState(() => !!document.querySelector('.tv-lite, .tv-still') || /Silk|AFT[A-Z]/.test(navigator.userAgent))
   // Nothing to show after all: straight back to the TV
   const doneRef = useRef(onDone)
   doneRef.current = onDone
