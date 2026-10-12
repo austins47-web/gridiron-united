@@ -42,6 +42,8 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
   labelScale: number
 }) {
   const [mapZoom, setMapZoom] = useState(1)
+  // Where the radar turns about: the middle of what's on screen (zoomed in, not the map's middle)
+  const [sweep, setSweep] = useState<{ x: number; y: number } | undefined>(undefined)
   const [card, setCard] = useState<string | null>(null)
   const [viewWeek, setViewWeek] = useState<number | null>(null)
   const [replay, setReplay] = useState<{ week: number; at: number } | null>(null)
@@ -104,6 +106,7 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
   const wentFullscreen = useRef(false)
   const open = () => {
     setMapZoom(1)
+    setSweep(undefined)
     setExpanded(true)
     // On a phone, the browser's own full screen too (no address bar), where it allows it (not iPhones)
     const root = document.documentElement
@@ -115,6 +118,7 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
   }
   const close = () => {
     setMapZoom(1)
+    setSweep(undefined)
     setExpanded(false)
     if (wentFullscreen.current && document.fullscreenElement) document.exitFullscreen().catch(() => {})
     wentFullscreen.current = false
@@ -164,6 +168,7 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
         key={full ? `full-${upright ? 'upright' : 'sideways'}` : 'inline'}
         className={full ? 'flex-1 min-h-0 mt-2' : 'mt-2'} fill={full} focus={full ? home : undefined}
         onTap={tap} onZoom={s => setMapZoom(Math.round(s * 4) / 4)} onExpand={full ? undefined : open}
+        onView={c => setSweep(s => (s && Math.abs(s.x - c.x) < 0.01 && Math.abs(s.y - c.y) < 0.01 ? s : c))}
       >
         <ConquestMap
           owners={shown.owners} besieged={shown.besieged} players={war.players} you={userId}
@@ -171,7 +176,7 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
           highlight={stepCity?.team ?? card}
           highlightColor={stepCity ? colorOf(stepCity.to) : undefined}
           labels="names" layout="none" labelScale={full ? (vp.w < 640 ? 2.6 : vp.w < 1100 ? 1.8 : 1.5) : labelScale}
-          battles={live ? battles : []} zoom={mapZoom} declutter className="w-full"
+          battles={live ? battles : []} zoom={mapZoom} declutter sweepCenter={sweep} className="w-full"
         />
       </ZoomPan>
 

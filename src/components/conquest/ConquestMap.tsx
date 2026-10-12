@@ -274,13 +274,17 @@ interface Front { key: string; d: string; box: Rect; color: string; live: boolea
 /** One turn of the radar, one pass of the scan line (index.css's cq-radar, cq-scan and cq-ping) */
 const SWEEP_S = 8
 
+/** Where the radar turns about, as fractions of the main map (its middle, unless you've zoomed elsewhere) */
+type Center = { x: number; y: number }
+const MIDDLE: Center = { x: 0.5, y: 0.5 }
+
 /**
  * When the sweep crosses a point, as a ping's delay into each turn: the
- * radar's beam goes clockwise from 12 o'clock around the map's center;
- * the scan line's bright edge goes from the top to 110% of the way down.
+ * radar's beam goes clockwise from 12 o'clock around its center; the scan
+ * line's bright edge goes from the top to 110% of the way down.
  */
-const sweepAt = (x: number, y: number) => {
-  const deg = ((Math.atan2(x - M.width / 2, -(y - M.height / 2)) * 180) / Math.PI + 360) % 360
+const sweepAt = (x: number, y: number, c: Center = MIDDLE) => {
+  const deg = ((Math.atan2(x - c.x * M.width, -(y - c.y * M.height)) * 180) / Math.PI + 360) % 360
   return { radar: (deg / 360) * SWEEP_S, scan: (y / M.height / 1.1) * SWEEP_S }
 }
 
@@ -312,7 +316,7 @@ function useOnSweep() {
  * the Northeast inset). Each is its own element, so moving it never
  * redraws the map under it.
  */
-function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes }: {
+function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes, center = MIDDLE }: {
   win: Rect
   zoom: number
   P: Palette
@@ -322,6 +326,8 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
   fronts: Front[]
   arrows: Arrow[]
   radar: boolean
+  /** where the radar turns about (the main map's frame) */
+  center?: Center
   lanes: boolean
 }) {
   const at = (x: number, y: number, w: number, h: number): CSSProperties => ({
@@ -335,7 +341,7 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
           <div
             className="cq-radar"
             style={{
-              position: 'absolute', left: '50%', top: '50%', width: '150%', aspectRatio: '1', borderRadius: '50%',
+              position: 'absolute', left: `${center.x * 100}%`, top: `${center.y * 100}%`, width: '150%', aspectRatio: '1', borderRadius: '50%',
               background: `conic-gradient(from 0deg, rgba(${a}, 0) 0deg, rgba(${a}, 0) 280deg, rgba(${a}, 0.08) 335deg, rgba(${a}, 0.26) 359deg, rgba(${a}, 0) 360deg)`,
             }}
           />
@@ -409,7 +415,7 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
 
       {/* Capitals ping as the sweep crosses them (a besieged one, fast and red, all the time) */}
       {pings.map(p => {
-        const when = sweepAt(p.x, p.y)
+        const when = sweepAt(p.x, p.y, center)
         return (
           <div key={p.team} className="cq-k-html" style={at(p.x - ringR, p.y - ringR, ringR * 2, ringR * 2)}>
             <div
@@ -430,7 +436,7 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
 }
 
 export const ConquestMap = memo(function ConquestMap({
-  owners, besieged = {}, players, you, orders, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, battles = [], zoom = 1, declutter = false, className,
+  owners, besieged = {}, players, you, orders, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, battles = [], zoom = 1, declutter = false, sweepCenter, className,
 }: {
   owners: Record<string, string | null>
   besieged?: Record<string, string>
@@ -451,6 +457,8 @@ export const ConquestMap = memo(function ConquestMap({
   battles?: LiveBattle[]
   /** how far it's zoomed in, once a pinch settles: which labels fit (their size on screen is held live, by --cq-s) */
   zoom?: number
+  /** where the radar turns about, as fractions of the map: the middle of what's on screen when zoomed in */
+  sweepCenter?: { x: number; y: number }
   /** labels that don't fit give way, least important first, and appear as you zoom in */
   declutter?: boolean
   className?: string
@@ -819,7 +827,7 @@ export const ConquestMap = memo(function ConquestMap({
       <div ref={motion} className="absolute inset-0 pointer-events-none" aria-hidden>
         <div style={frame(MAIN, 10)}>
           <Motion
-            win={MAIN} zoom={1} P={P} radar lanes
+            win={MAIN} zoom={1} P={P} radar lanes center={sweepCenter}
             pings={pings.filter(p => mainCities.includes(p.team))}
             ringR={12 * labelScale * 1.9}
             hot={hot}

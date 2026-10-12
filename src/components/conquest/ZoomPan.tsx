@@ -26,13 +26,15 @@ type View = { s: number; x: number; y: number }
  * size for real, so the browser draws it sharp again. `--cq-s` carries the
  * live zoom for the map's labels to hold their size by.
  */
-export function ZoomPan({ children, onTap, onZoom, onExpand, fill = false, focus, className }: {
+export function ZoomPan({ children, onTap, onZoom, onView, onExpand, fill = false, focus, className }: {
   children: ReactNode
   onTap?: (team: string | null) => void
   /** shows a button to open the map full screen */
   onExpand?: () => void
   /** the zoom once it settles (a pinch done, a button pressed): for what to draw at that size */
   onZoom?: (s: number) => void
+  /** the middle of what's on screen once a zoom or drag settles, as fractions of the map */
+  onView?: (center: { x: number; y: number }) => void
   /** fill the space it's given, map-app style (full screen) */
   fill?: boolean
   /** where to center a filled map when it opens, as fractions of the map's width and height */
@@ -79,6 +81,20 @@ export function ZoomPan({ children, onTap, onZoom, onExpand, fill = false, focus
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  const onViewRef = useRef(onView)
+  onViewRef.current = onView
+  useEffect(() => {
+    if (touching || !onViewRef.current) return
+    const t = setTimeout(() => {
+      const { w, h } = size()
+      const mh = mapH(h)
+      const fit = (v: number) => Math.max(0, Math.min(1, v))
+      onViewRef.current?.({ x: fit((w / 2 - view.x) / (w * view.s)), y: fit((h / 2 - view.y) / (mh * view.s)) })
+    }, 160)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.x, view.y, view.s, touching])
 
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const gesture = useRef<{ start: View; d0: number; mid0: { x: number; y: number }; p0: { x: number; y: number }; moved: boolean; multi: boolean } | null>(null)
