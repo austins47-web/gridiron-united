@@ -59,7 +59,7 @@ const PROFILES: Record<string, Profile> = {
     eleven: {
       voice: '1AKkSX7KMPHIWuz76m0n',
       model: 'eleven_multilingual_v2',
-      settings: { stability: 0.45, similarity_boost: 0.85, style: 0.45, use_speaker_boost: true, speed: 1.0 },
+      settings: { stability: 0.45, similarity_boost: 0.85, style: 0.45, use_speaker_boost: true, speed: 0.85 },
     },
     openai: {
       model: 'gpt-4o-mini-tts',
