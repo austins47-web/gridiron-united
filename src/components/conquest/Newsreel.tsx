@@ -67,7 +67,7 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
     const s = sound.current
     // The announcer's recordings, fetched and readied while the leader and title run
     const recordings: Promise<(AudioBuffer | null)[] | null> = voiceFrom
-      ? fetchVoices(story.lines.map(l => l.text), voiceFrom).then(urls => urls && Promise.all(urls.map(u =>
+      ? fetchVoices(story.lines.map(l => l.text), voiceFrom).then(urls => urls && Promise.all(urls.map(u => !u ? null :
         fetch(u).then(r => (r.ok ? r.arrayBuffer() : null)).then(b => (b ? s.prepare(b) : null)).catch(() => null))))
       : Promise.resolve(null)
     ;(async () => {

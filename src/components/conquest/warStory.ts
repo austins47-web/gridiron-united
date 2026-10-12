@@ -75,6 +75,25 @@ export function paperTint(color: string, amount = 0.55): string {
 
 const GAIN: Record<string, number> = { capture: 3, rebellion: 3, siege: 2, claim: 1, relief: 0 }
 
+/** What the newsreels would've called each city */
+const EPITHET: Record<string, string> = {
+  SEA: 'the Emerald City', SF: 'the City by the Bay', LAR: 'the City of Angels', LAC: 'sunny San Diego',
+  LV: 'the neon desert', ARI: 'the Valley of the Sun', DEN: 'the Mile High City', KC: 'the Heart of America',
+  DAL: 'Big D', HOU: 'the Bayou City', MIN: 'the North Star State', GB: 'Titletown', CHI: 'the Windy City',
+  DET: 'the Motor City', IND: 'the Crossroads of America', CIN: 'the Queen City', CLE: 'the shores of Lake Erie',
+  PIT: 'the Steel City', BUF: 'snowbound Buffalo', TEN: 'Music City', ATL: 'the Capital of the South',
+  NO: 'the Crescent City', JAX: 'the River City', TB: 'the Cigar City', MIA: 'the Magic City',
+  CAR: 'the Carolina hills', WSH: "the nation's capital", BAL: 'Charm City', PHI: 'the City of Brotherly Love',
+  NYG: 'the Garden State', NYJ: 'the Big Apple', NE: 'old New England',
+}
+
+/** A small, steady number for a string (which way to say a line) */
+function hashOf(s: string): number {
+  let h = 7
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return h
+}
+
 /**
  * The week's story, or null before any week's settled (or if nothing
  * happened). With `pending`, the week as it stands with that many games
@@ -126,27 +145,46 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
     return from && from !== m.team ? [{ from, to: m.team, color: color(m.to) }] : []
   }
 
-  add(`Gridiron United News. Dispatch from the front: Week ${week}${pending ? ', as it stands' : ''}.`, [], [], [], [])
-  add(
-    `No general marched harder this week than ${H}${heroCity ? ` of ${heroCity}` : ''}. ${correct.get(hero)} correct calls!`,
-    heroCap ? [heroCap] : heroBattles.map(m => m.team).slice(0, 1), [],
-  )
+  // Told the way the newsreels told it: big, florid and breathless. Each kind of line
+  // has a few ways of saying it, picked by the week and the city so the same story
+  // always reads the same (its recordings are kept) but next week's sounds fresh.
+  const say = (key: string, ways: string[], turn = 0) => ways[(hashOf(`${week}|${key}`) + turn) % ways.length]
+  const where = (t: string) => EPITHET[t] ? `${cityName(t)}, ${EPITHET[t]}` : cityName(t)
+  const c = correct.get(hero)
+  add(say('open', [
+    `Gridiron United News! From the smoking battlefields of the gridiron, a dispatch from the front: Week ${week}${pending ? ', as it stands' : ''}!`,
+    `Gridiron United News! The world holds its breath as we bring you the battle news of Week ${week}${pending ? ', as it stands' : ''}!`,
+    `Gridiron United News! Thunder on the gridiron, and empires tremble! Here is the news of Week ${week}${pending ? ', as it stands' : ''}!`,
+  ]), [], [], [], [])
+  const titled = `${say('title', ['the Iron Duke', 'the Hammer', 'the Lion', 'the Terror', 'the Conqueror'])} of ${heroCap && EPITHET[heroCap] ? EPITHET[heroCap] : heroCity ?? 'the plains'}`
+  add(say(`hero|${hero}`, [
+    `Behold ${H}${heroCity ? ` of ${heroCity}` : ''}, ${titled}! ${c} correct calls, and not one ounce of mercy!`,
+    `No general marched harder than ${H}, ${titled}! ${c} correct calls, and the whole map trembled!`,
+    `All hail ${H}${heroCity ? ` of ${heroCity}` : ''}! ${c} correct calls, a performance for the history books!`,
+  ]), heroCap ? [heroCap] : heroBattles.map(m => m.team).slice(0, 1), [])
   for (const m of heroBattles) {
-    const city = cityName(m.team), L = name(m.from)
+    const city = cityName(m.team), L = name(m.from), [a, b] = m.score
     const text = m.kind === 'siege'
-      ? `${H}'s armies laid siege to ${city}. ${L}'s defenders could muster only ${m.score[1]}.`
+      ? say(`siege|${m.team}`, [
+        `${H}'s legions thunder across the land and lay siege to mighty ${city}, where ${L}'s brave defenders, a mere ${b} strong, man the walls!`,
+        `The armies of ${H} surround ${where(m.team)}! ${L}'s garrison clings on with only ${b} correct calls!`,
+      ])
       : m.kind === 'rebellion'
-        ? `${H} rose up and took back ${city}!`
+        ? `Rise up! ${H} storms back into ${city} and reclaims the homeland!`
         : m.exiled
-          ? `${H}'s armies took ${city}, and ${L}'s empire is no more!`
-          : `${H}'s armies stormed ${city}, beating ${L} ${m.score[0]} to ${m.score[1]}.`
+          ? `${H}'s armies take ${city}, and the empire of ${L} is no more! Gone! Wiped from the map!`
+          : say(`capture|${m.team}`, [
+            `${H}'s armies storm the gates of ${where(m.team)}! ${L} falls, ${a} to ${b}!`,
+            `${city} has fallen! ${H} crushes ${L}, ${a} to ${b}, in a triumph for the ages!`,
+          ])
     add(text, [...(base(hero) ? [base(hero)!] : []), m.team], [m], arrowFor(m))
   }
   if (heroClaims.length) {
-    add(
-      `And the ${heroCity ?? H} flag now flies over ${andList(heroClaims.map(m => cityName(m.team)))}.`,
-      heroClaims.map(m => m.team), heroClaims,
-    )
+    const list = andList(heroClaims.map(m => cityName(m.team)))
+    add(say('claims', [
+      `And lo! The banner of ${heroCity ?? H} now flutters over ${list}!`,
+      `Not content, ${H} plants the flag over ${list} as well!`,
+    ]), heroClaims.map(m => m.team), heroClaims)
   }
 
   // The rest of the front: cities taken first, then rebellions, sieges and sieges broken
@@ -156,21 +194,30 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
     .sort((a, b) => Number(!!b.exiled) - Number(!!a.exiled) || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
   let said = 0
   for (let i = 0; i < rest.length && said < 4; i++) {
-    const m = rest[i], city = cityName(m.team), T = name(m.to), L = name(m.from)
+    const m = rest[i], city = cityName(m.team), T = name(m.to), L = name(m.from), [a, b] = m.score
     const next = rest[i + 1]
     if (m.kind === 'siege' && next?.kind === 'siege') {
-      add(`${T}'s forces encircle ${city}, and ${name(next.to)}'s troops dig in around ${cityName(next.team)}.`,
-        [m.team, next.team], [m, next], [...arrowFor(m), ...arrowFor(next)])
+      add(say(`sieges|${m.team}`, [
+        `Meanwhile, ${T}'s forces encircle ${city}, and ${name(next.to)}'s troops dig in around ${cityName(next.team)}! The noose tightens!`,
+        `On another front, ${T} lays siege to ${city}, while ${name(next.to)} rings ${cityName(next.team)} with steel!`,
+      ], said), [m.team, next.team], [m, next], [...arrowFor(m), ...arrowFor(next)])
       i++
     } else if (m.kind === 'capture') {
-      add(m.exiled ? `${city} has fallen to ${T}. ${L}'s empire is no more!` : `${T} stormed ${city}, beating ${L} ${m.score[0]} to ${m.score[1]}.`,
-        [m.team], [m], arrowFor(m))
+      add(m.exiled
+        ? `${city} falls to ${T}! The empire of ${L} is no more!`
+        : say(`capture|${m.team}`, [
+          `${T} storms ${where(m.team)}, smashing ${L} ${a} to ${b}!`,
+          `Disaster for ${L}! ${T} seizes ${city}, ${a} to ${b}!`,
+        ], said), [m.team], [m], arrowFor(m))
     } else if (m.kind === 'rebellion') {
-      add(`${T} rose up and took back ${city}!`, [m.team], [m])
+      add(`${T} rises from exile and takes back ${city}! What a comeback!`, [m.team], [m])
     } else if (m.kind === 'siege') {
-      add(`${T}'s forces encircle ${city}.`, [m.team], [m], arrowFor(m))
+      add(say(`siege|${m.team}`, [
+        `${T}'s forces encircle ${where(m.team)}! The noose tightens!`,
+        `${T} lays siege to ${city}! The defenders brace for the worst!`,
+      ], said), [m.team], [m], arrowFor(m))
     } else {
-      add(`In ${city}, ${T} broke the siege!`, [m.team], [m])
+      add(`In ${city}, ${T} breaks the siege! The defenders dance in the streets!`, [m.team], [m])
     }
     said++
   }
@@ -185,12 +232,15 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
     flags ? `${flags} ${flags === 1 ? 'flag' : 'flags'} planted on open land` : '',
   ].filter(Boolean)
   const left = moves.filter(m => !shown.has(idx(m)))
-  add(parts.length ? `${parts.join('. ')}.` : 'A quiet week on the front.', [], left, [], [])
+  add(parts.length ? `${parts.join('! ')}! What a week on the front!` : 'A quiet week on the front, but the generals are scheming!', [], left, [], [])
   add(pending
-    ? `But the war is not over. ${pending === 1 ? 'One game remains' : `${pending} games remain`}. Will the besieged hold? Stay tuned, and pick wisely.`
+    ? `But the war is not over! ${pending === 1 ? 'One game remains' : `${pending} games remain`}! Will the besieged hold? Stay tuned, and pick wisely!`
     : final
-    ? 'And so the war is over. This has been the Commish, reporting from the front.'
-    : `The war rolls on in Week ${week + 1}. Pick wisely. This has been the Commish, reporting from the front.`, [], [], [], [])
+    ? 'And so the great war ends! History will remember! This has been the Commish, reporting from the front!'
+    : say('close', [
+      `The war rolls on in Week ${week + 1}! Pick wisely, and may fortune favor the bold! This has been the Commish, reporting from the front!`,
+      `On to Week ${week + 1}, and more glory yet! This has been the Commish, reporting from the front!`,
+    ]), [], [], [], [])
 
   // ── The War Office's posters ──
   const posters: PosterSpec[] = []
