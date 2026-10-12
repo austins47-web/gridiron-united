@@ -267,7 +267,7 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
           <p style={{ fontFamily: DISPLAY, fontSize: '2.2em', letterSpacing: '.3em', color: '#ddd' }}>Gridiron United</p>
           <p style={{ fontFamily: DISPLAY, fontSize: '6.6em', lineHeight: 1, color: '#fff', margin: '.2em 0' }}>News of the Week</p>
           <div style={{ width: '36%', height: 2, margin: '.6em auto', background: 'linear-gradient(90deg, transparent, #bbb, transparent)' }} />
-          <p style={{ fontFamily: DISPLAY, fontSize: '2em', letterSpacing: '.22em', color: '#ccc' }}>Dispatch from the Front · Week {story.week}</p>
+          <p style={{ fontFamily: DISPLAY, fontSize: '2em', letterSpacing: '.22em', color: '#ccc' }}>Dispatch from the Front · Week {story.week}{story.pending ? ' · As It Stands' : ''}</p>
         </div>
         <div className={card} style={{ opacity: phase === 'end' || phase === 'done' ? 1 : 0, background: 'radial-gradient(ellipse at center, #3a3a3a 0%, #0d0d0d 75%)' }}>
           <p style={{ fontFamily: DISPLAY, fontSize: '2.2em', letterSpacing: '.3em', color: '#ddd' }}>Gridiron United News</p>
@@ -275,7 +275,7 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
             {war.finalWeek != null && story.week >= war.finalWeek ? 'The End' : 'Stay Tuned'}
           </p>
           <div style={{ width: '36%', height: 2, margin: '.6em auto', background: 'linear-gradient(90deg, transparent, #bbb, transparent)' }} />
-          <p style={{ fontFamily: DISPLAY, fontSize: '2em', letterSpacing: '.22em', color: '#ccc' }}>Pick wisely</p>
+          <p style={{ fontFamily: DISPLAY, fontSize: '2em', letterSpacing: '.22em', color: '#ccc' }}>{story.pending ? 'More to come' : 'Pick wisely'}</p>
         </div>
         {current && (
           <p

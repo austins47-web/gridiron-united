@@ -16,6 +16,10 @@
 //   (then crowns the season's titles). Each week settles once (claimed by
 //   moving last_resolved_week on), so calling it again, or twice at once,
 //   does nothing more.
+// POST { action: 'sofar', token } (the Shop TV) or { action: 'sofar',
+//   league_id } (signed in, a member): this week as it stands — what
+//   settling it now would do, from the games finished so far, saved
+//   nowhere. For the War Office's poster and newsreel before Monday night.
 // ══════════════════════════════════════════════════════════════
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -38,10 +42,26 @@ serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const admin = createClient(url, serviceKey)
-  const body = await req.json().catch(() => ({})) as { action?: string; league_id?: string; start_week?: number; restart?: boolean; target?: string | null; team?: string | null }
+  const body = await req.json().catch(() => ({})) as { action?: string; league_id?: string; token?: string; start_week?: number; restart?: boolean; target?: string | null; team?: string | null }
 
   try {
     if (body.action === 'resolve') return json(await resolveAll(admin))
+
+    if (body.action === 'sofar') {
+      let leagueId: string | null = null
+      if (typeof body.token === 'string' && body.token) {
+        const { data } = await admin.from('league_tv_tokens').select('league_id').eq('token', body.token).maybeSingle()
+        leagueId = (data?.league_id as string | undefined) ?? null
+      } else if (typeof body.league_id === 'string') {
+        const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
+        const { data: { user } } = await userClient.auth.getUser()
+        if (!user) return json({ error: 'Sign in first' }, 401)
+        const { data: member } = await admin.from('league_members').select('user_id').eq('league_id', body.league_id).eq('user_id', user.id).maybeSingle()
+        if (member) leagueId = body.league_id
+      }
+      if (!leagueId) return json({ error: 'Not your league' }, 403)
+      return json({ sofar: await soFar(admin, leagueId) })
+    }
 
     if (body.action === 'target' || body.action === 'claim') {
       if (typeof body.league_id !== 'string') return json({ error: 'league_id required' }, 400)
@@ -292,6 +312,74 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
     if (error) throw error
   }
   return moves.length
+}
+
+/**
+ * The week being played, as it stands: what settleWeek would do with the
+ * games finished so far (the same scores, tiebreakers, orders and rules),
+ * written nowhere. Null before any of its games has finished, or once
+ * there's no week left to play. Anyone who's joined since the week began
+ * isn't in it yet; anyone who's left has lost their cities already.
+ */
+async function soFar(admin: SupabaseClient, leagueId: string) {
+  const season = nflSeasonFor(new Date())
+  const { data: war } = await admin.from('conquest_games').select('start_week, last_resolved_week, final_week')
+    .eq('league_id', leagueId).eq('season', season).maybeSingle()
+  if (!war) return null
+  const week = ((war.last_resolved_week as number | null) ?? (war.start_week as number) - 1) + 1
+  if (week > (war.final_week as number)) return null
+  const { data: gameRows } = await admin.from('nfl_games')
+    .select('id, week, season, home_team, away_team, home_score, away_score, status, game_date, is_tiebreaker')
+    .eq('season', season).eq('week', week)
+  const games = (gameRows ?? []) as Game[]
+  const counted = new Map(games.filter(g => !isVoid(g) && isFinal(g)).map(g => [g.id, g]))
+  if (!counted.size) return null
+  const pending = games.filter(g => !isVoid(g) && !isFinal(g)).length
+
+  const [{ data: players }, { data: territories }, members, { data: picks }, { data: orderRows }] = await Promise.all([
+    admin.from('conquest_players').select('user_id, capital').eq('league_id', leagueId).eq('season', season),
+    admin.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', season),
+    membersOf(admin, leagueId),
+    admin.from('pickem_picks').select('user_id, game_id, picked_team, tiebreaker_score').eq('league_id', leagueId).eq('season', season).eq('week', week),
+    admin.from('conquest_orders').select('user_id, target_id, claim').eq('league_id', leagueId).eq('season', season).eq('week', week),
+  ])
+  const memberIds = new Set(members.map(m => m.userId))
+  const owners: Record<string, string | null> = Object.fromEntries(TERRITORIES.map(t => [t, null]))
+  const besieged: Record<string, string> = {}
+  for (const t of territories ?? []) {
+    owners[t.team] = t.owner_id && memberIds.has(t.owner_id) ? t.owner_id : null
+    if (t.besieged_by) besieged[t.team] = t.besieged_by
+  }
+  const roster = (players ?? []).map(p => p.user_id as string).filter(u => memberIds.has(u))
+  const scores: WeekScores = { correct: {}, picks: {} }
+  for (const u of roster) { scores.correct[u] = 0; scores.picks[u] = {} }
+  for (const p of picks ?? []) {
+    const g = counted.get(p.game_id)
+    if (!g || !(p.user_id in scores.picks) || !p.picked_team) continue
+    scores.picks[p.user_id][p.game_id] = p.picked_team
+    if (winnerOf(g) === p.picked_team) scores.correct[p.user_id]++
+  }
+  const total = tiebreakerTotal(games)
+  scores.tiebreak = {}
+  for (const p of picks ?? []) {
+    if (total != null && p.tiebreaker_score != null && p.user_id in scores.picks) scores.tiebreak[p.user_id] = Math.abs(p.tiebreaker_score - total)
+  }
+  scores.winPct = await seasonWinPct(admin, leagueId, season, week).catch(() => ({}))
+  const state: ConquestState = {
+    owners,
+    capitals: Object.fromEntries((players ?? []).filter(p => roster.includes(p.user_id) && p.capital).map(p => [p.user_id, p.capital])),
+    besieged,
+  }
+  const orders: Orders = Object.fromEntries((orderRows ?? []).filter(o => o.target_id).map(o => [o.user_id, o.target_id]))
+  const claims: Claims = Object.fromEntries((orderRows ?? []).filter(o => o.claim).map(o => [o.user_id, o.claim]))
+  const after = resolveWeek(state, scores, roster, orders, claims)
+  return {
+    week,
+    pending,
+    owners: after.owners,
+    besieged: after.besieged,
+    moves: after.moves.map(m => ({ kind: m.kind, team: m.team, from: m.from, to: m.to, score: m.score, exiled: !!m.exiled })),
+  }
 }
 
 /** Everyone's season win % through a week: correct picks over picks on finished games. */

@@ -145,7 +145,7 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       <WarOfficeRemote
         leagueId={leagueId}
         busy={busy}
-        onShow={a => void press(a, {}, a === 'poster' ? 'The war poster is on the TV' : 'The newsreel is playing on the TV')}
+        onShow={(a, sofar) => void press(a, sofar ? { p_text: 'sofar' } : {}, a === 'poster' ? 'The war poster is on the TV' : 'The newsreel is playing on the TV')}
       />
 
       {/* The TV chat, here: say something on the TV, see what's been said, take anything down */}

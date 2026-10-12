@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { CITY } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from '@/components/conquest/ConquestMap'
 import { empires, liveBattles, headline, ownersBefore, swatch, type ConquestData, type ConquestMove, type LiveBattle } from '@/components/conquest/conquestView'
 import { ConquestIcon } from '@/components/conquest/ConquestIcon'
 import { pointOf, viewOf } from '@/components/conquest/mapGeometry'
-import { weekStory } from '@/components/conquest/warStory'
+import { weekStory, type WarStory } from '@/components/conquest/warStory'
+import { fetchSoFar, warAsItStands } from '@/components/conquest/warSoFar'
 import { WarPoster } from '@/components/conquest/WarPoster'
 import { Newsreel } from '@/components/conquest/Newsreel'
 
@@ -384,15 +385,46 @@ function Coronation({ war, league }: { war: ConquestData; league: string }) {
 // Made from the last settled week (warStory), only when the commissioner
 // puts them up: nothing goes to the league chat.
 
+/**
+ * The War Office's week: the last settled one (the board's report), or,
+ * with `sofar`, the week being played as it stands (fetched with the
+ * TV's code). Undefined while that's loading, null if there's nothing.
+ */
+function useWarStory(b: WarBoard, code: string, sofar: boolean): { war: ConquestData; story: WarStory } | null | undefined {
+  const settled = useMemo(() => {
+    const story = b.conquest ? weekStory(b.conquest) : null
+    return b.conquest && story ? { war: b.conquest, story } : null
+  }, [b.conquest])
+  const [live, setLive] = useState<{ war: ConquestData; story: WarStory } | null | undefined>(undefined)
+  useEffect(() => {
+    if (!sofar || !b.conquest) return
+    let alive = true
+    const war = b.conquest
+    fetchSoFar({ token: code }).then(
+      s => {
+        if (!alive) return
+        const w = s ? warAsItStands(war, s) : null
+        const story = w && s ? weekStory(w, s.pending) : null
+        setLive(w && story ? { war: w, story } : null)
+      },
+      () => { if (alive) setLive(null) },
+    )
+    return () => { alive = false }
+    // Once, when it goes up: not again on every board refresh
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sofar, code])
+  return sofar ? live : settled
+}
+
 /** The week's war posters, full screen. */
-export function WarPosterShow({ b }: { b: WarBoard }) {
-  const story = useMemo(() => (b.conquest ? weekStory(b.conquest) : null), [b.conquest])
-  if (!b.conquest || !story) return null
-  const war = b.conquest
+export function WarPosterShow({ b, code, sofar = false }: { b: WarBoard; code: string; sofar?: boolean }) {
+  const got = useWarStory(b, code, sofar)
+  if (!got) return null
+  const { war, story } = got
   const colorOf = (id: string | null) => (id ? war.players.find(p => p.userId === id)?.color ?? null : null)
   return (
     <div className="absolute inset-0 z-[36] bg-field-950 flex flex-col items-center justify-center gap-6">
-      <p className="font-cond font-bold uppercase tracking-[0.35em] text-gold text-[28px]">{b.league} · War Office · Week {story.week}</p>
+      <p className="font-cond font-bold uppercase tracking-[0.35em] text-gold text-[28px]">{b.league} · War Office · Week {story.week}{story.pending ? ' · As it stands' : ''}</p>
       <div className="flex items-center justify-center gap-16">
         {story.posters.map(p => (
           <WarPoster key={p.key} spec={p} owners={war.owners} besieged={war.besieged ?? {}} colorOf={colorOf} className="h-[920px] w-auto rise-in shadow-2xl shadow-black/70 rounded-sm" />
@@ -403,13 +435,17 @@ export function WarPosterShow({ b }: { b: WarBoard }) {
 }
 
 /** The week's newsreel, full screen, then back to the TV. */
-export function NewsreelShow({ b, onDone }: { b: WarBoard; onDone: () => void }) {
-  const story = useMemo(() => (b.conquest ? weekStory(b.conquest) : null), [b.conquest])
+export function NewsreelShow({ b, code, sofar = false, onDone }: { b: WarBoard; code: string; sofar?: boolean; onDone: () => void }) {
+  const got = useWarStory(b, code, sofar)
   const [lite] = useState(() => !!document.querySelector('.tv-lite, .tv-still'))
-  if (!b.conquest || !story) return null
+  // Nothing to show after all: straight back to the TV
+  const doneRef = useRef(onDone)
+  doneRef.current = onDone
+  useEffect(() => { if (got === null) doneRef.current() }, [got])
+  if (!got) return null
   return (
     <div className="absolute inset-0 z-[36] bg-black">
-      <Newsreel war={b.conquest} story={story} autoPlay lite={lite} soundHint="Press OK on the TV's remote for sound" onDone={() => setTimeout(onDone, 1500)} />
+      <Newsreel war={got.war} story={got.story} autoPlay lite={lite} soundHint="Press OK on the TV's remote for sound" onDone={() => setTimeout(onDone, 1500)} />
     </div>
   )
 }

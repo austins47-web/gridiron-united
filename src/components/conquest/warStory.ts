@@ -40,6 +40,8 @@ export interface PosterSpec {
 
 export interface WarStory {
   week: number
+  /** games still to play: the week as it stands (warSoFar), not settled yet */
+  pending: number
   /** who held what before the week's moves */
   before: Record<string, string | null>
   moves: ConquestMove[]
@@ -73,8 +75,12 @@ export function paperTint(color: string, amount = 0.55): string {
 
 const GAIN: Record<string, number> = { capture: 3, rebellion: 3, siege: 2, claim: 1, relief: 0 }
 
-/** The week's story, or null before any week's settled (or if nothing happened). */
-export function weekStory(war: ConquestData): WarStory | null {
+/**
+ * The week's story, or null before any week's settled (or if nothing
+ * happened). With `pending`, the week as it stands with that many games
+ * still to play: told as news so far, not the final word.
+ */
+export function weekStory(war: ConquestData, pending = 0): WarStory | null {
   const report = war.report
   if (!report || !report.moves.length) return null
   const week = report.week
@@ -120,7 +126,7 @@ export function weekStory(war: ConquestData): WarStory | null {
     return from && from !== m.team ? [{ from, to: m.team, color: color(m.to) }] : []
   }
 
-  add(`Gridiron United News. Dispatch from the front: Week ${week}.`, [], [], [], [])
+  add(`Gridiron United News. Dispatch from the front: Week ${week}${pending ? ', as it stands' : ''}.`, [], [], [], [])
   add(
     `No general marched harder this week than ${H}${heroCity ? ` of ${heroCity}` : ''}. ${correct.get(hero)} correct calls!`,
     heroCap ? [heroCap] : heroBattles.map(m => m.team).slice(0, 1), [],
@@ -180,7 +186,9 @@ export function weekStory(war: ConquestData): WarStory | null {
   ].filter(Boolean)
   const left = moves.filter(m => !shown.has(idx(m)))
   add(parts.length ? `${parts.join('. ')}.` : 'A quiet week on the front.', [], left, [], [])
-  add(final
+  add(pending
+    ? `But the war is not over. ${pending === 1 ? 'One game remains' : `${pending} games remain`}. Will the besieged hold? Stay tuned, and pick wisely.`
+    : final
     ? 'And so the war is over. This has been the Commish, reporting from the front.'
     : `The war rolls on in Week ${week + 1}. Pick wisely. This has been the Commish, reporting from the front.`, [], [], [], [])
 
@@ -199,7 +207,7 @@ export function weekStory(war: ConquestData): WarStory | null {
     big: 0,
     ribbon,
     ribbonColor: '#a8322a',
-    fine: `${correct.get(hero)} CORRECT · WEEK ${week} · GRIDIRON UNITED WAR OFFICE`,
+    fine: pending ? `AS IT STANDS · ${correct.get(hero)} CORRECT · WEEK ${week} · WAR OFFICE` : `${correct.get(hero)} CORRECT · WEEK ${week} · GRIDIRON UNITED WAR OFFICE`,
     ray: paperTint(color(hero)),
     focus: heroFocus,
     arrow: battle(lead) && base(hero) && base(hero) !== lead.team ? { from: base(hero)!, to: lead.team } : null,
@@ -238,7 +246,7 @@ export function weekStory(war: ConquestData): WarStory | null {
     })
   }
 
-  return { week, before, moves, lines, posters }
+  return { week, pending, before, moves, lines, posters }
 }
 
 /** Who holds what, and which capitals are besieged, once these moves have played out. */

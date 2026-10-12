@@ -425,7 +425,7 @@ export function ShopTV() {
         {board && !asleep && holiday && !still && <HolidayParticles theme={holiday} count={lite ? 6 : 14} />}
         {status !== 'gone' && <LiveFromPhones code={code} status={{ lite, still, speaker, perf, asleep, sleep }} />}
         {speaker === 'blocked' && <SpeakerBlocked />}
-        {board && <RemoteOverlay board={board} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
+        {board && <RemoteOverlay board={board} code={code} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
         {board && !asleep && <ReplayShow board={board} />}
         {board && !asleep && <ReceiptsPop board={board} />}
         {board?.conquest && !asleep && <WarReport war={board.conquest} league={board.league} />}
@@ -2588,9 +2588,9 @@ const NEWSREEL_MS = 180_000
 const NOTE_MS = 6000
 const isMoment = (m: unknown): m is TvMoment => TV_MOMENTS.some(x => x.kind === m)
 
-type RemoteShow = { kind: 'announce' | 'note'; text: string } | { kind: 'standings' | 'chat' | 'map' | 'poster' | 'newsreel' }
+type RemoteShow = { kind: 'announce' | 'note'; text: string } | { kind: 'standings' | 'chat' | 'map' } | { kind: 'poster' | 'newsreel'; sofar: boolean }
 
-function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, string] }) {
+function RemoteOverlay({ board, code, colors }: { board: TvBoard; code: string; colors: [string, string] }) {
   const [show, setShow] = useState<(RemoteShow & { id: number }) | null>(null)
   const [moment, setMoment] = useState<{ kind: TvMoment; id: number } | null>(null)
   const n = useRef(0)
@@ -2615,7 +2615,8 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
         break
       case 'poster':
       case 'newsreel':
-        if (board.conquest?.report?.moves.length) put({ kind: r.action }, r.action === 'poster' ? POSTER_MS : NEWSREEL_MS)
+        // The last settled week, or (sofar) the week being played as it stands
+        if (r.text === 'sofar' || board.conquest?.report?.moves.length) put({ kind: r.action, sofar: r.text === 'sofar' }, r.action === 'poster' ? POSTER_MS : NEWSREEL_MS)
         else put({ kind: 'note', text: `The war ${r.action} comes out once a week settles` }, NOTE_MS)
         break
       case 'chat':
@@ -2665,8 +2666,8 @@ function RemoteOverlay({ board, colors }: { board: TvBoard; colors: [string, str
       {show?.kind === 'standings' && <StandingsTakeover key={show.id} board={board} />}
       {show?.kind === 'chat' && <ChatTakeover key={show.id} board={board} />}
       {show?.kind === 'map' && <ConquestMapShow key={show.id} b={board} />}
-      {show?.kind === 'poster' && <WarPosterShow key={show.id} b={board} />}
-      {show?.kind === 'newsreel' && <NewsreelShow key={show.id} b={board} onDone={() => { const id = show.id; setShow(s => (s?.id === id ? null : s)) }} />}
+      {show?.kind === 'poster' && <WarPosterShow key={show.id} b={board} code={code} sofar={show.sofar} />}
+      {show?.kind === 'newsreel' && <NewsreelShow key={show.id} b={board} code={code} sofar={show.sofar} onDone={() => { const id = show.id; setShow(s => (s?.id === id ? null : s)) }} />}
       <LivePoll />
       {show?.kind === 'note' && (
         // Centered by the row, not a transform: the fade-in animates transform
