@@ -5,8 +5,8 @@
 // (signed in, a member): the lines read aloud, as links to MP3s.
 //   voice 'newsreel' (the default): Clyde, a vintage radio announcer from
 //     ElevenLabs' library, for the Conquest newsreel.
-//   voice 'roast': the commissioner's own "Old Asian Woman" voice (made in
-//     their ElevenLabs account), for the weekly roast on the TV.
+//   voice 'roast': Tiffy, a Taiwanese bilingual narrator from ElevenLabs'
+//     library, for the weekly roast on the TV.
 // If ElevenLabs can't (no characters left this month, say), an OpenAI
 // voice directed to sound like it.
 // Each line is recorded once per voice and kept (the newsreel-voice bucket,
@@ -54,17 +54,17 @@ const PROFILES: Record<string, Profile> = {
       ].join(' '),
     },
   },
-  // The commissioner's "Old Asian Woman" (a voice they designed in ElevenLabs)
+  // Tiffy - Taiwanese Bilingual Narrator
   roast: {
     eleven: {
-      voice: 'Zs4u8Ek9Yu8UWq0rxk1J',
+      voice: '1AKkSX7KMPHIWuz76m0n',
       model: 'eleven_multilingual_v2',
       settings: { stability: 0.45, similarity_boost: 0.85, style: 0.45, use_speaker_boost: true, speed: 1.0 },
     },
     openai: {
       model: 'gpt-4o-mini-tts',
       voice: 'sage',
-      instructions: 'Voice: an elderly woman, warm and gently wavering. Tone: a sweet grandmother delivering a savage roast, with deadpan comic timing and a little relish on every insult.',
+      instructions: 'Voice: a warm, clear young woman. Tone: sweet and bright while delivering a savage roast, with deadpan comic timing and a little relish on every insult.',
     },
   },
 }
