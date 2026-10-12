@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
 import { registerServiceWorker } from '@/lib/push'
+import { applyCalm } from '@/lib/calm'
+import { logProblem } from '@/lib/problemLog'
 // Catches the browser's one-time install offer (see lib/install.ts)
 import '@/lib/install'
 
@@ -237,6 +239,23 @@ function App() {
 // Push notifications (public/sw.js) — registered up front so the
 // device can receive them even when Settings was never opened
 registerServiceWorker()
+
+// Reduce effects, if this device has it on (or the link says so)
+applyCalm()
+
+// A device reloading the app over and over (it strobes on screen): put it in
+// the problem log, with the screen it's on, so it can be found and fixed
+try {
+  const now = Date.now()
+  const loads = (JSON.parse(sessionStorage.getItem('gu-loads') ?? '[]') as number[]).filter(t => now - t < 30_000)
+  loads.push(now)
+  sessionStorage.setItem('gu-loads', JSON.stringify(loads))
+  if (loads.length >= 4) {
+    setTimeout(() => logProblem('reload-loop', `Reloaded ${loads.length} times in 30 seconds`, {
+      screen: `${screen.width}x${screen.height}@${devicePixelRatio}`, viewport: `${innerWidth}x${innerHeight}`,
+    }), 3000)
+  }
+} catch { /* no session storage: nothing to count with */ }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

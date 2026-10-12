@@ -8,6 +8,7 @@ import { AVATAR_PRESETS, presetToDataUrl } from './AvatarPresets'
 import { AccountNotifications } from '@/components/settings/NotificationSettings'
 import { AccentColorSetting } from '@/components/settings/AccentColorSetting'
 import { isSoundMuted, setSoundMuted, playPickLock } from '@/lib/sound'
+import { calmOn, setCalm } from '@/lib/calm'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -717,6 +718,7 @@ export function AccountPage() {
         </div>
 
         <AccentColorSetting />
+        <ReduceEffectsSetting />
       </div>
 
       {/* ── Sound ── */}
@@ -842,6 +844,28 @@ export function AccountPage() {
           </div>
         </ModalPortal>
       )}
+    </div>
+  )
+}
+
+/** Reduce effects (lib/calm): every animation off on this device, for a screen that flickers or flashes */
+function ReduceEffectsSetting() {
+  const [on, setOn] = useState(calmOn)
+  return (
+    <div className="mt-4 flex items-start gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="font-cond font-bold text-sm uppercase tracking-wider text-white">Reduce effects</div>
+        <div className="text-field-400 text-xs mt-0.5">Turns off animations and motion on this device. Try it if the screen flickers or flashes.</div>
+      </div>
+      <button
+        role="switch"
+        aria-checked={on}
+        aria-label="Reduce effects"
+        onClick={() => { setCalm(!on); setOn(!on) }}
+        className={clsx('relative w-11 h-6 rounded-full transition-colors shrink-0 mt-1', on ? 'bg-gold' : 'bg-field-600')}
+      >
+        <span className={clsx('absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all', on ? 'left-[22px]' : 'left-0.5')} />
+      </button>
     </div>
   )
 }

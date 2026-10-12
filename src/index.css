@@ -1448,3 +1448,13 @@
 [data-theme="light"] .cq-tab .text-amber-300 { color: #b45309 !important; }
 [data-theme="light"] .cq-tab .text-nfl { color: #1d6fd6 !important; }
 [data-theme="light"] .cq-tab .hover\:text-white:hover { color: #111827 !important; }
+
+/* Reduce effects (src/lib/calm.ts): nothing moves, fades or blurs, for a
+   screen that flashes under the app's moving layers */
+.gu-calm *, .gu-calm *::before, .gu-calm *::after {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  scroll-behavior: auto !important;
+}
