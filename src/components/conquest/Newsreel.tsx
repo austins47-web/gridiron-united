@@ -54,7 +54,7 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
     sound.current?.close()
     voice.current?.stop()
     sound.current = createFilmSound()
-    voice.current = createNarrator()
+    voice.current = createNarrator(sound.current)
     voiceOk.current = true
     if (inTap) { void sound.current.unlock(); voice.current?.prime() }
     window.dispatchEvent(new CustomEvent(TV_DUCK, { detail: true }))

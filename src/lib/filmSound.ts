@@ -1,9 +1,11 @@
 // The newsreel's sound, made in the browser: a projector's rattle under film
 // hiss and crackle, the leader's countdown beeps and a bugle call, all run
-// through an old-radio filter; and the narrator, the device's own voice
-// (speechSynthesis), where it has one. A browser only makes sound once the
-// page has been clicked or tapped (on the TV: OK on its remote), so every
-// piece says whether it could.
+// through an old-radio filter; and the narrator: the device's own voice
+// (speechSynthesis) where it has one that talks, or else (the Fire TV's
+// browser has none) a robot announcer made right here (eSpeak, in
+// public/vendor/mespeak) through the same filter. A browser only makes sound
+// once the page has been clicked or tapped (on the TV: OK on its remote),
+// so every piece says whether it could.
 
 const SR = 22050
 
@@ -89,7 +91,30 @@ export interface FilmSound {
   sting(): void
   /** the projector running under everything */
   bed(on: boolean): void
+  /** a narrator's line (a WAV file's bytes) through the radio; resolves once it's played, false if it couldn't be */
+  voice(wav: ArrayLike<number>): Promise<boolean>
   close(): void
+}
+
+/** A WAV file's samples (16-bit PCM, its first channel). */
+function readWav(bytes: ArrayLike<number>): { samples: Float32Array; rate: number } | null {
+  const b = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes)
+  const v = new DataView(b.buffer, b.byteOffset, b.byteLength)
+  const tag = (o: number) => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3])
+  if (b.length < 44 || tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return null
+  let rate = SR, channels = 1, o = 12
+  while (o + 8 <= b.length) {
+    const id = tag(o), n = v.getUint32(o + 4, true)
+    if (id === 'fmt ') { channels = v.getUint16(o + 10, true) || 1; rate = v.getUint32(o + 12, true) || SR }
+    if (id === 'data') {
+      const end = Math.min(b.length, o + 8 + n), count = Math.floor((end - o - 8) / (2 * channels))
+      const samples = new Float32Array(count)
+      for (let i = 0; i < count; i++) samples[i] = v.getInt16(o + 8 + i * 2 * channels, true) / 32768
+      return { samples, rate }
+    }
+    o += 8 + n + (n % 2)
+  }
+  return null
 }
 
 export function createFilmSound(): FilmSound {
@@ -138,6 +163,21 @@ export function createFilmSound(): FilmSound {
       if (on && !bedSrc) bedSrc = play(sounds().bed, 0.55, true)
       if (!on && bedSrc) { try { bedSrc.stop() } catch { /* already stopped */ } bedSrc = null }
     },
+    voice(wav) {
+      const pcm = readWav(wav)
+      if (!pcm || !pcm.samples.length || !ctx || ctx.state !== 'running') return Promise.resolve(false)
+      const buf = ctx.createBuffer(1, pcm.samples.length, pcm.rate)
+      buf.getChannelData(0).set(radio(pcm.samples, 2.2))
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      const g = ctx.createGain()
+      g.gain.value = 1.1
+      src.connect(g).connect(ctx.destination)
+      return new Promise(resolve => {
+        src.onended = () => resolve(true)
+        src.start()
+      })
+    },
     close() {
       self.bed(false)
       void ctx?.close().catch(() => {})
@@ -147,49 +187,120 @@ export function createFilmSound(): FilmSound {
   return self
 }
 
-/** The narrator: the device's own voice, deep and a touch quick, the way newsreels sounded. */
+/** The robot announcer (eSpeak, British), loaded the first time it's needed. */
+interface MeSpeak {
+  loadConfig(config: unknown): void
+  loadVoice(voice: unknown): void
+  speak(text: string, options: Record<string, unknown>): ArrayLike<number> | null
+}
+let robot: Promise<MeSpeak> | null = null
+function loadRobot(): Promise<MeSpeak> {
+  robot ??= (async () => {
+    const base = '/vendor/mespeak/'
+    const [config, voice] = await Promise.all([
+      fetch(base + 'mespeak_config.json').then(r => r.json()),
+      fetch(base + 'en-rp.json').then(r => r.json()),
+      new Promise<void>((resolve, reject) => {
+        if ((window as unknown as { meSpeak?: MeSpeak }).meSpeak) { resolve(); return }
+        const el = document.createElement('script')
+        el.src = base + 'mespeak.min.js'
+        el.onload = () => resolve()
+        el.onerror = () => reject(new Error("The newsreel's voice didn't load"))
+        document.head.appendChild(el)
+      }),
+    ])
+    const m = (window as unknown as { meSpeak: MeSpeak }).meSpeak
+    m.loadConfig(config)
+    m.loadVoice(voice)
+    return m
+  })()
+  robot.catch(() => { robot = null })
+  return robot
+}
+
+/** The Fire TV's browser (Silk): no voice of its own */
+const FIRE_TV = typeof navigator !== 'undefined' && /\bSilk\b|\bAFT[A-Z]/.test(navigator.userAgent)
+
+/**
+ * The narrator: the device's own voice, deep and a touch quick, the way
+ * newsreels sounded; or, where the device's voice won't talk (there's none,
+ * or it never starts), the robot announcer through the film's sound.
+ */
 export interface Narrator {
-  /** says it, resolving when it's said, or false if the device wouldn't */
+  /** says it, resolving when it's said, or false if it couldn't be heard */
   say(text: string): Promise<boolean>
   /** inside a tap: lets phones that need one speak later on their own */
   prime(): void
   stop(): void
 }
 
-export function createNarrator(): Narrator | null {
-  const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined
-  if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return null
+export function createNarrator(sound: FilmSound): Narrator {
+  const synth = typeof window !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined' ? window.speechSynthesis : undefined
+  // The device's voice until it shows it won't talk; the robot from then on
+  let device = !!synth && !FIRE_TV
+  if (!device) void loadRobot().catch(() => {})
   const pick = () => {
-    const voices = synth.getVoices().filter(v => /^en/i.test(v.lang))
+    const voices = synth?.getVoices().filter(v => /^en/i.test(v.lang)) ?? []
     return voices.find(v => /daniel|david|alex|fred|george|guy|aaron|arthur|james|male/i.test(v.name) && !/female/i.test(v.name))
       ?? voices.find(v => /en-(US|GB)/i.test(v.lang))
       ?? voices[0]
       ?? null
   }
+  // 'said'; 'blocked' (no tap yet, so nothing can talk); or 'mute' (it never started: no voice here)
+  const sayDevice = (text: string) => new Promise<'said' | 'blocked' | 'mute'>(resolve => {
+    let done = false, started = false
+    const finish = (r: 'said' | 'blocked' | 'mute') => {
+      if (done) return
+      done = true
+      clearTimeout(watch)
+      clearTimeout(guard)
+      resolve(r)
+    }
+    const u = new SpeechSynthesisUtterance(text)
+    const v = pick()
+    if (v) u.voice = v
+    u.rate = 1.05
+    u.pitch = 0.8
+    u.onstart = () => { started = true }
+    u.onend = () => finish(started ? 'said' : 'mute')
+    u.onerror = e => finish(e.error === 'not-allowed' ? 'blocked' : started ? 'said' : 'mute')
+    // A voice that hasn't started in a couple of seconds isn't going to
+    const watch = setTimeout(() => {
+      if (started) return
+      try { synth?.cancel() } catch { /* fine */ }
+      finish('mute')
+    }, 3000)
+    // Some devices never say they've finished: move on after a generous wait
+    const guard = setTimeout(() => finish('said'), 2500 + text.length * 110)
+    try { synth?.speak(u) } catch { finish('mute') }
+  })
+  const sayRobot = async (text: string) => {
+    try {
+      const m = await loadRobot()
+      const wav = m.speak(text, { rawdata: 'array', pitch: 38, speed: 158, wordgap: 1, amplitude: 120 })
+      return wav ? await sound.voice(wav) : false
+    } catch {
+      return false
+    }
+  }
   return {
-    say(text) {
-      return new Promise(resolve => {
-        let done = false
-        const finish = (ok: boolean) => { if (!done) { done = true; clearTimeout(guard); resolve(ok) } }
-        const u = new SpeechSynthesisUtterance(text)
-        const v = pick()
-        if (v) u.voice = v
-        u.rate = 1.05
-        u.pitch = 0.8
-        u.onend = () => finish(true)
-        u.onerror = () => finish(false)
-        // Some devices never say they've finished: move on after a generous wait
-        const guard = setTimeout(() => finish(true), 2500 + text.length * 110)
-        try { synth.speak(u) } catch { finish(false) }
-      })
+    async say(text) {
+      if (device) {
+        const r = await sayDevice(text)
+        if (r === 'said') return true
+        if (r === 'blocked') return false
+        device = false
+      }
+      return sayRobot(text)
     },
     prime() {
+      if (!synth || !device) return
       try {
         const u = new SpeechSynthesisUtterance(' ')
         u.volume = 0
         synth.speak(u)
       } catch { /* fine */ }
     },
-    stop() { try { synth.cancel() } catch { /* fine */ } },
+    stop() { try { synth?.cancel() } catch { /* fine */ } },
   }
 }
