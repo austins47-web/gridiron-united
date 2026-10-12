@@ -9,6 +9,7 @@ import { weekStory, type WarStory } from '@/components/conquest/warStory'
 import { fetchSoFar, warAsItStands } from '@/components/conquest/warSoFar'
 import { WarPoster } from '@/components/conquest/WarPoster'
 import { Newsreel } from '@/components/conquest/Newsreel'
+import { CipherOrders, cipherOf } from '@/components/conquest/CipherOrders'
 
 // Conquest on the Shop TV: a panel in the rotation, the remote's Map
 // (full screen), and the War Report, which plays once for each week the
@@ -81,6 +82,7 @@ export function ConquestPanelBody({ war, battles, week }: { war: ConquestData; b
           {exiled > 0 && <> · {exiled} in exile</>}
         </p>
       )}
+      <TvCodedOrders war={war} week={week} />
       <div className="space-y-1.5">
         {ranks.slice(0, 5).map((e, i) => (
           <div key={e.userId} className="flex items-center gap-2.5 text-[19px]">
@@ -446,6 +448,30 @@ export function NewsreelShow({ b, code, sofar = false, onDone }: { b: WarBoard; 
   return (
     <div className="absolute inset-0 z-[36] bg-black">
       <Newsreel war={got.war} story={got.story} autoPlay lite={lite} soundHint="Press OK on the TV's remote for sound" voiceFrom={{ token: code }} onDone={() => setTimeout(onDone, 1500)} />
+    </div>
+  )
+}
+
+/**
+ * The week's attack orders on the TV: in code before the first kickoff
+ * (who's sealed one), then decrypting into who each is on.
+ */
+function TvCodedOrders({ war, week }: { war: ConquestData; week: number }) {
+  const battleWeek = (war.lastWeek ?? war.startWeek - 1) + 1
+  if (week !== battleWeek || battleWeek > (war.finalWeek ?? 18)) return null
+  const nameOf = nameFrom(war), colorOf = colorFrom(war)
+  const orders = war.orders ?? {}
+  const sealed = war.sealed ?? []
+  const open = Object.keys(orders).length > 0
+  const ids = (open ? Object.keys(orders) : sealed).slice(0, 4)
+  if (!ids.length) return null
+  const rows = ids.map(id => ({ key: id, name: nameOf(id), color: colorOf(id), target: open ? nameOf(orders[id]) : null, code: cipherOf(`${war.startWeek}|${battleWeek}|${id}`) }))
+  const more = (open ? Object.keys(orders).length : sealed.length) - ids.length
+  return (
+    <div>
+      <p className="font-mono text-[15px] text-[#3fd0ff] mb-1">{open ? '// ORDERS DECRYPTED' : `// ${sealed.length} SEALED ORDERS · DECRYPT AT KICKOFF`}</p>
+      <CipherOrders rows={rows} animate={open} big />
+      {more > 0 && <p className="font-mono text-[14px] text-field-500 mt-0.5">+{more} more</p>}
     </div>
   )
 }

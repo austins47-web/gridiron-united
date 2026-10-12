@@ -487,3 +487,51 @@ export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Reco
   }
   return out
 }
+
+// ── Medals ─────────────────────────────────────────────────────
+// Won week by week, kept for good: the Medal of Honor for the week's
+// biggest conqueror, the Purple Heart for taking your capital back, and
+// the Distinguished Service Cross for breaking a siege on your capital.
+
+export type MedalKind = 'honor' | 'purple_heart' | 'service_cross'
+
+export const MEDAL_INFO: Record<MedalKind, { name: string; short: string; why: string }> = {
+  honor: { name: 'Medal of Honor', short: 'Honor', why: 'the week’s biggest conqueror' },
+  purple_heart: { name: 'Purple Heart', short: 'Purple Heart', why: 'took their capital back' },
+  service_cross: { name: 'Distinguished Service Cross', short: 'Service Cross', why: 'broke a siege on their capital' },
+}
+
+export interface Medal {
+  kind: MedalKind
+  to: string
+  /** the city it was won at (not the Medal of Honor's) */
+  team?: string
+}
+
+const GAINED: Partial<Record<MoveKind, number>> = { capture: 3, rebellion: 3, siege: 2, claim: 1 }
+
+/** The week's biggest conqueror: the most won (a city taken counts most), then the better week. */
+export function conquerorOf(moves: Pick<Move, 'kind' | 'to' | 'score'>[]): string | null {
+  const gains = new Map<string, number>()
+  const best = new Map<string, number>()
+  for (const m of moves) {
+    const g = GAINED[m.kind]
+    if (!g) continue
+    gains.set(m.to, (gains.get(m.to) ?? 0) + g)
+    best.set(m.to, Math.max(best.get(m.to) ?? 0, m.score[0]))
+  }
+  return [...gains.keys()].sort((a, b) =>
+    (gains.get(b)! - gains.get(a)!) || (best.get(b)! - best.get(a)!) || a.localeCompare(b))[0] ?? null
+}
+
+/** The medals one settled week hands out. */
+export function weekMedals(moves: Pick<Move, 'kind' | 'to' | 'score' | 'team'>[]): Medal[] {
+  const out: Medal[] = []
+  const hero = conquerorOf(moves)
+  if (hero) out.push({ kind: 'honor', to: hero })
+  for (const m of moves) {
+    if (m.kind === 'rebellion') out.push({ kind: 'purple_heart', to: m.to, team: m.team })
+    if (m.kind === 'relief') out.push({ kind: 'service_cross', to: m.to, team: m.team })
+  }
+  return out
+}

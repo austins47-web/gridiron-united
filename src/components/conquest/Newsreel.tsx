@@ -4,6 +4,8 @@ import { M } from './mapGeometry'
 import { useWarFonts } from './WarPoster'
 import { WHOLE_MAP, cityName, mapAfterMoves, type WarStory } from './warStory'
 import { createFilmSound, createNarrator, type FilmSound, type Narrator } from '@/lib/filmSound'
+import { MedalBadge } from './MedalBadge'
+import { MEDAL_INFO } from '../../../supabase/functions/_shared/conquest.ts'
 import type { ConquestData } from './conquestView'
 import { fetchVoices, type VoiceFrom } from './newsreelVoice'
 
@@ -220,6 +222,7 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
       <style>{`
         @keyframes gu-reel-ring { from { transform: scale(.35); opacity: .95 } to { transform: scale(1.6); opacity: 0 } }
         @keyframes gu-reel-march { to { stroke-dashoffset: -12 } }
+        @keyframes gu-reel-medals { from { opacity: 0; transform: translateY(8%) scale(.9) } to { opacity: 1; transform: none } }
         .gu-reel-ring { transform-box: fill-box; transform-origin: center; animation: gu-reel-ring 1.4s ease-out infinite; }
         .gu-reel-march { animation: gu-reel-march .5s linear infinite; }
         @media (prefers-reduced-motion: reduce) { .gu-reel-ring, .gu-reel-march { animation: none } }
@@ -292,6 +295,21 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
           <div style={{ width: '36%', height: 2, margin: '.6em auto', background: 'linear-gradient(90deg, transparent, #bbb, transparent)' }} />
           <p style={{ fontFamily: DISPLAY, fontSize: '2em', letterSpacing: '.22em', color: '#ccc' }}>{story.pending ? 'More to come' : 'Pick wisely'}</p>
         </div>
+        {/* The medal ceremony: each medal pinned up with who won it */}
+        {current?.medals && current.medals.length > 0 && (
+          <div className="absolute inset-x-0 top-[12%] flex flex-col items-center" style={{ animation: 'gu-reel-medals .8s ease-out both' }}>
+            <p style={{ fontFamily: DISPLAY, fontSize: '2.4em', letterSpacing: '.25em', color: '#fff', textShadow: '0 2px 6px #000' }}>Decorated for Valor</p>
+            <div className="flex items-end justify-center" style={{ gap: '3em', marginTop: '1.2em' }}>
+              {current.medals.slice(0, 5).map((m, i) => (
+                <div key={i} className="flex flex-col items-center text-center" style={{ width: '14em' }}>
+                  <MedalBadge kind={m.kind} className="w-[7em] h-auto drop-shadow-[0_6px_10px_rgba(0,0,0,.8)]" title={MEDAL_INFO[m.kind].name} />
+                  <p style={{ fontFamily: DISPLAY, fontSize: '2.2em', color: '#fff', marginTop: '.3em', textShadow: '0 2px 6px #000' }}>{m.name}</p>
+                  <p className="font-cond font-bold uppercase" style={{ fontSize: '1.5em', letterSpacing: '.12em', color: '#ddd', textShadow: '0 2px 6px #000' }}>{MEDAL_INFO[m.kind].name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {current && (
           <p
             className="absolute inset-x-[6%] bottom-[7%] text-center font-cond font-semibold text-white"

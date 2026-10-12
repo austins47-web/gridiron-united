@@ -5,10 +5,12 @@ import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
-import { CITY, ADJ, TERRITORIES, citiesOf, neighborsOf } from '../../../supabase/functions/_shared/conquest.ts'
+import { CITY, ADJ, TERRITORIES, MEDAL_INFO, citiesOf, neighborsOf, type Medal, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
 import { WarMap } from '@/components/conquest/WarMap'
-import { empires, liveBattles, headline, titles, swatch, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
+import { empires, liveBattles, headline, titles, seasonMedals, swatch, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
 import { ConquestIcon } from '@/components/conquest/ConquestIcon'
+import { MedalBadge } from '@/components/conquest/MedalBadge'
+import { CipherOrders, cipherOf } from '@/components/conquest/CipherOrders'
 
 /**
  * Conquest in the app (Pick'Em → Map): the war map, your empire, this
@@ -217,6 +219,10 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
         <OrdersCard war={data} userId={userId} week={battleWeek} sender={sender} />
       )}
 
+      {userId && battleWeek != null && week === battleWeek && battleWeek <= (data.finalWeek ?? 18) && (
+        <CodedOrders war={data} leagueId={leagueId} week={battleWeek} userId={userId} locked={!!lockAt && Date.now() >= lockAt.getTime()} />
+      )}
+
       {started && week === battleWeek && battleWeek <= (data.finalWeek ?? 18) && (
         <div className="panel p-4">
           <p className="font-cond font-bold text-sm uppercase tracking-wider text-white mb-2">This week’s battles</p>
@@ -232,6 +238,8 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
       )}
 
       <TitleRace war={data} userId={userId} />
+
+      <MedalBoard war={data} userId={userId} />
 
       <div className="panel p-4">
         <p className="font-cond font-bold text-sm uppercase tracking-wider text-white mb-2">Empires</p>
@@ -455,6 +463,114 @@ function TitleRace({ war, userId }: { war: War; userId: string | undefined }) {
           )
         })}
       </ul>
+    </div>
+  )
+}
+
+/** The season's medals, by who holds the most (Medals of Honor first). */
+function MedalBoard({ war, userId }: { war: War; userId: string | undefined }) {
+  const medals = useMemo(() => seasonMedals(war.log), [war.log])
+  const honors = (list: Medal[]) => list.filter(m => m.kind === 'honor').length
+  const rows = war.players
+    .map(p => ({ p, list: medals.get(p.userId) ?? [] }))
+    .filter(r => r.list.length > 0)
+    .sort((a, b) => honors(b.list) - honors(a.list) || b.list.length - a.list.length || a.p.name.localeCompare(b.p.name))
+  const KINDS: MedalKind[] = ['honor', 'purple_heart', 'service_cross']
+  return (
+    <div className="panel p-4">
+      <p className="font-cond font-bold text-sm uppercase tracking-wider text-white mb-2">War medals</p>
+      {rows.length === 0 ? (
+        <p className="text-xs text-field-400">
+          Pinned on as each week settles: the Medal of Honor for the week’s biggest conqueror, the Purple Heart for taking your capital back,
+          and the Distinguished Service Cross for breaking a siege on your capital.
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-1">
+            {rows.map(({ p, list }) => (
+              <li key={p.userId} className={clsx('flex items-center gap-2 text-sm rounded-md px-2 py-1', p.userId === userId && 'bg-gold/10')}>
+                <span className="w-3 h-3 rounded-sm shrink-0" style={swatch(p.color)} />
+                <span className="truncate font-bold text-white">{p.name}</span>
+                <span className="ml-auto flex items-center gap-2 shrink-0">
+                  {KINDS.map(k => {
+                    const n = list.filter(m => m.kind === k).length
+                    return n ? (
+                      <span key={k} className="flex items-center gap-0.5" title={`${MEDAL_INFO[k].name}${n > 1 ? ` ×${n}` : ''}`}>
+                        <MedalBadge kind={k} className="w-4 h-7" />
+                        {n > 1 && <span className="text-xs font-bold text-field-300 tabular-nums">×{n}</span>}
+                      </span>
+                    ) : null
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-field-500">
+            {KINDS.map(k => (
+              <span key={k} className="flex items-center gap-1"><MedalBadge kind={k} className="w-2.5 h-4" />{MEDAL_INFO[k].name}: {MEDAL_INFO[k].why}</span>
+            ))}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The week's attack orders as coded messages: before the first kickoff,
+ * who's sealed one (a cipher each; yours you can read), and after it, the
+ * orders decrypted, letter by letter the first time you see them.
+ */
+function CodedOrders({ war, leagueId, week, userId, locked }: { war: War; leagueId: string; week: number; userId: string; locked: boolean }) {
+  const { data: sealed = [] } = useQuery({
+    queryKey: ['conquest-sealed', leagueId, week],
+    enabled: !locked,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('conquest_sealed_orders', { p_league: leagueId })
+      if (error) throw error
+      return (data ?? []) as string[]
+    },
+  })
+  const seenKey = `gu-conquest-decrypted-${leagueId}-${CURRENT_SEASON}-${week}`
+  const [animate] = useState(() => {
+    if (!locked) return false
+    try {
+      if (localStorage.getItem(seenKey)) return false
+      localStorage.setItem(seenKey, '1')
+    } catch { /* fine: it plays again */ }
+    return true
+  })
+  const nameOf = (id: string) => war.players.find(p => p.userId === id)?.name ?? 'Someone'
+  const colorOf = (id: string) => war.players.find(p => p.userId === id)?.color ?? '#666'
+  const orders = war.orders ?? {}
+  const ids = locked ? Object.keys(orders) : [...new Set([...sealed, ...(orders[userId] ? [userId] : [])])]
+  const rows = ids
+    .sort((a, b) => Number(b === userId) - Number(a === userId) || nameOf(a).localeCompare(nameOf(b)))
+    .map(id => ({
+      key: id,
+      name: nameOf(id),
+      color: colorOf(id),
+      // Yours you can always read
+      target: orders[id] && (locked || id === userId) ? nameOf(orders[id]) : null,
+      code: cipherOf(`${leagueId}|${week}|${id}`),
+    }))
+  const empires = war.players.filter(p => citiesOf(war.owners, p.userId).length).length
+  if (!rows.length) return null
+  return (
+    <div className="panel p-4">
+      <div className="flex items-center gap-2 mb-2">
+        {locked ? <span aria-hidden>🔓</span> : <Lock className="w-3.5 h-3.5 text-[#3fd0ff]" />}
+        <p className="font-cond font-bold text-sm uppercase tracking-wider text-white">{locked ? 'Orders decrypted' : 'Sealed orders'}</p>
+        <span className="ml-auto text-[11px] text-field-500">{rows.length} of {empires} empires</span>
+      </div>
+      <CipherOrders rows={rows} animate={animate} />
+      <p className="mt-2 text-[11px] text-field-500">
+        {locked
+          ? 'Everyone else attacks automatically: the neighbor they picked most differently from.'
+          : 'Attack orders stay in code until the week’s first kickoff. Yours you can read.'}
+      </p>
     </div>
   )
 }

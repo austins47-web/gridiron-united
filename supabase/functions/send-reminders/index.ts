@@ -30,6 +30,7 @@ import { renderEmail, ordinal, type RichEmail, type PickRow } from './email.ts'
 import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
 import { partsInZone, weeklyDeadlineForWeek, stillPickable, weekDeadline } from '../_shared/pickLocks.ts'
 import { autopilotFills, type AutopilotRule } from '../_shared/autopilot.ts'
+import { CITY, weekMedals, MEDAL_INFO, type Move } from '../_shared/conquest.ts'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0'
 
 const CORS = {
@@ -162,6 +163,7 @@ const PUSH_LOOK: Record<string, PushLook> = {
   lineup_empty:      { icon: 'lineup',     emoji: '🚨' },
 }
 const WON_LOOK: PushLook = { icon: 'result', emoji: '🏆' }
+const TELEGRAM_LOOK: PushLook = { icon: 'alive', emoji: '📨' }
 
 const pushPayload = (r: Reminder) => {
   const look = r.pushLook ?? PUSH_LOOK[r.eventType]
@@ -323,6 +325,7 @@ serve(async (req) => {
         notify_lineup:          pick('notify_lineup', true),
         notify_weekly_recap:    pick('notify_weekly_recap', true),
         notify_live_alerts:     pick('notify_live_alerts', false),
+        notify_conquest:        pick('notify_conquest', true),
         lead_primary:   Number(pick('lead_hours_primary', 24)),
         lead_secondary: Number(pick('lead_hours_secondary', 2)),
       }
@@ -341,7 +344,7 @@ serve(async (req) => {
     // Who to reach, and how, for one kind of event: null when they've
     // switched it off or have no way to receive it. Event toggles apply
     // to email and push alike; "email me" only governs email.
-    type NotifyKey = 'notify_pickem_deadline' | 'notify_draft' | 'notify_on_the_clock' | 'notify_trades' | 'notify_lineup' | 'notify_weekly_recap' | 'notify_live_alerts'
+    type NotifyKey = 'notify_pickem_deadline' | 'notify_draft' | 'notify_on_the_clock' | 'notify_trades' | 'notify_lineup' | 'notify_weekly_recap' | 'notify_live_alerts' | 'notify_conquest'
     const reach = (userId: string, leagueId: string, notify: NotifyKey) => {
       const pref = prefFor(userId, leagueId)
       if (!pref[notify]) return null
@@ -1406,6 +1409,96 @@ serve(async (req) => {
               + (matters > 1 ? ` It swings the week for ${matters} of you.` : ''))
         }
       }
+    }
+
+    // ══ 9. CONQUEST TELEGRAMS — phone only ══════════════════
+    // Telegrams from the front, 1940s style ("KANSAS CITY UNDER SIEGE STOP"):
+    // when a week's attack orders come out at its first kickoff, to each
+    // empire an ordered attack is on; and when a week settles, to everyone
+    // it touched: what they took, what they lost, any medal. One each
+    // (reminder_log), and only while it's news.
+    try {
+      const { data: wars } = await supabase.from('conquest_games')
+        .select('league_id, season, start_week, last_resolved_week, final_week').eq('season', season)
+      const nameOf = (u: string | null) => {
+        const p = u ? profileById.get(u) : null
+        return String(p?.display_name || p?.username || 'Someone').toUpperCase()
+      }
+      const city = (t: string) => (CITY[t] ?? t).toUpperCase()
+      const andList = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} AND ${xs[xs.length - 1]}`)
+      for (const war of wars ?? []) {
+        const lg = leagueById.get(war.league_id)
+        if (!lg) continue
+        const telegram = (userId: string, dedupeKey: string, title: string, body: string) => {
+          const r = reach(userId, lg.id, 'notify_conquest')
+          if (!r?.push) return
+          reminders.push({
+            userId, email: null, push: true, pushOnly: true,
+            leagueId: lg.id, leagueName: lg.name, eventType: 'conquest_telegram', dedupeKey,
+            subject: title, heading: title, body, pushTitle: title, pushBody: body,
+            pushTag: `conquest-telegram-${lg.id}`, pushTtlSec: 24 * 3600, pushLook: TELEGRAM_LOOK,
+            ctaLabel: 'War map', ctaPath: '/app/pickem?tab=conquest',
+          })
+        }
+
+        // (a) The orders are out: an attack's coming your way
+        const battleWeek = (war.last_resolved_week ?? war.start_week - 1) + 1
+        const wkGames = scheduleBySeason.get(season)?.get(battleWeek) ?? []
+        const firstKick = wkGames.length ? Math.min(...wkGames.map(g => new Date(g.game_date).getTime())) : NaN
+        if (battleWeek <= war.final_week && now.getTime() >= firstKick && now.getTime() - firstKick < 6 * HOUR) {
+          const { data: orders } = await supabase.from('conquest_orders').select('user_id, target_id')
+            .eq('league_id', lg.id).eq('season', season).eq('week', battleWeek)
+          const on = new Map<string, string[]>()
+          for (const o of orders ?? []) if (o.target_id) on.set(o.target_id, [...(on.get(o.target_id) ?? []), o.user_id])
+          for (const [target, attackers] of on) {
+            const names = attackers.map(nameOf)
+            telegram(target, `conquest_inbound:${lg.id}:${season}:${battleWeek}`, 'Telegram: attack inbound',
+              `${andList(names)} ${names.length === 1 ? 'HAS' : 'HAVE'} ORDERED AN ATTACK ON YOU STOP DEFEND YOUR LAND STOP PICK WELL STOP`)
+          }
+        }
+
+        // (b) A week's settled: the news, to everyone it touched
+        const done = war.last_resolved_week as number | null
+        const doneGames = done != null ? scheduleBySeason.get(season)?.get(done) ?? [] : []
+        const lastKick = doneGames.length ? Math.max(...doneGames.map(g => new Date(g.game_date).getTime())) : NaN
+        if (done != null && now.getTime() - lastKick < 3 * 24 * HOUR) {
+          const { data: rows } = await supabase.from('conquest_moves')
+            .select('kind, team, from_user, to_user, score_for, score_against, exiled')
+            .eq('league_id', lg.id).eq('season', season).eq('week', done).order('id')
+          const moves: Move[] = (rows ?? []).map(m => ({
+            kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
+            score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: !!m.exiled,
+          }))
+          const news = new Map<string, string[]>()
+          const add = (u: string | null, line: string) => { if (u) news.set(u, [...(news.get(u) ?? []), line]) }
+          for (const m of moves) {
+            const [a, b] = m.score, T = city(m.team)
+            if (m.kind === 'capture') {
+              add(m.to, `YOU TOOK ${T} FROM ${nameOf(m.from)} ${a} TO ${b}`)
+              add(m.from, m.exiled
+                ? `${T} HAS FALLEN TO ${nameOf(m.to)} ${a} TO ${b} STOP YOUR EMPIRE IS NO MORE STOP RISE AGAIN`
+                : `${T} HAS FALLEN TO ${nameOf(m.to)} ${a} TO ${b} STOP TAKE IT BACK`)
+            } else if (m.kind === 'siege') {
+              add(m.to, `YOUR ARMIES BESIEGE ${T} ${a} TO ${b}`)
+              add(m.from, `${T} UNDER SIEGE STOP ${nameOf(m.to)} ${a} YOU ${b} STOP HOLD THE LINE`)
+            } else if (m.kind === 'rebellion') {
+              add(m.to, `YOU HAVE RETAKEN ${T}`)
+              add(m.from, `${nameOf(m.to)} HAS RETAKEN ${T}`)
+            } else if (m.kind === 'relief') {
+              add(m.to, `THE SIEGE OF ${T} IS BROKEN`)
+            } else if (m.kind === 'claim') {
+              add(m.to, `YOUR FLAG FLIES OVER ${T}`)
+            }
+          }
+          for (const medal of weekMedals(moves)) add(medal.to, `YOU ARE AWARDED THE ${MEDAL_INFO[medal.kind].name.toUpperCase()}`)
+          for (const [userId, lines] of news) {
+            telegram(userId, `conquest_settle:${lg.id}:${season}:${done}`, `Telegram from the front: Week ${done}`,
+              `${lines.slice(0, 4).join(' STOP ')} STOP`)
+          }
+        }
+      }
+    } catch (e) {
+      console.error('conquest telegrams:', e instanceof Error ? e.message : e)
     }
 
     // ══ SEND ═════════════════════════════════════════════════

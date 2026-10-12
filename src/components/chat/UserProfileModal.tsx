@@ -2,7 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
-import { X, Trophy, Star, Users } from 'lucide-react'
+import { X, Trophy, Star, Users, Medal } from 'lucide-react'
+import { CURRENT_SEASON } from '@/lib/season'
+import { seasonMedals } from '@/components/conquest/conquestView'
+import { MedalBadge } from '@/components/conquest/MedalBadge'
+import { MEDAL_INFO } from '../../../supabase/functions/_shared/conquest.ts'
 import clsx from 'clsx'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -117,6 +121,23 @@ export function UserProfileModal({ username, onClose }: {
     },
   })
 
+  // Their Conquest medals in this league's war, this season
+  const { data: medals = [] } = useQuery({
+    queryKey: ['war-medals', activeLeagueId, CURRENT_SEASON, profile?.id],
+    enabled: !!profile?.id && !!activeLeagueId,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.from('conquest_moves')
+        .select('week, kind, team, from_user, to_user, score_for, score_against, exiled')
+        .eq('league_id', activeLeagueId!).eq('season', CURRENT_SEASON)
+      const log = (data ?? []).map((m: any) => ({
+        week: m.week, kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
+        score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: m.exiled,
+      }))
+      return seasonMedals(log).get(profile!.id) ?? []
+    },
+  })
+
   const starters = roster.filter(r => !r.slot.startsWith('BN') && !r.slot.startsWith('IR') && !r.slot.startsWith('CFB_OS'))
   const benchSlots = roster.filter(r => r.slot.startsWith('BN'))
 
@@ -184,6 +205,30 @@ export function UserProfileModal({ username, onClose }: {
                     <span className="text-xs text-field-500">CFB</span>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Conquest medals, in the league that's open */}
+            {medals.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Medal className="w-3.5 h-3.5 text-field-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-field-400">War medals</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(['honor', 'purple_heart', 'service_cross'] as const).map(k => {
+                    const won = medals.filter(m => m.kind === k)
+                    return won.length ? (
+                      <div key={k} className="flex items-center gap-2 bg-field-700 border border-field-600 rounded-lg pl-1.5 pr-3 py-1" title={`${MEDAL_INFO[k].name}: ${MEDAL_INFO[k].why}`}>
+                        <MedalBadge kind={k} className="w-5 h-8" />
+                        <div className="leading-tight">
+                          <div className="text-xs font-bold text-white">{MEDAL_INFO[k].name}{won.length > 1 ? ` ×${won.length}` : ''}</div>
+                          <div className="text-[11px] text-field-400">Week{won.length > 1 ? 's' : ''} {won.map(m => m.week).join(', ')}</div>
+                        </div>
+                      </div>
+                    ) : null
+                  })}
+                </div>
               </div>
             )}
 

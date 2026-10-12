@@ -50,6 +50,11 @@ const EVENTS: { key: string; kinds: Kind[]; label: (k: Set<Kind>) => string; des
     label: () => 'Live game alerts',
     desc: () => 'Phone only, while games are on: when you take the lead or clinch, your chance to win swings, an upset is brewing, who to root for before the big game, or the tiebreaker total gets close to your guess',
   },
+  {
+    key: 'notify_conquest', kinds: ['pickem'],
+    label: () => 'War telegrams',
+    desc: () => 'Phone only, in Conquest: a telegram when someone orders an attack on you, and your news from the front when the week settles',
+  },
 ]
 
 /**

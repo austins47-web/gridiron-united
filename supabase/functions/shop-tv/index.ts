@@ -591,11 +591,18 @@ async function conquestOf(admin: ReturnType<typeof createClient>, leagueId: stri
       ? admin.from('conquest_orders').select('user_id, target_id').eq('league_id', leagueId).eq('season', season).eq('week', battleWeek)
       : Promise.resolve({ data: [] as never[] }),
   ])
+  // Coded orders: before the week's first kickoff, who has sealed an attack (not on whom)
+  let sealed: string[] = []
+  if (!open) {
+    const { data: sealedRows } = await admin.from('conquest_orders').select('user_id, target_id').eq('league_id', leagueId).eq('season', season).eq('week', battleWeek)
+    sealed = (sealedRows ?? []).filter(r => r.target_id).map(r => r.user_id as string)
+  }
   return {
     startWeek: war.start_week as number,
     lastWeek,
     finalWeek: war.final_week as number,
     lockAt: lockAt ?? null,
+    sealed,
     // Attacks only (a row can be just a flag order)
     orders: Object.fromEntries((orders ?? []).filter(o => o.target_id).map(o => [o.user_id, o.target_id])) as Record<string, string>,
     crowned: (war.crowned ?? null) as unknown,

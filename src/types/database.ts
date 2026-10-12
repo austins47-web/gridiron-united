@@ -1114,6 +1114,7 @@ export interface Database {
           notify_trades: boolean
           notify_weekly_recap: boolean
           notify_live_alerts: boolean
+          notify_conquest: boolean
           sms_enabled: boolean
           updated_at: string
           user_id: string
@@ -1132,6 +1133,7 @@ export interface Database {
           notify_trades?: boolean
           notify_weekly_recap?: boolean
           notify_live_alerts?: boolean
+          notify_conquest?: boolean
           sms_enabled?: boolean
           updated_at?: string
           user_id: string
@@ -1472,6 +1474,8 @@ export interface Database {
       mark_chat_read: { Args: { p_league: string; p_room: string; p_at: string }; Returns: undefined }
       league_tv_token: { Args: { p_league: string; p_reset?: boolean }; Returns: string }
       league_has_tv: { Args: { p_league: string }; Returns: boolean }
+      /** Conquest: who's sealed an attack order for the week being played (not on whom); members only. */
+      conquest_sealed_orders: { Args: { p_league: string }; Returns: string[] }
       /** Whether a Spotify is connected for the Shop TV, and whose (commissioner only). */
       league_spotify_status: {
         Args: { p_league: string }

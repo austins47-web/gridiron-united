@@ -2,7 +2,7 @@
 // lines (what's said, where the camera goes, which moves it shows) and the
 // War Office's posters. Built from the week's war report alone, so the TV
 // and the commissioner's preview tell the same story.
-import { CITY } from '../../../supabase/functions/_shared/conquest.ts'
+import { CITY, conquerorOf, weekMedals, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
 import { ownersBefore, type ConquestData, type ConquestMove } from './conquestView'
 import { M } from './mapGeometry'
 
@@ -19,6 +19,8 @@ export interface ReelLine {
   arrows: { from: string; to: string; color: string }[]
   /** cities named on screen while it plays */
   labels: string[]
+  /** the medal ceremony: who's pinned with what */
+  medals?: { kind: MedalKind; name: string }[]
 }
 
 export interface PosterSpec {
@@ -73,7 +75,6 @@ export function paperTint(color: string, amount = 0.55): string {
   return `hsl(${h} ${Math.round(s * 0.55)}% ${Math.round(l + (82 - l) * amount)}%)`
 }
 
-const GAIN: Record<string, number> = { capture: 3, rebellion: 3, siege: 2, claim: 1, relief: 0 }
 
 /** What the newsreels would've called each city */
 const EPITHET: Record<string, string> = {
@@ -116,17 +117,11 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
     return c && before[c] === u ? c : null
   }
 
-  // The week's biggest conqueror: the most won (a city taken counts most)
-  const gains = new Map<string, number>()
-  const correct = new Map<string, number>()
-  for (const m of moves) {
-    if (m.kind === 'relief') continue
-    gains.set(m.to, (gains.get(m.to) ?? 0) + (GAIN[m.kind] ?? 0))
-    correct.set(m.to, Math.max(correct.get(m.to) ?? 0, m.score[0]))
-  }
-  const hero = [...gains.keys()].sort((a, b) =>
-    (gains.get(b)! - gains.get(a)!) || (correct.get(b)! - correct.get(a)!) || name(a).localeCompare(name(b)))[0]
+  // The week's biggest conqueror (who wins the Medal of Honor), and how they did
+  const hero = conquerorOf(moves)
   if (!hero) return null
+  const correct = new Map<string, number>()
+  for (const m of moves) if (m.kind !== 'relief') correct.set(m.to, Math.max(correct.get(m.to) ?? 0, m.score[0]))
   const H = name(hero), heroCap = capital(hero)
   const heroCity = heroCap ? cityName(heroCap) : null
 
@@ -221,6 +216,22 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
     }
     said++
   }
+
+  // The medals: pinned on in front of the whole map
+  const medals = weekMedals(moves)
+  const hearts = medals.filter(m => m.kind === 'purple_heart'), crosses = medals.filter(m => m.kind === 'service_cross')
+  const ceremony = [
+    say('medals', [
+      `And now, the medals! The Medal of Honor goes to ${H}, for valor beyond the call of duty!`,
+      `For conspicuous gallantry on the gridiron, the Medal of Honor is awarded to ${H}!`,
+    ]),
+    ...hearts.slice(0, 2).map(m => `A Purple Heart for ${name(m.to)}, who fought back into ${cityName(m.team!)}!`),
+    ...crosses.slice(0, 2).map(m => `The Distinguished Service Cross to ${name(m.to)}, who broke the siege of ${cityName(m.team!)}!`),
+  ].join(' ')
+  lines.push({
+    text: ceremony, shot: WHOLE_MAP, reveals: [], arrows: [], labels: [],
+    medals: medals.map(m => ({ kind: m.kind, name: name(m.to) })),
+  })
 
   // The tally, with everything else on the map
   const taken = moves.filter(m => m.kind === 'capture' || m.kind === 'rebellion').length

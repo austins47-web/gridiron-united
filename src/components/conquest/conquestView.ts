@@ -4,6 +4,7 @@
 import type { CSSProperties } from 'react'
 import {
   CITY, citiesOf, plannedBattles, ADJ, patternOf,
+  weekMedals, type Medal,
   type ConquestState, type WeekScores, type MoveKind, type Orders, type Claims, type Title,
 } from '../../../supabase/functions/_shared/conquest.ts'
 
@@ -42,6 +43,8 @@ export interface ConquestData {
   lockAt?: string | null
   /** This week's attack orders, attacker → target (public once they lock) */
   orders?: Orders
+  /** Before they lock: who's sealed an attack order (not on whom) */
+  sealed?: string[]
   /** This week's flag orders, player → the open city they'd claim (yours, and everyone's once they lock) */
   claims?: Claims
   /** The season's titles, once the war's over */
@@ -194,4 +197,15 @@ export function cityStory(owners: Record<string, string | null>, log: LoggedMove
   const holders: CityStory['holders'] = [{ userId: changes.length ? changes[0].from : owners[team] ?? null, since: null }]
   for (const m of changes) holders.push({ userId: m.to, since: m.week })
   return { holders, events }
+}
+
+/** Everyone's medals over the season, from the war log (weekMedals, week by week). */
+export function seasonMedals(log: (ConquestMove & { week: number })[]): Map<string, (Medal & { week: number })[]> {
+  const out = new Map<string, (Medal & { week: number })[]>()
+  for (const week of [...new Set(log.map(m => m.week))].sort((a, b) => a - b)) {
+    for (const medal of weekMedals(log.filter(m => m.week === week))) {
+      out.set(medal.to, [...(out.get(medal.to) ?? []), { ...medal, week }])
+    }
+  }
+  return out
 }
