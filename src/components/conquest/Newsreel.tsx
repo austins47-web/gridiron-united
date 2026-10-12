@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Play } from 'lucide-react'
+import clsx from 'clsx'
 import { M } from './mapGeometry'
 import { useWarFonts } from './WarPoster'
 import { WHOLE_MAP, cityName, mapAfterMoves, type WarStory } from './warStory'
@@ -209,7 +210,8 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
         .gu-reel-march { animation: gu-reel-march .5s linear infinite; }
         @media (prefers-reduced-motion: reduce) { .gu-reel-ring, .gu-reel-march { animation: none } }
       `}</style>
-      <div className="gu-film-weave absolute -inset-[0.5%]" style={{ filter: lite ? FILM_TONE : FILM_TONE_SOFT }}>
+      {/* The film itself: toned, and (but on a Fire TV) weaving in the gate */}
+      <div className={clsx('absolute -inset-[0.5%]', !lite && 'gu-film-weave')} style={{ filter: lite ? FILM_TONE : FILM_TONE_SOFT }}>
         <svg ref={svg} viewBox={START_VIEW} className="absolute inset-[0.5%] w-[99%] h-[99%]" style={{ background: '#161616' }} preserveAspectRatio="xMidYMid slice" aria-hidden>
           <defs>
             {hatches.map(by => (
