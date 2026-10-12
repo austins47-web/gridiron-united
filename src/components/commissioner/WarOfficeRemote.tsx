@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Clapperboard, Eye, Loader2, Megaphone, X } from 'lucide-react'
+import { Clapperboard, Eye, Loader2, Megaphone, Mic, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { weekStory, type WarStory } from '@/components/conquest/warStory'
 import { fetchSoFar, warAsItStands } from '@/components/conquest/warSoFar'
 import { WarPoster } from '@/components/conquest/WarPoster'
 import { Newsreel } from '@/components/conquest/Newsreel'
+import { fetchVoices } from '@/components/conquest/newsreelVoice'
 import type { ConquestData } from '@/components/conquest/conquestView'
 
 type Pick = { key: 'final' | 'sofar'; label: string; war: ConquestData; story: WarStory }
@@ -63,6 +64,21 @@ export function WarOfficeRemote({ leagueId, busy, onShow }: {
   const pick = picks.find(p => p.key === chosen) ?? picks[0] ?? null
   const [preview, setPreview] = useState(false)
 
+  // The announcer records the week's lines as soon as the remote's open (a
+  // minute or so the first time, kept after that), so the TV's newsreel
+  // doesn't wait on them
+  const lines = pick ? pick.story.lines.map(l => l.text) : null
+  const linesKey = lines?.join('|') ?? ''
+  const [announcer, setAnnouncer] = useState<'recording' | 'ready' | 'off' | null>(null)
+  useEffect(() => {
+    if (!lines) return
+    let alive = true
+    setAnnouncer('recording')
+    fetchVoices(lines, { leagueId }).then(v => { if (alive) setAnnouncer(v ? 'ready' : 'off') })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linesKey, leagueId])
+
   if (!war) return null
   const nextWeek = (war.lastWeek ?? war.startWeek - 1) + 1
   const show = (a: 'poster' | 'newsreel') => pick && onShow(a, pick.key === 'sofar')
@@ -109,6 +125,12 @@ export function WarOfficeRemote({ leagueId, busy, onShow }: {
                 : `${pick.story.posters.length > 1 ? 'Two posters' : 'A poster'} and a one-minute newsreel of Week ${pick.story.week}.`}
               {' '}Only on the TV, and only when you put them there.
             </p>
+            {announcer && announcer !== 'off' && (
+              <p className={clsx('flex items-center gap-1 text-[11px]', announcer === 'ready' ? 'text-nfl' : 'text-field-400')}>
+                {announcer === 'ready' ? <Mic className="w-3 h-3" /> : <Loader2 className="w-3 h-3 animate-spin" />}
+                {announcer === 'ready' ? 'The announcer is ready' : 'Recording the announcer (about a minute the first time)…'}
+              </p>
+            )}
             <div className="grid grid-cols-3 gap-1.5 mt-auto">
               <button type="button" onClick={() => show('poster')} disabled={!!busy} className="flex items-center justify-center gap-1 rounded-lg border border-field-700 bg-field-800 px-2 py-2 text-xs font-bold text-field-200 hover:border-gold/50 hover:text-gold disabled:opacity-50">
                 {busy === 'poster' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Megaphone className="w-3.5 h-3.5" />} Poster
