@@ -336,7 +336,8 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
           <div
             className="cq-radar"
             style={{
-              position: 'absolute', left: '50%', top: '50%', width: '150%', height: `${(150 * win.w) / win.h}%`, borderRadius: '50%',
+              // A circle 1.5× the map's width with its middle on the map's (the US's), placed by its corner
+              position: 'absolute', left: '-25%', top: `${50 - (75 * win.w) / win.h}%`, width: '150%', height: `${(150 * win.w) / win.h}%`, borderRadius: '50%',
               background: `conic-gradient(from 0deg, rgba(${a}, 0) 0deg, rgba(${a}, 0) 280deg, rgba(${a}, 0.08) 335deg, rgba(${a}, 0.26) 359deg, rgba(${a}, 0) 360deg)`,
             }}
           />

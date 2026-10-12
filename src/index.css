@@ -1371,8 +1371,11 @@
      their own small layer, so they stay off the TV's lighter effects.
    The TV's lite effects (Silk on the Fire TV) trade the radar for a scan
    line; still, and anyone who'd rather not have motion, gets none. */
-@keyframes cq-radar { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-.cq-radar { transform: translate(-50%, -50%); animation: cq-radar 8s linear infinite; }
+/* The radar only turns: it's placed centered on the US by its left and top, never by a
+   translate(-50%) in the animation (Safari works that out once, at the size the map first had,
+   so once a zoom re-laid the map out bigger the beam turned about a point to the southeast) */
+@keyframes cq-radar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.cq-radar { animation: cq-radar 8s linear infinite; }
 @keyframes cq-scan { from { transform: translateY(-100%); } to { transform: translateY(1000%); } }
 .cq-scan { display: none; animation: cq-scan 8s linear infinite; }
 /* A capital pings as the sweep crosses it: every ping runs on the sweep's
