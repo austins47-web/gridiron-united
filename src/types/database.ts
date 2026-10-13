@@ -689,7 +689,7 @@ export interface Database {
       }
       /** Attack and flag orders: yours always readable, everyone's once the week's first kickoff passes */
       conquest_orders: {
-        Row: { league_id: string; season: number; week: number; user_id: string; target_id: string | null; claim: string | null; fortify: boolean; tribute: string | null; created_at: string }
+        Row: { league_id: string; season: number; week: number; user_id: string; target_id: string | null; claim: string | null; fortify: boolean; tribute: string | null; ambush: string | null; target2: string | null; created_at: string }
         Insert: never
         Update: never
         Relationships: []
@@ -700,7 +700,7 @@ export interface Database {
           league_id: string
           season: number
           week: number
-          kind: 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion' | 'tribute' | 'trade'
+          kind: 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion' | 'tribute' | 'trade' | 'outpost'
           team: string
           from_user: string | null
           to_user: string
@@ -708,8 +708,16 @@ export interface Database {
           score_against: number
           exiled: boolean
           with_team: string | null
+          tactic: 'ambush' | 'second' | 'cut' | null
           created_at: string
         }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      /** Outposts abroad: one per game played overseas, held by whoever won it */
+      conquest_outposts: {
+        Row: { league_id: string; season: number; game_id: string; key: string; name: string; week: number; owner_id: string | null; created_at: string }
         Insert: never
         Update: never
         Relationships: []

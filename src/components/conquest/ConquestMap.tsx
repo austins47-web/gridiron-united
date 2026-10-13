@@ -2,11 +2,12 @@ import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, typ
 import clsx from 'clsx'
 import { TERRITORIES, ADJ, citiesOf, patternOf } from '../../../supabase/functions/_shared/conquest.ts'
 import { laneRoute, sailKeyframes, strikeFrom } from './sea'
+import { cutOff } from '../../../supabase/functions/_shared/conquest.ts'
 import { Warship } from './Warship'
 import { NORTHEAST_CITIES } from './usMap'
-import { M, NE, NE_SET, insetBox, viewOf, empireLabel, spreadLabels, frontTeeth, type MapLayout, type Rect, type LabelBox } from './mapGeometry'
+import { M, NE, NE_SET, insetBox, viewOf, empireLabel, spreadLabels, frontTeeth, outpostSpot, type MapLayout, type Rect, type LabelBox } from './mapGeometry'
 import { ICON, type IconName } from './icons'
-import type { ConquestPlayer, LiveBattle } from './conquestView'
+import type { ConquestPlayer, LiveBattle, Outpost } from './conquestView'
 
 export type { MapLayout } from './mapGeometry'
 
@@ -631,7 +632,7 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
 }
 
 export const ConquestMap = memo(function ConquestMap({
-  owners, besieged = {}, players, you, orders, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, battles = [], zoom = 1, declutter = false, look = 'radar', className,
+  owners, besieged = {}, players, you, orders, highlight, highlightColor, labels = 'names', layout = 'below', labelScale = 1, battles = [], outposts = [], zoom = 1, declutter = false, look = 'radar', className,
 }: {
   owners: Record<string, string | null>
   besieged?: Record<string, string>
@@ -650,6 +651,8 @@ export const ConquestMap = memo(function ConquestMap({
   labelScale?: number
   /** this week's battles as they stand: drawn as arrows, the cities changing hands flickering */
   battles?: LiveBattle[]
+  /** the outposts won abroad, out in the ocean in their holders' colors */
+  outposts?: Outpost[]
   /** how far it's zoomed in, once a pinch settles: which labels fit (their size on screen is held live, by --cq-s) */
   zoom?: number
   /** labels that don't fit give way, least important first, and appear as you zoom in */
@@ -913,12 +916,14 @@ export const ConquestMap = memo(function ConquestMap({
     .map(p => ({ team: p.capital!, x: M.stadium[p.capital!][0], y: M.stadium[p.capital!][1], color: p.color, siege: !!besieged[p.capital!] }))
     .sort((a, b) => a.x - b.x)
   const colorOfUser = (id: string) => byId.get(id)?.color ?? P.ink
+  // Supply lines: cities cut off from their capital, marked on the map
+  const cutOffNow = cutOff(owners, Object.fromEntries(players.filter(p => p.capital).map(p => [p.userId, p.capital!])))
   const hot: Hot[] = battles.filter(b => b.outcome !== 'hold' && b.city).map(b => ({ team: b.city!, color: colorOfUser(b.attacker), siege: b.outcome === 'siege' }))
   const arrows: Arrow[] = battles.flatMap(b => {
     if (!b.city) return []
     // From the attacker's nearest city on that border (by land if they have one, else by sea)
     const s = strikeFrom(b.city, n => owners[n] === b.attacker)
-    return s ? [{ key: b.attacker, fromTeam: s.from, toTeam: b.city, from: M.stadium[s.from], to: M.stadium[b.city], color: P.arrow(colorOfUser(b.attacker)), live: b.outcome !== 'hold', sea: s.sea }] : []
+    return s ? [{ key: `${b.attacker}>${b.city}`, fromTeam: s.from, toTeam: b.city, from: M.stadium[s.from], to: M.stadium[b.city], color: P.arrow(colorOfUser(b.attacker)), live: b.outcome !== 'hold', sea: s.sea }] : []
   })
   /** Each battle's front at a tooth size: along the city at stake's border with the attacker's land */
   const frontsAt = (scale: number, only?: (team: string) => boolean): Front[] => battles.flatMap(b => {
@@ -926,7 +931,7 @@ export const ConquestMap = memo(function ConquestMap({
     // Two empires attacking each other across the same border: one's teeth go in between the other's
     const mutual = battles.some(o => o.attacker === b.defender && o.defender === b.attacker && o.attacker < b.attacker)
     const teeth = frontTeeth(b.city, new Set(citiesOf(owners, b.attacker)), scale, mutual)
-    return teeth ? [{ key: b.attacker, ...teeth, color: P.arrow(colorOfUser(b.attacker)), live: b.outcome !== 'hold' }] : []
+    return teeth ? [{ key: `${b.attacker}>${b.city}`, ...teeth, color: P.arrow(colorOfUser(b.attacker)), live: b.outcome !== 'hold' }] : []
   })
 
   // Each empire's land as a clip, so its glow stays on its side where it meets another
@@ -1019,6 +1024,44 @@ export const ConquestMap = memo(function ConquestMap({
         {box && <defs><clipPath id={`cq-nem-${uid}`}><rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} /></clipPath></defs>}
         {named.filter(n => !(box && inNE(n.x, n.y))).map(n => empireName(n, [n.x, n.y], 1, { x: 0, y: 0, w: M.width, h: M.height }))}
         {mainCities.map(t => cityMark(t, M.stadium[t], 12 * labelScale, 'main'))}
+        {/* Cities cut off from their capital (supply lines): a broken link by the city */}
+        {[...cutOffNow].filter(t => mainCities.includes(t) && M.stadium[t]).map(t => {
+          const s = 12 * labelScale
+          return (
+            <g key={`cut-${t}`} transform={`translate(${M.stadium[t][0]} ${M.stadium[t][1]})`}>
+              <g className="cq-k">
+                <g transform={`translate(${s * 0.95} ${-s * 0.95})`}>
+                  <title>Cut off from its capital: defends at −1</title>
+                  <circle r={s * 0.42} fill={P.under} stroke="#f59e0b" strokeWidth={s * 0.1} />
+                  <path d={`M${-s * 0.2} ${s * 0.2} L${s * 0.2} ${-s * 0.2}`} stroke="#f59e0b" strokeWidth={s * 0.12} strokeLinecap="round" />
+                </g>
+              </g>
+            </g>
+          )
+        })}
+        {/* Outposts abroad: an island in the ocean, in its holder's color */}
+        {outposts.map((o, i) => {
+          const nth = outposts.slice(0, i).filter(p => p.key === o.key).length
+          const { at: [x, y], label } = outpostSpot(o.key, nth)
+          const s = 7 * labelScale
+          const color = o.owner ? byId.get(o.owner)?.color ?? null : null
+          return (
+            <g key={o.gameId} transform={`translate(${x} ${y})`}>
+              <g className="cq-k">
+                <title>{`${o.name} outpost (Week ${o.week})${o.owner ? `: ${byId.get(o.owner)?.name ?? 'held'}` : ': nobody picked it right'}`}</title>
+                <circle r={s * 1.25} fill={P.under} opacity={0.7} />
+                <circle r={s} fill={color ?? P.free} stroke={P.ink} strokeWidth={s * 0.16} />
+                <path d={`M${-s * 0.15} ${s * 0.5} V${-s * 0.6} L${s * 0.55} ${-s * 0.35} L${-s * 0.15} ${-s * 0.1}`} fill={P.under} stroke={P.under} strokeWidth={s * 0.12} strokeLinejoin="round" />
+                <text
+                  y={s * 2.35} textAnchor="middle" fontFamily={P.font} fontWeight={800} fontSize={s * 1.05} letterSpacing={s * 0.08}
+                  fill={P.ink} stroke={P.under} strokeWidth={s * 0.4} paintOrder="stroke" strokeLinejoin="round"
+                >
+                  {label.toUpperCase()}
+                </text>
+              </g>
+            </g>
+          )
+        })}
         {targetAt && mainCities.includes(targetAt) && (
           <g transform={`translate(${M.stadium[targetAt][0]} ${M.stadium[targetAt][1]})`}>
             <g className="cq-k"><MapIcon name="target" x={0} y={0} size={12 * labelScale * 2.2} color={SIEGE} outline={P.under} /></g>

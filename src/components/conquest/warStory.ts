@@ -156,6 +156,14 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
   // always reads the same (its recordings are kept) but next week's sounds fresh.
   const say = (key: string, ways: string[], turn = 0) => ways[(hashOf(`${week}|${key}`) + turn) % ways.length]
   const where = (t: string) => EPITHET[t] ? `${cityName(t)}, ${EPITHET[t]}` : cityName(t)
+  // How a city was won, told first: an ambush sprung, a second front, a city cut off from home
+  const how = (m: ConquestMove, who: string) => m.tactic === 'ambush'
+    ? say(`ambush|${m.team}`, [
+      `Ambush! ${who} lay in wait, and ${name(m.from)} marched straight into the trap! `,
+      `It was a trap all along! ${who} springs the ambush on ${name(m.from)}! `,
+    ])
+    : m.tactic === 'second' ? say(`second|${m.team}`, [`A second front opens! `, `${who} strikes on two fronts at once! `])
+      : m.tactic === 'cut' ? `${cityName(m.team)}, cut off from its capital, cannot hold! ` : ''
   const ahoy = (m: ConquestMove, who: string) => {
     const port = sailed(m)
     if (!port) return ''
@@ -194,7 +202,7 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
             `${city} has fallen! ${H} crushes ${L}, ${a} to ${b}, in a triumph for the ages!`,
           ])
     const port = sailed(m)
-    add(ahoy(m, H) + text, [...(port ? [port] : base(hero) ? [base(hero)!] : []), m.team], [m], arrowFor(m))
+    add(ahoy(m, H) + how(m, H) + text, [...(port ? [port] : base(hero) ? [base(hero)!] : []), m.team], [m], arrowFor(m))
   }
   if (heroClaims.length) {
     const list = andList(heroClaims.map(m => cityName(m.team)))
@@ -207,7 +215,7 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
   // The rest of the front: cities taken first, then rebellions, sieges and sieges broken
   const ORDER = ['capture', 'rebellion', 'siege', 'tribute', 'relief']
   const rest = moves
-    .filter(m => !shown.has(idx(m)) && m.kind !== 'claim' && m.kind !== 'trade')
+    .filter(m => !shown.has(idx(m)) && m.kind !== 'claim' && m.kind !== 'trade' && m.kind !== 'outpost')
     .sort((a, b) => Number(!!b.exiled) - Number(!!a.exiled) || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
   let said = 0
   for (let i = 0; i < rest.length && said < 4; i++) {
@@ -220,7 +228,7 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
       ], said), [m.team, next.team], [m, next], [...arrowFor(m), ...arrowFor(next)])
       i++
     } else if (m.kind === 'capture') {
-      add(ahoy(m, T) + (m.exiled
+      add(ahoy(m, T) + how(m, T) + (m.exiled
         ? `${city} falls to ${T}! The empire of ${L} is no more!`
         : say(`capture|${m.team}`, [
           `${T} storms ${where(m.team)}, smashing ${L} ${a} to ${b}!`,
@@ -234,7 +242,7 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
         `Gold on the table! ${L} pays ${T} in land: ${city} for the lifting of the siege!`,
       ], said), [m.team, ...(m.withTeam ? [m.withTeam] : [])], [m])
     } else if (m.kind === 'siege') {
-      add(ahoy(m, T) + say(`siege|${m.team}`, [
+      add(ahoy(m, T) + how(m, T) + say(`siege|${m.team}`, [
         `${T}'s forces encircle ${where(m.team)}! The noose tightens!`,
         `${T} lays siege to ${city}! The defenders brace for the worst!`,
       ], said), [...(sailed(m) ? [sailed(m)!] : []), m.team], [m], arrowFor(m))
@@ -251,6 +259,15 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
     const others = moves.filter(m => m.kind === 'trade').length / 2 - 1
     add(`And at the treaty table, ${name(swap.from)} and ${name(swap.to)} shake hands: ${cityName(swap.team)} for ${swap.withTeam ? cityName(swap.withTeam) : 'a city'}!${others > 0 ? ` ${others === 1 ? 'One more deal' : `${others} more deals`} signed besides!` : ''}`,
       [swap.team, ...(swap.withTeam ? [swap.withTeam] : [])], [swap, ...(back ? [back] : [])])
+  }
+
+  // Overseas: the outposts won abroad
+  for (const op of moves.filter(m => m.kind === 'outpost').slice(0, 2)) {
+    const where = op.withTeam ?? op.team
+    add(say(`outpost|${where}`, [
+      `And across the sea! ${name(op.to)} plants the flag in ${where}, an outpost of empire!`,
+      `Overseas, the banner of ${name(op.to)} rises over ${where}! The empire reaches across the ocean!`,
+    ]), [], [op])
   }
 
   // The medals: pinned on in front of the whole map
@@ -291,12 +308,13 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
 
   // ── The War Office's posters ──
   const posters: PosterSpec[] = []
-  const lead = heroBattles[0] ?? moves.find(m => m.to === hero && (m.kind === 'claim' || m.kind === 'tribute'))!
-  const LEAD = cityName(lead.team).toUpperCase()
+  const lead = heroBattles[0] ?? moves.find(m => m.to === hero && (m.kind === 'claim' || m.kind === 'tribute' || m.kind === 'outpost'))!
+  const LEAD = (lead.kind === 'outpost' ? lead.withTeam ?? lead.team : cityName(lead.team)).toUpperCase()
   const ribbon = lead.kind === 'siege' ? `…OUT OF ${LEAD}!`
     : lead.kind === 'capture' ? `${LEAD} IS OURS!`
       : lead.kind === 'rebellion' ? `${LEAD} IS FREE!`
         : lead.kind === 'tribute' ? `${LEAD}, PAID IN TRIBUTE!`
+          : lead.kind === 'outpost' ? `${LEAD}, ACROSS THE SEA!`
         : `PLANT THE FLAG IN ${LEAD}!`
   const leadPort = battle(lead) ? sailed(lead) : null
   const heroFocus = [...new Set([...(heroCap ? [heroCap] : []), ...(leadPort ? [leadPort] : []), ...heroBattles.map(m => m.team), ...heroClaims.map(m => m.team)])]

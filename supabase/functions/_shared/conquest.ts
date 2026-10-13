@@ -28,6 +28,15 @@
 //   other cities to the besieger and the siege lifts, before the battles.
 // - Trades: two players swap a city each (never a capital) when both agree,
 //   before the week's first kickoff (the conquest function, not the settle).
+// - Ambush (an order, instead of attacking): name an empire on your border;
+//   if it attacks you and you outscore it, you take one of its cities.
+// - Second front: an empire of 5 or more cities attacks a second neighbor
+//   too, taking a city only with a win by 2.
+// - Supply lines: a city cut off from its capital (not joined to it through
+//   your own cities, by land or sea) defends at -1: one point short takes it.
+// - Outposts: a game played abroad leaves an outpost, won by the best week
+//   among those who picked it right; it counts as a city to the season's end
+//   and can't be attacked (the conquest function, at the settle).
 // - A city changes hands at most once a week; everything is decided on
 //   the map as it stood when the week began.
 // - The biggest empire after the last week is Emperor; a tie goes to the
@@ -193,9 +202,14 @@ export interface Battle {
   disagree: number
   /** [attacker's correct, defender's correct] */
   score: [number, number]
+  /** a second front (an empire of 5+ cities' second attack), or an ambush sprung (the defender striking back) */
+  tactic?: 'second' | 'ambush'
 }
 
-export type MoveKind = 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion' | 'tribute' | 'trade'
+/** An empire this big opens a second front each week */
+export const SECOND_FRONT_AT = 5
+
+export type MoveKind = 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion' | 'tribute' | 'trade' | 'outpost'
 
 export interface Move {
   kind: MoveKind
@@ -210,8 +224,10 @@ export interface Move {
   exiled?: boolean
   /** a claim: the city the player chose (not the automatic one) */
   chosen?: boolean
-  /** the other city in it: a tribute's, the capital it freed; a trade's, the city that went the other way */
+  /** the other city in it: a tribute's, the capital it freed; a trade's, the city that went the other way; an outpost's, its name */
   withTeam?: string
+  /** how a city was won: an ambush sprung, a second front, or cut off from its capital */
+  tactic?: 'ambush' | 'second' | 'cut'
 }
 
 export const citiesOf = (owners: Record<string, string | null>, user: string): string[] =>
@@ -260,34 +276,97 @@ function median(values: number[]): number {
  * This week's battles: every empire against the neighbor it ordered an
  * attack on, if that one's still on its border; otherwise the neighbor it
  * picked most differently from (the bigger empire on a tie). No automatic
- * battle for an empire that agreed with every neighbor on everything.
+ * battle for an empire that agreed with every neighbor on everything. An
+ * empire dug in, or lying in ambush, doesn't attack; one of 5 or more cities
+ * opens a second front too (its chosen second target, else the next most
+ * different neighbor). Then the ambushes sprung: an empire that attacked
+ * someone lying in wait for it, and was outscored, is struck back.
  */
-export function plannedBattles(state: ConquestState, week: WeekScores, players: string[], orders: Orders = {}, fortified: string[] = []): Battle[] {
+export function plannedBattles(state: ConquestState, week: WeekScores, players: string[], orders: Orders = {}, extra: WeekOrders = {}): Battle[] {
   const out: Battle[] = []
-  const dugIn = new Set(fortified)
-  for (const a of [...players].sort()) {
-    // Dug in: no attack this week
-    if (!citiesOf(state.owners, a).length || dugIn.has(a)) continue
-    const target = orders[a]
-    if (target && neighborsOf(state.owners, a).includes(target)) {
-      out.push({ attacker: a, defender: target, ordered: true, disagree: disagreements(week, a, target), score: [correctOf(week, a), correctOf(week, target)] })
-      continue
-    }
+  const holding = new Set([...(extra.fortified ?? []), ...Object.keys(extra.ambushes ?? {})])
+  const battle = (a: string, b: string, more: Partial<Battle> = {}): Battle =>
+    ({ attacker: a, defender: b, disagree: disagreements(week, a, b), score: [correctOf(week, a), correctOf(week, b)], ...more })
+  // The neighbor picked most differently from (the bigger empire on a tie), but not `skip`
+  const auto = (a: string, skip?: string) => {
     let best: { b: string; d: number; size: number } | null = null
     for (const b of neighborsOf(state.owners, a)) {
+      if (b === skip) continue
       const d = disagreements(week, a, b)
       const size = citiesOf(state.owners, b).length
       if (!best || d > best.d || (d === best.d && size > best.size)) best = { b, d, size }
     }
-    if (best && best.d > 0) {
-      out.push({ attacker: a, defender: best.b, disagree: best.d, score: [correctOf(week, a), correctOf(week, best.b)] })
+    return best && best.d > 0 ? best.b : null
+  }
+  for (const a of [...players].sort()) {
+    // Dug in, or lying in ambush: no attack this week
+    if (!citiesOf(state.owners, a).length || holding.has(a)) continue
+    const near = neighborsOf(state.owners, a)
+    const ordered = orders[a] && near.includes(orders[a]) ? orders[a] : null
+    const first = ordered ?? auto(a)
+    if (!first) continue
+    out.push(battle(a, first, ordered ? { ordered: true } : {}))
+    // A second front, for an empire this big
+    if (citiesOf(state.owners, a).length >= SECOND_FRONT_AT) {
+      const want = extra.seconds?.[a]
+      const chosen = want && want !== first && near.includes(want) ? want : null
+      const second = chosen ?? auto(a, first)
+      if (second) out.push(battle(a, second, { tactic: 'second', ...(chosen ? { ordered: true } : {}) }))
+    }
+  }
+  // Ambushes sprung: struck back by the empire it walked into
+  for (const b of [...out]) {
+    if (extra.ambushes?.[b.defender] === b.attacker && b.score[1] > b.score[0]) {
+      out.push(battle(b.defender, b.attacker, { tactic: 'ambush' }))
     }
   }
   return out
 }
 
-/** The week's other orders: who's dug in, and the city each besieged player pays in tribute */
-export interface WeekOrders { fortified?: string[]; tributes?: Record<string, string> }
+/**
+ * The week's other orders: who's dug in, the city each besieged player pays in
+ * tribute, who's lying in ambush for whom, and each big empire's second front
+ */
+export interface WeekOrders {
+  fortified?: string[]
+  tributes?: Record<string, string>
+  ambushes?: Record<string, string>
+  seconds?: Record<string, string>
+}
+
+/**
+ * Supply lines: the cities that can't reach their owner's capital through their
+ * owner's own cities (land borders or sea lanes). Without their capital, a
+ * player's biggest joined-up group is their heartland, supplied.
+ */
+export function cutOff(owners: Record<string, string | null>, capitals: Record<string, string>): Set<string> {
+  const out = new Set<string>()
+  const byOwner = new Map<string, string[]>()
+  for (const [t, o] of Object.entries(owners)) if (o && ADJ[t]) byOwner.set(o, [...(byOwner.get(o) ?? []), t])
+  for (const [u, cities] of byOwner) {
+    const mine = new Set(cities), seen = new Set<string>()
+    const groups: string[][] = []
+    for (const s0 of [...cities].sort()) {
+      if (seen.has(s0)) continue
+      const group: string[] = [], q = [s0]
+      seen.add(s0)
+      while (q.length) {
+        const x = q.shift()!
+        group.push(x)
+        for (const n of ADJ[x]) if (mine.has(n) && !seen.has(n)) { seen.add(n); q.push(n) }
+      }
+      groups.push(group)
+    }
+    const cap = capitals[u]
+    const home = groups.find(g => !!cap && g.includes(cap)) ?? [...groups].sort((a, b) => b.length - a.length)[0]
+    for (const g of groups) if (g !== home) for (const t of g) out.add(t)
+  }
+  return out
+}
+
+/** What a battle needs to take a city: a win by 1, by 2 against an empire dug in or on a second front (both: 3) */
+export const marginNeeded = (b: Pick<Battle, 'defender' | 'tactic'>, fortified: Set<string>) =>
+  1 + (fortified.has(b.defender) ? 1 : 0) + (b.tactic === 'second' ? 1 : 0)
 
 /** Settles a week: the moves, who owns what after them, and which capitals are under siege. */
 export function resolveWeek(
@@ -333,37 +412,42 @@ export function resolveWeek(
     moves.push({ kind: 'rebellion', team: cap, from: holder ?? null, to: p, score: [c(p), holder ? c(holder) : mid] })
   }
 
-  // 2. Battles, the biggest wins first (the same margin: the better week). Against
-  //    an empire that's dug in, only a win by 2 or more takes anything.
-  const wins = plannedBattles(st, week, players, orders, [...fortified])
-    .filter(b => b.score[0] - b.score[1] >= (fortified.has(b.defender) ? 2 : 1))
+  // 2. Battles, the biggest wins first (the same margin: the better week). A win
+  //    takes a city on the attacker's border (an outlying one before a capital):
+  //    by 1, or by 2 against an empire dug in or on a second front. One point short
+  //    still takes a city cut off from its capital (supply lines), if there's one.
+  const cut = cutOff(start, state.capitals)
+  const wins = plannedBattles(st, week, players, orders, extra)
+    .filter(b => b.score[0] - b.score[1] >= marginNeeded(b, fortified) - 1)
     .sort((x, y) => (y.score[0] - y.score[1]) - (x.score[0] - x.score[1])
       || y.score[0] - x.score[0]
       || tiebreak(week, x.attacker, y.attacker)
       || x.attacker.localeCompare(y.attacker))
   for (const b of wins) {
-    beaten.add(b.defender)
+    const full = b.score[0] - b.score[1] >= marginNeeded(b, fortified)
     const mine = new Set(citiesOf(start, b.attacker))
     const bordering = (t: string) => ADJ[t].filter(n => mine.has(n)).length
     const options = citiesOf(start, b.defender)
-      .filter(t => owners[t] === b.defender && !changed.has(t) && bordering(t) > 0)
+      .filter(t => owners[t] === b.defender && !changed.has(t) && bordering(t) > 0 && (full || cut.has(t)))
       .sort((x, y) =>
         Number(x === state.capitals[b.defender]) - Number(y === state.capitals[b.defender])
         || bordering(y) - bordering(x)
         || x.localeCompare(y))
+    if (full || options.length) beaten.add(b.defender)
     const t = options[0]
     if (!t) continue
     changed.add(t)
+    const tactic = b.tactic ?? (full ? undefined : 'cut' as const)
     // A capital not already under siege goes under siege instead of falling
     if (t === state.capitals[b.defender] && !wasBesieged[t]) {
       besieged[t] = b.attacker
-      moves.push({ kind: 'siege', team: t, from: b.defender, to: b.attacker, score: b.score })
+      moves.push({ kind: 'siege', team: t, from: b.defender, to: b.attacker, score: b.score, ...(tactic ? { tactic } : {}) })
       continue
     }
     owners[t] = b.attacker
     moves.push({
       kind: 'capture', team: t, from: b.defender, to: b.attacker, score: b.score,
-      exiled: citiesOf(owners, b.defender).length === 0,
+      exiled: citiesOf(owners, b.defender).length === 0, ...(tactic ? { tactic } : {}),
     })
   }
 
@@ -427,6 +511,25 @@ export function assignCapitals(
     place(userId, options.sort((x, y) => room(y) - room(x) || spin(x) - spin(y))[0])
   }
   return capitals
+}
+
+// ── Outposts ─────────────────────────────────────────────────
+// Where the NFL plays abroad, an outpost of empire: one per game, named for
+// its city. A season can have several in one city (London's had three):
+// each its own outpost.
+
+/** The outpost for a game's venue (ESPN's city and country), or null for one at home */
+export function outpostFor(city: string | null | undefined, country: string | null | undefined): { key: string; name: string } | null {
+  const c = (country ?? '').trim(), town = (city ?? '').trim()
+  if (!c || c === 'USA' || c === 'United States') return null
+  const by: Record<string, { key: string; name: string }> = {
+    England: { key: 'LON', name: 'London' }, 'United Kingdom': { key: 'LON', name: 'London' },
+    France: { key: 'PAR', name: 'Paris' }, Spain: { key: 'MAD', name: 'Madrid' }, Ireland: { key: 'DUB', name: 'Dublin' },
+    Mexico: { key: 'MEX', name: 'Mexico City' }, Australia: { key: 'MEL', name: 'Melbourne' },
+  }
+  if (c === 'Germany') return /munich|münchen/i.test(town) ? { key: 'MUN', name: 'Munich' } : /berlin/i.test(town) ? { key: 'BER', name: 'Berlin' } : { key: 'FRA', name: town || 'Frankfurt' }
+  if (c === 'Brazil') return /paulo/i.test(town) ? { key: 'SAO', name: 'São Paulo' } : { key: 'RIO', name: 'Rio de Janeiro' }
+  return by[c] ?? { key: c.slice(0, 3).toUpperCase(), name: town || c }
 }
 
 // ── A fair start ─────────────────────────────────────────────
@@ -576,8 +679,9 @@ const TITLE_INFO: Record<Title['key'], { icon: string; label: string; blurb: str
  * (`cityWeeks`: cities held, added up every settled week). Still tied,
  * they share it (nobody's out in front yet).
  */
-export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Record<string, string | null>, players: string[], cityWeeks: Record<string, number> = {}): Title[] {
-  const cities = (u: string) => citiesOf(owners, u).length
+export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Record<string, string | null>, players: string[], cityWeeks: Record<string, number> = {}, outposts: Record<string, number> = {}): Title[] {
+  // An outpost counts as a city
+  const cities = (u: string) => citiesOf(owners, u).length + (outposts[u] ?? 0)
   const count = (pred: (m: Pick<Move, 'kind' | 'to' | 'from'>) => boolean) => {
     const n: Record<string, number> = {}
     for (const m of moves) if (pred(m)) n[m.to] = (n[m.to] ?? 0) + 1
@@ -629,7 +733,7 @@ export interface Medal {
   team?: string
 }
 
-const GAINED: Partial<Record<MoveKind, number>> = { capture: 3, rebellion: 3, siege: 2, claim: 1, tribute: 1 }
+const GAINED: Partial<Record<MoveKind, number>> = { capture: 3, rebellion: 3, siege: 2, claim: 1, tribute: 1, outpost: 1 }
 
 /** The week's biggest conqueror: the most won (a city taken counts most), then the better week. */
 export function conquerorOf(moves: Pick<Move, 'kind' | 'to' | 'score'>[]): string | null {

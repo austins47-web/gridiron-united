@@ -3,7 +3,7 @@
 // battles as they stand, and the war log's headlines.
 import type { CSSProperties } from 'react'
 import {
-  CITY, citiesOf, plannedBattles, ADJ, patternOf,
+  CITY, citiesOf, plannedBattles, ADJ, patternOf, cutOff, marginNeeded,
   weekMedals, type Medal,
   type ConquestState, type WeekScores, type MoveKind, type Orders, type Claims, type Title,
 } from '../../../supabase/functions/_shared/conquest.ts'
@@ -31,9 +31,14 @@ export interface ConquestMove {
   to: string
   score: [number, number]
   exiled?: boolean
-  /** the other city in it: a tribute's, the capital it freed; a trade's, the city that went the other way */
+  /** the other city in it: a tribute's, the capital it freed; a trade's, the city that went the other way; an outpost's, its name */
   withTeam?: string | null
+  /** how a city was won: an ambush sprung, a second front, or cut off from its capital */
+  tactic?: 'ambush' | 'second' | 'cut' | null
 }
+
+/** An outpost abroad (a game played there): who won it, if anyone */
+export interface Outpost { key: string; name: string; week: number; owner: string | null; gameId: string }
 
 /** The war as the TV gets it (shop-tv) and the app reads it. */
 export interface ConquestData {
@@ -59,6 +64,12 @@ export interface ConquestData {
   fortified?: string[]
   /** Tribute this week: player → the city they hand their besieger (yours, and everyone's once orders lock) */
   tributes?: Record<string, string>
+  /** Ambushes this week: player → the empire they're lying in wait for (yours, and everyone's once orders lock) */
+  ambushes?: Record<string, string>
+  /** Second fronts this week: player → its target, when they chose one (yours, and everyone's once orders lock) */
+  seconds?: Record<string, string>
+  /** The outposts won abroad so far (each counts as a city) */
+  outposts?: Outpost[]
   /** The season's titles, once the war's over */
   crowned?: Title[] | null
 }
@@ -75,14 +86,16 @@ export interface Empire {
 }
 
 /** Every player, biggest empire first (the exiled last). */
-export function empires(war: Pick<ConquestData, 'owners' | 'besieged' | 'players'>): Empire[] {
+export function empires(war: Pick<ConquestData, 'owners' | 'besieged' | 'players' | 'outposts'>): Empire[] {
   return war.players
     .map(p => {
-      const cities = citiesOf(war.owners, p.userId).length
+      const land = citiesOf(war.owners, p.userId).length
+      // An outpost counts as a city; exile is about the map (no city on it)
+      const cities = land + (war.outposts ?? []).filter(o => o.owner === p.userId).length
       return {
         userId: p.userId, name: p.name, color: p.color, cities, capital: p.capital,
         besieged: !!p.capital && war.owners[p.capital] === p.userId && !!war.besieged[p.capital],
-        exiled: cities === 0,
+        exiled: land === 0,
       }
     })
     .sort((a, b) => b.cities - a.cities || Number(a.besieged) - Number(b.besieged) || a.name.localeCompare(b.name))
@@ -98,6 +111,10 @@ export interface LiveBattle {
   city: string | null
   /** ending like this: the attacker takes it, puts it under siege, or the defender holds */
   outcome: 'take' | 'siege' | 'hold'
+  /** a second front, or an ambush sprung */
+  tactic?: 'second' | 'ambush'
+  /** won one point short: the city's cut off from its capital */
+  cut?: boolean
 }
 
 /**
@@ -105,7 +122,7 @@ export interface LiveBattle {
  * picks so far) and what happens if it ends like this. A city wanted
  * twice goes to the bigger win, as when the week's settled.
  */
-export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'players' | 'orders' | 'fortified' | 'tributes'>, week: WeekScores): LiveBattle[] {
+export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'players' | 'orders' | 'fortified' | 'tributes' | 'ambushes' | 'seconds'>, week: WeekScores): LiveBattle[] {
   const capitals = Object.fromEntries(war.players.filter(p => p.capital).map(p => [p.userId, p.capital!]))
   // Tribute's paid before the battles: the week's fought on that map
   const owners = { ...war.owners }, besieged = { ...war.besieged }
@@ -115,29 +132,34 @@ export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'pla
     owners[t] = by
     delete besieged[cap]
   }
-  war = { ...war, owners, besieged }
   const fortified = new Set(war.fortified ?? [])
-  const state: ConquestState = { owners: war.owners, capitals, besieged: war.besieged }
+  const state: ConquestState = { owners, capitals, besieged }
   const players = war.players.map(p => p.userId)
-  const battles = plannedBattles(state, week, players, war.orders ?? {}, [...fortified])
+  const battles = plannedBattles(state, week, players, war.orders ?? {}, { fortified: [...fortified], ambushes: war.ambushes, seconds: war.seconds })
+  const cut = cutOff(owners, capitals)
   const taken = new Set<string>()
   const order = [...battles].sort((a, b) => (b.score[0] - b.score[1]) - (a.score[0] - a.score[1]))
-  const out = new Map<string, LiveBattle>()
+  const out = new Map<(typeof battles)[number], LiveBattle>()
   for (const b of order) {
-    // Against an empire that's dug in, only a win by 2 or more
-    const winning = b.score[0] - b.score[1] >= (fortified.has(b.defender) ? 2 : 1)
-    const mine = new Set(citiesOf(war.owners, b.attacker))
+    const margin = b.score[0] - b.score[1], need = marginNeeded(b, fortified)
+    const mine = new Set(citiesOf(owners, b.attacker))
     const bordering = (t: string) => ADJ[t].filter(n => mine.has(n)).length
-    const options = citiesOf(war.owners, b.defender)
+    const options = citiesOf(owners, b.defender)
       .filter(t => !taken.has(t) && bordering(t) > 0)
       .sort((x, y) => Number(x === capitals[b.defender]) - Number(y === capitals[b.defender]) || bordering(y) - bordering(x) || x.localeCompare(y))
-    const city = options[0] ?? null
+    // A win takes the city at stake; one point short, only a city cut off from its capital
+    const reach = margin >= need ? options : margin === need - 1 ? options.filter(t => cut.has(t)) : []
+    const city = reach[0] ?? options[0] ?? null
+    const winning = reach.length > 0
     if (winning && city) taken.add(city)
     const outcome: LiveBattle['outcome'] = !winning || !city ? 'hold'
-      : city === capitals[b.defender] && !war.besieged[city] ? 'siege' : 'take'
-    out.set(b.attacker, { attacker: b.attacker, defender: b.defender, ordered: b.ordered, score: b.score, city, outcome })
+      : city === capitals[b.defender] && !besieged[city] ? 'siege' : 'take'
+    out.set(b, {
+      attacker: b.attacker, defender: b.defender, ordered: b.ordered, score: b.score, city, outcome,
+      ...(b.tactic ? { tactic: b.tactic } : {}), ...(winning && margin < need ? { cut: true } : {}),
+    })
   }
-  return battles.map(b => out.get(b.attacker)!)
+  return battles.map(b => out.get(b)!)
 }
 
 /** A war log line: "Chud.M seizes Miami from Caleb". */
@@ -145,9 +167,19 @@ export function headline(m: ConquestMove, nameOf: (id: string | null) => string)
   const city = CITY[m.team] ?? m.team
   switch (m.kind) {
     case 'capture':
-      return { icon: '⚔️', text: `${nameOf(m.to)} seizes ${city} from ${nameOf(m.from)}${m.exiled ? `, driving ${nameOf(m.from)} into exile` : ''}` }
+      return {
+        icon: m.tactic === 'ambush' ? '🪤' : '⚔️',
+        text: (m.tactic === 'ambush' ? `${nameOf(m.to)} springs an ambush and seizes ${city} from ${nameOf(m.from)}`
+          : m.tactic === 'second' ? `${nameOf(m.to)} opens a second front and seizes ${city} from ${nameOf(m.from)}`
+          : m.tactic === 'cut' ? `${nameOf(m.to)} seizes ${city}, cut off from ${nameOf(m.from)}'s capital`
+          : `${nameOf(m.to)} seizes ${city} from ${nameOf(m.from)}`)
+          + (m.exiled ? `, driving ${nameOf(m.from)} into exile` : ''),
+      }
     case 'siege':
-      return { icon: '🔥', text: `${nameOf(m.to)} lays siege to ${nameOf(m.from)}'s capital, ${city}` }
+      return {
+        icon: m.tactic === 'ambush' ? '🪤' : '🔥',
+        text: `${nameOf(m.to)} ${m.tactic === 'ambush' ? 'springs an ambush and lays' : m.tactic === 'second' ? 'opens a second front and lays' : 'lays'} siege to ${nameOf(m.from)}'s capital, ${city}`,
+      }
     case 'relief':
       return { icon: '🛡️', text: `${city} holds: the siege on ${nameOf(m.to)}'s capital is broken` }
     case 'rebellion':
@@ -158,6 +190,8 @@ export function headline(m: ConquestMove, nameOf: (id: string | null) => string)
       return { icon: '🪙', text: `${nameOf(m.from)} pays tribute: ${city} goes to ${nameOf(m.to)}${m.withTeam ? `, and the siege of ${CITY[m.withTeam] ?? m.withTeam} lifts` : ''}` }
     case 'trade':
       return { icon: '🤝', text: `${nameOf(m.from)} trades ${city} to ${nameOf(m.to)}${m.withTeam ? ` for ${CITY[m.withTeam] ?? m.withTeam}` : ''}` }
+    case 'outpost':
+      return { icon: '🏝️', text: `${nameOf(m.to)} wins the ${m.withTeam ?? m.team} outpost, overseas` }
   }
 }
 

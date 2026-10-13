@@ -70,7 +70,8 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
   const stepsOf = (week: number): LoggedMove[][] => {
     const moves = chronological(log).filter(m => m.week === week)
     const claims = moves.filter(m => m.kind === 'claim')
-    return [...moves.filter(m => m.kind !== 'claim').map(m => [m]), ...(claims.length ? [claims] : [])]
+    // (an outpost isn't on the map's land: the newsreel and the log tell it)
+    return [...moves.filter(m => m.kind !== 'claim' && m.kind !== 'outpost').map(m => [m]), ...(claims.length ? [claims] : [])]
   }
   // Once per settled week, the first time you're here after it
   useEffect(() => {
@@ -107,6 +108,8 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replay, past, viewWeek, war.owners, war.besieged, log])
   const live = !replay && !past
+  // The outposts won by then (a replay: before its week)
+  const shownOutposts = (war.outposts ?? []).filter(o => (replay ? o.week < replay.week : past ? o.week <= viewWeek! : true))
   const step = replay ? stepsOf(replay.week)[replay.at] : undefined
   const stepCity = step && step.length === 1 ? step[0] : null
 
@@ -188,7 +191,7 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
           highlight={stepCity?.team ?? card}
           highlightColor={stepCity ? colorOf(stepCity.to) : undefined}
           labels="names" layout="none" labelScale={full ? (vp.w < 640 ? 2.6 : vp.w < 1100 ? 1.8 : 1.5) : labelScale}
-          battles={live ? battles : []} zoom={mapZoom} declutter look={look} className="w-full"
+          battles={live ? battles : []} outposts={shownOutposts} zoom={mapZoom} declutter look={look} className="w-full"
         />
       </ZoomPan>
 

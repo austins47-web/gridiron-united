@@ -6,7 +6,7 @@ import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
-import { CITY, ADJ, TERRITORIES, MEDAL_INFO, citiesOf, neighborsOf, startOdds, imbalance, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
+import { CITY, ADJ, TERRITORIES, MEDAL_INFO, SECOND_FRONT_AT, citiesOf, neighborsOf, startOdds, imbalance, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
 import { WarMap } from '@/components/conquest/WarMap'
 import { empires, liveBattles, headline, titles, seasonMedals, capitalsOf, swatch, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
 import { ConquestIcon } from '@/components/conquest/ConquestIcon'
@@ -46,15 +46,17 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
       const [{ data: players }, { data: cities }, { data: moves }, { data: first }, { data: orders }] = await Promise.all([
         supabase.from('conquest_players').select('user_id, color, capital, city_weeks').eq('league_id', leagueId).eq('season', CURRENT_SEASON),
         supabase.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', CURRENT_SEASON),
-        supabase.from('conquest_moves').select('week, kind, team, from_user, to_user, score_for, score_against, exiled, with_team')
+        supabase.from('conquest_moves').select('week, kind, team, from_user, to_user, score_for, score_against, exiled, with_team, tactic')
           .eq('league_id', leagueId).eq('season', CURRENT_SEASON).order('week', { ascending: false }).order('id'),
         supabase.from('nfl_games').select('game_date').eq('season', CURRENT_SEASON).eq('week', battleWeek).order('game_date').limit(1).maybeSingle(),
-        supabase.from('conquest_orders').select('user_id, target_id, claim, fortify, tribute').eq('league_id', leagueId).eq('season', CURRENT_SEASON).eq('week', battleWeek),
+        supabase.from('conquest_orders').select('user_id, target_id, claim, fortify, tribute, ambush, target2').eq('league_id', leagueId).eq('season', CURRENT_SEASON).eq('week', battleWeek),
       ])
       const log = (moves ?? []).map((m: any) => ({
         week: m.week, kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
-        score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: m.exiled, withTeam: m.with_team,
+        score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: m.exiled, withTeam: m.with_team, tactic: m.tactic,
       }))
+      const { data: abroad } = await supabase.from('conquest_outposts').select('key, name, week, owner_id, game_id')
+        .eq('league_id', leagueId).eq('season', CURRENT_SEASON).order('week')
       return {
         startWeek: war.start_week,
         lastWeek: war.last_resolved_week,
@@ -69,6 +71,9 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
         claims: Object.fromEntries((orders ?? []).filter((o: any) => o.claim).map((o: any) => [o.user_id, o.claim])),
         fortified: (orders ?? []).filter((o: any) => o.fortify).map((o: any) => o.user_id),
         tributes: Object.fromEntries((orders ?? []).filter((o: any) => o.tribute).map((o: any) => [o.user_id, o.tribute])),
+        ambushes: Object.fromEntries((orders ?? []).filter((o: any) => o.ambush).map((o: any) => [o.user_id, o.ambush])),
+        seconds: Object.fromEntries((orders ?? []).filter((o: any) => o.target2).map((o: any) => [o.user_id, o.target2])),
+        outposts: (abroad ?? []).map((o: any) => ({ key: o.key, name: o.name, week: o.week, owner: o.owner_id, gameId: o.game_id })),
         crowned: (war.crowned as Title[] | null) ?? null,
         log,
       }
@@ -168,15 +173,17 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
     const city = b.city ? CITY[b.city] : null
     const ahead = b.score[0] > b.score[1]
     return (
-      <li key={b.attacker} className={clsx('flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm', (b.attacker === userId || b.defender === userId) ? 'bg-gold/10 border border-gold/30' : 'bg-field-800/60')}>
+      <li key={`${b.attacker}>${b.defender}`} className={clsx('flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm', (b.attacker === userId || b.defender === userId) ? 'bg-gold/10 border border-gold/30' : 'bg-field-800/60')}>
         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={swatch(colorOf(b.attacker))} />
         <span className="font-bold text-white truncate">{nameOf(b.attacker)}</span>
-        {b.ordered ? <ConquestIcon name="target" title="Chose this attack" className="w-3.5 h-3.5 text-red-400 shrink-0" /> : <Swords className="w-3.5 h-3.5 text-field-500 shrink-0" />}
+        {b.tactic === 'ambush' ? <span className="shrink-0" title="An ambush, sprung">🪤</span>
+          : b.ordered ? <ConquestIcon name="target" title="Chose this attack" className="w-3.5 h-3.5 text-red-400 shrink-0" /> : <Swords className="w-3.5 h-3.5 text-field-500 shrink-0" />}
+        {b.tactic === 'second' && <span className="shrink-0 text-[10px] font-bold uppercase text-field-400" title="A second front: it needs a win by 2">2nd</span>}
         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={swatch(colorOf(b.defender))} />
         <span className="font-bold text-white truncate">{nameOf(b.defender)}</span>
         <span className={clsx('ml-auto shrink-0 font-cond font-black tabular-nums', ahead ? 'text-nfl' : 'text-field-300')}>{b.score[0]}–{b.score[1]}</span>
         <span className="shrink-0 text-[11px] text-field-400 w-[7.5rem] text-right">
-          {b.outcome === 'take' ? `takes ${city}` : b.outcome === 'siege' ? <><ConquestIcon name="siege" className="inline w-3 h-3 -mt-0.5 text-red-400" /> besieges {city}</> : 'holds'}
+          {b.outcome === 'take' ? <>{b.cut && <span title="Cut off from its capital">✂ </span>}takes {city}</> : b.outcome === 'siege' ? <><ConquestIcon name="siege" className="inline w-3 h-3 -mt-0.5 text-red-400" /> besieges {city}</> : 'holds'}
         </span>
       </li>
     )
@@ -353,6 +360,10 @@ function RulesSheet({ onClose }: { onClose: () => void }) {
           <li>Capital under siege? Pay tribute: hand one of your other cities to the besieger and the siege lifts before the week’s battles, so your capital can’t fall that week.</li>
           <li>Trade a city for another player’s (never a capital) when you both agree. Trades happen before the week’s first kickoff.</li>
           <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire; on a tie, whoever held the most cities week by week all season), Warlord, Siege Master, Unbreakable, Comeback Kid and Iron Grip (the most cities held, added up week after week).</li>
+          <li>Lie in ambush instead of attacking: name an empire on your border, and if it attacks you and you outscore it, you take one of its cities.</li>
+          <li>An empire of {SECOND_FRONT_AT} or more cities opens a second front: a second attack each week (yours to choose, or automatic) that takes a city only with a win by 2.</li>
+          <li>Supply lines: a city cut off from its capital (not joined to it through your own cities, by land or sea lane) defends at −1, so one point short still takes it. It’s marked on the map with a broken link.</li>
+          <li>Outposts: when the NFL plays abroad, an outpost appears off the coast. The best week among everyone who picked that game right wins it, and it counts as a city (for Emperor and Iron Grip) to the season’s end. It can’t be attacked.</li>
           <li>Cities that would change hands if the week ended now pulse on the map.</li>
         </ul>
       </div>
@@ -385,6 +396,10 @@ function useOrderSender(leagueId: string, onSaved: () => void) {
       id ? `You’re attacking ${name ?? 'them'} this week` : 'Attack back to automatic'),
     flag: (team: string | null) => send(`flag:${team ?? 'auto'}`, { action: 'claim', team },
       team ? `Your flag goes to ${CITY[team] ?? team} if you finish in the top half` : 'Flag back to automatic'),
+    ambush: (id: string | null, name?: string) => send(`amb:${id ?? 'off'}`, { action: 'ambush', target: id },
+      id ? `Lying in wait for ${name ?? 'them'}: no attack this week` : 'Back to attacking'),
+    second: (id: string | null, name?: string) => send(`sec:${id ?? 'auto'}`, { action: 'second', target: id },
+      id ? `Your second front: ${name ?? 'them'}` : 'Second front back to automatic'),
     fortify: (on: boolean) => send(on ? 'dig:on' : 'dig:off', { action: 'fortify', on },
       on ? 'You’re dug in this week: no attack, and they need to win by 2' : 'Back to attacking'),
     tribute: (team: string | null) => send(`tribute:${team ?? 'none'}`, { action: 'tribute', team },
@@ -400,15 +415,17 @@ function useOrderSender(leagueId: string, onSaved: () => void) {
  * when everyone's choices come out.
  */
 function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; week: number; sender: OrderSender }) {
-  const { busy, attack, flag, fortify, tribute } = sender
+  const { busy, attack, flag, fortify, tribute, ambush, second } = sender
   // Each order shows as one line; "Change" opens its choices (and picking one closes them)
-  const [editing, setEditing] = useState<'attack' | 'tribute' | 'flag' | null>(null)
+  const [editing, setEditing] = useState<'attack' | 'second' | 'tribute' | 'flag' | null>(null)
   const mine = citiesOf(war.owners, userId)
   if (!mine.length) return null
   const lockAt = war.lockAt ? new Date(war.lockAt) : null
   const locked = !!lockAt && Date.now() >= lockAt.getTime()
   const target = war.orders?.[userId] ?? null
   const dugIn = (war.fortified ?? []).includes(userId)
+  const waitingFor = war.ambushes?.[userId] ?? null
+  const secondTarget = war.seconds?.[userId] ?? null
   const player = (id: string) => war.players.find(p => p.userId === id)
   // Tribute: your capital's under siege, and you've another city to pay with
   const myCapital = player(userId)?.capital ?? null
@@ -441,7 +458,7 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
   const spin = <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
   const lockLabel = lockAt?.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })
   const pick = (go: () => void) => () => { go(); setEditing(null) }
-  const summary = (key: 'attack' | 'tribute' | 'flag', icon: ReactNode, label: string, value: string) => (
+  const summary = (key: 'attack' | 'second' | 'tribute' | 'flag', icon: ReactNode, label: string, value: string) => (
     <button
       onClick={() => setEditing(e => (e === key ? null : key))}
       className={clsx('w-full flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm text-left', editing === key ? 'border-gold/60 bg-gold/5' : 'border-field-700 bg-field-800/60 hover:border-field-500')}
@@ -467,6 +484,7 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
           <p>
             {dugIn ? <Shield className="inline w-3.5 h-3.5 mr-1 text-field-400" /> : <Swords className="inline w-3.5 h-3.5 mr-1 text-field-400" />}
             {dugIn ? <>Dug in: no attack, and anyone attacking you needs to win by 2.</>
+              : waitingFor ? <>🪤 Lying in wait for <span className="font-bold text-white">{player(waitingFor)?.name ?? 'Someone'}</span>: if they attack you and you outscore them, you take one of their cities.</>
               : target ? <>Attacking <span className="font-bold text-white">{player(target)?.name ?? 'Someone'}</span> (your choice).</> : 'Attack: automatic, the neighbor you pick most differently from.'}
           </p>
           {paying && (
@@ -483,11 +501,11 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
         <>
           <p className="text-xs text-field-400 mb-2">All optional, and nobody sees them until kickoff.</p>
           <div className="space-y-1.5">
-            {summary('attack', dugIn ? <Shield className="w-3.5 h-3.5 text-[#3fd0ff] shrink-0" /> : <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />, 'Attack',
-              dugIn ? 'Dig in: no attack' : target ? player(target)?.name ?? 'Someone' : 'Automatic')}
+            {summary('attack', dugIn ? <Shield className="w-3.5 h-3.5 text-[#3fd0ff] shrink-0" /> : waitingFor ? <span className="shrink-0 text-sm" aria-hidden>🪤</span> : <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />, 'Attack',
+              dugIn ? 'Dig in: no attack' : waitingFor ? `Ambush: ${player(waitingFor)?.name ?? 'Someone'}` : target ? player(target)?.name ?? 'Someone' : 'Automatic')}
             {editing === 'attack' && (
               <div className={choices}>
-                <button onClick={pick(() => (dugIn ? fortify(false) : attack(null)))} disabled={!!busy} className={row(!target && !dugIn)}>
+                <button onClick={pick(() => (dugIn ? fortify(false) : waitingFor ? ambush(null) : attack(null)))} disabled={!!busy} className={row(!target && !dugIn && !waitingFor)}>
                   {busy === 'atk:auto' || busy === 'dig:off' ? spin : <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />}
                   <span className="font-bold text-white shrink-0 whitespace-nowrap">Automatic</span>
                   <span className="text-[11px] text-field-500 truncate">the neighbor you pick most differently from</span>
@@ -507,7 +525,37 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
                     </span>
                   </button>
                 ))}
+                <p className="pt-1 text-[11px] text-field-500">Or lie in ambush (no attack): if they attack you and you outscore them, you take one of their cities.</p>
+                {neighbors.map(n => (
+                  <button key={`amb-${n.id}`} onClick={pick(() => ambush(n.id, n.name))} disabled={!!busy} className={row(waitingFor === n.id)}>
+                    {busy === `amb:${n.id}` ? spin : <span className="shrink-0" aria-hidden>🪤</span>}
+                    <span className="font-bold text-white truncate">Ambush {n.name}</span>
+                  </button>
+                ))}
               </div>
+            )}
+
+            {mine.length >= SECOND_FRONT_AT && (
+              <>
+                {summary('second', <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />, '2nd front', secondTarget ? player(secondTarget)?.name ?? 'Someone' : 'Automatic')}
+                {editing === 'second' && (
+                  <div className={choices}>
+                    <p className="text-[11px] text-field-500">An empire of {SECOND_FRONT_AT}+ cities attacks a second neighbor too: it takes a city only with a win by 2.</p>
+                    <button onClick={pick(() => second(null))} disabled={!!busy} className={row(!secondTarget)}>
+                      {busy === 'sec:auto' ? spin : <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />}
+                      <span className="font-bold text-white shrink-0 whitespace-nowrap">Automatic</span>
+                      <span className="text-[11px] text-field-500 truncate">the next neighbor you pick most differently from</span>
+                    </button>
+                    {neighbors.filter(n => n.id !== target).map(n => (
+                      <button key={`sec-${n.id}`} onClick={pick(() => second(n.id, n.name))} disabled={!!busy} className={row(secondTarget === n.id)}>
+                        {busy === `sec:${n.id}` ? spin : <span className="w-3 h-3 rounded-sm shrink-0" style={swatch(n.color)} />}
+                        <span className="font-bold text-white truncate">{n.name}</span>
+                        <span className="ml-auto shrink-0 text-[11px] text-field-400">{n.cities} {n.cities === 1 ? 'city' : 'cities'}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
 
             {besieger && payWith.length > 0 && (
@@ -770,7 +818,9 @@ function FairStart({ war, leagueId, onMoved }: { war: War; leagueId: string; onM
 
 /** The season's titles: the race as it stands, or the crowned ones once the war's over. */
 function TitleRace({ war, userId }: { war: War; userId: string | undefined }) {
-  const list = war.crowned ?? titles(war.log, war.owners, war.players.map(p => p.userId), Object.fromEntries(war.players.map(p => [p.userId, p.cityWeeks ?? 0])))
+  const abroad: Record<string, number> = {}
+  for (const o of war.outposts ?? []) if (o.owner) abroad[o.owner] = (abroad[o.owner] ?? 0) + 1
+  const list = war.crowned ?? titles(war.log, war.owners, war.players.map(p => p.userId), Object.fromEntries(war.players.map(p => [p.userId, p.cityWeeks ?? 0])), abroad)
   if (!list.length) return null
   const player = (id: string) => war.players.find(p => p.userId === id)
   return (
@@ -881,8 +931,9 @@ function CodedOrders({ war, leagueId, week, userId, locked, hideSeen = false }: 
   const colorOf = (id: string) => war.players.find(p => p.userId === id)?.color ?? '#666'
   const orders = war.orders ?? {}
   const dug = war.fortified ?? []
-  const mineSealed = orders[userId] || dug.includes(userId) || war.tributes?.[userId]
-  const ids = locked ? [...new Set([...Object.keys(orders), ...dug])] : [...new Set([...sealed, ...(mineSealed ? [userId] : [])])]
+  const waits = war.ambushes ?? {}
+  const mineSealed = orders[userId] || dug.includes(userId) || war.tributes?.[userId] || waits[userId] || war.seconds?.[userId]
+  const ids = locked ? [...new Set([...Object.keys(orders), ...dug, ...Object.keys(waits)])] : [...new Set([...sealed, ...(mineSealed ? [userId] : [])])]
   const rows = ids
     .sort((a, b) => Number(b === userId) - Number(a === userId) || nameOf(a).localeCompare(nameOf(b)))
     .map(id => ({
@@ -890,7 +941,7 @@ function CodedOrders({ war, leagueId, week, userId, locked, hideSeen = false }: 
       name: nameOf(id),
       color: colorOf(id),
       // Yours you can always read
-      target: !(locked || id === userId) ? null : orders[id] ? nameOf(orders[id]) : dug.includes(id) ? '🛡 Dug in' : null,
+      target: !(locked || id === userId) ? null : orders[id] ? nameOf(orders[id]) : dug.includes(id) ? '🛡 Dug in' : waits[id] ? `🪤 Ambush: ${nameOf(waits[id])}` : null,
       code: cipherOf(`${leagueId}|${week}|${id}`),
     }))
   const empires = war.players.filter(p => citiesOf(war.owners, p.userId).length).length

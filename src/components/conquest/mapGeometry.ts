@@ -221,3 +221,20 @@ export function spreadLabels(boxes: LabelBox[], bounds: Rect): Record<string, [n
   }
   return Object.fromEntries(pos.map(p => [p.key, [p.x, p.y] as [number, number]]))
 }
+
+/**
+ * Where each overseas outpost sits on the map, out in the ocean off the US:
+ * Europe's down the Atlantic side, Mexico City below Texas, Brazil off
+ * Florida, Melbourne in the Pacific; and the name it goes by there.
+ */
+export const OUTPOST_AT: Record<string, { at: [number, number]; label: string }> = {
+  LON: { at: [962, 262], label: 'London' }, DUB: { at: [930, 300], label: 'Dublin' }, PAR: { at: [976, 318], label: 'Paris' },
+  MAD: { at: [958, 374], label: 'Madrid' }, MUN: { at: [976, 430], label: 'Munich' }, BER: { at: [956, 486], label: 'Berlin' },
+  FRA: { at: [976, 542], label: 'Frankfurt' }, MEX: { at: [372, 584], label: 'Mexico City' }, RIO: { at: [925, 586], label: 'Rio' },
+  SAO: { at: [975, 586], label: 'São Paulo' }, MEL: { at: [56, 580], label: 'Melbourne' },
+}
+/** An outpost's spot: a second one in the same city sits below the first */
+export function outpostSpot(key: string, nth: number): { at: [number, number]; label: string } {
+  const o = OUTPOST_AT[key] ?? { at: [958, 520] as [number, number], label: key }
+  return { at: [o.at[0], o.at[1] + nth * 30], label: o.label }
+}

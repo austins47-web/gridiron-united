@@ -70,7 +70,7 @@ export function ConquestPanelBody({ war, battles, week }: { war: ConquestData; b
   const swinging = battles.filter(b => b.outcome !== 'hold').length
   return (
     <div className="h-full flex flex-col gap-3">
-      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} battles={battles} look={war.mapLook} className="w-full" />
+      <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="abbr" layout="below" labelScale={2.1} battles={battles} outposts={war.outposts} look={war.mapLook} className="w-full" />
       {war.crowned?.[0] && (
         <p className="text-[19px] font-bold text-gold">{war.crowned[0].icon} {war.crowned[0].label}: {war.crowned[0].holders.map(nameFrom(war)).join(' & ')}</p>
       )}
@@ -116,7 +116,7 @@ export function ConquestTakeover({ war, battles, league, week }: { war: Conquest
       </div>
       {/* The map, full width; the week's battles sit under the Northeast zoom */}
       <div className="relative w-full mt-3">
-        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} battles={battles} look={war.mapLook} className="w-full" />
+        <ConquestMap owners={war.owners} besieged={war.besieged} players={war.players} labels="names" layout="side" labelScale={1.5} battles={battles} outposts={war.outposts} look={war.mapLook} className="w-full" />
         <MapLegend />
         {shown.length > 0 && (
           <div className="absolute" style={{ left: '71.2%', top: '64%', width: '28.6%' }}>
@@ -228,7 +228,8 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
   const steps = useMemo<{ step: Step; ms: number }[]>(() => {
     if (!report) return []
     const moves = report.moves
-    const big = moves.map((m, i) => ({ m, i })).filter(({ m }) => m.kind !== 'claim').slice(0, MAX_STEPS)
+    // (outposts aren't on the map's land: they show at the finale, and the newsreel tells them)
+    const big = moves.map((m, i) => ({ m, i })).filter(({ m }) => m.kind !== 'claim' && m.kind !== 'outpost').slice(0, MAX_STEPS)
     const out: { step: Step; ms: number }[] = [{ step: { kind: 'intro' }, ms: INTRO_MS }]
     for (const { m, i } of big) out.push({ step: { kind: 'move', move: m, upTo: i + 1 }, ms: STEP_MS })
     const claims = moves.filter(m => m.kind === 'claim')
@@ -286,6 +287,7 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
           labelScale={1.5}
           highlight={step.kind === 'move' ? step.move.team : null}
           highlightColor={step.kind === 'move' ? colorOf(step.move.to) : undefined}
+          outposts={(war.outposts ?? []).filter(o => o.week < report.week || step.kind === 'finale')}
           look={war.mapLook}
           className="w-full"
         />
@@ -465,11 +467,12 @@ function TvCodedOrders({ war, week }: { war: ConquestData; week: number }) {
   const orders = war.orders ?? {}
   const sealed = war.sealed ?? []
   const dugIn = war.fortified ?? []
-  const revealed = [...Object.keys(orders), ...dugIn.filter(id => !orders[id])]
+  const waits = war.ambushes ?? {}
+  const revealed = [...Object.keys(orders), ...dugIn.filter(id => !orders[id]), ...Object.keys(waits).filter(id => !orders[id] && !dugIn.includes(id))]
   const open = revealed.length > 0
   const ids = (open ? revealed : sealed).slice(0, 4)
   if (!ids.length) return null
-  const rows = ids.map(id => ({ key: id, name: nameOf(id), color: colorOf(id), target: open ? (orders[id] ? nameOf(orders[id]) : 'DUG IN') : null, code: cipherOf(`${war.startWeek}|${battleWeek}|${id}`) }))
+  const rows = ids.map(id => ({ key: id, name: nameOf(id), color: colorOf(id), target: open ? (orders[id] ? nameOf(orders[id]) : waits[id] ? `AMBUSH: ${nameOf(waits[id])}` : 'DUG IN') : null, code: cipherOf(`${war.startWeek}|${battleWeek}|${id}`) }))
   const more = (open ? revealed.length : sealed.length) - ids.length
   return (
     <div>

@@ -1464,7 +1464,7 @@ serve(async (req) => {
         if (done != null && now.getTime() - lastKick < 3 * 24 * HOUR) {
           const [{ data: rows }, { data: warPlayers }] = await Promise.all([
             supabase.from('conquest_moves')
-              .select('kind, team, from_user, to_user, score_for, score_against, exiled, with_team')
+              .select('kind, team, from_user, to_user, score_for, score_against, exiled, with_team, tactic')
               .eq('league_id', lg.id).eq('season', season).eq('week', done).order('id'),
             supabase.from('conquest_players').select('user_id, capital').eq('league_id', lg.id).eq('season', season),
           ])
@@ -1473,13 +1473,15 @@ serve(async (req) => {
             kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
             score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: !!m.exiled,
             withTeam: (m.with_team as string | null) ?? undefined,
+            tactic: (m.tactic as Move['tactic'] | null) ?? undefined,
           }))
           const news = new Map<string, string[]>()
           const add = (u: string | null, line: string) => { if (u) news.set(u, [...(news.get(u) ?? []), line]) }
           for (const m of moves) {
             const [a, b] = m.score, T = city(m.team)
+            const how = m.tactic === 'ambush' ? 'AMBUSH SPRUNG STOP ' : m.tactic === 'second' ? 'SECOND FRONT STOP ' : m.tactic === 'cut' ? 'SUPPLY LINES CUT STOP ' : ''
             if (m.kind === 'capture') {
-              add(m.to, `YOU TOOK ${T} FROM ${nameOf(m.from)} ${a} TO ${b}`)
+              add(m.to, `${how}YOU TOOK ${T} FROM ${nameOf(m.from)} ${a} TO ${b}`)
               add(m.from, m.exiled
                 ? `${T} HAS FALLEN TO ${nameOf(m.to)} ${a} TO ${b} STOP YOUR EMPIRE IS NO MORE STOP RISE AGAIN`
                 : `${T} HAS FALLEN TO ${nameOf(m.to)} ${a} TO ${b} STOP TAKE IT BACK`)
@@ -1499,6 +1501,8 @@ serve(async (req) => {
               add(m.from, `TRIBUTE PAID STOP ${T} TO ${nameOf(m.to)} STOP ${cap} IS SAFE FOR NOW`)
             } else if (m.kind === 'trade') {
               add(m.to, `${T} IS YOURS BY TREATY WITH ${nameOf(m.from)}`)
+            } else if (m.kind === 'outpost') {
+              add(m.to, `THE ${(m.withTeam ?? m.team).toUpperCase()} OUTPOST IS YOURS STOP AN EMPIRE ACROSS THE SEA`)
             }
           }
           for (const medal of weekMedals(moves, capitals)) add(medal.to, `YOU ARE AWARDED THE ${MEDAL_INFO[medal.kind].name.toUpperCase()}`)

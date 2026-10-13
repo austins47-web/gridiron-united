@@ -235,6 +235,10 @@ serve(async (req) => {
         down_distance: sit?.downDistanceText ?? sit?.shortDownDistanceText ?? null,
         red_zone: sit ? !!sit.isRedZone : null,
         last_play: typeof sit?.lastPlay?.text === 'string' ? sit.lastPlay.text.slice(0, 300) : null,
+        // Where it's played (Conquest's outposts: a game abroad leaves one)
+        venue_city: comp.venue?.address?.city ?? null,
+        venue_country: comp.venue?.address?.country ?? null,
+        neutral_site: typeof comp.neutralSite === 'boolean' ? comp.neutralSite : null,
       })
     }
 
