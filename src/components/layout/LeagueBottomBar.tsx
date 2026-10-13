@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   ClipboardList, Swords, Search, Target, BarChart3, ArrowLeftRight,
-  MessageCircle, Shield, Settings, Goal, MoreHorizontal, X,
+  MessageCircle, Shield, Settings, Goal, MoreHorizontal, X, Map as MapIcon,
   type LucideIcon,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
@@ -22,8 +22,8 @@ interface Tab { to: string; label: string; icon: LucideIcon; badge?: boolean }
  * behind "More", which never grows the bar itself no matter how many
  * pages get added later.
  *
- * Pick'em leagues have far fewer destinations (Pick'Em, Chat,
- * Settings, and Commissioner for the commissioner) - those all fit
+ * Pick'em leagues have far fewer destinations (Pick'Em, the war Map,
+ * Chat, Settings, and Commissioner for the commissioner) - those all fit
  * as primary tabs directly, so there's no "More" for them at all.
  */
 export function LeagueBottomBar() {
@@ -41,6 +41,7 @@ export function LeagueBottomBar() {
   const primary: Tab[] = isPickEm
     ? [
         { to: '/app/pickem',   label: "Pick'Em",  icon: Goal },
+        { to: '/app/war',      label: 'Map',       icon: MapIcon },
         { to: '/app/chat',     label: 'Chat',      icon: MessageCircle, badge: hasUnreadChat },
         ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commish', icon: Shield }] : []),
         { to: '/app/settings', label: 'Settings', icon: Settings },

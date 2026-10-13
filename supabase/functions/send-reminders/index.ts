@@ -1437,7 +1437,7 @@ serve(async (req) => {
             leagueId: lg.id, leagueName: lg.name, eventType: 'conquest_telegram', dedupeKey,
             subject: title, heading: title, body, pushTitle: title, pushBody: body,
             pushTag: `conquest-telegram-${lg.id}`, pushTtlSec: 24 * 3600, pushLook: TELEGRAM_LOOK,
-            ctaLabel: 'War map', ctaPath: '/app/pickem?tab=conquest',
+            ctaLabel: 'War map', ctaPath: '/app/war',
           })
         }
 

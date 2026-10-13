@@ -192,8 +192,10 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
         />
       </ZoomPan>
 
-      {/* How the map's drawn: yours to pick (the league's until you do) */}
-      <div className={clsx('mt-2 flex items-center gap-1.5', full && 'shrink-0')} role="group" aria-label="Map style">
+      {/* How the map's drawn: yours to pick (the league's until you do), in the full-screen map
+          only, so it isn't under the map on the page all the time */}
+      {full && (
+      <div className="mt-2 flex items-center gap-1.5 shrink-0" role="group" aria-label="Map style">
         <span className="text-[11px] text-field-500 mr-0.5">Map</span>
         {MAP_LOOKS.map(l => (
           <button
@@ -207,6 +209,7 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
           </button>
         ))}
       </div>
+      )}
 
       {card && !replay && !full && (
         <CityCard

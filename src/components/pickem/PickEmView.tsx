@@ -37,7 +37,7 @@ import { AutopilotPanel } from './Autopilot'
 import { HolidayRibbon } from '@/components/ui/Holiday'
 import { weatherLabel } from '@/lib/weather'
 import {
-  Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, Eye, EyeOff, TrendingUp, Shuffle,
+  Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, TrendingUp, Shuffle,
   TrendingDown, Home, Plane, Award, Quote, MessageSquare, Pin, Bot, Repeat2, BellRing
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -94,7 +94,12 @@ function formatDeadline(iso: string): string {
  * page waits for it before choosing which week to open on — a brief
  * placeholder the first time, cached after that.
  */
-export function PickEmView() {
+/**
+ * Pick'Em, or (view 'map', the bottom bar's Map) the league's Conquest war
+ * map on its own page: the same week's games and picks feed the war's live
+ * battles, so it shares this page's data.
+ */
+export function PickEmView({ view = 'pickem' }: { view?: 'pickem' | 'map' } = {}) {
   const calendar = usePickemCalendar()
   if (!calendar) {
     return (
@@ -104,10 +109,10 @@ export function PickEmView() {
       </div>
     )
   }
-  return <PickEmWeekView calendar={calendar} />
+  return <PickEmWeekView calendar={calendar} view={view} />
 }
 
-function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
+function PickEmWeekView({ calendar, view }: { calendar: PickemCalendar; view: 'pickem' | 'map' }) {
   const { activeLeagueId, activeLeague, user, myMembership } = useAppStore()
   const qc = useQueryClient()
   const isCommissioner = myMembership?.is_commissioner
@@ -131,16 +136,38 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     return Number.isInteger(linked) && linked >= 1 && linked <= 22 ? linked : activeWeek
   })
   const [weekDropdownOpen, setWeekDropdownOpen] = useState(false)
+  // The war map shows the week being fought, which runs ahead of the Pick'Em page's
+  // week between a week settling and the next kickoff (orders open on Tuesday)
+  const { data: warWeek } = useQuery({
+    queryKey: ['conquest-week', activeLeagueId, CURRENT_SEASON],
+    enabled: view === 'map' && !!activeLeagueId,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.from('conquest_games').select('start_week, last_resolved_week, final_week')
+        .eq('league_id', activeLeagueId!).eq('season', CURRENT_SEASON).maybeSingle()
+      if (!data) return null
+      return Math.min((data.last_resolved_week ?? data.start_week - 1) + 1, data.final_week)
+    },
+  })
+  useEffect(() => {
+    if (view === 'map' && warWeek && warWeek !== week) setWeek(warWeek)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, warWeek])
   // Honors a deep link from the global Pick'Em winner popup ("Full
   // Standings" navigates here wanting the Standings tab open, not
   // the default Picks tab), or ?tab= from an email or notification
   // ("See every pick" opens the Board) — read once on mount, same as
   // any other router-state-driven initial value.
-  const [tab, setTab] = useState<'picks' | 'standings' | 'results' | 'board' | 'map'>(() => {
-    const linked = new URLSearchParams(location.search).get('tab')
-    return (location.state as any)?.pickemTab
-      ?? (linked === 'standings' || linked === 'results' || linked === 'board' || linked === 'map' ? linked : 'picks')
+  const [tab, setTab] = useState<'picks' | 'standings' | 'board'>(() => {
+    const linked = (location.state as any)?.pickemTab ?? new URLSearchParams(location.search).get('tab')
+    return linked === 'standings' || linked === 'board' ? linked : linked === 'results' ? 'board' : 'picks'
   })
+  // The map has its own page now: an old link to its tab goes there
+  useEffect(() => {
+    const linked = new URLSearchParams(location.search).get('tab')
+    if (view === 'pickem' && (linked === 'map' || linked === 'conquest')) navigate('/app/war', { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [pendingPicks, setPendingPicks] = useState<Record<string, string>>({})
   const [tiebreakerScore, setTiebreakerScore] = useState<Record<string, string>>({})
   // Pick receipts: an optional one-liner per pick, public at kickoff
@@ -249,7 +276,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   // All league members' picks for this week (revealed only after each game kicks off)
   const { data: allPicks = [] } = useQuery({
     queryKey: ['all-pickem-picks', activeLeagueId, week],
-    enabled: !!activeLeagueId && (tab === 'results' || tab === 'standings' || tab === 'board' || tab === 'map'),
+    enabled: !!activeLeagueId && (view === 'map' || tab === 'standings' || tab === 'board'),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pickem_picks')
@@ -708,8 +735,35 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 text-center">
         <Trophy className="w-12 h-12 text-gold/40 mx-auto mb-4" />
-        <h2 className="text-white font-bold text-lg mb-2">Pick'Em</h2>
-        <p className="text-field-400">Select a Pick'Em league to make your picks.</p>
+        <h2 className="text-white font-bold text-lg mb-2">{view === 'map' ? 'War Map' : 'Pick\'Em'}</h2>
+        <p className="text-field-400">{view === 'map' ? 'Select a Pick\'Em league to see its war.' : 'Select a Pick\'Em league to make your picks.'}</p>
+      </div>
+    )
+  }
+
+  if (view === 'map') {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        <div className="flex items-center gap-3 min-w-0">
+          {activeLeague.brand_logo_url && (
+            <img src={activeLeague.brand_logo_url} alt="" className="w-12 h-12 object-contain shrink-0" />
+          )}
+          <div className="min-w-0">
+            <h1 className="section-title">War Map</h1>
+            <p className="text-field-400 text-sm truncate">{activeLeague.name} · {CURRENT_SEASON} Conquest</p>
+          </div>
+        </div>
+        <ConquestTab
+          leagueId={activeLeagueId}
+          week={week}
+          games={games}
+          allPicks={allPicks}
+          weekRows={weekRows}
+          leagueMembers={leagueMembers}
+          userId={user?.id}
+          deadline={weekDeadline}
+          isCommissioner={!!isCommissioner}
+        />
       </div>
     )
   }
@@ -864,7 +918,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
             own line on narrow screens, rather than left-aligned and
             cramped alongside the week dropdown */}
         <div className="flex gap-1 w-full sm:w-auto">
-          {(['picks', 'standings', 'results', 'board', 'map'] as const).map(t => (
+          {(['picks', 'standings', 'board'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -946,7 +1000,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
           auto-save effect above picks up the change and persists it
           shortly after. Only makes sense while actively picking, so
           gated to the Picks tab specifically — was previously
-          showing on Results and Standings too. */}
+          showing on the other tabs too. */}
       {tab === 'picks' && anyUnlocked && (
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={handleFillFavorites}
@@ -1226,21 +1280,6 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
         </div>
       )}
 
-      {/* ── RESULTS TAB ── */}
-      {tab === 'results' && (
-        <div className="space-y-3">
-          <PicksChart
-            games={games}
-            allPicks={allPicks}
-            leagueMembers={leagueMembers}
-            userId={user?.id}
-            deadline={weekDeadline}
-            week={week}
-          />
-          <WeekReceipts games={games} allPicks={allPicks} leagueMembers={leagueMembers} userId={user?.id} deadline={weekDeadline} />
-        </div>
-      )}
-
       {/* ── BOARD TAB ── */}
       {tab === 'board' && (
         <div className="space-y-3">
@@ -1261,21 +1300,6 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
           />
           <WeekReceipts games={games} allPicks={allPicks} leagueMembers={leagueMembers} userId={user?.id} deadline={weekDeadline} />
         </div>
-      )}
-
-      {/* ── MAP TAB: Conquest ── */}
-      {tab === 'map' && activeLeagueId && (
-        <ConquestTab
-          leagueId={activeLeagueId}
-          week={week}
-          games={games}
-          allPicks={allPicks}
-          weekRows={weekRows}
-          leagueMembers={leagueMembers}
-          userId={user?.id}
-          deadline={weekDeadline}
-          isCommissioner={!!isCommissioner}
-        />
       )}
     </div>
   )
@@ -1607,374 +1631,6 @@ function GamePickCard({
           </p>
         </div>
       )}
-    </div>
-  )
-}
-
-// ── PICKS CHART ─────────────────────────────────────────────
-// Shows every game for the week with a per-user pick grid.
-// Other users' picks are hidden (locked) until that game's kickoff.
-
-function PicksChart({
-  games, allPicks, leagueMembers, userId, deadline, week
-}: {
-  games: any[]
-  allPicks: any[]
-  leagueMembers: any[]
-  userId: string | undefined
-  deadline: string | null
-  week: number
-}) {
-  const now = new Date()
-
-  if (games.length === 0) {
-    return (
-      <div className="panel text-center py-8">
-        <p className="text-field-400">No games scheduled for Week {week}</p>
-      </div>
-    )
-  }
-
-  // Only show members who actually submitted picks this week.
-  // Someone who hasn't picked yet shouldn't appear as a row of
-  // blanks — they show up once they're in. You always see yourself.
-  const submittedIds = new Set(allPicks.map((p: any) => p.user_id))
-  const visibleMembers = leagueMembers.filter(
-    (m: any) => submittedIds.has(m.user_id) || m.user_id === userId
-  )
-
-  // Sort members: current user first, then alphabetical
-  const sortedMembers = [...visibleMembers].sort((a, b) => {
-    if (a.user_id === userId) return -1
-    if (b.user_id === userId) return 1
-    const nameA = a.profile?.display_name || a.profile?.username || ''
-    const nameB = b.profile?.display_name || b.profile?.username || ''
-    return nameA.localeCompare(nameB)
-  })
-
-  // Build pick lookup: { gameId: { userId: pickedTeam } }
-  const pickMap: Record<string, Record<string, string>> = {}
-  allPicks.forEach((p: any) => {
-    if (!pickMap[p.game_id]) pickMap[p.game_id] = {}
-    pickMap[p.game_id][p.user_id] = p.picked_team
-  })
-
-  // Sort games by date
-  const sortedGames = [...games].sort(
-    (a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime()
-  )
-
-  // Others' picks revealed after kickoff (or commissioner deadline)
-  const isGameRevealed = (game: any): boolean => {
-    const kickoff = new Date(game.game_date)
-    if (deadline) {
-      const dl = new Date(deadline)
-      return now >= dl || now >= kickoff
-    }
-    return now >= kickoff
-  }
-
-  // Current user's own pick is always visible regardless of kickoff
-  const isPickVisibleForUser = (_game: any, memberId: string): boolean => {
-    return memberId === userId || isGameRevealed(_game)
-  }
-
-  // Count correct picks per user across all final games
-  const userScores: Record<string, { correct: number; total: number }> = {}
-  sortedMembers.forEach(m => {
-    userScores[m.user_id] = { correct: 0, total: 0 }
-  })
-  sortedGames.forEach(game => {
-    if (game.status !== 'final') return
-    const winner = game.home_score > game.away_score ? game.home_team
-      : game.away_score > game.home_score ? game.away_team : 'TIE'
-    sortedMembers.forEach(m => {
-      const picked = pickMap[game.id]?.[m.user_id]
-      if (picked) {
-        userScores[m.user_id].total++
-        if (picked === winner) userScores[m.user_id].correct++
-      }
-    })
-  })
-
-  const hasAnyFinal = sortedGames.some(g => g.status === 'final')
-  const hasAnyRevealed = sortedGames.some(g => isGameRevealed(g))
-
-  return (
-    <div className="space-y-2">
-      {/* Info banner */}
-      {!hasAnyRevealed && (
-        <div className="flex items-center gap-2 text-xs text-field-400 bg-field-800/50 border border-field-700 rounded-lg px-3 py-1.5">
-          <EyeOff className="w-3 h-3 shrink-0" />
-          <span>Your picks are always visible — others' picks reveal at kickoff</span>
-        </div>
-      )}
-
-      {/* Weekly scoreboard */}
-      {hasAnyFinal && sortedMembers.length > 1 && (
-        <div className="bg-field-800 border border-field-700 rounded-xl overflow-hidden">
-          <div className="px-3 py-1.5 border-b border-field-700 flex items-center gap-1.5">
-            <Trophy className="w-3.5 h-3.5 text-gold" />
-            <span className="font-cond font-bold text-xs text-white uppercase tracking-wider">Week {week}</span>
-          </div>
-          {/* Wraps to multiple rows instead of scrolling sideways —
-              with a full 15-person league this was a ~1400px-wide
-              strip of fixed columns, far past any phone width. */}
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-px bg-field-700">
-            {sortedMembers.map((m) => {
-              const score = userScores[m.user_id]
-              const isMe = m.user_id === userId
-              const pct = score.total > 0 ? Math.round((score.correct / score.total) * 100) : null
-              const name = isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?')
-              return (
-                <div key={m.user_id} className={clsx(
-                  'flex flex-col items-center px-2 py-2 bg-field-800',
-                  isMe && 'bg-gold/[0.05]'
-                )}>
-                  <span className={clsx(
-                    'font-bold text-xs uppercase tracking-wide truncate max-w-full',
-                    isMe ? 'text-gold' : 'text-field-400'
-                  )}>
-                    {name}
-                  </span>
-                  <span className="text-base font-black text-white leading-tight">
-                    {score.correct}<span className="text-field-500 text-xs font-bold">/{score.total}</span>
-                  </span>
-                  {pct !== null && <span className="text-xs text-field-500">{pct}%</span>}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Per-game rows */}
-      {sortedGames.map((game: any) => {
-        const revealed = isGameRevealed(game)
-        const isFinal = game.status === 'final'
-        const winner = isFinal
-          ? (game.home_score > game.away_score ? game.home_team
-            : game.away_score > game.home_score ? game.away_team : 'TIE')
-          : null
-
-        const kickoffTime = game.game_date
-          ? new Date(game.game_date).toLocaleString('en-US', {
-              weekday: 'short', month: 'short', day: 'numeric',
-              hour: 'numeric', minute: '2-digit',
-            })
-          : 'TBD'
-
-        const awayCount = sortedMembers.filter(
-          m => isPickVisibleForUser(game, m.user_id) && pickMap[game.id]?.[m.user_id] === game.away_team
-        ).length
-        const homeCount = sortedMembers.filter(
-          m => isPickVisibleForUser(game, m.user_id) && pickMap[game.id]?.[m.user_id] === game.home_team
-        ).length
-        const total = awayCount + homeCount
-        const awayPct = total > 0 ? Math.round((awayCount / total) * 100) : 50
-        const homePct = total > 0 ? 100 - awayPct : 50
-
-        return (
-          <div key={game.id} className={clsx(
-            'bg-field-800 border rounded-xl px-3 py-2.5 space-y-2',
-            game.is_tiebreaker ? 'border-gold/25' : 'border-field-700',
-          )}>
-
-            {/* Game header row */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                {/* Away */}
-                <div className="flex items-center gap-1.5">
-                  {teamLogoUrl({ abbr: game.away_team }, 'NFL') && (
-                    <img src={teamLogoUrl({ abbr: game.away_team }, 'NFL')!} alt="" className="w-6 h-6 object-contain shrink-0" />
-                  )}
-                  <span className="font-cond font-black text-sm text-white">{game.away_team}</span>
-                  {isFinal && (
-                    <span className={clsx(
-                      'font-black text-sm',
-                      winner === game.away_team ? 'text-nfl' : 'text-field-500'
-                    )}>{game.away_score}</span>
-                  )}
-                </div>
-                <span className="text-field-600 text-xs">@</span>
-                {/* Home */}
-                <div className="flex items-center gap-1.5">
-                  {teamLogoUrl({ abbr: game.home_team }, 'NFL') && (
-                    <img src={teamLogoUrl({ abbr: game.home_team }, 'NFL')!} alt="" className="w-6 h-6 object-contain shrink-0" />
-                  )}
-                  <span className="font-cond font-black text-sm text-white">{game.home_team}</span>
-                  {isFinal && (
-                    <span className={clsx(
-                      'font-black text-sm',
-                      winner === game.home_team ? 'text-nfl' : 'text-field-500'
-                    )}>{game.home_score}</span>
-                  )}
-                </div>
-                {game.is_tiebreaker && (
-                  <span className="text-[11px] font-bold text-gold bg-gold/10 px-1 py-0.5 rounded uppercase tracking-wider">TB</span>
-                )}
-              </div>
-              <div className="text-right shrink-0">
-                {isFinal
-                  ? <span className="text-xs font-bold text-nfl">Final</span>
-                  : revealed
-                  ? <span className="text-xs text-gold/80 flex items-center gap-0.5"><Eye className="w-2.5 h-2.5" /> Live</span>
-                  : <span className="text-xs text-field-500">{kickoffTime}</span>
-                }
-              </div>
-            </div>
-
-            {/* Pick bar */}
-            {total > 0 && (
-              <div className="space-y-0.5">
-                <div className="flex rounded overflow-hidden h-3.5 text-[11px] font-black">
-                  {awayPct > 0 && (
-                    <div
-                      className={clsx(
-                        'flex items-center justify-center',
-                        winner === game.away_team ? 'bg-nfl' : isFinal ? 'bg-red-500/50' : 'bg-field-500'
-                      )}
-                      style={{ width: `${awayPct}%` }}
-                    >
-                      {awayPct >= 25 && `${game.away_team} ${awayPct}%`}
-                    </div>
-                  )}
-                  {homePct > 0 && (
-                    <div
-                      className={clsx(
-                        'flex items-center justify-center',
-                        winner === game.home_team ? 'bg-nfl' : isFinal ? 'bg-red-500/50' : 'bg-gold/60'
-                      )}
-                      style={{ width: `${homePct}%` }}
-                    >
-                      {homePct >= 25 && `${game.home_team} ${homePct}%`}
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-between text-[11px] text-field-500">
-                  <span>{awayCount}p</span>
-                  <span>{homeCount}p</span>
-                </div>
-              </div>
-            )}
-
-            {/* Per-user picks — a grid of rows instead of the old
-                cramped, truncated-to-5-characters chip list, so
-                full names actually fit. */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {sortedMembers.map((m) => {
-                const isMe = m.user_id === userId
-                const picked = pickMap[game.id]?.[m.user_id]
-                const displayName = isMe
-                  ? 'You'
-                  : (m.profile?.display_name || m.profile?.username || '?')
-                const isCorrect = isFinal && picked === winner
-                const isWrong = isFinal && !!picked && picked !== winner
-                const pickedLogo = picked ? teamLogoUrl({ abbr: picked }, 'NFL') : null
-
-                return (
-                  <div
-                    key={m.user_id}
-                    className={clsx(
-                      'flex items-center gap-1.5 rounded-lg px-2 py-1.5 border min-w-0',
-                      isMe ? 'border-gold/40 bg-gold/[0.07]' : 'border-field-700 bg-field-800/60',
-                    )}
-                  >
-                    <div className="w-5 h-5 rounded-full bg-field-700 flex items-center justify-center text-[10px] font-bold text-gold overflow-hidden shrink-0">
-                      {m.profile?.avatar_url
-                        ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                        : displayName[0]?.toUpperCase()
-                      }
-                    </div>
-                    <span className={clsx('font-bold text-xs truncate flex-1 min-w-0', isMe ? 'text-gold' : 'text-field-300')}>
-                      {displayName}
-                    </span>
-                    {!isPickVisibleForUser(game, m.user_id) ? (
-                      <Lock className="w-3 h-3 text-field-600 shrink-0" />
-                    ) : !picked ? (
-                      <span className="text-field-600 text-xs italic shrink-0">—</span>
-                    ) : (
-                      <div className="flex items-center gap-1 shrink-0">
-                        {pickedLogo && <img src={pickedLogo} alt="" className="w-4 h-4 object-contain" />}
-                        <span className={clsx(
-                          'font-cond font-black text-xs',
-                          isCorrect ? 'text-nfl' : isWrong ? 'text-red-400' : 'text-white'
-                        )}>
-                          {picked}
-                        </span>
-                        {isCorrect && <Check className="w-3 h-3 text-nfl" />}
-                        {isWrong && <X className="w-3 h-3 text-red-400" />}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Tiebreaker guesses — mirrors the per-user picks grid
-                right above it (same avatar+full-name row shape),
-                just showing a guessed number instead of a team logo
-                on the right. Was still the old 5-char-truncated
-                chip style even after the main grid was redesigned. */}
-            {game.is_tiebreaker && (revealed || allPicks.some((p: any) => p.game_id === game.id && p.user_id === userId)) && (
-              <div className="border-t border-field-700/60 pt-2 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gold uppercase tracking-wider flex items-center gap-1">
-                    <Target className="w-2.5 h-2.5" /> Tiebreaker guesses
-                  </span>
-                  {isFinal && (
-                    <span className="text-[11px] font-bold text-nfl">
-                      Actual: {(game.home_score ?? 0) + (game.away_score ?? 0)}
-                    </span>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                  {sortedMembers.map(m => {
-                    const pick = allPicks.find((p: any) => p.game_id === game.id && p.user_id === m.user_id)
-                    const isMe = m.user_id === userId
-                    const actual = isFinal ? (game.home_score ?? 0) + (game.away_score ?? 0) : null
-                    const guess = pick?.tiebreaker_score
-                    const canSee = isPickVisibleForUser(game, m.user_id)
-                    const displayName = isMe ? 'You' : (m.profile?.display_name || m.profile?.username || '?')
-
-                    return (
-                      <div
-                        key={m.user_id}
-                        className={clsx(
-                          'flex items-center gap-1.5 rounded-lg px-2 py-1.5 border min-w-0',
-                          isMe ? 'border-gold/40 bg-gold/[0.07]' : 'border-field-700 bg-field-800/60',
-                        )}
-                      >
-                        <div className="w-5 h-5 rounded-full bg-field-700 flex items-center justify-center text-[10px] font-bold text-gold overflow-hidden shrink-0">
-                          {m.profile?.avatar_url
-                            ? <img src={m.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-                            : displayName[0]?.toUpperCase()
-                          }
-                        </div>
-                        <span className={clsx('font-bold text-xs truncate flex-1 min-w-0', isMe ? 'text-gold' : 'text-field-300')}>
-                          {displayName}
-                        </span>
-                        {!canSee ? (
-                          <Lock className="w-3 h-3 text-field-600 shrink-0" />
-                        ) : guess == null ? (
-                          <span className="text-field-600 text-xs italic shrink-0">—</span>
-                        ) : (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <span className="font-cond font-black text-xs text-white">{guess}</span>
-                            {isFinal && actual != null && (
-                              <span className="text-field-500 text-[11px]">±{Math.abs(guess - actual)}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )
-      })}
     </div>
   )
 }

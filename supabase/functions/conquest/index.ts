@@ -262,7 +262,7 @@ async function tellTrade(admin: SupabaseClient, leagueId: string, userId: string
     subject: Deno.env.get('VAPID_SUBJECT') ?? 'https://www.gridironunited.app',
   }
   if (pref?.notify_conquest === false || !vapid.publicKey || !vapid.privateKey) return
-  const path = '/app/pickem?tab=conquest'
+  const path = '/app/war'
   const payload = JSON.stringify({ title: `🤝 ${title}`, body, url: path, tag: `conquest-trade-${leagueId}`, icon: '/icons/notify/reminder.png' })
   const { data: subs } = await admin.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', userId)
   for (const s of subs ?? []) {

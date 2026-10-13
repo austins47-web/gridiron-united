@@ -191,7 +191,8 @@ function App() {
               <Route path="mock" element={<MockDraftHub />} />
               <Route path="social" element={<SocialHub />} />
               <Route path="account" element={<AccountPage />} />
-              <Route path="pickem" element={<PickEmView />} />
+              <Route path="pickem" element={<PickEmView key="pickem" />} />
+              <Route path="war" element={<PickEmView key="war" view="map" />} />
               {/* League-specific routes */}
               <Route path="roster" element={<LeagueWrapper><RosterView /></LeagueWrapper>} />
               <Route path="matchup" element={<LeagueWrapper><MatchupView /></LeagueWrapper>} />
