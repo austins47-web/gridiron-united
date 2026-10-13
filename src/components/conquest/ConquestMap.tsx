@@ -4,6 +4,7 @@ import { TERRITORIES, ADJ, citiesOf, patternOf } from '../../../supabase/functio
 import { laneRoute, sailKeyframes, strikeFrom } from './sea'
 import { cutOff } from '../../../supabase/functions/_shared/conquest.ts'
 import { Warship } from './Warship'
+import { SeaCreatures } from './SeaCreatures'
 import { NORTHEAST_CITIES } from './usMap'
 import { M, NE, NE_SET, insetBox, viewOf, empireLabel, spreadLabels, frontTeeth, outpostSpot, type MapLayout, type Rect, type LabelBox } from './mapGeometry'
 import { ICON, type IconName } from './icons'
@@ -191,7 +192,7 @@ const shortName = (name: string) => {
   return first.length > 9 ? first.slice(0, 8) + '…' : first
 }
 
-/** Where a city's label sits: in its middle, or hanging off its capital's star */
+/** Where a city's label sits: in its middle, or hanging off its capital's star (the parchment's X) */
 type Place = 'free' | 'below' | 'above' | 'right'
 
 /** One of Conquest's symbols drawn on the map, centered on a point at a size (map units). */
@@ -450,6 +451,20 @@ function LookFrame({ look, uid }: { look: MapLook; uid: string }) {
   )
 }
 
+/**
+ * A treasure map's X, as two brush strokes (pointed at their ends, a little
+ * bowed, one over the other), about a city's code in size
+ */
+function treasureX(size: number): string {
+  const a = size * 0.66, w = size * 0.3
+  const stroke = (x0: number, y0: number, x1: number, y1: number, k: number) => {
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, l = Math.hypot(x1 - x0, y1 - y0), nx = -(y1 - y0) / l, ny = (x1 - x0) / l
+    const r = (n: number) => Math.round(n * 100) / 100
+    return `M${r(x0)} ${r(y0)}Q${r(mx + nx * w * k)} ${r(my + ny * w * k)} ${r(x1)} ${r(y1)}Q${r(mx - nx * w * (2 - k))} ${r(my - ny * w * (2 - k))} ${r(x0)} ${r(y0)}Z`
+  }
+  return stroke(-a, -a * 0.92, a * 0.96, a, 1.35) + stroke(a * 0.9, -a, -a, a * 0.88, 0.7)
+}
+
 /** The war room's markers: a wooden block in its empire's color on every held city, a taller one on a capital */
 function Blocks({ owners, colorOf, capitalOf, skip }: { owners: Record<string, string | null>; colorOf: (t: string) => string | null; capitalOf: (t: string) => boolean; skip: Set<string> | null }) {
   return (
@@ -521,109 +536,6 @@ function useOnSweep() {
  * the Northeast inset). Each is its own element, so moving it never
  * redraws the map under it.
  */
-/**
- * The old chart's creatures, out on the sea, moving just a little: a sea serpent
- * rising and sinking off Baja, a kraken's arms swaying in the Atlantic, a whale
- * spouting off the Keys, and a galleon rocking in the Pacific. Each its own small
- * drawing over the map (map units), moved by CSS (held still where nothing should
- * move: the TV's lighter effects, Reduce effects, reduced motion).
- */
-function SeaCreatures({ at }: { at: (x: number, y: number, w: number, h: number) => CSSProperties }) {
-  const ink = '#3a2611', paper = '#f1e4c2'
-  const box = (x: number, y: number, w: number, h: number, body: ReactNode) => (
-    <svg viewBox={`${x} ${y} ${w} ${h}`} style={at(x, y, w, h)} overflow="visible" aria-hidden>{body}</svg>
-  )
-  const ripple = (x: number, y: number, w: number) => <path d={`M${x} ${y}q${w / 4} -2 ${w / 2} 0q${w / 4} 2 ${w / 2} 0`} fill="none" stroke={ink} strokeOpacity={0.55} strokeWidth={0.6} />
-  // An arm out of the water, curling at its tip: inked, then filled, then its suckers
-  const arm = (d: string, suckers: [number, number][], delay: number, key: number) => (
-    <g key={key} className="cq-sea-sway" style={{ animationDelay: `${delay}s` }}>
-      <path d={d} fill="none" stroke={ink} strokeWidth={5.4} strokeLinecap="round" />
-      <path d={d} fill="none" stroke={paper} strokeWidth={3.6} strokeLinecap="round" />
-      {suckers.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={0.55} fill="none" stroke={ink} strokeWidth={0.4} />)}
-    </g>
-  )
-  return (
-    <>
-      {/* The sea serpent: a horned dragon's head, jaws open, and three coils breaking the water */}
-      {box(146, 538, 206, 70, (
-        <g transform="translate(166 600) scale(1.55)">
-          <g className="cq-sea-bob">
-            <path d="M24 0C24 -12 21 -22 13 -27C9 -30 3 -30 -1 -27L-10 -25L-1 -21.5L-8 -16.5C-2 -15 4 -13 8 -9C12 -5 13 -2 13 0Z" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
-            <path d="M-8.4 -24.4l1 1.5l1 -1.3l1 1.3l1 -1.2M-6.6 -17l1 -1.3l1 1.1l1 -1.1" fill="none" stroke={ink} strokeWidth={0.45} />
-            <path d="M-4 -19.4l-5 -0.6l-2.6 -1.8M-9 -20l-2.4 1.4" fill="none" stroke="#7a2e1f" strokeWidth={0.6} strokeLinecap="round" />
-            <path d="M8 -29L12 -37L12.5 -28.4M12.5 -28L18 -34L16.6 -26" fill={paper} stroke={ink} strokeWidth={0.6} strokeLinejoin="round" />
-            <circle cx={5} cy={-24.6} r={1.25} fill={ink} />
-            <path d="M3 -26.6q2 -1.4 4.2 0" fill="none" stroke={ink} strokeWidth={0.5} />
-            <path d="M19 -23l4 -1.4l-1.6 3.4M22 -15l4 -0.6l-2.2 3M23.4 -7l4 0.2l-2.6 2.6" fill={paper} stroke={ink} strokeWidth={0.55} strokeLinejoin="round" />
-            <path d="M16 -6C14 -12 13 -17 11 -21" fill="none" stroke={ink} strokeOpacity={0.45} strokeWidth={0.45} />
-            {[[32, 16, 6], [58, 13, 5.5], [81, 10, 5]].map(([x, h, t], i) => (
-              <g key={i}>
-                <path d={`M${x} 0C${x} -${h} ${x + h + t} -${h} ${x + h + t} 0L${x + h} 0C${x + h} -${h - t} ${x + t} -${h - t} ${x + t} 0Z`} fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
-                <path d={`M${x + h * 0.3} -${h * 0.72}l1.2 -3.2l1.6 3M${x + h * 0.55} -${h * 0.9}l1.2 -3.4l1.6 3.2M${x + h * 0.8} -${h * 0.72}l1.2 -3.2l1.6 3`} fill={ink} fillOpacity={0.75} stroke={ink} strokeWidth={0.35} strokeLinejoin="round" />
-              </g>
-            ))}
-            <path d="M100 0C101 -6 106 -9 110 -7L113 -12L114 -5L119 -7L114 -2C111 -4 107 -3 106 0" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
-          </g>
-          {ripple(-4, 1.2, 32)}{ripple(30, 1.2, 26)}{ripple(56, 1.2, 22)}{ripple(79, 1.2, 18)}{ripple(98, 1.2, 18)}
-        </g>
-      ))}
-
-      {/* The kraken: its head breaking the surface, four arms swaying */}
-      {box(866, 392, 118, 86, (
-        <g transform="translate(878 470) scale(1.3)">
-          {arm('M4 0C2 -9 8 -15 5 -24C3.5 -29 -2 -29 -2 -25C-2 -22 1.5 -22 1.5 -24', [[4.2, -6], [6, -12], [6, -18]], 0, 0)}
-          {arm('M40 0C44 -10 38 -20 43 -30C46 -36 52 -34 51 -30C50 -27 47 -28 47.5 -30', [[42, -7], [41, -14], [41.5, -21]], 1.1, 1)}
-          {arm('M62 0C64 -8 58 -13 62 -21C64 -26 70 -25 69 -21C68.5 -19 66 -19.5 66.6 -21', [[62.6, -5], [61, -11], [61.6, -16]], 2.3, 2)}
-          {arm('M78 0C76 -6 82 -9 80 -15C79 -19 75 -18.6 75.6 -16', [[78.4, -4], [80.4, -9]], 0.6, 3)}
-          <g className="cq-sea-bob cq-sea-slow">
-            {/* The head: a tall mantle, spotted, with slitted eyes under a heavy brow */}
-            <path d="M12 0C11 -10 13 -27 22 -31C31 -27 33 -10 32 0Z" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
-            <path d="M18 -22.6a1 0.7 0 1 0 0.1 0M25.6 -19a0.8 0.6 0 1 0 0.1 0M21 -26.4a0.7 0.5 0 1 0 0.1 0M27 -24.6a0.6 0.5 0 1 0 0.1 0" fill="none" stroke={ink} strokeOpacity={0.6} strokeWidth={0.45} />
-            <path d="M13.6 -12.4C15.6 -14.6 18 -14.6 20 -12.6M24 -12.6C26 -14.6 28.4 -14.6 30.4 -12.4" fill="none" stroke={ink} strokeWidth={0.8} strokeLinecap="round" />
-            <ellipse cx={17} cy={-10.6} rx={2.2} ry={1.5} fill={paper} stroke={ink} strokeWidth={0.55} /><ellipse cx={17.2} cy={-10.6} rx={0.45} ry={1.3} fill={ink} />
-            <ellipse cx={27} cy={-10.6} rx={2.2} ry={1.5} fill={paper} stroke={ink} strokeWidth={0.55} /><ellipse cx={26.8} cy={-10.6} rx={0.45} ry={1.3} fill={ink} />
-          </g>
-          {ripple(-4, 1.2, 14)}{ripple(10, 1.2, 24)}{ripple(36, 1.2, 18)}{ripple(58, 1.2, 14)}{ripple(74, 1.2, 12)}
-        </g>
-      ))}
-
-      {/* The whale, spouting now and then */}
-      {box(846, 566, 80, 42, (
-        <g transform="translate(850 602) scale(1.35)">
-          <g className="cq-sea-bob cq-sea-slow">
-            <path d="M0 0C1 -10 12 -15 26 -12C36 -10 43 -5 46 -1L51 -8C53 -6 53 -2 50 0C53 2 53 5 51 7L46 1C40 4 18 4 0 0Z" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
-            <path d="M6 -3C14 -1 26 -1 34 -4M9 0.6C15 1.8 22 2 28 1.4" fill="none" stroke={ink} strokeOpacity={0.5} strokeWidth={0.5} />
-            <path d="M18 -2C20 2 23 4 26 4" fill="none" stroke={ink} strokeWidth={0.6} />
-            <circle cx={8} cy={-4.5} r={1} fill={ink} />
-            <g className="cq-sea-spout">
-              <path d="M10 -13C8 -19 4 -22 1 -21M10 -13C12 -19 16 -22 19 -21M10 -13V-23" fill="none" stroke={ink} strokeWidth={0.8} strokeLinecap="round" />
-              <circle cx={1} cy={-21} r={0.7} fill={ink} /><circle cx={19} cy={-21} r={0.7} fill={ink} />
-            </g>
-          </g>
-          {ripple(-4, 2, 60)}
-        </g>
-      ))}
-
-      {/* A galleon under sail, rocking */}
-      {box(32, 430, 62, 64, (
-        <g transform="translate(36 489) scale(1.5)">
-          <g className="cq-sea-rock">
-            <path d="M0 -7H36L31 0H5Z" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
-            <path d="M5 -3.6H31" stroke={ink} strokeOpacity={0.5} strokeWidth={0.4} />
-            <path d="M3 -7V-10H10V-7M27 -7V-11H34V-7" fill={paper} stroke={ink} strokeWidth={0.6} />
-            <path d="M12 -7V-34M20 -7V-38M28 -7V-30M34 -9L41 -16" stroke={ink} strokeWidth={0.7} />
-            {[[12, -31, 8], [12, -21, 9], [20, -35, 9], [20, -24, 10], [28, -27, 7], [28, -18, 8]].map(([x, y, w], i) => (
-              <path key={i} d={`M${x - w / 2} ${y}Q${x} ${y + 2} ${x + w / 2} ${y}L${x + w / 2} ${y + 8}Q${x} ${y + 10} ${x - w / 2} ${y + 8}Z`} fill={paper} stroke={ink} strokeWidth={0.55} />
-            ))}
-            <path d="M20 -38l6 1.5l-6 1.5" fill="#7a2e1f" />
-          </g>
-          {ripple(-3, 1.4, 42)}
-        </g>
-      ))}
-    </>
-  )
-}
-
 function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes, creatures = false }: {
   win: Rect
   zoom: number
@@ -981,7 +893,7 @@ export const ConquestMap = memo(function ConquestMap({
   const flagColor = you ? byId.get(you)?.color : undefined
 
   /**
-   * A city's marker and label: the capital's star (a flame beside it under
+   * A city's marker and label: the capital's star (the parchment's treasure X; a flame beside it under
    * siege, your YOU tag above), the code, and its owner's name. Each is
    * drawn around its own point and kept its size on screen as the map
    * zooms (.cq-k, from the zoom's --cq-s), so nothing grows with the land.
@@ -1015,12 +927,18 @@ export const ConquestMap = memo(function ConquestMap({
       <g key={`mark-${t}`}>
         {(capital || siege || t === youAt || caption) && held(sx, sy, (
           <>
-            {capital && (
+            {capital && (look === 'parchment' ? (
+              // The parchment's capital: an X painted on the chart, as on a treasure map
+              <>
+                {siege && <circle cx={0} cy={0} r={size * 0.92} fill="none" stroke={SIEGE} strokeWidth={1.2} strokeOpacity={0.85} strokeDasharray="2 1.6" />}
+                <path d={treasureX(size)} fill={P.name(o!.color)} stroke={P.ink} strokeWidth={size * 0.07} strokeLinejoin="round" />
+              </>
+            ) : (
               <>
                 <circle cx={0} cy={0} r={size * 0.78} fill="none" stroke={siege ? SIEGE : o!.color} strokeWidth={1.2} strokeOpacity={0.85} strokeDasharray={siege ? '2 1.6' : undefined} />
                 <MapIcon name="capital" x={0} y={0} size={size * 1.05} color={o!.color} outline={P.under} />
               </>
-            )}
+            ))}
             {siege && <MapIcon name="siege" x={size * 0.95} y={-size * 0.75} size={size * 1.1} color={SIEGE} outline={P.under} />}
             {t === youAt && o && (() => {
               const h = size * 0.95, w = size * 2.6, top = -size * 0.78 - size * 0.3 - h
