@@ -32,6 +32,8 @@
 //   if it attacks you and you outscore it, you take one of its cities.
 // - Second front: an empire of 5 or more cities attacks a second neighbor
 //   too, taking a city only with a win by 2.
+// - Rout: a win by 5 more than the battle needed (5, or 6 against an empire
+//   dug in or on a second front) takes two cities.
 // - Supply lines: a city cut off from its capital (not joined to it through
 //   your own cities, by land or sea) defends at -1: one point short takes it.
 // - Outposts: a game played abroad leaves an outpost, won by the best week
@@ -209,6 +211,12 @@ export interface Battle {
 /** An empire this big opens a second front each week */
 export const SECOND_FRONT_AT = 5
 
+/** A rout: a win by this much (beyond what the battle needed to win at all, less one) takes a second city */
+export const ROUT_BY = 5
+/** Did this battle end in a rout? (margin 5 normally; 6 against an empire dug in or on a second front) */
+export const isRout = (b: Pick<Battle, 'defender' | 'tactic' | 'score'>, fortified: Set<string>) =>
+  b.score[0] - b.score[1] - marginNeeded(b, fortified) >= ROUT_BY - 1
+
 export type MoveKind = 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion' | 'tribute' | 'trade' | 'outpost'
 
 export interface Move {
@@ -226,8 +234,8 @@ export interface Move {
   chosen?: boolean
   /** the other city in it: a tribute's, the capital it freed; a trade's, the city that went the other way; an outpost's, its name */
   withTeam?: string
-  /** how a city was won: an ambush sprung, a second front, or cut off from its capital */
-  tactic?: 'ambush' | 'second' | 'cut'
+  /** how a city was won: an ambush sprung, a second front, cut off from its capital, or the second city of a rout */
+  tactic?: 'ambush' | 'second' | 'cut' | 'rout'
 }
 
 export const citiesOf = (owners: Record<string, string | null>, user: string): string[] =>
@@ -448,6 +456,22 @@ export function resolveWeek(
     moves.push({
       kind: 'capture', team: t, from: b.defender, to: b.attacker, score: b.score,
       exiled: citiesOf(owners, b.defender).length === 0, ...(tactic ? { tactic } : {}),
+    })
+    // A rout: the enemy breaks, and a second city on the border falls too (a capital
+    // that's not besieged only goes under siege)
+    if (!full || !isRout(b, fortified)) continue
+    const t2 = options.find(x => x !== t && !changed.has(x) && owners[x] === b.defender)
+    if (!t2) continue
+    changed.add(t2)
+    if (t2 === state.capitals[b.defender] && !wasBesieged[t2]) {
+      besieged[t2] = b.attacker
+      moves.push({ kind: 'siege', team: t2, from: b.defender, to: b.attacker, score: b.score, tactic: 'rout' })
+      continue
+    }
+    owners[t2] = b.attacker
+    moves.push({
+      kind: 'capture', team: t2, from: b.defender, to: b.attacker, score: b.score,
+      exiled: citiesOf(owners, b.defender).length === 0, tactic: 'rout',
     })
   }
 

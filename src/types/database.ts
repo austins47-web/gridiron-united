@@ -708,7 +708,7 @@ export interface Database {
           score_against: number
           exiled: boolean
           with_team: string | null
-          tactic: 'ambush' | 'second' | 'cut' | null
+          tactic: 'ambush' | 'second' | 'cut' | 'rout' | null
           created_at: string
         }
         Insert: never

@@ -163,7 +163,8 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
       `It was a trap all along! ${who} springs the ambush on ${name(m.from)}! `,
     ])
     : m.tactic === 'second' ? say(`second|${m.team}`, [`A second front opens! `, `${who} strikes on two fronts at once! `])
-      : m.tactic === 'cut' ? `${cityName(m.team)}, cut off from its capital, cannot hold! ` : ''
+      : m.tactic === 'cut' ? `${cityName(m.team)}, cut off from its capital, cannot hold! `
+        : m.tactic === 'rout' ? say(`rout|${m.team}`, [`A rout! ${name(m.from)}'s army breaks and runs! `, `The enemy scatters! It's a rout! `]) : ''
   const ahoy = (m: ConquestMove, who: string) => {
     const port = sailed(m)
     if (!port) return ''

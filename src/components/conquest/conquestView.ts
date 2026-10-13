@@ -3,7 +3,7 @@
 // battles as they stand, and the war log's headlines.
 import type { CSSProperties } from 'react'
 import {
-  CITY, citiesOf, plannedBattles, ADJ, patternOf, cutOff, marginNeeded,
+  CITY, citiesOf, plannedBattles, ADJ, patternOf, cutOff, marginNeeded, isRout,
   weekMedals, type Medal,
   type ConquestState, type WeekScores, type MoveKind, type Orders, type Claims, type Title,
 } from '../../../supabase/functions/_shared/conquest.ts'
@@ -33,8 +33,8 @@ export interface ConquestMove {
   exiled?: boolean
   /** the other city in it: a tribute's, the capital it freed; a trade's, the city that went the other way; an outpost's, its name */
   withTeam?: string | null
-  /** how a city was won: an ambush sprung, a second front, or cut off from its capital */
-  tactic?: 'ambush' | 'second' | 'cut' | null
+  /** how a city was won: an ambush sprung, a second front, cut off from its capital, or the second city of a rout */
+  tactic?: 'ambush' | 'second' | 'cut' | 'rout' | null
 }
 
 /** An outpost abroad (one a city; the latest game played there): who holds it, if anyone, since `week` */
@@ -128,6 +128,8 @@ export interface LiveBattle {
   tactic?: 'second' | 'ambush'
   /** won one point short: the city's cut off from its capital */
   cut?: boolean
+  /** a rout: the second city that falls with it */
+  city2?: string | null
 }
 
 /**
@@ -167,9 +169,12 @@ export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'pla
     if (winning && city) taken.add(city)
     const outcome: LiveBattle['outcome'] = !winning || !city ? 'hold'
       : city === capitals[b.defender] && !besieged[city] ? 'siege' : 'take'
+    // A rout: a second city on the border falls too
+    const city2 = outcome === 'take' && margin >= need && isRout(b, fortified) ? reach.find(x => x !== city && !taken.has(x)) ?? null : null
+    if (city2) taken.add(city2)
     out.set(b, {
       attacker: b.attacker, defender: b.defender, ordered: b.ordered, score: b.score, city, outcome,
-      ...(b.tactic ? { tactic: b.tactic } : {}), ...(winning && margin < need ? { cut: true } : {}),
+      ...(b.tactic ? { tactic: b.tactic } : {}), ...(winning && margin < need ? { cut: true } : {}), ...(city2 ? { city2 } : {}),
     })
   }
   return battles.map(b => out.get(b)!)
@@ -185,13 +190,14 @@ export function headline(m: ConquestMove, nameOf: (id: string | null) => string)
         text: (m.tactic === 'ambush' ? `${nameOf(m.to)} springs an ambush and seizes ${city} from ${nameOf(m.from)}`
           : m.tactic === 'second' ? `${nameOf(m.to)} opens a second front and seizes ${city} from ${nameOf(m.from)}`
           : m.tactic === 'cut' ? `${nameOf(m.to)} seizes ${city}, cut off from ${nameOf(m.from)}'s capital`
+          : m.tactic === 'rout' ? `${nameOf(m.from)}'s army breaks: ${nameOf(m.to)} seizes ${city} in the rout`
           : `${nameOf(m.to)} seizes ${city} from ${nameOf(m.from)}`)
           + (m.exiled ? `, driving ${nameOf(m.from)} into exile` : ''),
       }
     case 'siege':
       return {
         icon: m.tactic === 'ambush' ? '🪤' : '🔥',
-        text: `${nameOf(m.to)} ${m.tactic === 'ambush' ? 'springs an ambush and lays' : m.tactic === 'second' ? 'opens a second front and lays' : 'lays'} siege to ${nameOf(m.from)}'s capital, ${city}`,
+        text: `${nameOf(m.to)} ${m.tactic === 'ambush' ? 'springs an ambush and lays' : m.tactic === 'second' ? 'opens a second front and lays' : m.tactic === 'rout' ? 'routs the defenders and lays' : 'lays'} siege to ${nameOf(m.from)}'s capital, ${city}`,
       }
     case 'relief':
       return { icon: '🛡️', text: `${city} holds: the siege on ${nameOf(m.to)}'s capital is broken` }

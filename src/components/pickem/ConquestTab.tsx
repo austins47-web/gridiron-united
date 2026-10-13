@@ -183,7 +183,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
         <span className="font-bold text-white truncate">{nameOf(b.defender)}</span>
         <span className={clsx('ml-auto shrink-0 font-cond font-black tabular-nums', ahead ? 'text-nfl' : 'text-field-300')}>{b.score[0]}–{b.score[1]}</span>
         <span className="shrink-0 text-[11px] text-field-400 w-[7.5rem] text-right">
-          {b.outcome === 'take' ? <>{b.cut && <span title="Cut off from its capital">✂ </span>}takes {city}</> : b.outcome === 'siege' ? <><ConquestIcon name="siege" className="inline w-3 h-3 -mt-0.5 text-red-400" /> besieges {city}</> : 'holds'}
+          {b.outcome === 'take' ? <>{b.cut && <span title="Cut off from its capital">✂ </span>}takes {city}{b.city2 && <span title="A rout: won by 5 or more"> + {CITY[b.city2]}</span>}</> : b.outcome === 'siege' ? <><ConquestIcon name="siege" className="inline w-3 h-3 -mt-0.5 text-red-400" /> besieges {city}</> : 'holds'}
         </span>
       </li>
     )
@@ -362,6 +362,7 @@ function RulesSheet({ onClose }: { onClose: () => void }) {
           <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire; on a tie, whoever held the most cities week by week all season), Warlord, Siege Master, Unbreakable, Comeback Kid and Iron Grip (the most cities held, added up week after week).</li>
           <li>Lie in ambush instead of attacking: name an empire on your border, and if it attacks you and you outscore it, you take one of its cities.</li>
           <li>An empire of {SECOND_FRONT_AT} or more cities opens a second front: a second attack each week (yours to choose, or automatic) that takes a city only with a win by 2.</li>
+          <li>Rout: win a battle by 5 or more (6 against an empire that’s dug in, or on a second front) and the enemy breaks: you take two cities.</li>
           <li>Supply lines: a city cut off from its capital (not joined to it through your own cities, by land or sea lane) defends at −1, so one point short still takes it. It’s marked on the map with a broken link.</li>
           <li>Outposts: when the NFL plays abroad, an outpost appears off the coast. The best week among everyone who picked that game right wins it, and it counts as a city (for Emperor and Iron Grip) to the season’s end. It can’t be attacked, but when the NFL goes back to the same city, that game’s winner takes its outpost over.</li>
           <li>Cities that would change hands if the week ended now pulse on the map.</li>

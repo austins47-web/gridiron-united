@@ -1479,7 +1479,7 @@ serve(async (req) => {
           const add = (u: string | null, line: string) => { if (u) news.set(u, [...(news.get(u) ?? []), line]) }
           for (const m of moves) {
             const [a, b] = m.score, T = city(m.team)
-            const how = m.tactic === 'ambush' ? 'AMBUSH SPRUNG STOP ' : m.tactic === 'second' ? 'SECOND FRONT STOP ' : m.tactic === 'cut' ? 'SUPPLY LINES CUT STOP ' : ''
+            const how = m.tactic === 'ambush' ? 'AMBUSH SPRUNG STOP ' : m.tactic === 'second' ? 'SECOND FRONT STOP ' : m.tactic === 'cut' ? 'SUPPLY LINES CUT STOP ' : m.tactic === 'rout' ? 'A ROUT STOP ' : ''
             if (m.kind === 'capture') {
               add(m.to, `${how}YOU TOOK ${T} FROM ${nameOf(m.from)} ${a} TO ${b}`)
               add(m.from, m.exiled

@@ -1404,6 +1404,24 @@
    behind a phone browser's toolbar), where the browser knows it */
 .cq-sheet { max-height: 85vh; max-height: 85dvh; }
 
+/* The parchment's sea creatures (ConquestMap's SeaCreatures): bobbing, rocking, spouting,
+   swaying; in the creature's own drawing (map units), small and slow */
+@keyframes cq-sea-bob { from { transform: translateY(0); } to { transform: translateY(-1.6px); } }
+.cq-sea-bob { animation: cq-sea-bob 3.6s ease-in-out infinite alternate; }
+.cq-sea-slow { animation-duration: 5.2s; }
+@keyframes cq-sea-rock { from { transform: rotate(-2.5deg); } to { transform: rotate(2.5deg); } }
+.cq-sea-rock { transform-box: fill-box; transform-origin: 50% 90%; animation: cq-sea-rock 4.4s ease-in-out infinite alternate; }
+@keyframes cq-sea-spout { 0%, 55% { transform: scaleY(0.2); opacity: 0; } 70% { transform: scaleY(1); opacity: 0.9; } 100% { transform: scaleY(1.15); opacity: 0; } }
+.cq-sea-spout { transform-box: fill-box; transform-origin: 50% 100%; animation: cq-sea-spout 6s ease-out infinite; }
+@keyframes cq-sea-sway { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+.cq-sea-sway { transform-box: fill-box; transform-origin: 50% 100%; animation: cq-sea-sway 3.2s ease-in-out infinite alternate; }
+.tv-lite .cq-sea-bob, .tv-lite .cq-sea-rock, .tv-lite .cq-sea-spout, .tv-lite .cq-sea-sway,
+.tv-still .cq-sea-bob, .tv-still .cq-sea-rock, .tv-still .cq-sea-spout, .tv-still .cq-sea-sway { animation: none; }
+.tv-lite .cq-sea-spout, .tv-still .cq-sea-spout { opacity: 0.8; }
+@media (prefers-reduced-motion: reduce) {
+  .cq-sea-bob, .cq-sea-rock, .cq-sea-spout, .cq-sea-sway { animation: none !important; }
+}
+
 /* A warship sailing an attack's sea lane (ConquestMap; its keyframes come with it) */
 .cq-sail { animation: var(--cq-sail) var(--cq-sail-s, 6s) linear infinite; will-change: transform; }
 

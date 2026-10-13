@@ -329,9 +329,40 @@ function Lands({ owners, colorOf, clipOf, near, patternFill, you, target, flag, 
 }
 
 /** Under the land: the paper's mottling and fibers, or the printed board's wear */
+/** The parchment's two compass roses (map units), where its rhumb lines start */
+const ROSES: [number, number, number][] = [[72, 548, 36], [846, 50, 20]]
+/** The old chart's little waves, out on the open sea */
+const WAVES: [number, number][] = [
+  [18, 222], [22, 330], [14, 420], [118, 470], [128, 512], [130, 594], [384, 586], [560, 602],
+  [790, 604], [890, 300], [940, 528], [884, 546], [760, 22],
+]
+/** The seas, named in Latin as an old chart would: [name, x, y, turned] */
+const SEAS: [string, number, number, number][] = [
+  ['Mare Pacificum', 262, 524, 0], ['Oceanus Atlanticus', 930, 380, 0], ['Sinus Mexicanus', 690, 600, 0],
+]
+
 function LookGround({ look, uid }: { look: MapLook; uid: string }) {
+  // The sea of an old chart: rhumb lines (a portolan's lines of bearing, from each rose)
+  // and little inked waves, all under the land
+  const rhumbs = look !== 'parchment' ? '' : ROSES.flatMap(([cx, cy]) => Array.from({ length: 16 }, (_, k) => {
+    const a = (k / 16) * Math.PI * 2
+    return `M${cx} ${cy}L${(cx + Math.cos(a) * 1300).toFixed(1)} ${(cy + Math.sin(a) * 1300).toFixed(1)}`
+  })).join('')
   return (
     <g pointerEvents="none">
+      {look === 'parchment' && (
+        <>
+          <clipPath id={`cq-sea-${uid}`}><rect x={0} y={0} width={M.width} height={M.height} rx={10} /></clipPath>
+          <path d={rhumbs} fill="none" stroke="#3a2611" strokeOpacity={0.14} strokeWidth={0.6} clipPath={`url(#cq-sea-${uid})`} />
+          {WAVES.map(([x, y], i) => (
+            <path key={i} d={`M${x} ${y}q2.5 -2.6 5 0q2.5 -2.6 5 0q2.5 -2.6 5 0`} fill="none" stroke="#3a2611" strokeOpacity={0.38} strokeWidth={0.7} strokeLinecap="round" />
+          ))}
+          {SEAS.map(([name, x, y, turn]) => (
+            <text key={name} x={x} y={y} transform={turn ? `rotate(${turn} ${x} ${y})` : undefined} textAnchor="middle" fontFamily={SERIF}
+              fontStyle="italic" fontSize={10} letterSpacing={1.2} fill="#3a2611" fillOpacity={0.6}>{name}</text>
+          ))}
+        </>
+      )}
       <defs>
         <filter id={`cq-paper-${uid}`} x="0" y="0" width="100%" height="100%">
           <feTurbulence type="fractalNoise" baseFrequency={look === 'parchment' ? '0.012 0.02' : '0.02'} numOctaves={3} seed={7} result="blot" />
@@ -350,20 +381,53 @@ function LookGround({ look, uid }: { look: MapLook; uid: string }) {
 /** Over the land: the parchment's compass rose and inked border, or the lamp over the table and its wooden frame */
 function LookFrame({ look, uid }: { look: MapLook; uid: string }) {
   if (look === 'parchment') {
-    const cx = 72, cy = 548, r = 34
-    const ray = (deg: number, len: number, wide: number) => {
-      const a = (deg * Math.PI) / 180, b = ((deg + 90) * Math.PI) / 180
-      const tip = [cx + Math.sin(a) * len, cy - Math.cos(a) * len], l = [cx + Math.sin(b) * wide, cy - Math.cos(b) * wide], rr = [cx - Math.sin(b) * wide, cy + Math.cos(b) * wide]
-      return { dark: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${l[0]} ${l[1]}Z`, light: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${rr[0]} ${rr[1]}Z` }
+    const ink = '#3a2611', paper = '#f1e4c2'
+    // A compass rose: rings, sixteen points (the cardinal four long and inked), N marked
+    const rose = (cx: number, cy: number, r: number, key: string) => {
+      const ray = (deg: number, len: number, wide: number) => {
+        const a = (deg * Math.PI) / 180, b = ((deg + 90) * Math.PI) / 180
+        const tip = [cx + Math.sin(a) * len, cy - Math.cos(a) * len], l = [cx + Math.sin(b) * wide, cy - Math.cos(b) * wide], rr = [cx - Math.sin(b) * wide, cy + Math.cos(b) * wide]
+        return { dark: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${l[0]} ${l[1]}Z`, light: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${rr[0]} ${rr[1]}Z` }
+      }
+      return (
+        <g key={key}>
+          <circle cx={cx} cy={cy} r={r * 0.82} fill={paper} fillOpacity={0.55} stroke={ink} strokeOpacity={0.6} strokeWidth={0.9} />
+          <circle cx={cx} cy={cy} r={r * 0.74} fill="none" stroke={ink} strokeOpacity={0.4} strokeWidth={0.5} strokeDasharray="1.2 1.6" />
+          {Array.from({ length: 8 }, (_, k) => 22.5 + k * 45).map(d => { const p = ray(d, r * 0.48, r * 0.06); return <g key={d}><path d={p.dark} fill={ink} fillOpacity={0.4} /><path d={p.light} fill={paper} stroke={ink} strokeOpacity={0.4} strokeWidth={0.4} /></g> })}
+          {[45, 135, 225, 315].map(d => { const p = ray(d, r * 0.64, r * 0.1); return <g key={d}><path d={p.dark} fill={ink} fillOpacity={0.6} /><path d={p.light} fill={paper} stroke={ink} strokeOpacity={0.55} strokeWidth={0.5} /></g> })}
+          {[0, 90, 180, 270].map(d => { const p = ray(d, r, r * 0.16); return <g key={d}><path d={p.dark} fill={ink} fillOpacity={0.88} /><path d={p.light} fill={paper} stroke={ink} strokeWidth={0.6} /></g> })}
+          <circle cx={cx} cy={cy} r={r * 0.08} fill={ink} />
+          {/* A fleur-de-lis over north */}
+          <path d={`M${cx} ${cy - r - 9}c-2 2.5 -2 5 0 7c2 -2 2 -4.5 0 -7zM${cx - 1.2} ${cy - r - 3}c-3 -1 -5 -4 -3.5 -6c1 1.6 2.2 3.4 3.5 4.4zM${cx + 1.2} ${cy - r - 3}c3 -1 5 -4 3.5 -6c-1 1.6 -2.2 3.4 -3.5 4.4zM${cx - 3} ${cy - r - 1.6}h6`} fill={ink} stroke={ink} strokeWidth={0.6} />
+        </g>
+      )
     }
     return (
       <g pointerEvents="none">
-        <rect x={6} y={6} width={M.width - 12} height={M.height - 12} rx={6} fill="none" stroke="#3a2611" strokeOpacity={0.55} strokeWidth={2} />
-        <rect x={11} y={11} width={M.width - 22} height={M.height - 22} rx={4} fill="none" stroke="#3a2611" strokeOpacity={0.35} strokeWidth={0.8} />
-        <circle cx={cx} cy={cy} r={r * 0.62} fill="none" stroke="#3a2611" strokeOpacity={0.55} strokeWidth={0.8} />
-        {[45, 135, 225, 315].map(d => { const p = ray(d, r * 0.6, 4); return <g key={d}><path d={p.dark} fill="#3a2611" fillOpacity={0.55} /><path d={p.light} fill="#f1e4c2" stroke="#3a2611" strokeOpacity={0.5} strokeWidth={0.5} /></g> })}
-        {[0, 90, 180, 270].map(d => { const p = ray(d, r, 6); return <g key={d}><path d={p.dark} fill="#3a2611" fillOpacity={0.85} /><path d={p.light} fill="#f1e4c2" stroke="#3a2611" strokeWidth={0.6} /></g> })}
-        <text x={cx} y={cy - r - 4} textAnchor="middle" fontFamily={SERIF} fontSize={13} fontWeight={700} fill="#3a2611">N</text>
+        <defs>
+          {/* Age: the paper browned toward its edges, the corners burnt dark */}
+          <radialGradient id={`cq-age-${uid}`} cx="50%" cy="50%" r="72%">
+            <stop offset="0.6" stopColor="#5a3a14" stopOpacity={0} />
+            <stop offset="0.9" stopColor="#5a3a14" stopOpacity={0.22} />
+            <stop offset="1" stopColor="#2a1806" stopOpacity={0.5} />
+          </radialGradient>
+        </defs>
+        <rect x={0} y={0} width={M.width} height={M.height} rx={10} fill={`url(#cq-age-${uid})`} />
+        {/* A ruled double border, with its corners tied off */}
+        <rect x={6} y={6} width={M.width - 12} height={M.height - 12} rx={6} fill="none" stroke={ink} strokeOpacity={0.6} strokeWidth={2.2} />
+        <rect x={11} y={11} width={M.width - 22} height={M.height - 22} rx={4} fill="none" stroke={ink} strokeOpacity={0.38} strokeWidth={0.8} />
+        {[[11, 11], [M.width - 11, 11], [11, M.height - 11], [M.width - 11, M.height - 11]].map(([x, y], i) => (
+          <path key={i} d={`M${x - 4} ${y}L${x} ${y - 4}L${x + 4} ${y}L${x} ${y + 4}Z`} fill={ink} fillOpacity={0.6} />
+        ))}
+        {ROSES.map(([x, y, r], i) => rose(x, y, r, `rose${i}`))}
+        {/* The title, on a scroll unrolled across the north */}
+        <g>
+          <path d="M412 12 h236 l-6 9 6 9 h-236 l6 -9 z" fill={paper} stroke={ink} strokeOpacity={0.7} strokeWidth={0.8} />
+          <path d="M412 12 q-10 1 -10 9 q0 8 10 9 M648 12 q10 1 10 9 q0 8 -10 9" fill={paper} stroke={ink} strokeOpacity={0.7} strokeWidth={0.8} />
+          <text x={530} y={25.5} textAnchor="middle" fontFamily={SERIF} fontSize={11.5} letterSpacing={1.4} fill={ink}>The Gridiron Empires · Anno MMXXVI</text>
+        </g>
+        {/* The old warning, off the coast where the serpent swims */}
+        <text x={290} y={560} textAnchor="middle" fontFamily={SERIF} fontStyle="italic" fontSize={10} fill={ink} fillOpacity={0.75}>Hic sunt dracones</text>
       </g>
     )
   }
@@ -457,7 +521,110 @@ function useOnSweep() {
  * the Northeast inset). Each is its own element, so moving it never
  * redraws the map under it.
  */
-function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes }: {
+/**
+ * The old chart's creatures, out on the sea, moving just a little: a sea serpent
+ * rising and sinking off Baja, a kraken's arms swaying in the Atlantic, a whale
+ * spouting off the Keys, and a galleon rocking in the Pacific. Each its own small
+ * drawing over the map (map units), moved by CSS (held still where nothing should
+ * move: the TV's lighter effects, Reduce effects, reduced motion).
+ */
+function SeaCreatures({ at }: { at: (x: number, y: number, w: number, h: number) => CSSProperties }) {
+  const ink = '#3a2611', paper = '#f1e4c2'
+  const box = (x: number, y: number, w: number, h: number, body: ReactNode) => (
+    <svg viewBox={`${x} ${y} ${w} ${h}`} style={at(x, y, w, h)} overflow="visible" aria-hidden>{body}</svg>
+  )
+  const ripple = (x: number, y: number, w: number) => <path d={`M${x} ${y}q${w / 4} -2 ${w / 2} 0q${w / 4} 2 ${w / 2} 0`} fill="none" stroke={ink} strokeOpacity={0.55} strokeWidth={0.6} />
+  // An arm out of the water, curling at its tip: inked, then filled, then its suckers
+  const arm = (d: string, suckers: [number, number][], delay: number, key: number) => (
+    <g key={key} className="cq-sea-sway" style={{ animationDelay: `${delay}s` }}>
+      <path d={d} fill="none" stroke={ink} strokeWidth={5.4} strokeLinecap="round" />
+      <path d={d} fill="none" stroke={paper} strokeWidth={3.6} strokeLinecap="round" />
+      {suckers.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={0.55} fill="none" stroke={ink} strokeWidth={0.4} />)}
+    </g>
+  )
+  return (
+    <>
+      {/* The sea serpent: a horned dragon's head, jaws open, and three coils breaking the water */}
+      {box(146, 538, 206, 70, (
+        <g transform="translate(166 600) scale(1.55)">
+          <g className="cq-sea-bob">
+            <path d="M24 0C24 -12 21 -22 13 -27C9 -30 3 -30 -1 -27L-10 -25L-1 -21.5L-8 -16.5C-2 -15 4 -13 8 -9C12 -5 13 -2 13 0Z" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
+            <path d="M-8.4 -24.4l1 1.5l1 -1.3l1 1.3l1 -1.2M-6.6 -17l1 -1.3l1 1.1l1 -1.1" fill="none" stroke={ink} strokeWidth={0.45} />
+            <path d="M-4 -19.4l-5 -0.6l-2.6 -1.8M-9 -20l-2.4 1.4" fill="none" stroke="#7a2e1f" strokeWidth={0.6} strokeLinecap="round" />
+            <path d="M8 -29L12 -37L12.5 -28.4M12.5 -28L18 -34L16.6 -26" fill={paper} stroke={ink} strokeWidth={0.6} strokeLinejoin="round" />
+            <circle cx={5} cy={-24.6} r={1.25} fill={ink} />
+            <path d="M3 -26.6q2 -1.4 4.2 0" fill="none" stroke={ink} strokeWidth={0.5} />
+            <path d="M19 -23l4 -1.4l-1.6 3.4M22 -15l4 -0.6l-2.2 3M23.4 -7l4 0.2l-2.6 2.6" fill={paper} stroke={ink} strokeWidth={0.55} strokeLinejoin="round" />
+            <path d="M16 -6C14 -12 13 -17 11 -21" fill="none" stroke={ink} strokeOpacity={0.45} strokeWidth={0.45} />
+            {[[32, 16, 6], [58, 13, 5.5], [81, 10, 5]].map(([x, h, t], i) => (
+              <g key={i}>
+                <path d={`M${x} 0C${x} -${h} ${x + h + t} -${h} ${x + h + t} 0L${x + h} 0C${x + h} -${h - t} ${x + t} -${h - t} ${x + t} 0Z`} fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
+                <path d={`M${x + h * 0.3} -${h * 0.72}l1.2 -3.2l1.6 3M${x + h * 0.55} -${h * 0.9}l1.2 -3.4l1.6 3.2M${x + h * 0.8} -${h * 0.72}l1.2 -3.2l1.6 3`} fill={ink} fillOpacity={0.75} stroke={ink} strokeWidth={0.35} strokeLinejoin="round" />
+              </g>
+            ))}
+            <path d="M100 0C101 -6 106 -9 110 -7L113 -12L114 -5L119 -7L114 -2C111 -4 107 -3 106 0" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
+          </g>
+          {ripple(-4, 1.2, 32)}{ripple(30, 1.2, 26)}{ripple(56, 1.2, 22)}{ripple(79, 1.2, 18)}{ripple(98, 1.2, 18)}
+        </g>
+      ))}
+
+      {/* The kraken: its head breaking the surface, four arms swaying */}
+      {box(866, 392, 118, 86, (
+        <g transform="translate(878 470) scale(1.3)">
+          {arm('M4 0C2 -9 8 -15 5 -24C3.5 -29 -2 -29 -2 -25C-2 -22 1.5 -22 1.5 -24', [[4.2, -6], [6, -12], [6, -18]], 0, 0)}
+          {arm('M40 0C44 -10 38 -20 43 -30C46 -36 52 -34 51 -30C50 -27 47 -28 47.5 -30', [[42, -7], [41, -14], [41.5, -21]], 1.1, 1)}
+          {arm('M62 0C64 -8 58 -13 62 -21C64 -26 70 -25 69 -21C68.5 -19 66 -19.5 66.6 -21', [[62.6, -5], [61, -11], [61.6, -16]], 2.3, 2)}
+          {arm('M78 0C76 -6 82 -9 80 -15C79 -19 75 -18.6 75.6 -16', [[78.4, -4], [80.4, -9]], 0.6, 3)}
+          <g className="cq-sea-bob cq-sea-slow">
+            {/* The head: a tall mantle, spotted, with slitted eyes under a heavy brow */}
+            <path d="M12 0C11 -10 13 -27 22 -31C31 -27 33 -10 32 0Z" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
+            <path d="M18 -22.6a1 0.7 0 1 0 0.1 0M25.6 -19a0.8 0.6 0 1 0 0.1 0M21 -26.4a0.7 0.5 0 1 0 0.1 0M27 -24.6a0.6 0.5 0 1 0 0.1 0" fill="none" stroke={ink} strokeOpacity={0.6} strokeWidth={0.45} />
+            <path d="M13.6 -12.4C15.6 -14.6 18 -14.6 20 -12.6M24 -12.6C26 -14.6 28.4 -14.6 30.4 -12.4" fill="none" stroke={ink} strokeWidth={0.8} strokeLinecap="round" />
+            <ellipse cx={17} cy={-10.6} rx={2.2} ry={1.5} fill={paper} stroke={ink} strokeWidth={0.55} /><ellipse cx={17.2} cy={-10.6} rx={0.45} ry={1.3} fill={ink} />
+            <ellipse cx={27} cy={-10.6} rx={2.2} ry={1.5} fill={paper} stroke={ink} strokeWidth={0.55} /><ellipse cx={26.8} cy={-10.6} rx={0.45} ry={1.3} fill={ink} />
+          </g>
+          {ripple(-4, 1.2, 14)}{ripple(10, 1.2, 24)}{ripple(36, 1.2, 18)}{ripple(58, 1.2, 14)}{ripple(74, 1.2, 12)}
+        </g>
+      ))}
+
+      {/* The whale, spouting now and then */}
+      {box(846, 566, 80, 42, (
+        <g transform="translate(850 602) scale(1.35)">
+          <g className="cq-sea-bob cq-sea-slow">
+            <path d="M0 0C1 -10 12 -15 26 -12C36 -10 43 -5 46 -1L51 -8C53 -6 53 -2 50 0C53 2 53 5 51 7L46 1C40 4 18 4 0 0Z" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
+            <path d="M6 -3C14 -1 26 -1 34 -4M9 0.6C15 1.8 22 2 28 1.4" fill="none" stroke={ink} strokeOpacity={0.5} strokeWidth={0.5} />
+            <path d="M18 -2C20 2 23 4 26 4" fill="none" stroke={ink} strokeWidth={0.6} />
+            <circle cx={8} cy={-4.5} r={1} fill={ink} />
+            <g className="cq-sea-spout">
+              <path d="M10 -13C8 -19 4 -22 1 -21M10 -13C12 -19 16 -22 19 -21M10 -13V-23" fill="none" stroke={ink} strokeWidth={0.8} strokeLinecap="round" />
+              <circle cx={1} cy={-21} r={0.7} fill={ink} /><circle cx={19} cy={-21} r={0.7} fill={ink} />
+            </g>
+          </g>
+          {ripple(-4, 2, 60)}
+        </g>
+      ))}
+
+      {/* A galleon under sail, rocking */}
+      {box(32, 430, 62, 64, (
+        <g transform="translate(36 489) scale(1.5)">
+          <g className="cq-sea-rock">
+            <path d="M0 -7H36L31 0H5Z" fill={paper} stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
+            <path d="M5 -3.6H31" stroke={ink} strokeOpacity={0.5} strokeWidth={0.4} />
+            <path d="M3 -7V-10H10V-7M27 -7V-11H34V-7" fill={paper} stroke={ink} strokeWidth={0.6} />
+            <path d="M12 -7V-34M20 -7V-38M28 -7V-30M34 -9L41 -16" stroke={ink} strokeWidth={0.7} />
+            {[[12, -31, 8], [12, -21, 9], [20, -35, 9], [20, -24, 10], [28, -27, 7], [28, -18, 8]].map(([x, y, w], i) => (
+              <path key={i} d={`M${x - w / 2} ${y}Q${x} ${y + 2} ${x + w / 2} ${y}L${x + w / 2} ${y + 8}Q${x} ${y + 10} ${x - w / 2} ${y + 8}Z`} fill={paper} stroke={ink} strokeWidth={0.55} />
+            ))}
+            <path d="M20 -38l6 1.5l-6 1.5" fill="#7a2e1f" />
+          </g>
+          {ripple(-3, 1.4, 42)}
+        </g>
+      ))}
+    </>
+  )
+}
+
+function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes, creatures = false }: {
   win: Rect
   zoom: number
   P: Palette
@@ -468,6 +635,8 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
   arrows: Arrow[]
   radar: boolean
   lanes: boolean
+  /** the parchment's sea creatures */
+  creatures?: boolean
 }) {
   const at = (x: number, y: number, w: number, h: number): CSSProperties => ({
     position: 'absolute', left: pct(x - win.x, win.w), top: pct(y - win.y, win.h), width: pct(w, win.w), height: pct(h, win.h),
@@ -494,6 +663,8 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
           />
         </>
       )}
+
+      {creatures && <SeaCreatures at={at} />}
 
       {/* Cities changing hands as the week stands */}
       {hot.map(c => {
@@ -918,7 +1089,11 @@ export const ConquestMap = memo(function ConquestMap({
   const colorOfUser = (id: string) => byId.get(id)?.color ?? P.ink
   // Supply lines: cities cut off from their capital, marked on the map
   const cutOffNow = cutOff(owners, Object.fromEntries(players.filter(p => p.capital).map(p => [p.userId, p.capital!])))
-  const hot: Hot[] = battles.filter(b => b.outcome !== 'hold' && b.city).map(b => ({ team: b.city!, color: colorOfUser(b.attacker), siege: b.outcome === 'siege' }))
+  const hot: Hot[] = battles.filter(b => b.outcome !== 'hold' && b.city).flatMap(b => [
+    { team: b.city!, color: colorOfUser(b.attacker), siege: b.outcome === 'siege' },
+    // A rout's second city
+    ...(b.city2 ? [{ team: b.city2, color: colorOfUser(b.attacker), siege: false }] : []),
+  ])
   const arrows: Arrow[] = battles.flatMap(b => {
     if (!b.city) return []
     // From the attacker's nearest city on that border (by land if they have one, else by sea)
@@ -1083,7 +1258,7 @@ export const ConquestMap = memo(function ConquestMap({
       <div ref={motion} className="absolute inset-0 pointer-events-none" aria-hidden>
         <div style={frame(MAIN, 10)}>
           <Motion
-            win={MAIN} zoom={1} P={P} radar={look === 'radar'} lanes
+            win={MAIN} zoom={1} P={P} radar={look === 'radar'} lanes creatures={look === 'parchment'}
             pings={pings.filter(p => mainCities.includes(p.team) && (look === 'radar' || p.siege))}
             ringR={12 * labelScale * 1.9}
             hot={hot}
