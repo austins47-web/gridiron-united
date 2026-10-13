@@ -568,7 +568,10 @@
   .stagger > *:nth-child(n+9) { animation-delay: .34s }
 
   /* Route transition wrapper */
-  .route-enter { animation: rise-in .34s cubic-bezier(.22,1,.36,1) both; }
+  /* backwards, not both: a transform kept after the entrance would make the page a
+     containing block, and a position: fixed pop-up inside it would be pinned to the
+     page's scroll area instead of the screen (the Conquest rules sheet, on a phone) */
+  .route-enter { animation: rise-in .34s cubic-bezier(.22,1,.36,1) backwards; }
 
   @media (prefers-reduced-motion: reduce) {
     .fade-in, .slide-in, .pop-in, .route-enter,
@@ -1397,6 +1400,10 @@
 .cq-march { animation: cq-march 0.9s linear infinite; }
 @keyframes cq-flow { to { stroke-dashoffset: -48; } }
 .cq-flow { animation: cq-flow 3.2s linear infinite; }
+/* A sheet over the page: as tall as the screen that's actually showing (dvh: not
+   behind a phone browser's toolbar), where the browser knows it */
+.cq-sheet { max-height: 85vh; max-height: 85dvh; }
+
 /* A warship sailing an attack's sea lane (ConquestMap; its keyframes come with it) */
 .cq-sail { animation: var(--cq-sail) var(--cq-sail-s, 6s) linear infinite; will-change: transform; }
 

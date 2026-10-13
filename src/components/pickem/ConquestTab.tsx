@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Swords, Loader2, ChevronDown, Crosshair, Crown, Lock, Flag, Shield, ArrowLeftRight, Info, X } from 'lucide-react'
 import clsx from 'clsx'
@@ -323,13 +324,17 @@ function Note({ children }: { children: ReactNode }) {
   return <div className="panel p-4 text-sm text-field-400">{children}</div>
 }
 
-/** How the war works, in a sheet over the page (the ⓘ by the title) */
+/**
+ * How the war works, in a sheet over the page (the ⓘ by the title): put on the
+ * document's body, so nothing on the page can pin it inside the page, and above
+ * the bottom bar; it scrolls within itself if the rules run longer than the screen.
+ */
 function RulesSheet({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 sm:p-4" onClick={onClose}>
       <div
-        role="dialog" aria-label="How Conquest works" onClick={e => e.stopPropagation()}
-        className="w-full sm:max-w-lg max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-field-800 border border-field-700 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+        role="dialog" aria-modal="true" aria-label="How Conquest works" onClick={e => e.stopPropagation()}
+        className="cq-sheet w-full sm:max-w-lg overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl bg-field-800 border border-field-700 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
       >
         <div className="flex items-center gap-2 mb-3">
           <Swords className="w-4 h-4 text-gold" />
@@ -352,7 +357,7 @@ function RulesSheet({ onClose }: { onClose: () => void }) {
         </ul>
       </div>
     </div>
-  )
+  , document.body)
 }
 
 type War = ConquestData & { log: (ConquestMove & { week: number })[] }
