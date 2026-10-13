@@ -248,14 +248,14 @@ export function ZoomPan({ children, onTap, onZoom, onExpand, fill = false, focus
             <Expand className="w-4 h-4" />
           </button>
         )}
-        <button type="button" onClick={() => step(1.6)} disabled={view.s >= max - 0.001} aria-label="Zoom in" className="w-8 h-8 rounded-lg bg-field-900/85 border border-field-600 text-white flex items-center justify-center disabled:opacity-40">
+        <button type="button" onClick={() => step(1.6)} disabled={view.s >= max - 0.001} aria-label="Zoom in" className="w-8 h-8 rounded-lg bg-field-800/90 border border-field-600 text-white flex items-center justify-center disabled:opacity-40">
           <Plus className="w-4 h-4" />
         </button>
-        <button type="button" onClick={() => step(1 / 1.6)} disabled={!zoomed} aria-label="Zoom out" className="w-8 h-8 rounded-lg bg-field-900/85 border border-field-600 text-white flex items-center justify-center disabled:opacity-40">
+        <button type="button" onClick={() => step(1 / 1.6)} disabled={!zoomed} aria-label="Zoom out" className="w-8 h-8 rounded-lg bg-field-800/90 border border-field-600 text-white flex items-center justify-center disabled:opacity-40">
           <Minus className="w-4 h-4" />
         </button>
         {zoomed && (
-          <button type="button" onClick={() => put(clamp({ s: min, x: 0, y: 0 }))} aria-label="Show the whole map" className="w-8 h-8 rounded-lg bg-field-900/85 border border-field-600 text-white flex items-center justify-center">
+          <button type="button" onClick={() => put(clamp({ s: min, x: 0, y: 0 }))} aria-label="Show the whole map" className="w-8 h-8 rounded-lg bg-field-800/90 border border-field-600 text-white flex items-center justify-center">
             <Shrink className="w-3.5 h-3.5" />
           </button>
         )}

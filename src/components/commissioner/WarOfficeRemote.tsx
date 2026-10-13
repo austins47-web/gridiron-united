@@ -101,7 +101,7 @@ export function WarOfficeRemote({ leagueId, busy, onShow }: {
   const show = (a: 'poster' | 'newsreel') => pick && onShow(a, pick.key === 'sofar')
 
   return (
-    <div className="rounded-xl border border-field-700 bg-field-900/60 p-3">
+    <div className="rounded-xl border border-field-700 bg-field-800/60 p-3">
       <div className="flex items-center gap-2">
         <Megaphone className="w-4 h-4 text-gold" />
         <span className="text-sm font-bold text-white">War Office</span>

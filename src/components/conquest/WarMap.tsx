@@ -117,7 +117,9 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
   }, [replay, past, viewWeek, war.owners, war.besieged, log])
   const live = !replay && !past
   // The outposts won by then (a replay: before its week)
-  const shownOutposts = replay ? outpostsAt(war.outposts ?? [], log, replay.week - 1) : past ? outpostsAt(war.outposts ?? [], log, viewWeek!) : war.outposts ?? []
+  // (a replay: as they stood before its week, then with its own once it's played out)
+  const shownOutposts = replay ? outpostsAt(war.outposts ?? [], log, replay.at >= stepsOf(replay.week).length ? replay.week : replay.week - 1)
+    : past ? outpostsAt(war.outposts ?? [], log, viewWeek!) : war.outposts ?? []
   const step = replay ? stepsOf(replay.week)[replay.at] : undefined
   const stepCity = step && step.length === 1 ? step[0] : null
 
@@ -348,7 +350,7 @@ function ReplayBanner({ week, at, steps, nameOf, onSkip, onAgain }: {
     line = { ...h, score: step[0].kind !== 'relief' ? `${step[0].score[0]}–${step[0].score[1]}` : undefined }
   }
   return (
-    <div className="mt-2 rounded-lg border border-gold/40 bg-field-900/90 px-3 py-2">
+    <div className="mt-2 rounded-lg border border-gold/40 bg-field-800/95 px-3 py-2">
       <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-gold">
         <span>Week {week} replay</span>
         {at >= 0 && !done && <span className="text-field-500">{at + 1} of {steps.length}</span>}
