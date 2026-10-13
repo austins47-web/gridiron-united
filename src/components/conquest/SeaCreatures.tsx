@@ -1,4 +1,5 @@
 import { useId, type CSSProperties, type ReactNode } from 'react'
+import { usePoke } from './poke'
 
 /**
  * The parchment's creatures, drawn the way the old engravers drew them (Olaus
@@ -6,7 +7,14 @@ import { useId, type CSSProperties, type ReactNode } from 'react'
  * curve, shaded with hatching that follows the form, scaled and banded, out of
  * engraved water. Each moves a little (by CSS: held still for the TV's lighter
  * effects, Reduce effects and reduced motion). All in map units.
+ *
+ * Tap one and it does something: the serpent dives and comes up again, the
+ * whale blows and slaps its tail, the kraken thrashes, squirts ink and sinks to
+ * its eyes, the galleon fires a broadside.
  */
+
+/** A poke's state, passed to a creature: `n` restarts its animation, `on` while it plays */
+interface Poked { id: string; n: number; on: boolean }
 
 type Pt = [number, number]
 const INK = '#3a2611', PAPER = '#f1e4c2', RED = '#8a3322'
@@ -88,6 +96,22 @@ const breaks = (b: Body, s = 1) => {
   return curl(xs[0] - 0.3, -1, s) + curl(xs[1] + 0.3, 1, s)
 }
 
+/** Water thrown up where something hits it (at each x), after `delay` seconds */
+function Splash({ at, delay }: { at: number[]; delay: number }) {
+  return (
+    <g className="cq-sea-splash" style={{ animationDelay: `${delay}s` }}>
+      {at.map((x, i) => (
+        <g key={i}>
+          <path d={curl(x - 1.6, -1, 1.4) + curl(x + 1.6, 1, 1.4)} fill="none" stroke={INK} strokeWidth={0.45} strokeLinecap="round" />
+          {[[-2.4, -4.4, 0.45], [0, -5.6, 0.55], [2.2, -4, 0.4], [-1, -2.8, 0.35], [1.2, -2.4, 0.35]].map(([dx, dy, r], k) => (
+            <circle key={k} cx={r2(x + dx)} cy={dy} r={r} fill={INK} />
+          ))}
+        </g>
+      ))}
+    </g>
+  )
+}
+
 /** Hatch patterns (one way, and across it for the darkest shade) and a clip at the waterline, for one creature */
 function Defs({ id }: { id: string }) {
   return (
@@ -153,13 +177,15 @@ const SERPENT = (() => {
   return { neck, coils, tail, mane, fin, finRays, upper, lower, jaw }
 })()
 
-function Serpent({ id }: { id: string }) {
+function Serpent({ id, n, on }: Poked) {
   const S = SERPENT
   const head = 'M16 -36.5C12 -41.5 4 -42.5 -1 -39.5C-5 -37.5 -12 -36.5 -17 -36C-19.6 -35.7 -20.4 -33.4 -18.6 -32.6L-3 -29.6L-15 -25.6C-16.8 -25 -16.8 -23.2 -15 -22.9C-10 -22 -3 -22.4 2 -24C6 -25.2 8.6 -27 10 -28.6'
   return (
     <>
       <Defs id={id} />
       <g clipPath={`url(#${id}w)`}>
+        {/* Tapped: it rears, dives under, and comes up again */}
+        <g key={n} className={on ? 'cq-sea-dive' : undefined}>
         <g className="cq-sea-bob">
           {/* The coils: spines, then the banded body, shaded beneath */}
           {S.coils.map((c, i) => (
@@ -197,7 +223,9 @@ function Serpent({ id }: { id: string }) {
           <circle cx={-2.5} cy={-35.7} r={0.3} fill={PAPER} />
           <path d="M-5.2 -37.4C-3 -39.4 1 -39.8 3.8 -38.2" fill="none" stroke={INK} strokeWidth={0.9} strokeLinecap="round" />
         </g>
+        </g>
       </g>
+      {on && <Splash key={n} at={[26, 34, 58, 96, 128, 152]} delay={0.9} />}
       {/* The water it breaks */}
       <path d={[S.neck, ...S.coils, S.tail].map(b => breaks(b)).join('') + water(-6, 170, 7)} fill="none" stroke={INK} strokeOpacity={0.6} strokeWidth={0.4} strokeLinecap="round" />
     </>
@@ -226,7 +254,7 @@ const WHALE = (() => {
   return { scales, ridge, upper, lower }
 })()
 
-function Whale({ id }: { id: string }) {
+function Whale({ id, n, on }: Poked) {
   const shape = 'M-1 -9C-1.8 -12.6 -1 -17.6 3.4 -19.8C8 -22 17 -21.8 25 -20.6C33.6 -19.2 40 -14.4 44 -8.4C45.8 -5.6 46.8 -2.4 47.4 1.5L4.5 1.5C2.5 0 0.6 -1.6 1 -3.2L12 -6.2Z'
   const fluke = 'M51.5 1C52 -4 53.5 -8 55 -10.5C52.5 -13.5 50 -17 50.5 -20.5C53.5 -18.2 56.5 -15.8 58.5 -13.6C59.8 -16.6 63 -19.6 67 -20.4C65.6 -16.4 62.6 -12.6 59.4 -9.8C58.4 -6.4 57.8 -3 57.8 1Z'
   return (
@@ -236,12 +264,15 @@ function Whale({ id }: { id: string }) {
       <clipPath id={`${id}f`}><path d={fluke} /></clipPath>
       <g clipPath={`url(#${id}w)`}>
         <g className="cq-sea-bob cq-sea-slow">
-          <path d={fluke} fill={PAPER} />
-          <path d="M57 -16V2H70V-24Z" fill={`url(#${id}h)`} clipPath={`url(#${id}f)`} />
-          <path d={fluke} fill="none" stroke={INK} strokeWidth={0.7} strokeLinejoin="round" />
-          <path d="M55 0C55.5 -4 56.4 -8 57.2 -11.6M53 -17.6C54.6 -16.4 55.8 -15.2 57 -13.8M63.4 -18C61.6 -16.6 60.2 -15 59 -13.2" fill="none" stroke={INK} strokeWidth={0.35} />
-          {/* The spouts from its twin blowholes */}
-          <g className="cq-sea-spout">
+          {/* Its tail: tapped, it rises and slaps the water */}
+          <g key={n} className={on ? 'cq-sea-slap' : undefined}>
+            <path d={fluke} fill={PAPER} />
+            <path d="M57 -16V2H70V-24Z" fill={`url(#${id}h)`} clipPath={`url(#${id}f)`} />
+            <path d={fluke} fill="none" stroke={INK} strokeWidth={0.7} strokeLinejoin="round" />
+            <path d="M55 0C55.5 -4 56.4 -8 57.2 -11.6M53 -17.6C54.6 -16.4 55.8 -15.2 57 -13.8M63.4 -18C61.6 -16.6 60.2 -15 59 -13.2" fill="none" stroke={INK} strokeWidth={0.35} />
+          </g>
+          {/* The spouts from its twin blowholes: tapped, a great blow */}
+          <g key={`s${n}`} className={on ? 'cq-sea-blow' : 'cq-sea-spout'}>
             <path d="M20.4 -21C19 -28 14 -32.5 9.4 -31.6M21 -21C20 -27.6 15.6 -31.6 10.6 -30.6M21.6 -21C21 -27 17 -30.6 12 -29.8M23.2 -21C24.6 -28 29.8 -32.4 34.6 -31.2M22.6 -21C23.8 -27.6 28.6 -31.4 33.4 -30.4M22 -21C23 -27 27.2 -30.4 32 -29.8" fill="none" stroke={INK} strokeWidth={0.38} strokeLinecap="round" />
             {[[8, -29.8], [9.6, -28], [6.6, -31.6], [7.4, -27.4], [36, -29.4], [34.4, -27.6], [37.4, -31.2], [36.8, -27]].map(([x, y], i) => (
               <path key={i} d={`M${x} ${y - 0.9}q0.55 0.7 0 1.1q-0.55 -0.4 0 -1.1Z`} fill={INK} />
@@ -269,6 +300,7 @@ function Whale({ id }: { id: string }) {
           <path d="M25 -4.2L28 0.6M26.6 -4.4L30.4 0.6M28.6 -3.8L32.4 0.6" stroke={INK} strokeWidth={0.28} />
         </g>
       </g>
+      {on && <Splash key={n} at={[52, 56, 60, 64]} delay={0.8} />}
       <path d={curl(4.2, -1) + curl(47.8, 1, 0.8) + curl(51.2, -1, 0.7) + curl(58.2, 1, 0.8) + water(-4, 64, 3)} fill="none" stroke={INK} strokeOpacity={0.6} strokeWidth={0.4} strokeLinecap="round" />
     </>
   )
@@ -292,7 +324,7 @@ const KRAKEN = (() => {
   }))
 })()
 
-function Kraken({ id }: { id: string }) {
+function Kraken({ id, n, on }: Poked) {
   const mantle = 'M24.6 1.5C26 -3.6 27.6 -8 27.2 -13C26.4 -20 25.4 -29.6 30.4 -36C35 -42.4 45.6 -42.6 50.2 -36.2C55 -29.4 54 -20 53 -13C52.6 -8 54.2 -3.6 55.6 1.5Z'
   return (
     <>
@@ -300,11 +332,12 @@ function Kraken({ id }: { id: string }) {
       <clipPath id={`${id}m`}><path d={mantle} /></clipPath>
       <g clipPath={`url(#${id}w)`}>
         {KRAKEN.map((a, i) => (
-          <g key={i} className="cq-sea-sway" style={{ animationDelay: `${a.delay}s` }}>
+          <g key={i} className={on ? 'cq-sea-thrash' : 'cq-sea-sway'} style={{ animationDelay: `${on ? i * 0.07 : a.delay}s` }}>
             <Drawn b={a.b} shade={a.shade} width={0.6} />
             {a.suckers.map(([x, y, r], k) => <circle key={k} cx={r2(x)} cy={r2(y)} r={r2(r)} fill={PAPER} stroke={INK} strokeWidth={0.28} />)}
           </g>
         ))}
+        <g key={n} className={on ? 'cq-sea-duck' : undefined}>
         <g className="cq-sea-bob cq-sea-slow">
           <path d={mantle} fill={PAPER} />
           <path d="M41.6 -43C50.6 -32 48.6 -14 44.6 2H62V-44Z" fill={`url(#${id}h)`} clipPath={`url(#${id}m)`} />
@@ -326,7 +359,16 @@ function Kraken({ id }: { id: string }) {
             </g>
           ))}
         </g>
+        </g>
       </g>
+      {/* Its ink, spreading on the water */}
+      {on && (
+        <g key={n} className="cq-sea-ink">
+          {[[40, 1.4, 15, 2.6], [27, 2.2, 8, 1.8], [54, 2, 9, 1.6], [40, -0.6, 7, 2.6], [33, 3.2, 6, 1.2], [48, 3.4, 7, 1.2]].map(([x, y, rx, ry], i) => (
+            <ellipse key={i} cx={x} cy={y} rx={rx} ry={ry} fill={INK} fillOpacity={0.72} />
+          ))}
+        </g>
+      )}
       <path d={[...KRAKEN.map(a => breaks(a.b, 0.8)), curl(24.2, -1), curl(56, 1)].join('') + curl(94 - 2, -1, 0.6) + water(0, 98, 11)} fill="none" stroke={INK} strokeOpacity={0.6} strokeWidth={0.4} strokeLinecap="round" />
     </>
   )
@@ -342,38 +384,49 @@ function sail(cx: number, top: number, w: number, h: number, bulge: number) {
     + `M${r2(x0 + 0.9)} ${r2(bot - 0.5)}Q${r2(cx)} ${r2(bot + bulge - 0.9)} ${r2(x1 - 0.9)} ${r2(bot - 0.5)}`
   return { shape, shade, yard: `M${r2(x0 - 0.8)} ${top}H${r2(x1 + 0.8)}` }
 }
+/** Its gunports, bow to stern */
+const PORTS = [10, 13.6, 17.2, 20.8, 24.4, 28, 31.6]
 const SAILS = [sail(9.4, -23, 8.4, 7.6, 1.6), sail(9.4, -30.4, 6.4, 5.6, 1.2), sail(19, -27, 10.4, 9, 1.8), sail(19, -35.6, 7.8, 6.6, 1.4), sail(19, -40.2, 4.6, 3.6, 0.8), sail(-4.4, -13.8, 4.8, 3.6, 0.9)]
 
-function Galleon({ id }: { id: string }) {
+function Galleon({ id, n, on }: Poked) {
   const hull = 'M2.2 -8.2C6 -7.2 11 -6.4 17 -6.4L25.6 -6.4L25.6 -9L30.4 -9L30.4 -11.2L36.4 -12.6C37.4 -8.6 36.6 -4 33.4 1.2L6.6 1.2C3.6 -1.6 2 -4.8 2.2 -8.2Z'
   return (
     <>
       <Defs id={id} />
       <clipPath id={`${id}k`}><path d={hull} /></clipPath>
       <g clipPath={`url(#${id}w)`}>
+        {/* Tapped: it heels from the recoil, and rights itself */}
+        <g key={n} className={on ? 'cq-sea-recoil' : undefined}>
         <g className="cq-sea-rock">
           {/* Rigging, masts and bowsprit, behind the sails */}
           <path d="M19 -41L-6 -14.6M9.4 -32L-8.2 -16M19 -41L28.4 -30M28.4 -30L36.4 -12.6M19 -41L35.8 -12.8M9.4 -32L2.6 -9M19 -41L13 -7" stroke={INK} strokeOpacity={0.6} strokeWidth={0.25} />
           <path d="M9.4 -7.6V-32.4M19 -6.4V-42M28.4 -9V-30.6M2.6 -8.6L-8.6 -16.2" stroke={INK} strokeWidth={0.8} strokeLinecap="round" />
+          {/* The sails, flapping from their yards, each in its own time */}
           {SAILS.map((s, i) => (
             <g key={i}>
-              <path d={s.shape} fill={PAPER} stroke={INK} strokeWidth={0.55} strokeLinejoin="round" />
-              <path d={s.shade} fill="none" stroke={INK} strokeWidth={0.3} />
+              <g className="cq-sail-flap" style={{ animationDelay: `${-i * 0.37}s`, animationDuration: `${1.4 + (i % 3) * 0.25}s` }}>
+                <path d={s.shape} fill={PAPER} stroke={INK} strokeWidth={0.55} strokeLinejoin="round" />
+                <path d={s.shade} fill="none" stroke={INK} strokeWidth={0.3} />
+              </g>
               <path d={s.yard} stroke={INK} strokeWidth={0.65} strokeLinecap="round" />
             </g>
           ))}
           {/* The lateen on the mizzen */}
-          <path d="M24.4 -13.2L32.6 -30.6Q30.8 -20.4 28.6 -12.6Z" fill={PAPER} stroke={INK} strokeWidth={0.55} strokeLinejoin="round" />
-          <path d="M31.4 -26.6Q29.6 -19.6 28 -13M30.2 -22.6Q28.8 -18 27.2 -13" fill="none" stroke={INK} strokeWidth={0.3} />
+          <g className="cq-sail-flap cq-sail-lateen" style={{ animationDelay: '-0.8s' }}>
+            <path d="M24.4 -13.2L32.6 -30.6Q30.8 -20.4 28.6 -12.6Z" fill={PAPER} stroke={INK} strokeWidth={0.55} strokeLinejoin="round" />
+            <path d="M31.4 -26.6Q29.6 -19.6 28 -13M30.2 -22.6Q28.8 -18 27.2 -13" fill="none" stroke={INK} strokeWidth={0.3} />
+          </g>
           <path d="M24 -12.4L33 -31.4" stroke={INK} strokeWidth={0.6} strokeLinecap="round" />
           {/* Fighting tops */}
           <path d="M7.8 -24h3.2l-0.5 1.1h-2.2zM17.4 -28.2h3.2l-0.5 1.1h-2.2z" fill={PAPER} stroke={INK} strokeWidth={0.4} />
           {/* Pennants streaming, and the ensign */}
-          <path d="M19 -41.8C15 -44.6 11 -41.6 6.2 -44.2L7.8 -42.6L6 -42C10.8 -40.4 15 -42.6 19 -40.6Z" fill={RED} stroke={INK} strokeWidth={0.3} strokeLinejoin="round" />
-          <path d="M9.4 -32.2C6.4 -34.2 3.4 -32.2 0 -33.8L1.4 -32.6L0 -32C3.8 -31 6.6 -32.8 9.4 -31.2Z" fill={RED} stroke={INK} strokeWidth={0.3} strokeLinejoin="round" />
-          <path d="M28.4 -30.4C26.6 -31.8 24.6 -30.4 22.6 -31.6L23.4 -30.2C25.4 -29.6 27 -30.6 28.4 -29.6Z" fill={RED} stroke={INK} strokeWidth={0.3} strokeLinejoin="round" />
+          {[
+            'M19 -41.8C15 -44.6 11 -41.6 6.2 -44.2L7.8 -42.6L6 -42C10.8 -40.4 15 -42.6 19 -40.6Z',
+            'M9.4 -32.2C6.4 -34.2 3.4 -32.2 0 -33.8L1.4 -32.6L0 -32C3.8 -31 6.6 -32.8 9.4 -31.2Z',
+            'M28.4 -30.4C26.6 -31.8 24.6 -30.4 22.6 -31.6L23.4 -30.2C25.4 -29.6 27 -30.6 28.4 -29.6Z',
+          ].map((d, i) => <path key={i} className="cq-pennant" style={{ animationDelay: `${-i * 0.3}s` }} d={d} fill={RED} stroke={INK} strokeWidth={0.3} strokeLinejoin="round" />)}
           <path d="M36.4 -12.6L38.6 -19.4" stroke={INK} strokeWidth={0.5} />
-          <path d="M38.6 -19.4C36.6 -20.8 34.4 -19.2 32.6 -20.4L33.2 -16.8C35 -16 36.8 -17.2 38.2 -16.2Z" fill={RED} stroke={INK} strokeWidth={0.3} strokeLinejoin="round" />
+          <path className="cq-pennant" style={{ animationDelay: '-0.5s', animationDuration: '1.2s' }} d="M38.6 -19.4C36.6 -20.8 34.4 -19.2 32.6 -20.4L33.2 -16.8C35 -16 36.8 -17.2 38.2 -16.2Z" fill={RED} stroke={INK} strokeWidth={0.3} strokeLinejoin="round" />
           {/* The hull: forecastle, beakhead, wales, gunports, shaded below */}
           <path d="M2.4 -8L-3.4 -9.2L-2.6 -8L2.6 -5.8Z" fill={PAPER} stroke={INK} strokeWidth={0.5} strokeLinejoin="round" />
           <path d="M2.2 -8.2L2.8 -10.4L8.6 -10L8.6 -7.3C6 -7.4 4 -7.8 2.2 -8.2Z" fill={PAPER} stroke={INK} strokeWidth={0.55} strokeLinejoin="round" />
@@ -381,8 +434,29 @@ function Galleon({ id }: { id: string }) {
           <path d="M2 -2.6C12 -1.6 22 -1.4 37 -3.4V2H2Z" fill={`url(#${id}h)`} clipPath={`url(#${id}k)`} />
           <path d={hull} fill="none" stroke={INK} strokeWidth={0.7} strokeLinejoin="round" />
           <path d="M3 -5.2C10 -4 20 -3.8 36.8 -6.8M4.2 -2.6C12 -1.6 22 -1.4 35.6 -3.2M8.6 -7.6H25.6" fill="none" stroke={INK} strokeWidth={0.45} />
-          {[10, 13.6, 17.2, 20.8, 24.4, 28, 31.6].map(x => <rect key={x} x={x} y={-4.7 + (x - 10) * -0.03} width={1.1} height={1} fill={INK} />)}
+          {PORTS.map(x => <rect key={x} x={x} y={-4.7 + (x - 10) * -0.03} width={1.1} height={1} fill={INK} />)}
           <path d="M32.4 -10.6h2.8v1.8h-2.8zM33.8 -10.6v1.8" fill="none" stroke={INK} strokeWidth={0.3} />
+          {/* A broadside: each gun in turn, bow to stern, a flash and a puff of smoke */}
+          {on && (
+            <g key={n}>
+              {PORTS.map((x, i) => {
+                const cx = x + 0.55, cy = -4.2 + (x - 10) * -0.03, delay = { animationDelay: `${i * 0.11}s` }
+                return (
+                  <g key={x}>
+                    <g className="cq-sea-smoke" style={delay}>
+                      <circle cx={cx + 0.6} cy={cy + 0.4} r={2} fill={PAPER} stroke={INK} strokeWidth={0.3} />
+                      <circle cx={cx - 1.6} cy={cy - 0.8} r={1.8} fill={PAPER} stroke={INK} strokeWidth={0.3} />
+                      <circle cx={cx + 1.4} cy={cy - 1.6} r={1.5} fill={PAPER} stroke={INK} strokeWidth={0.3} />
+                      <circle cx={cx - 0.4} cy={cy - 2.4} r={1.3} fill={PAPER} stroke={INK} strokeWidth={0.3} />
+                    </g>
+                    <path className="cq-sea-flash" style={delay} fill="#f0a23a" stroke={INK} strokeWidth={0.2} strokeLinejoin="round"
+                      d={`M${r2(cx)} ${r2(cy - 2.8)}L${r2(cx + 0.9)} ${r2(cy - 0.9)}L${r2(cx + 3)} ${r2(cy)}L${r2(cx + 0.9)} ${r2(cy + 0.9)}L${r2(cx)} ${r2(cy + 2.8)}L${r2(cx - 0.9)} ${r2(cy + 0.9)}L${r2(cx - 3)} ${r2(cy)}L${r2(cx - 0.9)} ${r2(cy - 0.9)}Z`} />
+                  </g>
+                )
+              })}
+            </g>
+          )}
+        </g>
         </g>
       </g>
       <path d={curl(2.4, -1) + curl(-3.6, -1, 0.6) + curl(33.8, 1) + curl(39.4, 1, 0.6) + water(-8, 42, 5)} fill="none" stroke={INK} strokeOpacity={0.6} strokeWidth={0.4} strokeLinecap="round" />
@@ -390,25 +464,33 @@ function Galleon({ id }: { id: string }) {
   )
 }
 
-/** Where each creature sits on the map: its box (map units) and its drawing's place and scale in it */
+/**
+ * Where each creature sits on the map: its box (map units), its drawing's place
+ * and scale in it, the box (in the drawing) that takes a tap on it, and how
+ * long a poke plays
+ */
 const PLACES = [
-  { key: 'serpent', box: [144, 532, 238, 74], at: [180, 599], scale: 1.15, draw: Serpent },
-  { key: 'kraken', box: [866, 414, 122, 64], at: [870, 474], scale: 1.2, draw: Kraken },
-  { key: 'whale', box: [846, 562, 84, 42], at: [852, 600], scale: 1.15, draw: Whale },
-  { key: 'galleon', box: [30, 432, 64, 64], at: [44, 492], scale: 1.25, draw: Galleon },
+  { key: 'serpent', box: [144, 532, 238, 74], at: [180, 599], scale: 1.15, hit: [-32, -54, 206, 58], ms: 3500, draw: Serpent },
+  { key: 'kraken', box: [866, 414, 122, 64], at: [870, 474], scale: 1.2, hit: [-4, -46, 106, 50], ms: 3100, draw: Kraken },
+  { key: 'whale', box: [846, 562, 84, 42], at: [852, 600], scale: 1.15, hit: [-6, -36, 78, 40], ms: 2600, draw: Whale },
+  { key: 'galleon', box: [30, 432, 64, 64], at: [44, 492], scale: 1.25, hit: [-14, -50, 60, 54], ms: 2600, draw: Galleon },
 ] as const
+
+/** Each its own layer (will-change), so its moving never has the map under it redrawn */
+function Creature({ place, id, at }: { place: (typeof PLACES)[number]; id: string; at: (x: number, y: number, w: number, h: number) => CSSProperties }) {
+  const { ref, n, on } = usePoke<SVGGElement>(place.ms)
+  const { box: [x, y, w, h], at: [tx, ty], scale, hit: [hx, hy, hw, hh], draw: Draw } = place
+  return (
+    <svg viewBox={`${x} ${y} ${w} ${h}`} style={{ ...at(x, y, w, h), pointerEvents: 'none', willChange: 'transform' }} overflow="visible" aria-hidden>
+      <g ref={ref} data-poke={place.key} transform={`translate(${tx} ${ty}) scale(${scale})`} style={{ pointerEvents: 'auto', cursor: 'pointer' }}>
+        <rect x={hx} y={hy} width={hw} height={hh} fill="none" pointerEvents="all" />
+        <Draw id={id} n={n} on={on} />
+      </g>
+    </svg>
+  )
+}
 
 export function SeaCreatures({ at }: { at: (x: number, y: number, w: number, h: number) => CSSProperties }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
-  return (
-    <>
-      {PLACES.map(({ key, box: [x, y, w, h], at: [tx, ty], scale, draw: Draw }): ReactNode => (
-        <svg key={key} viewBox={`${x} ${y} ${w} ${h}`} style={at(x, y, w, h)} overflow="visible" aria-hidden>
-          <g transform={`translate(${tx} ${ty}) scale(${scale})`}>
-            <Draw id={`cq${uid}${key}`} />
-          </g>
-        </svg>
-      ))}
-    </>
-  )
+  return <>{PLACES.map((p): ReactNode => <Creature key={p.key} place={p} id={`cq${uid}${p.key}`} at={at} />)}</>
 }

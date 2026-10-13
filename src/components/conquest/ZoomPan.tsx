@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react'
 import { Minus, Plus, Shrink, Expand } from 'lucide-react'
 import clsx from 'clsx'
+import { POKE } from './poke'
 
 const MAX = 5
 const TAP_PX = 8
@@ -51,6 +52,19 @@ export function ZoomPan({ children, onTap, onZoom, onExpand, fill = false, focus
   }
   // A finger on the map: any second one is a pinch, not the page's
   const [touching, setTouching] = useState(false)
+  // While a pinch, a drag or a trackpad zoom moves the map, it's its own layer, so the browser
+  // moves and stretches the picture it has rather than drawing the whole map again every
+  // frame (slow on a phone); let go and it's drawn sharp once, at the new size
+  const [moving, setMoving] = useState(false)
+  const movingRef = useRef(false)
+  const still = useRef(0)
+  const moveLayer = (on: boolean, after = 0) => {
+    window.clearTimeout(still.current)
+    if (on && !movingRef.current) { movingRef.current = true; setMoving(true) }
+    if (!on) still.current = window.setTimeout(() => { movingRef.current = false; setMoving(false) }, after)
+  }
+  const moveLayerRef = useRef(moveLayer)
+  moveLayerRef.current = moveLayer
 
   // The size the map's actually laid out at, and its height at 1× (the inline frame keeps it)
   const [base, setBase] = useState(1)
@@ -152,6 +166,7 @@ export function ZoomPan({ children, onTap, onZoom, onExpand, fill = false, focus
     const g = gesture.current
     if (!g) return
     const pts = [...pointers.current.values()]
+    if (pts.length > 1 || (g.moved && (fill || g.start.s > 1))) moveLayer(true)
     if (pts.length > 1) {
       const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
       const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 }
@@ -187,10 +202,14 @@ export function ZoomPan({ children, onTap, onZoom, onExpand, fill = false, focus
     if (pointers.current.size > 0) { begin(); return }
     gesture.current = null
     setTouching(false)
+    if (movingRef.current) moveLayer(false)
     // A cancel is the browser taking over (scrolling the page): never a tap
-    if (e.type === 'pointerup' && g && !g.moved && !g.multi && onTap) {
+    if (e.type === 'pointerup' && g && !g.moved && !g.multi) {
       const el = document.elementFromPoint(e.clientX, e.clientY)
-      onTap(el?.closest('[data-team]')?.getAttribute('data-team') ?? null)
+      // One of the parchment's creatures or compass roses: it does something (and no city's picked)
+      const poke = el?.closest('[data-poke]')
+      if (poke) { poke.dispatchEvent(new CustomEvent(POKE)); return }
+      onTap?.(el?.closest('[data-team]')?.getAttribute('data-team') ?? null)
     }
   }
   // A trackpad pinch arrives as a ctrl+wheel (a plain wheel still scrolls the page). Its own
@@ -208,6 +227,8 @@ export function ZoomPan({ children, onTap, onZoom, onExpand, fill = false, focus
       const v = zoomRef.current(viewRef.current, viewRef.current.s * Math.exp(-e.deltaY / 200), px, py)
       viewRef.current = v
       setView(v)
+      moveLayerRef.current(true)
+      moveLayerRef.current(false, 250)
     }
     el.addEventListener('wheel', wheel, { passive: false })
     return () => el.removeEventListener('wheel', wheel)
@@ -236,6 +257,7 @@ export function ZoomPan({ children, onTap, onZoom, onExpand, fill = false, focus
             ...(base !== 1 || fill ? { position: 'absolute', left: 0, top: 0, width: `${base * 100}%` } : {}),
             transform: `translate(${view.x}px, ${view.y}px) scale(${view.s / base})`,
             transformOrigin: '0 0',
+            willChange: moving ? 'transform' : undefined,
             ['--cq-s' as string]: view.s,
           }}
         >

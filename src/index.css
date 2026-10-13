@@ -1415,11 +1415,45 @@
 .cq-sea-spout { transform-box: fill-box; transform-origin: 50% 100%; animation: cq-sea-spout 6s ease-out infinite; }
 @keyframes cq-sea-sway { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
 .cq-sea-sway { transform-box: fill-box; transform-origin: 50% 100%; animation: cq-sea-sway 3.2s ease-in-out infinite alternate; }
-.tv-lite .cq-sea-bob, .tv-lite .cq-sea-rock, .tv-lite .cq-sea-spout, .tv-lite .cq-sea-sway,
-.tv-still .cq-sea-bob, .tv-still .cq-sea-rock, .tv-still .cq-sea-spout, .tv-still .cq-sea-sway { animation: none; }
+/* The galleon's sails flap from their yards; its pennants stream */
+@keyframes cq-sail-flap { 0%, 100% { transform: skewX(0) scaleX(1); } 25% { transform: skewX(-6deg) scaleX(0.9); } 50% { transform: skewX(2deg) scaleX(1.03); } 75% { transform: skewX(-3deg) scaleX(0.95); } }
+.cq-sail-flap { transform-box: fill-box; transform-origin: 50% 0; animation: cq-sail-flap 1.6s ease-in-out infinite; }
+.cq-sail-lateen { transform-origin: 100% 0; animation-duration: 2s; }
+@keyframes cq-pennant { 0%, 100% { transform: skewY(0) scaleX(1); } 25% { transform: skewY(8deg) scaleX(0.9); } 50% { transform: skewY(-4deg) scaleX(1); } 75% { transform: skewY(6deg) scaleX(0.93); } }
+.cq-pennant { transform-box: fill-box; transform-origin: 100% 50%; animation: cq-pennant 0.9s ease-in-out infinite; }
+
+/* Tapped (SeaCreatures, ConquestMap's CompassRose): each plays once. What only
+   shows while it plays (smoke, flashes, splashes, ink) is hidden otherwise, so
+   with the motion off nothing's left lying about */
+@keyframes cq-sea-dive { 0% { transform: translateY(0); } 18% { transform: translateY(-4px); } 45%, 70% { transform: translateY(60px); } 100% { transform: translateY(0); } }
+.cq-sea-dive { animation: cq-sea-dive 3.4s ease-in-out both; }
+@keyframes cq-sea-splash { 0% { opacity: 0; transform: translateY(1px) scale(0.5); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(-3px) scale(1.15); } }
+.cq-sea-splash { opacity: 0; transform-box: fill-box; transform-origin: 50% 100%; animation: cq-sea-splash 0.9s ease-out both; }
+@keyframes cq-sea-blow { 0% { transform: scale(0.3); opacity: 0; } 12% { transform: scale(1.4); opacity: 1; } 55% { transform: scale(1.65); opacity: 0.95; } 100% { transform: scale(1.75); opacity: 0; } }
+.cq-sea-blow { transform-box: fill-box; transform-origin: 50% 100%; animation: cq-sea-blow 2.4s ease-out both; }
+@keyframes cq-sea-slap { 0% { transform: rotate(0); } 30% { transform: rotate(-30deg); } 48% { transform: rotate(16deg); } 62% { transform: rotate(-5deg); } 76%, 100% { transform: rotate(0); } }
+.cq-sea-slap { transform-box: fill-box; transform-origin: 40% 100%; animation: cq-sea-slap 1.8s ease-in-out both; }
+@keyframes cq-sea-thrash { from { transform: rotate(-14deg); } to { transform: rotate(13deg); } }
+.cq-sea-thrash { transform-box: fill-box; transform-origin: 50% 100%; animation: cq-sea-thrash 0.3s ease-in-out 8 alternate; }
+@keyframes cq-sea-duck { 0% { transform: translateY(0); } 15% { transform: translateY(-3px); } 45%, 72% { transform: translateY(15px); } 100% { transform: translateY(0); } }
+.cq-sea-duck { animation: cq-sea-duck 3s ease-in-out both; }
+@keyframes cq-sea-ink { 0% { opacity: 0; transform: scale(0.3, 0.5); } 20% { opacity: 0.9; } 100% { opacity: 0; transform: scale(1.8, 1.2); } }
+.cq-sea-ink { opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; animation: cq-sea-ink 2.6s ease-out 0.5s both; }
+@keyframes cq-sea-recoil { 0% { transform: rotate(0); } 10% { transform: rotate(4deg); } 35% { transform: rotate(-3deg); } 60% { transform: rotate(1.5deg); } 100% { transform: rotate(0); } }
+.cq-sea-recoil { transform-box: fill-box; transform-origin: 50% 95%; animation: cq-sea-recoil 2.2s ease-out both; }
+@keyframes cq-sea-flash { 0% { opacity: 1; transform: scale(1.5); } 25% { opacity: 0; transform: scale(0.6); } 100% { opacity: 0; } }
+.cq-sea-flash { opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; animation: cq-sea-flash 0.5s ease-out forwards; }
+@keyframes cq-sea-smoke { 0% { opacity: 0; transform: translate(0, 0) scale(0.3); } 10% { opacity: 1; } 60% { opacity: 0.9; } 100% { opacity: 0; transform: translate(-9px, -7px) scale(2.4); } }
+.cq-sea-smoke { opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; animation: cq-sea-smoke 2.2s ease-out forwards; }
+@keyframes cq-rose-spin { 0% { transform: rotate(0); } 45% { transform: rotate(420deg); } 62% { transform: rotate(340deg); } 76% { transform: rotate(378deg); } 88% { transform: rotate(355deg); } 100% { transform: rotate(360deg); } }
+.cq-rose-spin { transform-box: fill-box; transform-origin: 50% 50%; animation: cq-rose-spin 2.4s cubic-bezier(0.3, 0.7, 0.4, 1) both; }
+
+.tv-lite .cq-sea-bob, .tv-lite .cq-sea-rock, .tv-lite .cq-sea-spout, .tv-lite .cq-sea-sway, .tv-lite .cq-sail-flap, .tv-lite .cq-pennant,
+.tv-still .cq-sea-bob, .tv-still .cq-sea-rock, .tv-still .cq-sea-spout, .tv-still .cq-sea-sway, .tv-still .cq-sail-flap, .tv-still .cq-pennant { animation: none; }
 .tv-lite .cq-sea-spout, .tv-still .cq-sea-spout { opacity: 0.8; }
 @media (prefers-reduced-motion: reduce) {
-  .cq-sea-bob, .cq-sea-rock, .cq-sea-spout, .cq-sea-sway { animation: none !important; }
+  .cq-sea-bob, .cq-sea-rock, .cq-sea-spout, .cq-sea-sway, .cq-sail-flap, .cq-pennant, .cq-sea-dive, .cq-sea-splash, .cq-sea-blow, .cq-sea-slap,
+  .cq-sea-thrash, .cq-sea-duck, .cq-sea-ink, .cq-sea-recoil, .cq-sea-flash, .cq-sea-smoke, .cq-rose-spin { animation: none !important; }
 }
 
 /* A warship sailing an attack's sea lane (ConquestMap; its keyframes come with it) */

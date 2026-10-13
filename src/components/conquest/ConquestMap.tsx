@@ -5,6 +5,8 @@ import { laneRoute, sailKeyframes, strikeFrom } from './sea'
 import { cutOff } from '../../../supabase/functions/_shared/conquest.ts'
 import { Warship } from './Warship'
 import { SeaCreatures } from './SeaCreatures'
+import { usePoke } from './poke'
+import { usePaperGrain } from './paper'
 import { NORTHEAST_CITIES } from './usMap'
 import { M, NE, NE_SET, insetBox, viewOf, empireLabel, spreadLabels, frontTeeth, outpostSpot, type MapLayout, type Rect, type LabelBox } from './mapGeometry'
 import { ICON, type IconName } from './icons'
@@ -349,11 +351,13 @@ function LookGround({ look, uid }: { look: MapLook; uid: string }) {
     const a = (k / 16) * Math.PI * 2
     return `M${cx} ${cy}L${(cx + Math.cos(a) * 1300).toFixed(1)} ${(cy + Math.sin(a) * 1300).toFixed(1)}`
   })).join('')
+  // The paper's grain, drawn once into a picture (paper.ts): a live filter here was redrawn with the map, and slow
+  const grain = usePaperGrain(look === 'parchment' || look === 'warroom' ? look : null, M.width, M.height)
   return (
     <g pointerEvents="none">
+      <clipPath id={`cq-sea-${uid}`}><rect x={0} y={0} width={M.width} height={M.height} rx={10} /></clipPath>
       {look === 'parchment' && (
         <>
-          <clipPath id={`cq-sea-${uid}`}><rect x={0} y={0} width={M.width} height={M.height} rx={10} /></clipPath>
           <path d={rhumbs} fill="none" stroke="#3a2611" strokeOpacity={0.14} strokeWidth={0.6} clipPath={`url(#cq-sea-${uid})`} />
           {WAVES.map(([x, y], i) => (
             <path key={i} d={`M${x} ${y}q2.5 -2.6 5 0q2.5 -2.6 5 0q2.5 -2.6 5 0`} fill="none" stroke="#3a2611" strokeOpacity={0.38} strokeWidth={0.7} strokeLinecap="round" />
@@ -364,34 +368,31 @@ function LookGround({ look, uid }: { look: MapLook; uid: string }) {
           ))}
         </>
       )}
-      <defs>
-        <filter id={`cq-paper-${uid}`} x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency={look === 'parchment' ? '0.012 0.02' : '0.02'} numOctaves={3} seed={7} result="blot" />
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves={1} seed={3} result="fiber" />
-          <feComposite in="blot" in2="fiber" operator="arithmetic" k1="0" k2="0.75" k3="0.35" k4="0" />
-          <feColorMatrix values={look === 'parchment'
-            ? '0 0 0 0 .32  0 0 0 0 .2  0 0 0 0 .08  0 0 0 -1.6 1.25'
-            : '0 0 0 0 .15  0 0 0 0 .14  0 0 0 0 .1  0 0 0 -1.4 1.05'} />
-        </filter>
-      </defs>
-      <rect x={0} y={0} width={M.width} height={M.height} rx={10} filter={`url(#cq-paper-${uid})`} opacity={look === 'parchment' ? 0.5 : 0.35} />
+      {grain && <image href={grain} x={0} y={0} width={M.width} height={M.height} preserveAspectRatio="none" clipPath={`url(#cq-sea-${uid})`} />}
     </g>
   )
 }
 
 /** Over the land: the parchment's compass rose and inked border, or the lamp over the table and its wooden frame */
-function LookFrame({ look, uid }: { look: MapLook; uid: string }) {
-  if (look === 'parchment') {
-    const ink = '#3a2611', paper = '#f1e4c2'
-    // A compass rose: rings, sixteen points (the cardinal four long and inked), N marked
-    const rose = (cx: number, cy: number, r: number, key: string) => {
-      const ray = (deg: number, len: number, wide: number) => {
-        const a = (deg * Math.PI) / 180, b = ((deg + 90) * Math.PI) / 180
-        const tip = [cx + Math.sin(a) * len, cy - Math.cos(a) * len], l = [cx + Math.sin(b) * wide, cy - Math.cos(b) * wide], rr = [cx - Math.sin(b) * wide, cy + Math.cos(b) * wide]
-        return { dark: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${l[0]} ${l[1]}Z`, light: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${rr[0]} ${rr[1]}Z` }
-      }
-      return (
-        <g key={key}>
+/**
+ * The parchment's compass rose: rings, sixteen points (the cardinal four long
+ * and inked), a fleur-de-lis over north. Tapped, its card spins and swings back
+ * to north, as a compass's does when it's knocked.
+ */
+function CompassRose({ cx, cy, r }: { cx: number; cy: number; r: number }) {
+  const ink = '#3a2611', paper = '#f1e4c2'
+  const { ref, n, on } = usePoke<SVGGElement>(2600)
+  const ray = (deg: number, len: number, wide: number) => {
+    const a = (deg * Math.PI) / 180, b = ((deg + 90) * Math.PI) / 180
+    const tip = [cx + Math.sin(a) * len, cy - Math.cos(a) * len], l = [cx + Math.sin(b) * wide, cy - Math.cos(b) * wide], rr = [cx - Math.sin(b) * wide, cy + Math.cos(b) * wide]
+    return { dark: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${l[0]} ${l[1]}Z`, light: `M${cx} ${cy} L${tip[0]} ${tip[1]} L${rr[0]} ${rr[1]}Z` }
+  }
+  return (
+    <g ref={ref} data-poke="rose" style={{ pointerEvents: 'auto', cursor: 'pointer' }}>
+      <circle cx={cx} cy={cy} r={r * 1.2} fill="none" pointerEvents="all" />
+      <g key={n} className={on ? 'cq-rose-spin' : undefined}>
+          {/* Unseen, so the card turns about its middle (the fleur-de-lis would pull it off) */}
+          <circle cx={cx} cy={cy} r={r + 10} fill="none" />
           <circle cx={cx} cy={cy} r={r * 0.82} fill={paper} fillOpacity={0.55} stroke={ink} strokeOpacity={0.6} strokeWidth={0.9} />
           <circle cx={cx} cy={cy} r={r * 0.74} fill="none" stroke={ink} strokeOpacity={0.4} strokeWidth={0.5} strokeDasharray="1.2 1.6" />
           {Array.from({ length: 8 }, (_, k) => 22.5 + k * 45).map(d => { const p = ray(d, r * 0.48, r * 0.06); return <g key={d}><path d={p.dark} fill={ink} fillOpacity={0.4} /><path d={p.light} fill={paper} stroke={ink} strokeOpacity={0.4} strokeWidth={0.4} /></g> })}
@@ -400,9 +401,14 @@ function LookFrame({ look, uid }: { look: MapLook; uid: string }) {
           <circle cx={cx} cy={cy} r={r * 0.08} fill={ink} />
           {/* A fleur-de-lis over north */}
           <path d={`M${cx} ${cy - r - 9}c-2 2.5 -2 5 0 7c2 -2 2 -4.5 0 -7zM${cx - 1.2} ${cy - r - 3}c-3 -1 -5 -4 -3.5 -6c1 1.6 2.2 3.4 3.5 4.4zM${cx + 1.2} ${cy - r - 3}c3 -1 5 -4 3.5 -6c-1 1.6 -2.2 3.4 -3.5 4.4zM${cx - 3} ${cy - r - 1.6}h6`} fill={ink} stroke={ink} strokeWidth={0.6} />
-        </g>
-      )
-    }
+      </g>
+    </g>
+  )
+}
+
+function LookFrame({ look, uid }: { look: MapLook; uid: string }) {
+  if (look === 'parchment') {
+    const ink = '#3a2611', paper = '#f1e4c2'
     return (
       <g pointerEvents="none">
         <defs>
@@ -420,12 +426,12 @@ function LookFrame({ look, uid }: { look: MapLook; uid: string }) {
         {[[11, 11], [M.width - 11, 11], [11, M.height - 11], [M.width - 11, M.height - 11]].map(([x, y], i) => (
           <path key={i} d={`M${x - 4} ${y}L${x} ${y - 4}L${x + 4} ${y}L${x} ${y + 4}Z`} fill={ink} fillOpacity={0.6} />
         ))}
-        {ROSES.map(([x, y, r], i) => rose(x, y, r, `rose${i}`))}
+        {ROSES.map(([x, y, r], i) => <CompassRose key={i} cx={x} cy={y} r={r} />)}
         {/* The title, on a scroll unrolled across the north */}
         <g>
           <path d="M412 12 h236 l-6 9 6 9 h-236 l6 -9 z" fill={paper} stroke={ink} strokeOpacity={0.7} strokeWidth={0.8} />
           <path d="M412 12 q-10 1 -10 9 q0 8 10 9 M648 12 q10 1 10 9 q0 8 -10 9" fill={paper} stroke={ink} strokeOpacity={0.7} strokeWidth={0.8} />
-          <text x={530} y={25.5} textAnchor="middle" fontFamily={SERIF} fontSize={11.5} letterSpacing={1.4} fill={ink}>The Gridiron Empires · Anno MMXXVI</text>
+          <text x={530} y={25.5} textAnchor="middle" fontFamily={SERIF} fontSize={11.5} textLength={204} lengthAdjust="spacingAndGlyphs" fill={ink}>The Gridiron Empires · Anno MMXXVI</text>
         </g>
         {/* The old warning, off the coast where the serpent swims */}
         <text x={290} y={560} textAnchor="middle" fontFamily={SERIF} fontStyle="italic" fontSize={10} fill={ink} fillOpacity={0.75}>Hic sunt dracones</text>
@@ -1176,7 +1182,7 @@ export const ConquestMap = memo(function ConquestMap({
       <div ref={motion} className="absolute inset-0 pointer-events-none" aria-hidden>
         <div style={frame(MAIN, 10)}>
           <Motion
-            win={MAIN} zoom={1} P={P} radar={look === 'radar'} lanes creatures={look === 'parchment'}
+            win={MAIN} zoom={1} P={P} radar={look === 'radar'} lanes={look !== 'parchment'} creatures={look === 'parchment'}
             pings={pings.filter(p => mainCities.includes(p.team) && (look === 'radar' || p.siege))}
             ringR={12 * labelScale * 1.9}
             hot={hot}
