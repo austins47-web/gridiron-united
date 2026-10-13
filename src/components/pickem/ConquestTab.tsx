@@ -414,13 +414,13 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
           <div className="space-y-1.5">
             <button onClick={() => (dugIn ? fortify(false) : attack(null))} disabled={!!busy} className={row(!target && !dugIn)}>
               {busy === 'atk:auto' || busy === 'dig:off' ? spin : <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />}
-              <span className="font-bold text-white">Automatic</span>
+              <span className="font-bold text-white shrink-0 whitespace-nowrap">Automatic</span>
               <span className="text-[11px] text-field-500 truncate">the neighbor you pick most differently from</span>
             </button>
             <button onClick={() => fortify(!dugIn)} disabled={!!busy} className={row(dugIn)}>
               {busy === 'dig:on' ? spin : <Shield className="w-3.5 h-3.5 text-[#3fd0ff] shrink-0" />}
-              <span className="font-bold text-white">Dig in</span>
-              <span className="text-[11px] text-field-500 truncate">no attack; anyone attacking you must win by 2 (not two weeks running)</span>
+              <span className="font-bold text-white shrink-0 whitespace-nowrap">Dig in</span>
+              <span className="text-[11px] text-field-500 truncate">no attack; they must win by 2</span>
             </button>
             {neighbors.map(n => (
               <button key={n.id} onClick={() => attack(n.id, n.name)} disabled={!!busy} className={row(target === n.id)}>
@@ -443,7 +443,7 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
               <div className="space-y-1.5">
                 <button onClick={() => tribute(null)} disabled={!!busy} className={row(!paying)}>
                   {busy === 'tribute:none' ? spin : <Shield className="w-3.5 h-3.5 text-field-400 shrink-0" />}
-                  <span className="font-bold text-white">No tribute</span>
+                  <span className="font-bold text-white shrink-0 whitespace-nowrap">No tribute</span>
                   <span className="text-[11px] text-field-500 truncate">hold out</span>
                 </button>
                 {payWith.map(t => (
@@ -463,7 +463,7 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
               <div className="space-y-1.5">
                 <button onClick={() => flag(null)} disabled={!!busy} className={row(!claim)}>
                   {busy === 'flag:auto' ? spin : <Flag className="w-3.5 h-3.5 text-field-400 shrink-0" />}
-                  <span className="font-bold text-white">Automatic</span>
+                  <span className="font-bold text-white shrink-0 whitespace-nowrap">Automatic</span>
                   <span className="text-[11px] text-field-500 truncate">{CITY[autoClaim!]}</span>
                 </button>
                 {open.map(o => (
@@ -689,20 +689,26 @@ function TitleRace({ war, userId }: { war: War; userId: string | undefined }) {
         {list.map(t => {
           const tied = t.holders.length > 1
           return (
-            <li key={t.key} className={clsx('flex items-center gap-2 text-sm rounded-md px-2 py-1', !!userId && t.holders.includes(userId) && 'bg-gold/10')}>
-              <span className="w-6 text-center">{t.icon}</span>
-              <span className="font-bold text-white w-28 shrink-0">{t.label}</span>
-              {tied ? (
-                <span className="text-field-400 truncate">
-                  {t.holders.length <= 3 ? `${t.holders.map(id => player(id)?.name ?? 'Someone').join(' & ')}, tied` : `${t.holders.length}-way tie`}
-                </span>
-              ) : (
-                <>
-                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={swatch(player(t.holders[0])?.color ?? '#666')} />
-                  <span className="font-bold text-field-200 truncate">{player(t.holders[0])?.name ?? 'Someone'}</span>
-                </>
-              )}
-              <span className="ml-auto shrink-0 text-[11px] text-field-400">{t.value} · {t.blurb}</span>
+            <li key={t.key} className={clsx('flex items-start gap-2 text-sm rounded-md px-2 py-1.5', !!userId && t.holders.includes(userId) && 'bg-gold/10')}>
+              <span className="w-6 shrink-0 text-center leading-5">{t.icon}</span>
+              {/* The title, who holds it and the count on one line; what it's for under it, so a phone never squeezes out the name */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white shrink-0 whitespace-nowrap">{t.label}</span>
+                  {tied ? (
+                    <span className="text-field-400 truncate">
+                      {t.holders.length <= 3 ? `${t.holders.map(id => player(id)?.name ?? 'Someone').join(' & ')}, tied` : `${t.holders.length}-way tie`}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={swatch(player(t.holders[0])?.color ?? '#666')} />
+                      <span className="font-bold text-field-200 truncate">{player(t.holders[0])?.name ?? 'Someone'}</span>
+                    </>
+                  )}
+                  <span className="ml-auto shrink-0 font-cond font-black tabular-nums text-field-300">{t.value}</span>
+                </div>
+                <p className="text-[11px] text-field-500 truncate">{t.blurb}</p>
+              </div>
             </li>
           )
         })}
