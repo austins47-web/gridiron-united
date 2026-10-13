@@ -366,8 +366,15 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   })
   const injuries = useMemo(() => keyInjuries(injuredPlayers as any), [injuredPlayers])
 
-  // Sync picks into state
+  // Sync picks into state, unless there are edits here that haven't saved yet: a
+  // reload landing mid-edit (after another save, or coming back to the app) used to
+  // put the server's values back over what was just typed, and the edit was lost
+  // without a word. The pending save writes them, and the reload after it syncs.
+  const savedWeekRef = useRef<number | null>(null)
   useEffect(() => {
+    const local = JSON.stringify({ existing: pendingPicks, existingTb: tiebreakerScore, existingReasons: reasons })
+    if (savedWeekRef.current === week && lastSavedRef.current !== null && local !== lastSavedRef.current) return
+    savedWeekRef.current = week
     const existing: Record<string, string> = {}
     const existingTb: Record<string, string> = {}
     const existingReasons: Record<string, string> = {}
@@ -383,6 +390,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     // confirmed against — the DB), so it's the correct baseline for
     // the auto-save effect to compare future changes against.
     lastSavedRef.current = JSON.stringify({ existing, existingTb, existingReasons })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myPicks])
 
   // Auto-saves picks/tiebreaker guesses shortly after the user stops
@@ -398,6 +406,24 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPicks, tiebreakerScore, reasons])
+
+  // Switching away or closing the app saves any change at once: the debounce above
+  // waits about a second, and a guess typed just before leaving used to be lost
+  const flushRef = useRef<() => void>(() => {})
+  flushRef.current = () => {
+    const snapshot = JSON.stringify({ existing: pendingPicks, existingTb: tiebreakerScore, existingReasons: reasons })
+    if (snapshot !== lastSavedRef.current && Object.keys(pendingPicks).length > 0) void savePicks()
+  }
+  useEffect(() => {
+    const leave = () => { if (document.visibilityState === 'hidden') flushRef.current() }
+    const hide = () => flushRef.current()
+    document.addEventListener('visibilitychange', leave)
+    window.addEventListener('pagehide', hide)
+    return () => {
+      document.removeEventListener('visibilitychange', leave)
+      window.removeEventListener('pagehide', hide)
+    }
+  }, [])
 
   // Sync deadline input when editor opens
   useEffect(() => {
@@ -465,6 +491,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
   const savePicks = async () => {
     if (!activeLeagueId || !user) return
     setSaving(true)
+    const writing = JSON.stringify({ existing: pendingPicks, existingTb: tiebreakerScore, existingReasons: reasons })
     try {
       const rows = Object.entries(pendingPicks).map(([gameId, team]) => ({
         league_id: activeLeagueId,
@@ -480,6 +507,7 @@ function PickEmWeekView({ calendar }: { calendar: PickemCalendar }) {
         .from('pickem_picks')
         .upsert(rows, { onConflict: 'league_id,user_id,game_id' })
       if (error) throw error
+      lastSavedRef.current = writing
       qc.invalidateQueries({ queryKey: ['my-pickem-picks', activeLeagueId, week] })
       // No success toast — this now fires automatically, potentially
       // several times as someone clicks through picks, and a popup
