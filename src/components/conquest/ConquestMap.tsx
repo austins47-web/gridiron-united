@@ -1046,11 +1046,12 @@ export const ConquestMap = memo(function ConquestMap({
           const s = 7 * labelScale
           const color = o.owner ? byId.get(o.owner)?.color ?? null : null
           return (
-            <g key={o.gameId} transform={`translate(${x} ${y})`}>
+            <g key={o.gameId} transform={`translate(${x} ${y})`} data-team={`outpost:${o.gameId}`} style={{ pointerEvents: 'auto', cursor: 'pointer' }}>
               <g className="cq-k">
+                <circle r={s * 2.4} fill="transparent" />
                 <title>{`${o.name} outpost (Week ${o.week})${o.owner ? `: ${byId.get(o.owner)?.name ?? 'held'}` : ': nobody picked it right'}`}</title>
                 <circle r={s * 1.25} fill={P.under} opacity={0.7} />
-                <circle r={s} fill={color ?? P.free} stroke={P.ink} strokeWidth={s * 0.16} />
+                <circle r={s} fill={color ?? P.free} stroke={highlight === `outpost:${o.gameId}` ? highlightColor ?? P.ink : P.ink} strokeWidth={s * (highlight === `outpost:${o.gameId}` ? 0.32 : 0.16)} />
                 <path d={`M${-s * 0.15} ${s * 0.5} V${-s * 0.6} L${s * 0.55} ${-s * 0.35} L${-s * 0.15} ${-s * 0.1}`} fill={P.under} stroke={P.under} strokeWidth={s * 0.12} strokeLinejoin="round" />
                 <text
                   y={s * 2.35} textAnchor="middle" fontFamily={P.font} fontWeight={800} fontSize={s * 1.05} letterSpacing={s * 0.08}

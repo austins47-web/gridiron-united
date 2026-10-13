@@ -236,5 +236,5 @@ export const OUTPOST_AT: Record<string, { at: [number, number]; label: string }>
 /** An outpost's spot: a second one in the same city sits below the first */
 export function outpostSpot(key: string, nth: number): { at: [number, number]; label: string } {
   const o = OUTPOST_AT[key] ?? { at: [958, 520] as [number, number], label: key }
-  return { at: [o.at[0], o.at[1] + nth * 30], label: o.label }
+  return { at: [o.at[0], o.at[1] + nth * 30], label: nth ? `${o.label} ${['II', 'III', 'IV', 'V'][nth - 1] ?? nth + 1}` : o.label }
 }
