@@ -4,7 +4,7 @@ import { useAppStore } from '@/store/appStore'
 import { ModalPortal } from '@/components/ui/ModalPortal'
 import { X, Trophy, Star, Users, Medal } from 'lucide-react'
 import { CURRENT_SEASON } from '@/lib/season'
-import { seasonMedals } from '@/components/conquest/conquestView'
+import { seasonMedals, capitalsOf } from '@/components/conquest/conquestView'
 import { MedalBadge } from '@/components/conquest/MedalBadge'
 import { MEDAL_INFO } from '../../../supabase/functions/_shared/conquest.ts'
 import clsx from 'clsx'
@@ -127,14 +127,17 @@ export function UserProfileModal({ username, onClose }: {
     enabled: !!profile?.id && !!activeLeagueId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase.from('conquest_moves')
-        .select('week, kind, team, from_user, to_user, score_for, score_against, exiled')
-        .eq('league_id', activeLeagueId!).eq('season', CURRENT_SEASON)
+      const [{ data }, { data: players }] = await Promise.all([
+        supabase.from('conquest_moves')
+          .select('week, kind, team, from_user, to_user, score_for, score_against, exiled')
+          .eq('league_id', activeLeagueId!).eq('season', CURRENT_SEASON),
+        supabase.from('conquest_players').select('user_id, capital').eq('league_id', activeLeagueId!).eq('season', CURRENT_SEASON),
+      ])
       const log = (data ?? []).map((m: any) => ({
         week: m.week, kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
         score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: m.exiled,
       }))
-      return seasonMedals(log).get(profile!.id) ?? []
+      return seasonMedals(log, capitalsOf((players ?? []).map((p: any) => ({ userId: p.user_id, capital: p.capital })))).get(profile!.id) ?? []
     },
   })
 

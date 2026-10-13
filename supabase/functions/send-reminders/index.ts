@@ -1462,9 +1462,13 @@ serve(async (req) => {
         const doneGames = done != null ? scheduleBySeason.get(season)?.get(done) ?? [] : []
         const lastKick = doneGames.length ? Math.max(...doneGames.map(g => new Date(g.game_date).getTime())) : NaN
         if (done != null && now.getTime() - lastKick < 3 * 24 * HOUR) {
-          const { data: rows } = await supabase.from('conquest_moves')
-            .select('kind, team, from_user, to_user, score_for, score_against, exiled')
-            .eq('league_id', lg.id).eq('season', season).eq('week', done).order('id')
+          const [{ data: rows }, { data: warPlayers }] = await Promise.all([
+            supabase.from('conquest_moves')
+              .select('kind, team, from_user, to_user, score_for, score_against, exiled')
+              .eq('league_id', lg.id).eq('season', season).eq('week', done).order('id'),
+            supabase.from('conquest_players').select('user_id, capital').eq('league_id', lg.id).eq('season', season),
+          ])
+          const capitals: Record<string, string> = Object.fromEntries((warPlayers ?? []).filter(p => p.capital).map(p => [p.user_id as string, p.capital as string]))
           const moves: Move[] = (rows ?? []).map(m => ({
             kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
             score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: !!m.exiled,
@@ -1490,7 +1494,7 @@ serve(async (req) => {
               add(m.to, `YOUR FLAG FLIES OVER ${T}`)
             }
           }
-          for (const medal of weekMedals(moves)) add(medal.to, `YOU ARE AWARDED THE ${MEDAL_INFO[medal.kind].name.toUpperCase()}`)
+          for (const medal of weekMedals(moves, capitals)) add(medal.to, `YOU ARE AWARDED THE ${MEDAL_INFO[medal.kind].name.toUpperCase()}`)
           for (const [userId, lines] of news) {
             telegram(userId, `conquest_settle:${lg.id}:${season}:${done}`, `Telegram from the front: Week ${done}`,
               `${lines.slice(0, 4).join(' STOP ')} STOP`)

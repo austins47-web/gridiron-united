@@ -240,7 +240,7 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
   }
 
   // The medals: pinned on in front of the whole map
-  const medals = weekMedals(moves)
+  const medals = weekMedals(moves, Object.fromEntries(war.players.filter(p => p.capital).map(p => [p.userId, p.capital!])))
   const hearts = medals.filter(m => m.kind === 'purple_heart'), crosses = medals.filter(m => m.kind === 'service_cross')
   const ceremony = [
     say('medals', [

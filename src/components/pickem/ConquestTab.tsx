@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
 import { CITY, ADJ, TERRITORIES, MEDAL_INFO, citiesOf, neighborsOf, startOdds, imbalance, type Medal, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
 import { WarMap } from '@/components/conquest/WarMap'
-import { empires, liveBattles, headline, titles, seasonMedals, swatch, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
+import { empires, liveBattles, headline, titles, seasonMedals, capitalsOf, swatch, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
 import { ConquestIcon } from '@/components/conquest/ConquestIcon'
 import { MedalBadge } from '@/components/conquest/MedalBadge'
 import { CipherOrders, cipherOf } from '@/components/conquest/CipherOrders'
@@ -197,7 +197,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
             <li>Level scores are settled like Pick’Em: the closer tiebreaker guess, then the better season win %. A battle that ends level still goes to the defender.</li>
             <li>Dotted lines on the map are sea lanes: the cities at each end border each other, like Risk.</li>
             <li>Lose everything and you’re in exile: outscore whoever holds your capital any week to take it back.</li>
-            <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire; on a tie, whoever held the most cities week by week all season), Warlord, Siege Master, Unbreakable, Comeback Kid and Pioneer.</li>
+            <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire; on a tie, whoever held the most cities week by week all season), Warlord, Siege Master, Unbreakable, Comeback Kid and Iron Grip (the most cities held, added up week after week).</li>
             <li>Cities that would change hands if the week ended now pulse on the map.</li>
           </ul>
         )}
@@ -534,7 +534,7 @@ function TitleRace({ war, userId }: { war: War; userId: string | undefined }) {
 
 /** The season's medals, by who holds the most (Medals of Honor first). */
 function MedalBoard({ war, userId }: { war: War; userId: string | undefined }) {
-  const medals = useMemo(() => seasonMedals(war.log), [war.log])
+  const medals = useMemo(() => seasonMedals(war.log, capitalsOf(war.players)), [war.log, war.players])
   const honors = (list: Medal[]) => list.filter(m => m.kind === 'honor').length
   const rows = war.players
     .map(p => ({ p, list: medals.get(p.userId) ?? [] }))
@@ -546,7 +546,7 @@ function MedalBoard({ war, userId }: { war: War; userId: string | undefined }) {
       <p className="font-cond font-bold text-sm uppercase tracking-wider text-white mb-2">War medals</p>
       {rows.length === 0 ? (
         <p className="text-xs text-field-400">
-          Pinned on as each week settles: the Medal of Honor for the week’s biggest conqueror, the Purple Heart for taking your capital back,
+          Pinned on as each week settles: the Medal of Honor for the week’s biggest conqueror, the Purple Heart for taking your capital back (from exile or in battle),
           and the Distinguished Service Cross for breaking a siege on your capital.
         </p>
       ) : (

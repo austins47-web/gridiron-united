@@ -517,7 +517,7 @@ export const patternOf = (color: string) => PALETTE.find(p => p.color === color)
 
 // ── The titles ────────────────────────────────────────────────
 export interface Title {
-  key: 'emperor' | 'warlord' | 'siege' | 'unbreakable' | 'comeback' | 'pioneer'
+  key: 'emperor' | 'warlord' | 'siege' | 'unbreakable' | 'comeback' | 'grip'
   icon: string
   label: string
   /** what it's for */
@@ -533,7 +533,9 @@ const TITLE_INFO: Record<Title['key'], { icon: string; label: string; blurb: str
   siege: { icon: '🔥', label: 'Siege Master', blurb: 'the most sieges laid' },
   unbreakable: { icon: '🛡️', label: 'Unbreakable', blurb: 'the most sieges survived' },
   comeback: { icon: '✊', label: 'Comeback Kid', blurb: 'the most rebellions' },
-  pioneer: { icon: '🚩', label: 'Pioneer', blurb: 'the most flags planted' },
+  // (Pioneer, the most flags planted, went once the open land filled in a week or two:
+  //  a tie among half the league. This one's alive all season, in a war of any size.)
+  grip: { icon: '🏰', label: 'Iron Grip', blurb: 'the most ground held, week after week' },
 }
 
 /**
@@ -557,7 +559,7 @@ export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Reco
     siege: count(m => m.kind === 'siege'),
     unbreakable: count(m => m.kind === 'relief'),
     comeback: count(m => m.kind === 'rebellion'),
-    pioneer: count(m => m.kind === 'claim'),
+    grip: Object.fromEntries(players.map(u => [u, cityWeeks[u] ?? 0])),
   }
   const out: Title[] = []
   for (const key of Object.keys(TITLE_INFO) as Title['key'][]) {
@@ -578,7 +580,8 @@ export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Reco
 
 // ── Medals ─────────────────────────────────────────────────────
 // Won week by week, kept for good: the Medal of Honor for the week's
-// biggest conqueror, the Purple Heart for taking your capital back, and
+// biggest conqueror, the Purple Heart for taking your capital back (out of
+// exile, or in battle while you still hold other land), and
 // the Distinguished Service Cross for breaking a siege on your capital.
 
 export type MedalKind = 'honor' | 'purple_heart' | 'service_cross'
@@ -612,13 +615,13 @@ export function conquerorOf(moves: Pick<Move, 'kind' | 'to' | 'score'>[]): strin
     (gains.get(b)! - gains.get(a)!) || (best.get(b)! - best.get(a)!) || a.localeCompare(b))[0] ?? null
 }
 
-/** The medals one settled week hands out. */
-export function weekMedals(moves: Pick<Move, 'kind' | 'to' | 'score' | 'team'>[]): Medal[] {
+/** The medals one settled week hands out (`capitals`: each player's, to spot a capital taken back in battle). */
+export function weekMedals(moves: Pick<Move, 'kind' | 'to' | 'score' | 'team'>[], capitals: Record<string, string> = {}): Medal[] {
   const out: Medal[] = []
   const hero = conquerorOf(moves)
   if (hero) out.push({ kind: 'honor', to: hero })
   for (const m of moves) {
-    if (m.kind === 'rebellion') out.push({ kind: 'purple_heart', to: m.to, team: m.team })
+    if (m.kind === 'rebellion' || (m.kind === 'capture' && capitals[m.to] === m.team)) out.push({ kind: 'purple_heart', to: m.to, team: m.team })
     if (m.kind === 'relief') out.push({ kind: 'service_cross', to: m.to, team: m.team })
   }
   return out

@@ -205,11 +205,15 @@ export function cityStory(owners: Record<string, string | null>, log: LoggedMove
   return { holders, events }
 }
 
+/** Each player's capital, from the war's players (for weekMedals) */
+export const capitalsOf = (players: { userId: string; capital: string | null }[]): Record<string, string> =>
+  Object.fromEntries(players.filter(p => p.capital).map(p => [p.userId, p.capital!]))
+
 /** Everyone's medals over the season, from the war log (weekMedals, week by week). */
-export function seasonMedals(log: (ConquestMove & { week: number })[]): Map<string, (Medal & { week: number })[]> {
+export function seasonMedals(log: (ConquestMove & { week: number })[], capitals: Record<string, string> = {}): Map<string, (Medal & { week: number })[]> {
   const out = new Map<string, (Medal & { week: number })[]>()
   for (const week of [...new Set(log.map(m => m.week))].sort((a, b) => a - b)) {
-    for (const medal of weekMedals(log.filter(m => m.week === week))) {
+    for (const medal of weekMedals(log.filter(m => m.week === week), capitals)) {
       out.set(medal.to, [...(out.get(medal.to) ?? []), { ...medal, week }])
     }
   }
