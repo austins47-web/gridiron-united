@@ -26,6 +26,7 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   matchup_result: Trophy,
   league_invite: Mail,
   nudge: BellRing,
+  conquest_trade: ArrowLeftRight,
   system: Megaphone,
 }
 

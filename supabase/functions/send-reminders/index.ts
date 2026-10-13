@@ -1464,7 +1464,7 @@ serve(async (req) => {
         if (done != null && now.getTime() - lastKick < 3 * 24 * HOUR) {
           const [{ data: rows }, { data: warPlayers }] = await Promise.all([
             supabase.from('conquest_moves')
-              .select('kind, team, from_user, to_user, score_for, score_against, exiled')
+              .select('kind, team, from_user, to_user, score_for, score_against, exiled, with_team')
               .eq('league_id', lg.id).eq('season', season).eq('week', done).order('id'),
             supabase.from('conquest_players').select('user_id, capital').eq('league_id', lg.id).eq('season', season),
           ])
@@ -1472,6 +1472,7 @@ serve(async (req) => {
           const moves: Move[] = (rows ?? []).map(m => ({
             kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
             score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: !!m.exiled,
+            withTeam: (m.with_team as string | null) ?? undefined,
           }))
           const news = new Map<string, string[]>()
           const add = (u: string | null, line: string) => { if (u) news.set(u, [...(news.get(u) ?? []), line]) }
@@ -1492,6 +1493,12 @@ serve(async (req) => {
               add(m.to, `THE SIEGE OF ${T} IS BROKEN`)
             } else if (m.kind === 'claim') {
               add(m.to, `YOUR FLAG FLIES OVER ${T}`)
+            } else if (m.kind === 'tribute') {
+              const cap = m.withTeam ? city(m.withTeam) : 'THE CAPITAL'
+              add(m.to, `${nameOf(m.from)} PAYS TRIBUTE STOP ${T} IS YOURS STOP THE SIEGE OF ${cap} IS LIFTED`)
+              add(m.from, `TRIBUTE PAID STOP ${T} TO ${nameOf(m.to)} STOP ${cap} IS SAFE FOR NOW`)
+            } else if (m.kind === 'trade') {
+              add(m.to, `${T} IS YOURS BY TREATY WITH ${nameOf(m.from)}`)
             }
           }
           for (const medal of weekMedals(moves, capitals)) add(medal.to, `YOU ARE AWARDED THE ${MEDAL_INFO[medal.kind].name.toUpperCase()}`)

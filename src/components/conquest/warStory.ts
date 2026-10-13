@@ -3,7 +3,7 @@
 // War Office's posters. Built from the week's war report alone, so the TV
 // and the commissioner's preview tell the same story.
 import { CITY, conquerorOf, weekMedals, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
-import { ownersBefore, type ConquestData, type ConquestMove } from './conquestView'
+import { ownersBefore, changesHands, type ConquestData, type ConquestMove } from './conquestView'
 import { M } from './mapGeometry'
 import { strikeFrom, waterBetween } from './sea'
 
@@ -205,9 +205,9 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
   }
 
   // The rest of the front: cities taken first, then rebellions, sieges and sieges broken
-  const ORDER = ['capture', 'rebellion', 'siege', 'relief']
+  const ORDER = ['capture', 'rebellion', 'siege', 'tribute', 'relief']
   const rest = moves
-    .filter(m => !shown.has(idx(m)) && m.kind !== 'claim')
+    .filter(m => !shown.has(idx(m)) && m.kind !== 'claim' && m.kind !== 'trade')
     .sort((a, b) => Number(!!b.exiled) - Number(!!a.exiled) || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
   let said = 0
   for (let i = 0; i < rest.length && said < 4; i++) {
@@ -228,6 +228,11 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
         ], said)), [...(sailed(m) ? [sailed(m)!] : []), m.team], [m], arrowFor(m))
     } else if (m.kind === 'rebellion') {
       add(`${T} rises from exile and takes back ${city}! What a comeback!`, [m.team], [m])
+    } else if (m.kind === 'tribute') {
+      add(say(`tribute|${m.team}`, [
+        `${L} buys peace! ${city} is handed to ${T} as tribute, and the siege of ${m.withTeam ? cityName(m.withTeam) : 'the capital'} is lifted!`,
+        `Gold on the table! ${L} pays ${T} in land: ${city} for the lifting of the siege!`,
+      ], said), [m.team, ...(m.withTeam ? [m.withTeam] : [])], [m])
     } else if (m.kind === 'siege') {
       add(ahoy(m, T) + say(`siege|${m.team}`, [
         `${T}'s forces encircle ${where(m.team)}! The noose tightens!`,
@@ -237,6 +242,15 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
       add(`In ${city}, ${T} breaks the siege! The defenders dance in the streets!`, [m.team], [m])
     }
     said++
+  }
+
+  // Diplomacy: a trade (two moves, a city each way), the first one told
+  const swap = moves.find(m => m.kind === 'trade')
+  if (swap) {
+    const back = moves.find(m => m.kind === 'trade' && m.team === swap.withTeam && m.from === swap.to)
+    const others = moves.filter(m => m.kind === 'trade').length / 2 - 1
+    add(`And at the treaty table, ${name(swap.from)} and ${name(swap.to)} shake hands: ${cityName(swap.team)} for ${swap.withTeam ? cityName(swap.withTeam) : 'a city'}!${others > 0 ? ` ${others === 1 ? 'One more deal' : `${others} more deals`} signed besides!` : ''}`,
+      [swap.team, ...(swap.withTeam ? [swap.withTeam] : [])], [swap, ...(back ? [back] : [])])
   }
 
   // The medals: pinned on in front of the whole map
@@ -277,11 +291,12 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
 
   // ── The War Office's posters ──
   const posters: PosterSpec[] = []
-  const lead = heroBattles[0] ?? moves.find(m => m.to === hero && m.kind === 'claim')!
+  const lead = heroBattles[0] ?? moves.find(m => m.to === hero && (m.kind === 'claim' || m.kind === 'tribute'))!
   const LEAD = cityName(lead.team).toUpperCase()
   const ribbon = lead.kind === 'siege' ? `…OUT OF ${LEAD}!`
     : lead.kind === 'capture' ? `${LEAD} IS OURS!`
       : lead.kind === 'rebellion' ? `${LEAD} IS FREE!`
+        : lead.kind === 'tribute' ? `${LEAD}, PAID IN TRIBUTE!`
         : `PLANT THE FLAG IN ${LEAD}!`
   const leadPort = battle(lead) ? sailed(lead) : null
   const heroFocus = [...new Set([...(heroCap ? [heroCap] : []), ...(leadPort ? [leadPort] : []), ...heroBattles.map(m => m.team), ...heroClaims.map(m => m.team)])]
@@ -342,7 +357,8 @@ export function mapAfterMoves(before: Record<string, string | null>, moves: Conq
   for (const i of shownIdx) {
     const m = moves[i]
     if (!m) continue
-    if (m.kind === 'capture' || m.kind === 'claim' || m.kind === 'rebellion') { owners[m.team] = m.to; delete sieges[m.team] }
+    if (changesHands(m)) { owners[m.team] = m.to; delete sieges[m.team] }
+    if (m.kind === 'tribute' && m.withTeam) delete sieges[m.withTeam]
     if (m.kind === 'siege') sieges[m.team] = m.to
     if (m.kind === 'relief') delete sieges[m.team]
   }

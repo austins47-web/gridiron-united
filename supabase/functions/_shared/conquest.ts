@@ -22,6 +22,12 @@
 // - Lose your last city and you're in exile: outscore whoever holds your
 //   capital in any week to take it back (a rebellion).
 // - Sea lanes (dotted on the map) count as borders, Risk style.
+// - Dig in (an order): skip your attack for the week, and anyone attacking
+//   you has to win by 2 to take anything. Not two weeks running.
+// - Tribute (an order, with your capital under siege): hand one of your
+//   other cities to the besieger and the siege lifts, before the battles.
+// - Trades: two players swap a city each (never a capital) when both agree,
+//   before the week's first kickoff (the conquest function, not the settle).
 // - A city changes hands at most once a week; everything is decided on
 //   the map as it stood when the week began.
 // - The biggest empire after the last week is Emperor; a tie goes to the
@@ -189,7 +195,7 @@ export interface Battle {
   score: [number, number]
 }
 
-export type MoveKind = 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion'
+export type MoveKind = 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion' | 'tribute' | 'trade'
 
 export interface Move {
   kind: MoveKind
@@ -204,6 +210,8 @@ export interface Move {
   exiled?: boolean
   /** a claim: the city the player chose (not the automatic one) */
   chosen?: boolean
+  /** the other city in it: a tribute's, the capital it freed; a trade's, the city that went the other way */
+  withTeam?: string
 }
 
 export const citiesOf = (owners: Record<string, string | null>, user: string): string[] =>
@@ -254,10 +262,12 @@ function median(values: number[]): number {
  * picked most differently from (the bigger empire on a tie). No automatic
  * battle for an empire that agreed with every neighbor on everything.
  */
-export function plannedBattles(state: ConquestState, week: WeekScores, players: string[], orders: Orders = {}): Battle[] {
+export function plannedBattles(state: ConquestState, week: WeekScores, players: string[], orders: Orders = {}, fortified: string[] = []): Battle[] {
   const out: Battle[] = []
+  const dugIn = new Set(fortified)
   for (const a of [...players].sort()) {
-    if (!citiesOf(state.owners, a).length) continue
+    // Dug in: no attack this week
+    if (!citiesOf(state.owners, a).length || dugIn.has(a)) continue
     const target = orders[a]
     if (target && neighborsOf(state.owners, a).includes(target)) {
       out.push({ attacker: a, defender: target, ordered: true, disagree: disagreements(week, a, target), score: [correctOf(week, a), correctOf(week, target)] })
@@ -276,18 +286,37 @@ export function plannedBattles(state: ConquestState, week: WeekScores, players: 
   return out
 }
 
+/** The week's other orders: who's dug in, and the city each besieged player pays in tribute */
+export interface WeekOrders { fortified?: string[]; tributes?: Record<string, string> }
+
 /** Settles a week: the moves, who owns what after them, and which capitals are under siege. */
 export function resolveWeek(
-  state: ConquestState, week: WeekScores, players: string[], orders: Orders = {}, claims: Claims = {},
+  state: ConquestState, week: WeekScores, players: string[], orders: Orders = {}, claims: Claims = {}, extra: WeekOrders = {},
 ): { moves: Move[]; owners: Record<string, string | null>; besieged: Record<string, string> } {
-  const start = state.owners
+  const c = (u: string) => correctOf(week, u)
+  const fortified = new Set(extra.fortified ?? [])
+
+  // 0. Tribute, before anything: a player whose capital is under siege hands one of their
+  //    other cities to the besieger, and the siege lifts. The week's fought on that map.
+  const start: Record<string, string | null> = { ...state.owners }
+  const wasBesieged: Record<string, string> = { ...(state.besieged ?? {}) }
+  const paid: Move[] = []
+  for (const p of [...players].sort()) {
+    const t = extra.tributes?.[p], cap = state.capitals[p]
+    if (!t || !cap || t === cap) continue
+    const by = wasBesieged[cap]
+    if (!by || start[cap] !== p || start[t] !== p) continue
+    start[t] = by
+    delete wasBesieged[cap]
+    paid.push({ kind: 'tribute', team: t, from: p, to: by, score: [c(by), c(p)], withTeam: cap })
+  }
+  const st: ConquestState = { ...state, owners: start, besieged: wasBesieged }
+
   const owners: Record<string, string | null> = { ...start }
-  const wasBesieged = state.besieged ?? {}
   const besieged: Record<string, string> = {}
   const beaten = new Set<string>()
-  const changed = new Set<string>()
-  const moves: Move[] = []
-  const c = (u: string) => correctOf(week, u)
+  const changed = new Set<string>(paid.map(m => m.team))
+  const moves: Move[] = [...paid]
   const mid = median(players.map(c))
   const sorted = [...players].sort()
 
@@ -304,9 +333,10 @@ export function resolveWeek(
     moves.push({ kind: 'rebellion', team: cap, from: holder ?? null, to: p, score: [c(p), holder ? c(holder) : mid] })
   }
 
-  // 2. Battles, the biggest wins first (the same margin: the better week)
-  const wins = plannedBattles(state, week, players, orders)
-    .filter(b => b.score[0] > b.score[1])
+  // 2. Battles, the biggest wins first (the same margin: the better week). Against
+  //    an empire that's dug in, only a win by 2 or more takes anything.
+  const wins = plannedBattles(st, week, players, orders, [...fortified])
+    .filter(b => b.score[0] - b.score[1] >= (fortified.has(b.defender) ? 2 : 1))
     .sort((x, y) => (y.score[0] - y.score[1]) - (x.score[0] - x.score[1])
       || y.score[0] - x.score[0]
       || tiebreak(week, x.attacker, y.attacker)
@@ -599,7 +629,7 @@ export interface Medal {
   team?: string
 }
 
-const GAINED: Partial<Record<MoveKind, number>> = { capture: 3, rebellion: 3, siege: 2, claim: 1 }
+const GAINED: Partial<Record<MoveKind, number>> = { capture: 3, rebellion: 3, siege: 2, claim: 1, tribute: 1 }
 
 /** The week's biggest conqueror: the most won (a city taken counts most), then the better week. */
 export function conquerorOf(moves: Pick<Move, 'kind' | 'to' | 'score'>[]): string | null {

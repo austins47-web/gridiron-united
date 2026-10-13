@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { CITY } from '../../../supabase/functions/_shared/conquest.ts'
 import { ConquestMap } from '@/components/conquest/ConquestMap'
-import { empires, liveBattles, headline, ownersBefore, swatch, type ConquestData, type ConquestMove, type LiveBattle } from '@/components/conquest/conquestView'
+import { empires, liveBattles, headline, ownersBefore, swatch, type ConquestData, type ConquestMove, type LiveBattle, changesHands } from '@/components/conquest/conquestView'
 import { ConquestIcon } from '@/components/conquest/ConquestIcon'
 import { pointOf, viewOf } from '@/components/conquest/mapGeometry'
 import { weekStory, type WarStory } from '@/components/conquest/warStory'
@@ -255,7 +255,7 @@ export function WarReport({ war, league }: { war: ConquestData; league: string }
   const start = ownersBefore(war.owners, report.moves)
   const upTo = step.kind === 'move' || step.kind === 'claims' ? step.upTo : step.kind === 'finale' ? report.moves.length : 0
   const owners = { ...start }
-  for (const m of report.moves.slice(0, upTo)) if (m.kind === 'capture' || m.kind === 'claim' || m.kind === 'rebellion') owners[m.team] = m.to
+  for (const m of report.moves.slice(0, upTo)) if (changesHands(m)) owners[m.team] = m.to
   const besieged: Record<string, string> = step.kind === 'finale' ? war.besieged : Object.fromEntries(
     report.moves.slice(0, upTo).filter(m => m.kind === 'siege').map(m => [m.team, m.to]),
   )
@@ -441,7 +441,7 @@ export function WarPosterShow({ b, code, sofar = false }: { b: WarBoard; code: s
 export function NewsreelShow({ b, code, sofar = false, onDone }: { b: WarBoard; code: string; sofar?: boolean; onDone: () => void }) {
   const got = useWarStory(b, code, sofar)
   // The Fire TV's film is the light one, whatever effects the TV's on
-  const [lite] = useState(() => !!document.querySelector('.tv-lite, .tv-still') || /Silk|AFT[A-Z]/.test(navigator.userAgent))
+  const [lite] = useState(() => !!document.querySelector('.tv-lite, .tv-still') || /\bSilk\b|\bAFT[A-Z]/.test(navigator.userAgent))
   // Nothing to show after all: straight back to the TV
   const doneRef = useRef(onDone)
   doneRef.current = onDone
@@ -464,11 +464,13 @@ function TvCodedOrders({ war, week }: { war: ConquestData; week: number }) {
   const nameOf = nameFrom(war), colorOf = colorFrom(war)
   const orders = war.orders ?? {}
   const sealed = war.sealed ?? []
-  const open = Object.keys(orders).length > 0
-  const ids = (open ? Object.keys(orders) : sealed).slice(0, 4)
+  const dugIn = war.fortified ?? []
+  const revealed = [...Object.keys(orders), ...dugIn.filter(id => !orders[id])]
+  const open = revealed.length > 0
+  const ids = (open ? revealed : sealed).slice(0, 4)
   if (!ids.length) return null
-  const rows = ids.map(id => ({ key: id, name: nameOf(id), color: colorOf(id), target: open ? nameOf(orders[id]) : null, code: cipherOf(`${war.startWeek}|${battleWeek}|${id}`) }))
-  const more = (open ? Object.keys(orders).length : sealed.length) - ids.length
+  const rows = ids.map(id => ({ key: id, name: nameOf(id), color: colorOf(id), target: open ? (orders[id] ? nameOf(orders[id]) : 'DUG IN') : null, code: cipherOf(`${war.startWeek}|${battleWeek}|${id}`) }))
+  const more = (open ? revealed.length : sealed.length) - ids.length
   return (
     <div>
       <p className="font-mono text-[15px] text-[#3fd0ff] mb-1">{open ? '// ORDERS DECRYPTED' : `// ${sealed.length} SEALED ORDERS · DECRYPT AT KICKOFF`}</p>

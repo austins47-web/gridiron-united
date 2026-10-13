@@ -31,6 +31,8 @@ export interface ConquestMove {
   to: string
   score: [number, number]
   exiled?: boolean
+  /** the other city in it: a tribute's, the capital it freed; a trade's, the city that went the other way */
+  withTeam?: string | null
 }
 
 /** The war as the TV gets it (shop-tv) and the app reads it. */
@@ -53,6 +55,10 @@ export interface ConquestData {
   mapLook?: 'radar' | 'parchment' | 'warroom'
   /** This week's flag orders, player → the open city they'd claim (yours, and everyone's once they lock) */
   claims?: Claims
+  /** Who's dug in this week (yours, and everyone's once orders lock) */
+  fortified?: string[]
+  /** Tribute this week: player → the city they hand their besieger (yours, and everyone's once orders lock) */
+  tributes?: Record<string, string>
   /** The season's titles, once the war's over */
   crowned?: Title[] | null
 }
@@ -99,16 +105,27 @@ export interface LiveBattle {
  * picks so far) and what happens if it ends like this. A city wanted
  * twice goes to the bigger win, as when the week's settled.
  */
-export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'players' | 'orders'>, week: WeekScores): LiveBattle[] {
+export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'players' | 'orders' | 'fortified' | 'tributes'>, week: WeekScores): LiveBattle[] {
   const capitals = Object.fromEntries(war.players.filter(p => p.capital).map(p => [p.userId, p.capital!]))
+  // Tribute's paid before the battles: the week's fought on that map
+  const owners = { ...war.owners }, besieged = { ...war.besieged }
+  for (const [p, t] of Object.entries(war.tributes ?? {})) {
+    const cap = capitals[p], by = cap ? besieged[cap] : undefined
+    if (!cap || !by || t === cap || owners[cap] !== p || owners[t] !== p) continue
+    owners[t] = by
+    delete besieged[cap]
+  }
+  war = { ...war, owners, besieged }
+  const fortified = new Set(war.fortified ?? [])
   const state: ConquestState = { owners: war.owners, capitals, besieged: war.besieged }
   const players = war.players.map(p => p.userId)
-  const battles = plannedBattles(state, week, players, war.orders ?? {})
+  const battles = plannedBattles(state, week, players, war.orders ?? {}, [...fortified])
   const taken = new Set<string>()
   const order = [...battles].sort((a, b) => (b.score[0] - b.score[1]) - (a.score[0] - a.score[1]))
   const out = new Map<string, LiveBattle>()
   for (const b of order) {
-    const winning = b.score[0] > b.score[1]
+    // Against an empire that's dug in, only a win by 2 or more
+    const winning = b.score[0] - b.score[1] >= (fortified.has(b.defender) ? 2 : 1)
     const mine = new Set(citiesOf(war.owners, b.attacker))
     const bordering = (t: string) => ADJ[t].filter(n => mine.has(n)).length
     const options = citiesOf(war.owners, b.defender)
@@ -137,22 +154,26 @@ export function headline(m: ConquestMove, nameOf: (id: string | null) => string)
       return { icon: '✊', text: `${nameOf(m.to)} rises up and retakes ${city}${m.from ? ` from ${nameOf(m.from)}` : ''}` }
     case 'claim':
       return { icon: '🚩', text: `${nameOf(m.to)} plants a flag in ${city}` }
+    case 'tribute':
+      return { icon: '🪙', text: `${nameOf(m.from)} pays tribute: ${city} goes to ${nameOf(m.to)}${m.withTeam ? `, and the siege of ${CITY[m.withTeam] ?? m.withTeam} lifts` : ''}` }
+    case 'trade':
+      return { icon: '🤝', text: `${nameOf(m.from)} trades ${city} to ${nameOf(m.to)}${m.withTeam ? ` for ${CITY[m.withTeam] ?? m.withTeam}` : ''}` }
   }
 }
 
 /** Who owned what before a week's moves (the moves undone, last first). */
 export function ownersBefore(owners: Record<string, string | null>, moves: ConquestMove[]): Record<string, string | null> {
   const before = { ...owners }
-  for (const m of [...moves].reverse()) {
-    if (m.kind === 'capture' || m.kind === 'claim' || m.kind === 'rebellion') before[m.team] = m.from
-  }
+  for (const m of [...moves].reverse()) if (changesHands(m)) before[m.team] = m.from
   return before
 }
 
 /** A move in the war log, with the week it was made */
 export type LoggedMove = ConquestMove & { week: number }
 
-const changesHands = (m: ConquestMove) => m.kind === 'capture' || m.kind === 'claim' || m.kind === 'rebellion'
+/** A move that hands a city to someone else: taken, claimed, retaken, paid in tribute or traded */
+export const changesHands = (m: Pick<ConquestMove, 'kind'>) =>
+  m.kind === 'capture' || m.kind === 'claim' || m.kind === 'rebellion' || m.kind === 'tribute' || m.kind === 'trade'
 
 /** The log oldest first: week by week, and within a week in the order the moves were made */
 export function chronological(log: LoggedMove[]): LoggedMove[] {
@@ -178,6 +199,8 @@ export function siegesAfter(moves: ConquestMove[], from: Record<string, string> 
   for (const m of moves) {
     if (m.kind === 'siege') besieged[m.team] = m.to
     else if (m.kind === 'relief' || changesHands(m)) delete besieged[m.team]
+    // Tribute lifts the siege on the payer's capital
+    if (m.kind === 'tribute' && m.withTeam) delete besieged[m.withTeam]
   }
   return besieged
 }

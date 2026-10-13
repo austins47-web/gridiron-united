@@ -25,8 +25,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isFinal, isVoid, isWeekComplete, winnerOf, nflSeasonFor, tiebreakerTotal, type Game } from '../_shared/pickemCore.ts'
+import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
 import {
-  TERRITORIES, POS, assignCapitals, balanceCapitals, startOdds, empireColor, resolveWeek, citiesOf, neighborsOf, titles,
+  TERRITORIES, POS, CITY, assignCapitals, balanceCapitals, startOdds, empireColor, resolveWeek, citiesOf, neighborsOf, titles,
   ADJ, type ConquestState, type WeekScores, type Orders, type Claims, type Move,
 } from '../_shared/conquest.ts'
 
@@ -42,7 +43,10 @@ serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const admin = createClient(url, serviceKey)
-  const body = await req.json().catch(() => ({})) as { action?: string; league_id?: string; token?: string; start_week?: number; restart?: boolean; target?: string | null; team?: string | null }
+  const body = await req.json().catch(() => ({})) as {
+    action?: string; league_id?: string; token?: string; start_week?: number; restart?: boolean; target?: string | null; team?: string | null
+    on?: boolean; to?: string; give?: string; get?: string; trade_id?: string; accept?: boolean
+  }
 
   try {
     if (body.action === 'resolve') return json(await resolveAll(admin))
@@ -63,14 +67,32 @@ serve(async (req) => {
       return json({ sofar: await soFar(admin, leagueId) })
     }
 
-    if (body.action === 'target' || body.action === 'claim') {
+    if (body.action === 'target' || body.action === 'claim' || body.action === 'fortify' || body.action === 'tribute') {
       if (typeof body.league_id !== 'string') return json({ error: 'league_id required' }, 400)
       const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
       const { data: { user } } = await userClient.auth.getUser()
       if (!user) return json({ error: 'Sign in first' }, 401)
-      return body.action === 'target'
-        ? await setOrder(admin, body.league_id, user.id, { target: typeof body.target === 'string' ? body.target : null })
-        : await setOrder(admin, body.league_id, user.id, { claim: typeof body.team === 'string' ? body.team : null })
+      const team = typeof body.team === 'string' ? body.team : null
+      return await setOrder(admin, body.league_id, user.id,
+        body.action === 'target' ? { target: typeof body.target === 'string' ? body.target : null }
+          : body.action === 'claim' ? { claim: team }
+            : body.action === 'fortify' ? { fortify: !!body.on }
+              : { tribute: team })
+    }
+
+    if (body.action === 'trade_offer' || body.action === 'trade_reply' || body.action === 'trade_cancel') {
+      if (typeof body.league_id !== 'string') return json({ error: 'league_id required' }, 400)
+      const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
+      const { data: { user } } = await userClient.auth.getUser()
+      if (!user) return json({ error: 'Sign in first' }, 401)
+      if (body.action === 'trade_offer') {
+        if (typeof body.to !== 'string' || typeof body.give !== 'string' || typeof body.get !== 'string') return json({ error: 'to, give and get required' }, 400)
+        return await tradeOffer(admin, body.league_id, user.id, body.to, body.give, body.get)
+      }
+      if (typeof body.trade_id !== 'string') return json({ error: 'trade_id required' }, 400)
+      return body.action === 'trade_reply'
+        ? await tradeReply(admin, body.league_id, user.id, body.trade_id, !!body.accept)
+        : await tradeCancel(admin, body.league_id, user.id, body.trade_id)
     }
 
     if (body.action === 'balance') {
@@ -199,12 +221,125 @@ async function balance(admin: SupabaseClient, leagueId: string) {
   return json({ moves, odds: startOdds(Object.values(capitals)) })
 }
 
+/** The week's orders besides attacks and flags: who's dug in, and who's paying tribute with what */
+function otherOrders(rows: { user_id: string; fortify?: boolean | null; tribute?: string | null }[]) {
+  return {
+    fortified: rows.filter(o => o.fortify).map(o => o.user_id),
+    tributes: Object.fromEntries(rows.filter(o => o.tribute).map(o => [o.user_id, o.tribute as string])),
+  }
+}
+
+/** The week being played, if its orders (and trades) are still open: before its first kickoff. */
+async function openWeek(admin: SupabaseClient, leagueId: string, season: number): Promise<{ week: number } | Response> {
+  const { data: war } = await admin.from('conquest_games').select('start_week, last_resolved_week, final_week')
+    .eq('league_id', leagueId).eq('season', season).maybeSingle()
+  if (!war) return json({ error: 'No war going on' }, 404)
+  const week = (war.last_resolved_week ?? war.start_week - 1) + 1
+  if (week > war.final_week) return json({ error: 'The war is over' }, 409)
+  const { data: first } = await admin.from('nfl_games').select('game_date')
+    .eq('season', season).eq('week', week).order('game_date').limit(1).maybeSingle()
+  if (first && new Date(first.game_date).getTime() <= Date.now()) return json({ error: 'Trades close at the week’s first kickoff and reopen once it settles' }, 409)
+  return { week }
+}
+
+async function nameOfUser(admin: SupabaseClient, userId: string): Promise<string> {
+  const { data } = await admin.from('profiles').select('display_name, username').eq('id', userId).maybeSingle()
+  return (data?.display_name as string | undefined)?.trim() || (data?.username as string | undefined) || 'Someone'
+}
+
+/** A trade's news to one player: in the app, and to their phone unless they've turned war telegrams off. */
+async function tellTrade(admin: SupabaseClient, leagueId: string, userId: string, from: string, title: string, body: string) {
+  await admin.from('notifications').insert({
+    user_id: userId, league_id: leagueId, type: 'conquest_trade', title, body, is_read: false,
+    data: { league_id: leagueId }, sender_id: from,
+  })
+  const { data: prefs } = await admin.from('notification_preferences')
+    .select('league_id, notify_conquest, updated_at').eq('user_id', userId).order('updated_at', { ascending: false })
+  const pref = (prefs ?? []).find(p => p.league_id === leagueId) ?? (prefs ?? []).find(p => p.league_id === null)
+  const vapid: VapidKeys = {
+    publicKey: Deno.env.get('VAPID_PUBLIC_KEY') ?? '',
+    privateKey: Deno.env.get('VAPID_PRIVATE_KEY') ?? '',
+    subject: Deno.env.get('VAPID_SUBJECT') ?? 'https://www.gridironunited.app',
+  }
+  if (pref?.notify_conquest === false || !vapid.publicKey || !vapid.privateKey) return
+  const path = '/app/pickem?tab=conquest'
+  const payload = JSON.stringify({ title: `🤝 ${title}`, body, url: path, tag: `conquest-trade-${leagueId}`, icon: '/icons/notify/reminder.png' })
+  const { data: subs } = await admin.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', userId)
+  for (const s of subs ?? []) {
+    try {
+      const r = await sendWebPush(s, payload, vapid, { ttlSec: 24 * 3600, urgency: 'normal' })
+      if (r.gone) await admin.from('push_subscriptions').delete().eq('id', s.id)
+    } catch { /* one phone's trouble isn't the trade's */ }
+  }
+}
+
+/**
+ * Offer a trade: one of your cities for one of theirs, neither a capital,
+ * before the week's first kickoff. Three open offers at most.
+ */
+async function tradeOffer(admin: SupabaseClient, leagueId: string, userId: string, to: string, give: string, get: string) {
+  const season = nflSeasonFor(new Date())
+  const open = await openWeek(admin, leagueId, season)
+  if (open instanceof Response) return open
+  if (to === userId) return json({ error: 'Trade with someone else' }, 400)
+  const [{ data: players }, { data: cities }, { data: mine }] = await Promise.all([
+    admin.from('conquest_players').select('user_id, capital').eq('league_id', leagueId).eq('season', season).in('user_id', [userId, to]),
+    admin.from('conquest_territories').select('team, owner_id').eq('league_id', leagueId).eq('season', season).in('team', [give, get]),
+    admin.from('conquest_trades').select('id, to_user, give_team, get_team').eq('league_id', leagueId).eq('season', season).eq('status', 'pending').eq('from_user', userId),
+  ])
+  const capital = new Map((players ?? []).map(p => [p.user_id as string, p.capital as string | null]))
+  if (!capital.has(userId) || !capital.has(to)) return json({ error: 'You both have to be in the war' }, 400)
+  const owner = new Map((cities ?? []).map(c => [c.team as string, c.owner_id as string | null]))
+  if (owner.get(give) !== userId) return json({ error: 'That city isn’t yours' }, 400)
+  if (owner.get(get) !== to) return json({ error: 'That city isn’t theirs' }, 400)
+  if (give === capital.get(userId) || get === capital.get(to)) return json({ error: 'Capitals can’t be traded' }, 400)
+  if ((mine ?? []).length >= 3) return json({ error: 'You have three offers out already: cancel one first' }, 409)
+  if ((mine ?? []).some(t => t.to_user === to && t.give_team === give && t.get_team === get)) return json({ error: 'You’ve already offered that' }, 409)
+  const { data: trade, error } = await admin.from('conquest_trades')
+    .insert({ league_id: leagueId, season, week: open.week, from_user: userId, to_user: to, give_team: give, get_team: get })
+    .select('id').single()
+  if (error) throw error
+  const who = await nameOfUser(admin, userId)
+  await tellTrade(admin, leagueId, to, userId, `${who} offers a trade`, `${CITY[give] ?? give} for your ${CITY[get] ?? get}. Answer before the week’s first kickoff.`)
+  return json({ trade: trade.id })
+}
+
+/** Accept or decline a trade offered to you. Accepted, the two cities swap at once (conquest_apply_trade). */
+async function tradeReply(admin: SupabaseClient, leagueId: string, userId: string, tradeId: string, accept: boolean) {
+  const season = nflSeasonFor(new Date())
+  const { data: t } = await admin.from('conquest_trades').select('*').eq('id', tradeId).eq('league_id', leagueId).maybeSingle()
+  if (!t || t.to_user !== userId) return json({ error: 'No such offer' }, 404)
+  if (t.status !== 'pending') return json({ error: `That offer’s ${t.status}` }, 409)
+  const who = await nameOfUser(admin, userId)
+  if (!accept) {
+    await admin.from('conquest_trades').update({ status: 'declined', decided_at: new Date().toISOString() }).eq('id', tradeId)
+    await tellTrade(admin, leagueId, t.from_user, userId, `${who} turned down your trade`, `${CITY[t.give_team] ?? t.give_team} for ${CITY[t.get_team] ?? t.get_team}: no deal.`)
+    return json({ declined: true })
+  }
+  const open = await openWeek(admin, leagueId, season)
+  if (open instanceof Response) return open
+  const { data: result, error } = await admin.rpc('conquest_apply_trade', { p_trade: tradeId, p_week: open.week })
+  if (error) throw error
+  if (result !== 'ok') return json({ error: 'One of those cities has changed hands (or become a capital): the offer’s void' }, 409)
+  await tellTrade(admin, leagueId, t.from_user, userId, `${who} took your trade`, `${CITY[t.get_team] ?? t.get_team} is yours, and ${CITY[t.give_team] ?? t.give_team} is theirs.`)
+  return json({ accepted: true })
+}
+
+/** Take back an offer you made, while it's still open. */
+async function tradeCancel(admin: SupabaseClient, leagueId: string, userId: string, tradeId: string) {
+  const { data, error } = await admin.from('conquest_trades').update({ status: 'cancelled', decided_at: new Date().toISOString() })
+    .eq('id', tradeId).eq('league_id', leagueId).eq('from_user', userId).eq('status', 'pending').select('id')
+  if (error) throw error
+  if (!data?.length) return json({ error: 'No open offer to cancel' }, 404)
+  return json({ cancelled: true })
+}
+
 /**
  * Your orders this week, before the first kickoff: the attack (an empire
  * on your border) or the flag (an unclaimed city next to you). Null puts
  * that one back to automatic; the other is kept.
  */
-async function setOrder(admin: SupabaseClient, leagueId: string, userId: string, change: { target?: string | null; claim?: string | null }) {
+async function setOrder(admin: SupabaseClient, leagueId: string, userId: string, change: { target?: string | null; claim?: string | null; fortify?: boolean; tribute?: string | null }) {
   const season = nflSeasonFor(new Date())
   const { data: war } = await admin.from('conquest_games').select('start_week, last_resolved_week, final_week')
     .eq('league_id', leagueId).eq('season', season).maybeSingle()
@@ -216,10 +351,23 @@ async function setOrder(admin: SupabaseClient, leagueId: string, userId: string,
   if (first && new Date(first.game_date).getTime() <= Date.now()) {
     return json({ error: 'Orders lock at the week’s first kickoff' }, 409)
   }
-  const { data: cities } = await admin.from('conquest_territories').select('team, owner_id').eq('league_id', leagueId).eq('season', season)
+  const { data: cities } = await admin.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', season)
   const owners: Record<string, string | null> = Object.fromEntries(TERRITORIES.map(t => [t, null]))
   for (const c of cities ?? []) owners[c.team] = c.owner_id
   if (!citiesOf(owners, userId).length) return json({ error: 'You’re in exile: retake your capital first' }, 409)
+  if (change.fortify) {
+    // Not two weeks running
+    const { data: last } = await admin.from('conquest_orders').select('fortify')
+      .eq('league_id', leagueId).eq('season', season).eq('week', week - 1).eq('user_id', userId).maybeSingle()
+    if (last?.fortify) return json({ error: 'You dug in last week: you can’t two weeks running' }, 409)
+  }
+  if (change.tribute) {
+    const { data: me } = await admin.from('conquest_players').select('capital').eq('league_id', leagueId).eq('season', season).eq('user_id', userId).maybeSingle()
+    const cap = me?.capital as string | undefined
+    const siege = (cities ?? []).find(c => c.team === cap)
+    if (!cap || owners[cap] !== userId || !siege?.besieged_by) return json({ error: 'Tribute is only for a capital under siege' }, 409)
+    if (owners[change.tribute] !== userId || change.tribute === cap) return json({ error: 'Pay with one of your other cities' }, 400)
+  }
   if (change.target && !neighborsOf(owners, userId).includes(change.target)) return json({ error: 'That empire isn’t on your border' }, 400)
   if (change.claim) {
     const mine = new Set(citiesOf(owners, userId))
@@ -228,14 +376,19 @@ async function setOrder(admin: SupabaseClient, leagueId: string, userId: string,
     }
   }
   const key = { league_id: leagueId, season, week, user_id: userId }
-  const { data: had } = await admin.from('conquest_orders').select('target_id, claim').match(key).maybeSingle()
-  const target = 'target' in change ? change.target ?? null : had?.target_id ?? null
+  const { data: had } = await admin.from('conquest_orders').select('target_id, claim, fortify, tribute').match(key).maybeSingle()
+  // Digging in and attacking are one or the other: choosing either drops the other
+  let target = 'target' in change ? change.target ?? null : had?.target_id ?? null
+  let fortify = 'fortify' in change ? !!change.fortify : !!had?.fortify
+  if ('target' in change && target) fortify = false
+  if ('fortify' in change && fortify) target = null
   const claim = 'claim' in change ? change.claim ?? null : had?.claim ?? null
-  const { error } = target == null && claim == null
+  const tribute = 'tribute' in change ? change.tribute ?? null : had?.tribute ?? null
+  const { error } = target == null && claim == null && !fortify && tribute == null
     ? await admin.from('conquest_orders').delete().match(key)
-    : await admin.from('conquest_orders').upsert({ ...key, target_id: target, claim, created_at: new Date().toISOString() })
+    : await admin.from('conquest_orders').upsert({ ...key, target_id: target, claim, fortify, tribute, created_at: new Date().toISOString() })
   if (error) throw error
-  return json({ week, target, claim })
+  return json({ week, target, claim, fortify, tribute })
 }
 
 async function resolveAll(admin: SupabaseClient) {
@@ -346,12 +499,15 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
   }
   // The week's attack orders (anyone's no longer on a border falls back to automatic)
   // The week's orders: attacks and flags (one no longer possible falls back to automatic)
-  const { data: orderRows } = await admin.from('conquest_orders').select('user_id, target_id, claim')
+  const { data: orderRows } = await admin.from('conquest_orders').select('user_id, target_id, claim, fortify, tribute')
     .eq('league_id', leagueId).eq('season', season).eq('week', week)
   const orders: Orders = Object.fromEntries((orderRows ?? []).filter(o => o.target_id).map(o => [o.user_id, o.target_id]))
   const claims: Claims = Object.fromEntries((orderRows ?? []).filter(o => o.claim).map(o => [o.user_id, o.claim]))
-  const after = resolveWeek(state, scores, roster, orders, claims)
+  const after = resolveWeek(state, scores, roster, orders, claims, otherOrders(orderRows ?? []))
   const moves = after.moves
+  // Trade offers nobody answered before the week began run out with it
+  await admin.from('conquest_trades').update({ status: 'expired', decided_at: new Date().toISOString() })
+    .eq('league_id', leagueId).eq('season', season).eq('status', 'pending').lte('week', week)
   // Who owns what, and which capitals are under siege, after the week
   for (const t of TERRITORIES) {
     const owner = after.owners[t] ?? null
@@ -371,7 +527,7 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
   if (moves.length) {
     const { error } = await admin.from('conquest_moves').insert(moves.map(m => ({
       league_id: leagueId, season, week, kind: m.kind, team: m.team, from_user: m.from, to_user: m.to,
-      score_for: m.score[0], score_against: m.score[1], exiled: !!m.exiled,
+      score_for: m.score[0], score_against: m.score[1], exiled: !!m.exiled, with_team: m.withTeam ?? null,
     })))
     if (error) throw error
   }
@@ -405,7 +561,7 @@ async function soFar(admin: SupabaseClient, leagueId: string) {
     admin.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', season),
     membersOf(admin, leagueId),
     admin.from('pickem_picks').select('user_id, game_id, picked_team, tiebreaker_score').eq('league_id', leagueId).eq('season', season).eq('week', week),
-    admin.from('conquest_orders').select('user_id, target_id, claim').eq('league_id', leagueId).eq('season', season).eq('week', week),
+    admin.from('conquest_orders').select('user_id, target_id, claim, fortify, tribute').eq('league_id', leagueId).eq('season', season).eq('week', week),
   ])
   const memberIds = new Set(members.map(m => m.userId))
   const owners: Record<string, string | null> = Object.fromEntries(TERRITORIES.map(t => [t, null]))
@@ -436,13 +592,13 @@ async function soFar(admin: SupabaseClient, leagueId: string) {
   }
   const orders: Orders = Object.fromEntries((orderRows ?? []).filter(o => o.target_id).map(o => [o.user_id, o.target_id]))
   const claims: Claims = Object.fromEntries((orderRows ?? []).filter(o => o.claim).map(o => [o.user_id, o.claim]))
-  const after = resolveWeek(state, scores, roster, orders, claims)
+  const after = resolveWeek(state, scores, roster, orders, claims, otherOrders(orderRows ?? []))
   return {
     week,
     pending,
     owners: after.owners,
     besieged: after.besieged,
-    moves: after.moves.map(m => ({ kind: m.kind, team: m.team, from: m.from, to: m.to, score: m.score, exiled: !!m.exiled })),
+    moves: after.moves.map(m => ({ kind: m.kind, team: m.team, from: m.from, to: m.to, score: m.score, exiled: !!m.exiled, withTeam: m.withTeam })),
   }
 }
 

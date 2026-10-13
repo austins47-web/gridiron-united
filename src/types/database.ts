@@ -689,7 +689,7 @@ export interface Database {
       }
       /** Attack and flag orders: yours always readable, everyone's once the week's first kickoff passes */
       conquest_orders: {
-        Row: { league_id: string; season: number; week: number; user_id: string; target_id: string | null; claim: string | null; created_at: string }
+        Row: { league_id: string; season: number; week: number; user_id: string; target_id: string | null; claim: string | null; fortify: boolean; tribute: string | null; created_at: string }
         Insert: never
         Update: never
         Relationships: []
@@ -700,14 +700,34 @@ export interface Database {
           league_id: string
           season: number
           week: number
-          kind: 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion'
+          kind: 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion' | 'tribute' | 'trade'
           team: string
           from_user: string | null
           to_user: string
           score_for: number
           score_against: number
           exiled: boolean
+          with_team: string | null
           created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      /** Trade offers: a city each way, seen by the two players in them */
+      conquest_trades: {
+        Row: {
+          id: string
+          league_id: string
+          season: number
+          week: number
+          from_user: string
+          to_user: string
+          give_team: string
+          get_team: string
+          status: 'pending' | 'accepted' | 'declined' | 'cancelled' | 'expired' | 'void'
+          created_at: string
+          decided_at: string | null
         }
         Insert: never
         Update: never

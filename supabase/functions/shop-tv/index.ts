@@ -587,17 +587,17 @@ async function conquestOf(admin: ReturnType<typeof createClient>, leagueId: stri
     admin.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', season),
     lastWeek == null
       ? Promise.resolve({ data: [] as never[] })
-      : admin.from('conquest_moves').select('kind, team, from_user, to_user, score_for, score_against, exiled')
+      : admin.from('conquest_moves').select('kind, team, from_user, to_user, score_for, score_against, exiled, with_team')
         .eq('league_id', leagueId).eq('season', season).eq('week', lastWeek).order('id'),
     open
-      ? admin.from('conquest_orders').select('user_id, target_id').eq('league_id', leagueId).eq('season', season).eq('week', battleWeek)
+      ? admin.from('conquest_orders').select('user_id, target_id, fortify, tribute').eq('league_id', leagueId).eq('season', season).eq('week', battleWeek)
       : Promise.resolve({ data: [] as never[] }),
   ])
   // Coded orders: before the week's first kickoff, who has sealed an attack (not on whom)
   let sealed: string[] = []
   if (!open) {
-    const { data: sealedRows } = await admin.from('conquest_orders').select('user_id, target_id').eq('league_id', leagueId).eq('season', season).eq('week', battleWeek)
-    sealed = (sealedRows ?? []).filter(r => r.target_id).map(r => r.user_id as string)
+    const { data: sealedRows } = await admin.from('conquest_orders').select('user_id, target_id, fortify, tribute').eq('league_id', leagueId).eq('season', season).eq('week', battleWeek)
+    sealed = (sealedRows ?? []).filter(r => r.target_id || r.fortify || r.tribute).map(r => r.user_id as string)
   }
   return {
     startWeek: war.start_week as number,
@@ -607,6 +607,9 @@ async function conquestOf(admin: ReturnType<typeof createClient>, leagueId: stri
     sealed,
     // Attacks only (a row can be just a flag order)
     orders: Object.fromEntries((orders ?? []).filter(o => o.target_id).map(o => [o.user_id, o.target_id])) as Record<string, string>,
+    // Who's dug in, and who's paying tribute with what (public with the orders, at the first kickoff)
+    fortified: (orders ?? []).filter(o => o.fortify).map(o => o.user_id as string),
+    tributes: Object.fromEntries((orders ?? []).filter(o => o.tribute).map(o => [o.user_id, o.tribute])) as Record<string, string>,
     crowned: (war.crowned ?? null) as unknown,
     players: (players ?? []).map(p => ({ userId: p.user_id as string, color: p.color as string, capital: p.capital as string | null })),
     owners: Object.fromEntries((cities ?? []).map(c => [c.team, c.owner_id])) as Record<string, string | null>,
@@ -616,6 +619,7 @@ async function conquestOf(admin: ReturnType<typeof createClient>, leagueId: stri
       moves: (moves ?? []).map(m => ({
         kind: m.kind as string, team: m.team as string, from: m.from_user as string | null, to: m.to_user as string,
         score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: !!m.exiled,
+        withTeam: (m.with_team as string | null) ?? null,
       })),
     },
   }

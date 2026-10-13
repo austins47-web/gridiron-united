@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Swords, Loader2, ChevronDown, Crosshair, Crown, Lock, Flag } from 'lucide-react'
+import { Swords, Loader2, ChevronDown, Crosshair, Crown, Lock, Flag, Shield, ArrowLeftRight } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -45,14 +45,14 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
       const [{ data: players }, { data: cities }, { data: moves }, { data: first }, { data: orders }] = await Promise.all([
         supabase.from('conquest_players').select('user_id, color, capital, city_weeks').eq('league_id', leagueId).eq('season', CURRENT_SEASON),
         supabase.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', CURRENT_SEASON),
-        supabase.from('conquest_moves').select('week, kind, team, from_user, to_user, score_for, score_against, exiled')
+        supabase.from('conquest_moves').select('week, kind, team, from_user, to_user, score_for, score_against, exiled, with_team')
           .eq('league_id', leagueId).eq('season', CURRENT_SEASON).order('week', { ascending: false }).order('id'),
         supabase.from('nfl_games').select('game_date').eq('season', CURRENT_SEASON).eq('week', battleWeek).order('game_date').limit(1).maybeSingle(),
-        supabase.from('conquest_orders').select('user_id, target_id, claim').eq('league_id', leagueId).eq('season', CURRENT_SEASON).eq('week', battleWeek),
+        supabase.from('conquest_orders').select('user_id, target_id, claim, fortify, tribute').eq('league_id', leagueId).eq('season', CURRENT_SEASON).eq('week', battleWeek),
       ])
       const log = (moves ?? []).map((m: any) => ({
         week: m.week, kind: m.kind, team: m.team, from: m.from_user, to: m.to_user,
-        score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: m.exiled,
+        score: [Number(m.score_for), Number(m.score_against)] as [number, number], exiled: m.exiled, withTeam: m.with_team,
       }))
       return {
         startWeek: war.start_week,
@@ -66,6 +66,8 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
         lockAt: first?.game_date ?? null,
         orders: Object.fromEntries((orders ?? []).filter((o: any) => o.target_id).map((o: any) => [o.user_id, o.target_id])),
         claims: Object.fromEntries((orders ?? []).filter((o: any) => o.claim).map((o: any) => [o.user_id, o.claim])),
+        fortified: (orders ?? []).filter((o: any) => o.fortify).map((o: any) => o.user_id),
+        tributes: Object.fromEntries((orders ?? []).filter((o: any) => o.tribute).map((o: any) => [o.user_id, o.tribute])),
         crowned: (war.crowned as Title[] | null) ?? null,
         log,
       }
@@ -197,6 +199,9 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
             <li>Level scores are settled like Pick’Em: the closer tiebreaker guess, then the better season win %. A battle that ends level still goes to the defender.</li>
             <li>Dotted lines on the map are sea lanes: the cities at each end border each other, like Risk.</li>
             <li>Lose everything and you’re in exile: outscore whoever holds your capital any week to take it back.</li>
+            <li>Dig in instead of attacking: anyone attacking you that week has to win by 2 or more. Not two weeks running.</li>
+            <li>Capital under siege? Pay tribute: hand one of your other cities to the besieger and the siege lifts before the week’s battles, so your capital can’t fall that week.</li>
+            <li>Trade a city for another player’s (never a capital) when you both agree. Trades happen before the week’s first kickoff.</li>
             <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire; on a tie, whoever held the most cities week by week all season), Warlord, Siege Master, Unbreakable, Comeback Kid and Iron Grip (the most cities held, added up week after week).</li>
             <li>Cities that would change hands if the week ended now pulse on the map.</li>
           </ul>
@@ -218,6 +223,10 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
 
       {userId && battleWeek != null && battleWeek <= (data.finalWeek ?? 18) && week === battleWeek && (
         <OrdersCard war={data} userId={userId} week={battleWeek} sender={sender} />
+      )}
+
+      {userId && battleWeek != null && week === battleWeek && battleWeek <= (data.finalWeek ?? 18) && (
+        <Trades war={data} leagueId={leagueId} userId={userId} locked={!!lockAt && Date.now() >= lockAt.getTime()} onDone={() => qc.invalidateQueries({ queryKey: key })} />
       )}
 
       {userId && battleWeek != null && week === battleWeek && battleWeek <= (data.finalWeek ?? 18) && (
@@ -318,6 +327,10 @@ function useOrderSender(leagueId: string, onSaved: () => void) {
       id ? `You’re attacking ${name ?? 'them'} this week` : 'Attack back to automatic'),
     flag: (team: string | null) => send(`flag:${team ?? 'auto'}`, { action: 'claim', team },
       team ? `Your flag goes to ${CITY[team] ?? team} if you finish in the top half` : 'Flag back to automatic'),
+    fortify: (on: boolean) => send(on ? 'dig:on' : 'dig:off', { action: 'fortify', on },
+      on ? 'You’re dug in this week: no attack, and they need to win by 2' : 'Back to attacking'),
+    tribute: (team: string | null) => send(`tribute:${team ?? 'none'}`, { action: 'tribute', team },
+      team ? `${CITY[team] ?? team} goes as tribute, and the siege lifts before the battles` : 'No tribute'),
   }
 }
 
@@ -329,13 +342,19 @@ function useOrderSender(leagueId: string, onSaved: () => void) {
  * when everyone's choices come out.
  */
 function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; week: number; sender: OrderSender }) {
-  const { busy, attack, flag } = sender
+  const { busy, attack, flag, fortify, tribute } = sender
   const mine = citiesOf(war.owners, userId)
   if (!mine.length) return null
   const lockAt = war.lockAt ? new Date(war.lockAt) : null
   const locked = !!lockAt && Date.now() >= lockAt.getTime()
   const target = war.orders?.[userId] ?? null
+  const dugIn = (war.fortified ?? []).includes(userId)
   const player = (id: string) => war.players.find(p => p.userId === id)
+  // Tribute: your capital's under siege, and you've another city to pay with
+  const myCapital = player(userId)?.capital ?? null
+  const besieger = myCapital && war.owners[myCapital] === userId ? war.besieged[myCapital] ?? null : null
+  const payWith = besieger ? mine.filter(t => t !== myCapital) : []
+  const paying = war.tributes?.[userId] && payWith.includes(war.tributes[userId]) ? war.tributes[userId] : null
   const mineSet = new Set(mine)
   const bordering = (t: string) => ADJ[t].filter(n => mineSet.has(n)).length
   const neighbors = neighborsOf(war.owners, userId).map(id => {
@@ -373,9 +392,13 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
       {locked ? (
         <div className="text-sm text-field-300 space-y-1">
           <p>
-            <Swords className="inline w-3.5 h-3.5 mr-1 text-field-400" />
-            {target ? <>Attacking <span className="font-bold text-white">{player(target)?.name ?? 'Someone'}</span> (your choice).</> : 'Attack: automatic, the neighbor you pick most differently from.'}
+            {dugIn ? <Shield className="inline w-3.5 h-3.5 mr-1 text-field-400" /> : <Swords className="inline w-3.5 h-3.5 mr-1 text-field-400" />}
+            {dugIn ? <>Dug in: no attack, and anyone attacking you needs to win by 2.</>
+              : target ? <>Attacking <span className="font-bold text-white">{player(target)?.name ?? 'Someone'}</span> (your choice).</> : 'Attack: automatic, the neighbor you pick most differently from.'}
           </p>
+          {paying && (
+            <p>🪙 Tribute: <span className="font-bold text-white">{CITY[paying]}</span> to {player(besieger!)?.name ?? 'your besieger'}, and the siege lifts.</p>
+          )}
           {open.length > 0 && (
             <p>
               <Flag className="inline w-3.5 h-3.5 mr-1 text-field-400" />
@@ -389,10 +412,15 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
 
           <p className="text-[11px] font-bold uppercase tracking-wider text-field-400 mb-1.5">Attack</p>
           <div className="space-y-1.5">
-            <button onClick={() => attack(null)} disabled={!!busy} className={row(!target)}>
-              {busy === 'atk:auto' ? spin : <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />}
+            <button onClick={() => (dugIn ? fortify(false) : attack(null))} disabled={!!busy} className={row(!target && !dugIn)}>
+              {busy === 'atk:auto' || busy === 'dig:off' ? spin : <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />}
               <span className="font-bold text-white">Automatic</span>
               <span className="text-[11px] text-field-500 truncate">the neighbor you pick most differently from</span>
+            </button>
+            <button onClick={() => fortify(!dugIn)} disabled={!!busy} className={row(dugIn)}>
+              {busy === 'dig:on' ? spin : <Shield className="w-3.5 h-3.5 text-[#3fd0ff] shrink-0" />}
+              <span className="font-bold text-white">Dig in</span>
+              <span className="text-[11px] text-field-500 truncate">no attack; anyone attacking you must win by 2 (not two weeks running)</span>
             </button>
             {neighbors.map(n => (
               <button key={n.id} onClick={() => attack(n.id, n.name)} disabled={!!busy} className={row(target === n.id)}>
@@ -405,6 +433,28 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
               </button>
             ))}
           </div>
+
+          {besieger && payWith.length > 0 && (
+            <>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-field-400 mt-4 mb-1">Tribute</p>
+              <p className="text-[11px] text-field-500 mb-1.5">
+                Your capital is under siege by {player(besieger)?.name ?? 'someone'}. Hand them a city and the siege lifts before the battles: {myCapital ? CITY[myCapital] : 'your capital'} can’t fall this week.
+              </p>
+              <div className="space-y-1.5">
+                <button onClick={() => tribute(null)} disabled={!!busy} className={row(!paying)}>
+                  {busy === 'tribute:none' ? spin : <Shield className="w-3.5 h-3.5 text-field-400 shrink-0" />}
+                  <span className="font-bold text-white">No tribute</span>
+                  <span className="text-[11px] text-field-500 truncate">hold out</span>
+                </button>
+                {payWith.map(t => (
+                  <button key={t} onClick={() => tribute(t)} disabled={!!busy} className={row(paying === t)}>
+                    {busy === `tribute:${t}` ? spin : <span className="shrink-0" aria-hidden>🪙</span>}
+                    <span className="font-bold text-white truncate">Pay with {CITY[t] ?? t}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           {open.length > 0 && (
             <>
@@ -431,6 +481,135 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
             </>
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+type Trade = { id: string; from_user: string; to_user: string; give_team: string; get_team: string; week: number; status: string }
+
+/**
+ * Trades: offer one of your cities for one of someone else's (never a
+ * capital), and answer the offers made to you. Swaps happen at once, before
+ * the week's first kickoff; after it, offers wait for the week to settle,
+ * and any not answered by then run out.
+ */
+function Trades({ war, leagueId, userId, locked, onDone }: { war: War; leagueId: string; userId: string; locked: boolean; onDone: () => void }) {
+  const qc = useQueryClient()
+  const key = ['conquest-trades', leagueId, CURRENT_SEASON]
+  const { data: trades = [] } = useQuery({
+    queryKey: key,
+    staleTime: 30_000,
+    refetchInterval: 2 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('conquest_trades').select('id, from_user, to_user, give_team, get_team, week, status')
+        .eq('league_id', leagueId).eq('season', CURRENT_SEASON).eq('status', 'pending').order('created_at')
+      if (error) throw error
+      return (data ?? []) as Trade[]
+    },
+  })
+  const [busy, setBusy] = useState<string | null>(null)
+  const [give, setGive] = useState('')
+  const [withId, setWithId] = useState('')
+  const [get, setGet] = useState('')
+  const capitalOf = (id: string) => war.players.find(p => p.userId === id)?.capital ?? null
+  const nameOf = (id: string) => war.players.find(p => p.userId === id)?.name ?? 'Someone'
+  const tradeable = (id: string) => citiesOf(war.owners, id).filter(t => t !== capitalOf(id))
+  const mine = tradeable(userId)
+  const partners = war.players.filter(p => p.userId !== userId && tradeable(p.userId).length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const incoming = trades.filter(t => t.to_user === userId)
+  const outgoing = trades.filter(t => t.from_user === userId)
+  if (!mine.length && !incoming.length && !outgoing.length) return null
+
+  const call = async (busyKey: string, body: Record<string, unknown>, done: string) => {
+    setBusy(busyKey)
+    const { error } = await supabase.functions.invoke('conquest', { body: { league_id: leagueId, ...body } })
+    setBusy(null)
+    if (error) {
+      const msg = await (error as any)?.context?.json?.().then((b: any) => b?.error).catch(() => null)
+      toast.error(msg ?? 'Couldn’t do that')
+      return false
+    }
+    toast.success(done)
+    qc.invalidateQueries({ queryKey: key })
+    onDone()
+    return true
+  }
+  const offer = async () => {
+    if (await call('offer', { action: 'trade_offer', to: withId, give, get }, `Offer sent to ${nameOf(withId)}`)) { setGive(''); setGet('') }
+  }
+  const select = 'w-full rounded-lg border border-field-700 bg-field-800 px-2 py-1.5 text-sm text-white'
+  const spin = <Loader2 className="w-3.5 h-3.5 animate-spin" />
+  return (
+    <div className="panel p-4">
+      <div className="flex items-center gap-2 mb-1">
+        <ArrowLeftRight className="w-4 h-4 text-gold" />
+        <p className="font-cond font-bold text-sm uppercase tracking-wider text-white">Trades</p>
+      </div>
+      <p className="text-xs text-field-400 mb-3">
+        {locked
+          ? 'Trades are closed until this week settles. Offers not answered by then run out.'
+          : 'Swap a city for someone else’s, never a capital. It happens the moment they accept, before the week’s first kickoff.'}
+      </p>
+
+      {incoming.length > 0 && (
+        <ul className="space-y-1.5 mb-3">
+          {incoming.map(t => (
+            <li key={t.id} className="rounded-lg border border-gold/40 bg-gold/10 px-2.5 py-2 text-sm">
+              <p className="text-field-200"><span className="font-bold text-white">{nameOf(t.from_user)}</span> offers <span className="font-bold text-white">{CITY[t.give_team]}</span> for your <span className="font-bold text-white">{CITY[t.get_team]}</span></p>
+              {!locked && (
+                <div className="flex gap-2 mt-1.5">
+                  <button onClick={() => call(`yes:${t.id}`, { action: 'trade_reply', trade_id: t.id, accept: true }, `${CITY[t.give_team]} is yours`)} disabled={!!busy} className="btn-gold !py-1 !px-3 text-xs">
+                    {busy === `yes:${t.id}` ? spin : 'Accept'}
+                  </button>
+                  <button onClick={() => call(`no:${t.id}`, { action: 'trade_reply', trade_id: t.id, accept: false }, 'Offer declined')} disabled={!!busy} className="rounded-lg border border-field-600 px-3 py-1 text-xs font-bold text-field-300 hover:text-white">
+                    {busy === `no:${t.id}` ? spin : 'Decline'}
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {outgoing.length > 0 && (
+        <ul className="space-y-1.5 mb-3">
+          {outgoing.map(t => (
+            <li key={t.id} className="flex items-center gap-2 rounded-lg bg-field-800/60 px-2.5 py-2 text-sm">
+              <span className="text-field-300 truncate">You offered <span className="font-bold text-white">{CITY[t.give_team]}</span> for {nameOf(t.to_user)}’s <span className="font-bold text-white">{CITY[t.get_team]}</span></span>
+              <button onClick={() => call(`cancel:${t.id}`, { action: 'trade_cancel', trade_id: t.id }, 'Offer withdrawn')} disabled={!!busy} className="ml-auto shrink-0 text-[11px] font-bold text-field-400 hover:text-white">
+                {busy === `cancel:${t.id}` ? spin : 'Withdraw'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!locked && mine.length > 0 && partners.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto] items-end">
+          <label className="text-[11px] text-field-400">You give
+            <select value={give} onChange={e => setGive(e.target.value)} className={select}>
+              <option value="">Your city…</option>
+              {mine.map(t => <option key={t} value={t}>{CITY[t]}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px] text-field-400">To
+            <select value={withId} onChange={e => { setWithId(e.target.value); setGet('') }} className={select}>
+              <option value="">Player…</option>
+              {partners.map(p => <option key={p.userId} value={p.userId}>{p.name}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px] text-field-400">For
+            <select value={get} onChange={e => setGet(e.target.value)} disabled={!withId} className={select}>
+              <option value="">Their city…</option>
+              {withId && tradeable(withId).map(t => <option key={t} value={t}>{CITY[t]}</option>)}
+            </select>
+          </label>
+          <button onClick={offer} disabled={!!busy || !give || !withId || !get} className="btn-gold justify-center">
+            {busy === 'offer' ? spin : 'Offer'}
+          </button>
+        </div>
       )}
     </div>
   )
@@ -610,7 +789,9 @@ function CodedOrders({ war, leagueId, week, userId, locked }: { war: War; league
   const nameOf = (id: string) => war.players.find(p => p.userId === id)?.name ?? 'Someone'
   const colorOf = (id: string) => war.players.find(p => p.userId === id)?.color ?? '#666'
   const orders = war.orders ?? {}
-  const ids = locked ? Object.keys(orders) : [...new Set([...sealed, ...(orders[userId] ? [userId] : [])])]
+  const dug = war.fortified ?? []
+  const mineSealed = orders[userId] || dug.includes(userId) || war.tributes?.[userId]
+  const ids = locked ? [...new Set([...Object.keys(orders), ...dug])] : [...new Set([...sealed, ...(mineSealed ? [userId] : [])])]
   const rows = ids
     .sort((a, b) => Number(b === userId) - Number(a === userId) || nameOf(a).localeCompare(nameOf(b)))
     .map(id => ({
@@ -618,7 +799,7 @@ function CodedOrders({ war, leagueId, week, userId, locked }: { war: War; league
       name: nameOf(id),
       color: colorOf(id),
       // Yours you can always read
-      target: orders[id] && (locked || id === userId) ? nameOf(orders[id]) : null,
+      target: !(locked || id === userId) ? null : orders[id] ? nameOf(orders[id]) : dug.includes(id) ? '🛡 Dug in' : null,
       code: cipherOf(`${leagueId}|${week}|${id}`),
     }))
   const empires = war.players.filter(p => citiesOf(war.owners, p.userId).length).length
