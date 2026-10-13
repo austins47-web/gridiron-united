@@ -221,7 +221,7 @@ async function resolveAll(admin: SupabaseClient) {
 
 async function settleWeek(admin: SupabaseClient, leagueId: string, season: number, week: number, games: Game[]): Promise<number> {
   const [{ data: players }, { data: territories }, members, { data: picks }] = await Promise.all([
-    admin.from('conquest_players').select('user_id, capital, color').eq('league_id', leagueId).eq('season', season),
+    admin.from('conquest_players').select('user_id, capital, color, city_weeks').eq('league_id', leagueId).eq('season', season),
     admin.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', season),
     membersOf(admin, leagueId),
     admin.from('pickem_picks').select('user_id, game_id, picked_team, tiebreaker_score').eq('league_id', leagueId).eq('season', season).eq('week', week),
@@ -254,7 +254,7 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
         ?? (m.favorite && POS[m.favorite] ? m.favorite : TERRITORIES[[...m.userId].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % TERRITORIES.length])
       const row = { league_id: leagueId, season, user_id: m.userId, color: empireColor(i++), capital, joined_week: week }
       await admin.from('conquest_players').insert(row)
-      inWar.set(m.userId, row)
+      inWar.set(m.userId, { ...row, city_weeks: 0 })
       if (capitals[m.userId]) {
         owners[capital] = m.userId
         await admin.from('conquest_territories').update({ owner_id: m.userId, since_week: week }).eq('league_id', leagueId).eq('season', season).eq('team', capital)
@@ -303,6 +303,13 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
     const row: Record<string, unknown> = { owner_id: owner, besieged_by: siege }
     if (owner !== (owners[t] ?? null)) row.since_week = week
     await admin.from('conquest_territories').update(row).eq('league_id', leagueId).eq('season', season).eq('team', t)
+  }
+  // Everyone's city-weeks: the cities they hold now the week's settled (Emperor's tiebreak)
+  for (const u of roster) {
+    const held = TERRITORIES.filter(t => after.owners[t] === u).length
+    if (!held) continue
+    await admin.from('conquest_players').update({ city_weeks: Number(inWar.get(u)?.city_weeks ?? 0) + held })
+      .eq('league_id', leagueId).eq('season', season).eq('user_id', u)
   }
   if (moves.length) {
     const { error } = await admin.from('conquest_moves').insert(moves.map(m => ({
@@ -410,10 +417,11 @@ async function crown(admin: SupabaseClient, leagueId: string, season: number) {
   const [{ data: moves }, { data: cities }, { data: players }] = await Promise.all([
     admin.from('conquest_moves').select('kind, from_user, to_user').eq('league_id', leagueId).eq('season', season),
     admin.from('conquest_territories').select('team, owner_id').eq('league_id', leagueId).eq('season', season),
-    admin.from('conquest_players').select('user_id').eq('league_id', leagueId).eq('season', season),
+    admin.from('conquest_players').select('user_id, city_weeks').eq('league_id', leagueId).eq('season', season),
   ])
   const owners: Record<string, string | null> = Object.fromEntries((cities ?? []).map(c => [c.team, c.owner_id]))
   const log = (moves ?? []).map(m => ({ kind: m.kind as Move['kind'], from: m.from_user as string | null, to: m.to_user as string }))
-  const crowned = titles(log, owners, (players ?? []).map(p => p.user_id as string))
+  const cityWeeks = Object.fromEntries((players ?? []).map(p => [p.user_id as string, Number(p.city_weeks ?? 0)]))
+  const crowned = titles(log, owners, (players ?? []).map(p => p.user_id as string), cityWeeks)
   await admin.from('conquest_games').update({ crowned }).eq('league_id', leagueId).eq('season', season)
 }

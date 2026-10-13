@@ -24,6 +24,8 @@
 // - Sea lanes (dotted on the map) count as borders, Risk style.
 // - A city changes hands at most once a week; everything is decided on
 //   the map as it stood when the week began.
+// - The biggest empire after the last week is Emperor; a tie goes to the
+//   most city-weeks (cities held, added up every week).
 // ══════════════════════════════════════════════════════════════
 
 /** Each stadium on the map (the app's map space, 1000×620): for ordering, never for borders. */
@@ -462,9 +464,11 @@ const TITLE_INFO: Record<Title['key'], { icon: string; label: string; blurb: str
  * The season's titles from the war log and the map as it stands: who
  * leads each (the race during the season; crowned after the last week).
  * A title nobody's earned (a count of 0) isn't given. A tie goes to the
- * bigger empire; still tied, they share it (nobody's out in front yet).
+ * bigger empire; for Emperor (all the same size), to the most city-weeks
+ * (`cityWeeks`: cities held, added up every settled week). Still tied,
+ * they share it (nobody's out in front yet).
  */
-export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Record<string, string | null>, players: string[]): Title[] {
+export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Record<string, string | null>, players: string[], cityWeeks: Record<string, number> = {}): Title[] {
   const cities = (u: string) => citiesOf(owners, u).length
   const count = (pred: (m: Pick<Move, 'kind' | 'to' | 'from'>) => boolean) => {
     const n: Record<string, number> = {}
@@ -487,6 +491,10 @@ export function titles(moves: Pick<Move, 'kind' | 'to' | 'from'>[], owners: Reco
     let lead = ranked.filter(x => x.v === top)
     const most = Math.max(...lead.map(x => x.c))
     lead = lead.filter(x => x.c === most)
+    if (key === 'emperor') {
+      const held = Math.max(...lead.map(x => cityWeeks[x.u] ?? 0))
+      lead = lead.filter(x => (cityWeeks[x.u] ?? 0) === held)
+    }
     out.push({ key, ...TITLE_INFO[key], holders: lead.map(x => x.u).sort(), value: top })
   }
   return out

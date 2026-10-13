@@ -43,7 +43,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
       const battleWeek = (war.last_resolved_week ?? war.start_week - 1) + 1
       // This week's orders: yours, and everyone's once the first kickoff reveals them
       const [{ data: players }, { data: cities }, { data: moves }, { data: first }, { data: orders }] = await Promise.all([
-        supabase.from('conquest_players').select('user_id, color, capital').eq('league_id', leagueId).eq('season', CURRENT_SEASON),
+        supabase.from('conquest_players').select('user_id, color, capital, city_weeks').eq('league_id', leagueId).eq('season', CURRENT_SEASON),
         supabase.from('conquest_territories').select('team, owner_id, besieged_by').eq('league_id', leagueId).eq('season', CURRENT_SEASON),
         supabase.from('conquest_moves').select('week, kind, team, from_user, to_user, score_for, score_against, exiled')
           .eq('league_id', leagueId).eq('season', CURRENT_SEASON).order('week', { ascending: false }).order('id'),
@@ -58,7 +58,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
         startWeek: war.start_week,
         lastWeek: war.last_resolved_week,
         // Names go on when it's drawn: the member list may still be loading now
-        players: (players ?? []).map((p: any): ConquestPlayer => ({ userId: p.user_id, color: p.color, capital: p.capital, name: '' })),
+        players: (players ?? []).map((p: any): ConquestPlayer => ({ userId: p.user_id, color: p.color, capital: p.capital, name: '', cityWeeks: p.city_weeks ?? 0 })),
         owners: Object.fromEntries((cities ?? []).map((c: any) => [c.team, c.owner_id])),
         besieged: Object.fromEntries((cities ?? []).filter((c: any) => c.besieged_by).map((c: any) => [c.team, c.besieged_by])),
         report: null,
@@ -196,7 +196,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
             <li>Level scores are settled like Pick’Em: the closer tiebreaker guess, then the better season win %. A battle that ends level still goes to the defender.</li>
             <li>Dotted lines on the map are sea lanes: the cities at each end border each other, like Risk.</li>
             <li>Lose everything and you’re in exile: outscore whoever holds your capital any week to take it back.</li>
-            <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire), Warlord, Siege Master, Unbreakable, Comeback Kid and Pioneer.</li>
+            <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire; on a tie, whoever held the most cities week by week all season), Warlord, Siege Master, Unbreakable, Comeback Kid and Pioneer.</li>
             <li>Cities that would change hands if the week ended now pulse on the map.</li>
           </ul>
         )}
@@ -433,7 +433,7 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
 
 /** The season's titles: the race as it stands, or the crowned ones once the war's over. */
 function TitleRace({ war, userId }: { war: War; userId: string | undefined }) {
-  const list = war.crowned ?? titles(war.log, war.owners, war.players.map(p => p.userId))
+  const list = war.crowned ?? titles(war.log, war.owners, war.players.map(p => p.userId), Object.fromEntries(war.players.map(p => [p.userId, p.cityWeeks ?? 0])))
   if (!list.length) return null
   const player = (id: string) => war.players.find(p => p.userId === id)
   return (

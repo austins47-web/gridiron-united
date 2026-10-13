@@ -18,7 +18,11 @@ export function swatch(color: string): CSSProperties {
   return { background: color }
 }
 
-export interface ConquestPlayer { userId: string; color: string; capital: string | null; name: string; avatarUrl?: string | null }
+export interface ConquestPlayer {
+  userId: string; color: string; capital: string | null; name: string; avatarUrl?: string | null
+  /** cities held, added up every settled week (Emperor's tiebreak) */
+  cityWeeks?: number
+}
 
 export interface ConquestMove {
   kind: MoveKind

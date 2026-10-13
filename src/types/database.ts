@@ -676,7 +676,7 @@ export interface Database {
         Relationships: []
       }
       conquest_players: {
-        Row: { league_id: string; season: number; user_id: string; color: string; capital: string | null; joined_week: number }
+        Row: { league_id: string; season: number; user_id: string; color: string; capital: string | null; joined_week: number; city_weeks: number }
         Insert: never
         Update: never
         Relationships: []
