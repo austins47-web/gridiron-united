@@ -5,7 +5,7 @@ import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
-import { CITY, ADJ, TERRITORIES, MEDAL_INFO, citiesOf, neighborsOf, type Medal, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
+import { CITY, ADJ, TERRITORIES, MEDAL_INFO, citiesOf, neighborsOf, startOdds, imbalance, type Medal, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
 import { WarMap } from '@/components/conquest/WarMap'
 import { empires, liveBattles, headline, titles, seasonMedals, swatch, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
 import { ConquestIcon } from '@/components/conquest/ConquestIcon'
@@ -85,14 +85,15 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
   const [starting, setStarting] = useState(false)
   const start = async () => {
     setStarting(true)
-    const { error } = await supabase.functions.invoke('conquest', { body: { action: 'start', league_id: leagueId } })
+    const { data: started, error } = await supabase.functions.invoke('conquest', { body: { action: 'start', league_id: leagueId } })
     setStarting(false)
     if (error) {
       const msg = await (error as any)?.context?.json?.().then((b: any) => b?.error).catch(() => null)
       toast.error(msg ?? 'Couldn’t start the war')
       return
     }
-    toast.success('The war is on. Capitals are handed out.')
+    const moved = (started?.balanced ?? []).length
+    toast.success(`The war is on. Capitals are handed out${moved ? `, ${moved === 1 ? 'one' : moved} moved for a fair start` : ''}.`)
     qc.invalidateQueries({ queryKey: key })
   }
 
@@ -235,6 +236,10 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
             </>
           )}
         </div>
+      )}
+
+      {isCommissioner && data.lastWeek == null && !(lockAt && Date.now() >= lockAt.getTime()) && (
+        <FairStart war={data} leagueId={leagueId} onMoved={() => qc.invalidateQueries({ queryKey: key })} />
       )}
 
       <TitleRace war={data} userId={userId} />
@@ -426,6 +431,66 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
             </>
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The commissioner's look at the starts, before the war's first kickoff:
+ * each player's estimated chance of the crown against a fair share
+ * (startOdds), and if it's lopsided, a button to even it out (the server
+ * moves the fewest capitals that fix it, never off a favorite team's city).
+ */
+function FairStart({ war, leagueId, onMoved }: { war: War; leagueId: string; onMoved: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const caps = war.players.filter(p => p.capital)
+  const odds = startOdds(caps.map(p => p.capital!))
+  const off = imbalance(caps.map(p => p.capital!))
+  const lopsided = off > 0.3
+  const rows = [...caps].sort((a, b) => odds[b.capital!] - odds[a.capital!])
+  const even = async () => {
+    setBusy(true)
+    const { data, error } = await supabase.functions.invoke('conquest', { body: { action: 'balance', league_id: leagueId } })
+    setBusy(false)
+    if (error) {
+      const msg = await (error as any)?.context?.json?.().then((b: any) => b?.error).catch(() => null)
+      toast.error(msg ?? 'Couldn’t move the capitals')
+      return
+    }
+    const moves: { userId: string; from: string; to: string }[] = data?.moves ?? []
+    const name = (u: string) => war.players.find(p => p.userId === u)?.name ?? 'Someone'
+    toast.success(moves.length ? moves.map(m => `${name(m.userId)}: ${CITY[m.from]} → ${CITY[m.to]}`).join(' · ') : 'Already as even as it gets')
+    onMoved()
+  }
+  return (
+    <div className={clsx('panel p-4', lopsided && 'border-amber-500/40')}>
+      <p className="font-cond font-bold text-sm uppercase tracking-wider text-white mb-1">Fair start · only you see this</p>
+      <p className="text-xs text-field-400 mb-3">
+        {lopsided
+          ? 'Some capitals start well ahead of others: open land next to them that nobody else is near. Moving a capital or two evens it out.'
+          : 'The starts are even: nobody’s far ahead on where they begin.'}
+        {' '}Each player’s chance of ending as Emperor, against a fair share, if everyone picked equally well.
+      </p>
+      <ul className="space-y-1 mb-3">
+        {rows.map(p => {
+          const v = odds[p.capital!]
+          return (
+            <li key={p.userId} className="flex items-center gap-2 text-xs">
+              <span className="w-28 truncate text-field-300">{p.name}</span>
+              <span className="w-24 truncate text-field-500">{CITY[p.capital!]}</span>
+              <span className="flex-1 h-2 rounded bg-field-800 overflow-hidden">
+                <span className={clsx('block h-full rounded', v > 2 || v < 0.5 ? 'bg-amber-500' : 'bg-field-400')} style={{ width: `${Math.min(100, (v / 3) * 100)}%` }} />
+              </span>
+              <span className={clsx('w-10 text-right tabular-nums', v > 2 || v < 0.5 ? 'text-amber-400' : 'text-field-400')}>×{v.toFixed(1)}</span>
+            </li>
+          )
+        })}
+      </ul>
+      {lopsided && (
+        <button onClick={even} disabled={busy} className="btn-gold">
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Swords className="w-4 h-4" />} Even it out
+        </button>
       )}
     </div>
   )

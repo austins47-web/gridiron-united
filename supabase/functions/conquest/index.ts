@@ -26,7 +26,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isFinal, isVoid, isWeekComplete, winnerOf, nflSeasonFor, tiebreakerTotal, type Game } from '../_shared/pickemCore.ts'
 import {
-  TERRITORIES, POS, assignCapitals, empireColor, resolveWeek, citiesOf, neighborsOf, titles,
+  TERRITORIES, POS, assignCapitals, balanceCapitals, startOdds, empireColor, resolveWeek, citiesOf, neighborsOf, titles,
   ADJ, type ConquestState, type WeekScores, type Orders, type Claims, type Move,
 } from '../_shared/conquest.ts'
 
@@ -71,6 +71,16 @@ serve(async (req) => {
       return body.action === 'target'
         ? await setOrder(admin, body.league_id, user.id, { target: typeof body.target === 'string' ? body.target : null })
         : await setOrder(admin, body.league_id, user.id, { claim: typeof body.team === 'string' ? body.team : null })
+    }
+
+    if (body.action === 'balance') {
+      if (typeof body.league_id !== 'string') return json({ error: 'league_id required' }, 400)
+      const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
+      const { data: { user } } = await userClient.auth.getUser()
+      if (!user) return json({ error: 'Sign in first' }, 401)
+      const { data: isCommish } = await userClient.rpc('is_league_commissioner', { check_league_id: body.league_id })
+      if (!isCommish) return json({ error: 'Only the commissioner can move capitals' }, 403)
+      return await balance(admin, body.league_id)
     }
 
     if (body.action === 'start') {
@@ -131,7 +141,13 @@ async function start(admin: SupabaseClient, leagueId: string, startWeek: number 
   }
 
   const members = await membersOf(admin, leagueId)
-  const capitals = assignCapitals(members.map(m => ({ userId: m.userId, favorite: m.favorite && POS[m.favorite] ? m.favorite : null })))
+  const placed = assignCapitals(members.map(m => ({ userId: m.userId, favorite: m.favorite && POS[m.favorite] ? m.favorite : null })))
+  // Then a fair start: anyone not on their favorite team's city can be moved to even out
+  // everyone's chances (someone placed near a favorite that was taken, only if it's clearly better)
+  const favorite = new Map(members.map(m => [m.userId, m.favorite]))
+  const keep = new Set(Object.keys(placed).filter(u => placed[u] === favorite.get(u)))
+  const nearFavorite = new Set(Object.keys(placed).filter(u => !keep.has(u) && favorite.get(u)))
+  const { capitals, moves: balanced } = balanceCapitals(placed, keep, nearFavorite)
   // Colors walk the wheel west to east, so neighbors never look alike
   const byPlace = Object.entries(capitals).sort(([, a], [, b]) => POS[a][0] - POS[b][0] || POS[a][1] - POS[b][1])
   const color = new Map(byPlace.map(([u], i) => [u, empireColor(i)]))
@@ -147,7 +163,40 @@ async function start(admin: SupabaseClient, leagueId: string, startWeek: number 
     league_id: leagueId, season, team: t, owner_id: ownerOf.get(t) ?? null, since_week: ownerOf.has(t) ? week : null,
   })))
   if (tErr) throw tErr
-  return json({ started: true, season, start_week: week, players: members.length, capitals })
+  return json({ started: true, season, start_week: week, players: members.length, capitals, balanced, odds: startOdds(Object.values(capitals)) })
+}
+
+/**
+ * Evens out the starts (the commissioner's call, before the war's first
+ * kickoff, so no battle's been fought on the old map): anyone not on their
+ * favorite team's city can move to an open one, the moves that help most
+ * (balanceCapitals). Their old capital goes back to open land.
+ */
+async function balance(admin: SupabaseClient, leagueId: string) {
+  const season = nflSeasonFor(new Date())
+  const { data: war } = await admin.from('conquest_games').select('start_week, last_resolved_week')
+    .eq('league_id', leagueId).eq('season', season).maybeSingle()
+  if (!war) return json({ error: 'No war yet' }, 404)
+  const { data: first } = await admin.from('nfl_games').select('game_date')
+    .eq('season', season).eq('week', war.start_week).order('game_date').limit(1).maybeSingle()
+  if (war.last_resolved_week != null || (first && Date.now() >= new Date(first.game_date as string).getTime())) {
+    return json({ error: 'The war’s first battles have begun: capitals stay where they are' }, 409)
+  }
+  const [{ data: players }, members] = await Promise.all([
+    admin.from('conquest_players').select('user_id, capital').eq('league_id', leagueId).eq('season', season),
+    membersOf(admin, leagueId),
+  ])
+  const favorite = new Map(members.map(m => [m.userId, m.favorite]))
+  const placed: Record<string, string> = Object.fromEntries((players ?? []).filter(p => p.capital).map(p => [p.user_id as string, p.capital as string]))
+  const keep = new Set(Object.keys(placed).filter(u => placed[u] === favorite.get(u)))
+  const nearFavorite = new Set(Object.keys(placed).filter(u => !keep.has(u) && favorite.get(u)))
+  const { capitals, moves } = balanceCapitals(placed, keep, nearFavorite)
+  for (const m of moves) {
+    await admin.from('conquest_players').update({ capital: m.to }).eq('league_id', leagueId).eq('season', season).eq('user_id', m.userId)
+    await admin.from('conquest_territories').update({ owner_id: null, since_week: null, besieged_by: null }).eq('league_id', leagueId).eq('season', season).eq('team', m.from)
+    await admin.from('conquest_territories').update({ owner_id: m.userId, since_week: war.start_week, besieged_by: null }).eq('league_id', leagueId).eq('season', season).eq('team', m.to)
+  }
+  return json({ moves, odds: startOdds(Object.values(capitals)) })
 }
 
 /**
@@ -248,6 +297,14 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
   const joiners = members.filter(m => !inWar.has(m.userId))
   if (joiners.length) {
     const capitals = assignCapitals(joiners.map(m => ({ userId: m.userId, favorite: m.favorite && POS[m.favorite] ? m.favorite : null })), owners)
+    // Not on their favorite's city: the open city whose start is nearest fair, with the map as it is
+    for (const m of joiners) {
+      if (!capitals[m.userId] || capitals[m.userId] === m.favorite) continue
+      const held = TERRITORIES.filter(t => owners[t] != null || Object.values(capitals).includes(t))
+      const open = TERRITORIES.filter(t => owners[t] == null && (t === capitals[m.userId] || !Object.values(capitals).includes(t)))
+      const fair = (t: string) => Math.abs((startOdds([...held.filter(h => h !== capitals[m.userId]), t])[t] ?? 1) - 1)
+      capitals[m.userId] = open.sort((a, b) => fair(a) - fair(b) || a.localeCompare(b))[0] ?? capitals[m.userId]
+    }
     let i = inWar.size
     for (const m of joiners) {
       const capital = capitals[m.userId]

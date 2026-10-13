@@ -399,6 +399,82 @@ export function assignCapitals(
   return capitals
 }
 
+// ── A fair start ─────────────────────────────────────────────
+// Where you start matters most through the open land near you: a capital
+// that's the nearest to open cities nobody else is near plants flags there
+// unopposed, and holds a corner of the map from the first week (2026's
+// first war: three Northeast capitals beside five open cities won the
+// crown 6 times in 10 between them). Simulating whole seasons is too slow
+// to place capitals with, so this estimates each start's chance of the
+// crown from the map alone, fitted to thousands of simulated seasons on
+// random layouts of 12-28 players (it explains about 3/4 of what they
+// showed): its share of the open land, against the average share, its
+// rival capitals next door and two steps away, and its borders.
+
+/** Steps between every two cities, worked out once */
+let DIST: Record<string, Record<string, number>> | null = null
+const dist = (a: string, b: string) => (DIST ??= Object.fromEntries(TERRITORIES.map(x => [x, Object.fromEntries(TERRITORIES.map(y => [y, steps(x, y)]))])))[a][b]
+
+/** Each capital's estimated chance of ending as Emperor, as a multiple of a fair share (1 = fair). */
+export function startOdds(capitals: string[]): Record<string, number> {
+  const set = new Set(capitals)
+  const land: Record<string, number> = Object.fromEntries(capitals.map(c => [c, 0]))
+  // Each open city goes to the capitals nearest it, shared, and counts less the farther it is
+  for (const t of TERRITORIES) {
+    if (set.has(t)) continue
+    const d = capitals.map(c => dist(c, t)), m = Math.min(...d)
+    const near = capitals.filter((_, k) => d[k] === m)
+    for (const c of near) land[c] += 1 / near.length / m
+  }
+  const avg = capitals.reduce((s, c) => s + land[c], 0) / Math.max(1, capitals.length)
+  const raw = Object.fromEntries(capitals.map(c => {
+    const next = ADJ[c].filter(n => set.has(n)).length
+    const two = capitals.filter(o => o !== c && dist(c, o) === 2).length
+    return [c, Math.max(0.05, 1.06 + (avg ? land[c] / avg : 1) + 0.064 * next - 0.036 * two - 0.237 * ADJ[c].length)]
+  }))
+  // As multiples of a fair share: they average 1
+  const mean = capitals.reduce((s, c) => s + raw[c], 0) / Math.max(1, capitals.length)
+  return Object.fromEntries(capitals.map(c => [c, raw[c] / mean]))
+}
+
+/** How lopsided a set of starts is: the spread of their estimated chances (0 = all even). */
+export function imbalance(capitals: string[]): number {
+  const odds = Object.values(startOdds(capitals))
+  return Math.sqrt(odds.reduce((s, v) => s + (v - 1) ** 2, 0) / Math.max(1, odds.length))
+}
+
+/**
+ * Evens out the starts by moving capitals to open cities, one at a time,
+ * each the move that helps most, until none helps much (at most
+ * `maxMoves`; on 2026's layout two moves did it, and the simulation saw
+ * nothing gained from the smaller ones after). Nobody in `keep` moves (they got their favorite team's
+ * city); someone whose favorite was taken (placed near it) moves only if
+ * it's clearly the better move than moving someone without a favorite.
+ */
+export function balanceCapitals(
+  capitals: Record<string, string>, keep: Set<string>, nearFavorite: Set<string> = new Set(), maxMoves = 3,
+): { capitals: Record<string, string>; moves: { userId: string; from: string; to: string }[] } {
+  const out = { ...capitals }
+  const moves: { userId: string; from: string; to: string }[] = []
+  for (let k = 0; k < maxMoves; k++) {
+    const now = imbalance(Object.values(out))
+    let best: { userId: string; to: string; score: number } | null = null
+    const free = TERRITORIES.filter(t => !Object.values(out).includes(t))
+    for (const u of Object.keys(out)) {
+      if (keep.has(u)) continue
+      for (const to of free) {
+        const after = imbalance(Object.values({ ...out, [u]: to }))
+        const score = after + (nearFavorite.has(u) ? 0.03 : 0)
+        if (!best || score < best.score) best = { userId: u, to, score }
+      }
+    }
+    if (!best || now - best.score < 0.065) break
+    moves.push({ userId: best.userId, from: out[best.userId], to: best.to })
+    out[best.userId] = best.to
+  }
+  return { capitals: out, moves }
+}
+
 /** Colors that read on the TV and stand apart from their neighbors' (a golden-angle walk round the wheel). */
 /**
  * The empires' colors, picked by hand to tell apart: sixteen solid, then
