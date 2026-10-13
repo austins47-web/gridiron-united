@@ -363,7 +363,7 @@ function RulesSheet({ onClose }: { onClose: () => void }) {
           <li>Lie in ambush instead of attacking: name an empire on your border, and if it attacks you and you outscore it, you take one of its cities.</li>
           <li>An empire of {SECOND_FRONT_AT} or more cities opens a second front: a second attack each week (yours to choose, or automatic) that takes a city only with a win by 2.</li>
           <li>Supply lines: a city cut off from its capital (not joined to it through your own cities, by land or sea lane) defends at −1, so one point short still takes it. It’s marked on the map with a broken link.</li>
-          <li>Outposts: when the NFL plays abroad, an outpost appears off the coast. The best week among everyone who picked that game right wins it, and it counts as a city (for Emperor and Iron Grip) to the season’s end. It can’t be attacked.</li>
+          <li>Outposts: when the NFL plays abroad, an outpost appears off the coast. The best week among everyone who picked that game right wins it, and it counts as a city (for Emperor and Iron Grip) to the season’s end. It can’t be attacked, but when the NFL goes back to the same city, that game’s winner takes its outpost over.</li>
           <li>Cities that would change hands if the week ended now pulse on the map.</li>
         </ul>
       </div>

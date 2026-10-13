@@ -1502,7 +1502,9 @@ serve(async (req) => {
             } else if (m.kind === 'trade') {
               add(m.to, `${T} IS YOURS BY TREATY WITH ${nameOf(m.from)}`)
             } else if (m.kind === 'outpost') {
-              add(m.to, `THE ${(m.withTeam ?? m.team).toUpperCase()} OUTPOST IS YOURS STOP AN EMPIRE ACROSS THE SEA`)
+              const where = (m.withTeam ?? m.team).toUpperCase()
+              add(m.to, m.from ? `THE ${where} OUTPOST IS YOURS STOP TAKEN FROM ${nameOf(m.from)}` : `THE ${where} OUTPOST IS YOURS STOP AN EMPIRE ACROSS THE SEA`)
+              if (m.from) add(m.from, `THE ${where} OUTPOST HAS FALLEN TO ${nameOf(m.to)}`)
             }
           }
           for (const medal of weekMedals(moves, capitals)) add(medal.to, `YOU ARE AWARDED THE ${MEDAL_INFO[medal.kind].name.toUpperCase()}`)

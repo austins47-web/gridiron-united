@@ -264,10 +264,15 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
   // Overseas: the outposts won abroad
   for (const op of moves.filter(m => m.kind === 'outpost').slice(0, 2)) {
     const where = op.withTeam ?? op.team
-    add(say(`outpost|${where}`, [
-      `And across the sea! ${name(op.to)} plants the flag in ${where}, an outpost of empire!`,
-      `Overseas, the banner of ${name(op.to)} rises over ${where}! The empire reaches across the ocean!`,
-    ]), [], [op])
+    add(op.from
+      ? say(`outpost|${where}`, [
+        `And across the sea! ${name(op.to)} storms ${where} and tears down the flag of ${name(op.from)}! The outpost changes hands!`,
+        `Overseas, ${where} falls! ${name(op.to)} takes the outpost from ${name(op.from)}!`,
+      ])
+      : say(`outpost|${where}`, [
+        `And across the sea! ${name(op.to)} plants the flag in ${where}, an outpost of empire!`,
+        `Overseas, the banner of ${name(op.to)} rises over ${where}! The empire reaches across the ocean!`,
+      ]), [], [op])
   }
 
   // The medals: pinned on in front of the whole map

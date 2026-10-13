@@ -12,8 +12,14 @@ import { ConquestIcon } from './ConquestIcon'
 import { M } from './mapGeometry'
 import {
   headline, mapAfter, ownersAfter, siegesAfter, chronological, cityStory, swatch,
-  type ConquestData, type LiveBattle, type LoggedMove,
+  type ConquestData, type LiveBattle, type LoggedMove, outpostsAt,
 } from './conquestView'
+
+/** A city's or an outpost's card: solid, so nothing behind it shows through (the full-screen map, its controls) */
+const CARD = 'rounded-xl border border-field-700 bg-field-800 p-3 shadow-xl rise-in'
+
+/** Log lines that came from a score (a trade, a tribute or an outpost didn't) */
+const SCORED = new Set(['capture', 'siege', 'rebellion', 'claim'])
 
 const INTRO_MS = 1400
 const STEP_MS = 1900
@@ -111,7 +117,7 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
   }, [replay, past, viewWeek, war.owners, war.besieged, log])
   const live = !replay && !past
   // The outposts won by then (a replay: before its week)
-  const shownOutposts = (war.outposts ?? []).filter(o => (replay ? o.week < replay.week : past ? o.week <= viewWeek! : true))
+  const shownOutposts = replay ? outpostsAt(war.outposts ?? [], log, replay.week - 1) : past ? outpostsAt(war.outposts ?? [], log, viewWeek!) : war.outposts ?? []
   const step = replay ? stepsOf(replay.week)[replay.at] : undefined
   const stepCity = step && step.length === 1 ? step[0] : null
 
@@ -217,7 +223,7 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
       )}
 
       {card?.startsWith('outpost:') && !replay && !full && (
-        <OutpostCard gameId={card.slice(8)} war={war} nameOf={nameOf} colorOf={colorOf} onClose={() => setCard(null)} />
+        <OutpostCard gameId={card.slice(8)} war={war} log={log} nameOf={nameOf} colorOf={colorOf} onClose={() => setCard(null)} />
       )}
       {card && !card.startsWith('outpost:') && !replay && !full && (
         <CityCard
@@ -276,16 +282,16 @@ export function WarMap({ war, log, userId, battles, ordersOpen, myTarget, myClai
           <div className="flex-1 min-h-0 flex flex-col px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{mapBlock(true)}</div>
           {/* A city's card comes up from the bottom, over the map */}
           {card && !replay && (
-            <div className="absolute inset-x-0 bottom-0 flex justify-center px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pointer-events-none">
+            <div className="absolute inset-x-0 bottom-0 z-30 flex justify-center px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pointer-events-none">
               <div className="w-full max-w-[560px] max-h-[45vh] overflow-y-auto pointer-events-auto rounded-xl shadow-2xl">
                 {card.startsWith('outpost:') ? (
-                  <OutpostCard gameId={card.slice(8)} war={war} nameOf={nameOf} colorOf={colorOf} onClose={() => setCard(null)} />
+                  <OutpostCard gameId={card.slice(8)} war={war} log={log} nameOf={nameOf} colorOf={colorOf} onClose={() => setCard(null)} className="" />
                 ) : (
                 <CityCard
                   team={card} war={war} owners={shown.owners} besieged={shown.besieged} log={log}
                   userId={userId} canOrder={live && ordersOpen} myTarget={myTarget} myClaim={myClaim}
                   onAttack={onAttack} onFlag={onFlag} busy={busy} nameOf={nameOf} colorOf={colorOf}
-                  onClose={() => setCard(null)}
+                  onClose={() => setCard(null)} className=""
                 />
                 )}
               </div>
@@ -363,17 +369,23 @@ function ReplayBanner({ week, at, steps, nameOf, onSkip, onAgain }: {
 
 /** A city's card: who holds it and since when, who held it before, what's happened there, and (before kickoff) your move. */
 /**
- * An outpost's card: where the NFL played abroad, who won it (the best week
- * among those who picked that game right), and what it's worth.
+ * An outpost's card, laid out like a city's: who holds it and since when,
+ * who's held it, the game that won it (the best week among those who picked
+ * it right), and what it's worth.
  */
-function OutpostCard({ gameId, war, nameOf, colorOf, onClose }: {
+function OutpostCard({ gameId, war, log, nameOf, colorOf, onClose, className = 'mt-3' }: {
   gameId: string
   war: ConquestData
+  log: LoggedMove[]
   nameOf: (id: string | null) => string
   colorOf: (id: string) => string
   onClose: () => void
+  /** its spacing on the page (none floating over the full-screen map) */
+  className?: string
 }) {
   const o = (war.outposts ?? []).find(p => p.gameId === gameId)
+  // Everyone who's held it, oldest first
+  const history = o ? log.filter(m => m.kind === 'outpost' && m.team === o.key).sort((x, y) => x.week - y.week) : []
   const { data: game } = useQuery({
     queryKey: ['outpost-game', gameId],
     staleTime: Infinity,
@@ -387,32 +399,49 @@ function OutpostCard({ gameId, war, nameOf, colorOf, onClose }: {
     ? (game.home_score > game.away_score ? game.home_team : game.away_score > game.home_score ? game.away_team : null) : null
   const lost = won && game ? (won === game.home_team ? game.away_team : game.home_team) : null
   return (
-    <div className="mt-2 rounded-xl border border-field-700 bg-field-800 p-3">
-      <div className="flex items-center gap-2">
-        <span className="text-lg" aria-hidden>🏝️</span>
-        <p className="font-cond font-black uppercase tracking-wide text-white">{o.name} outpost</p>
-        <span className="text-[11px] text-field-400">Week {o.week}</span>
-        <button onClick={onClose} aria-label="Close" className="ml-auto p-1 -m-1 text-field-400 hover:text-white"><X className="w-4 h-4" /></button>
+    <div className={clsx(CARD, className)}>
+      <div className="flex items-start gap-2">
+        <div className="min-w-0">
+          <p className="font-cond font-black uppercase text-white text-lg leading-tight">{o.name} <span className="text-field-500 text-sm">outpost</span></p>
+          <div className="mt-1 flex items-center gap-1.5 text-sm">
+            {o.owner ? (
+              <>
+                <span className="w-3 h-3 rounded-sm shrink-0" style={swatch(colorOf(o.owner))} />
+                <span className="font-bold text-white">{nameOf(o.owner)}</span>
+                <span className="text-[11px] text-field-400">· since Week {o.week}</span>
+              </>
+            ) : (
+              <span className="text-field-300">Nobody’s: nobody picked that game right</span>
+            )}
+          </div>
+        </div>
+        <button onClick={onClose} aria-label="Close" className="ml-auto shrink-0 text-field-400 hover:text-white"><X className="w-4 h-4" /></button>
       </div>
-      {o.owner ? (
-        <p className="mt-2 flex items-center gap-2 text-sm text-field-200">
-          <span className="w-3 h-3 rounded-sm shrink-0" style={swatch(colorOf(o.owner))} />
-          <span><span className="font-bold text-white">{nameOf(o.owner)}</span> holds it</span>
+
+      {history.length > 1 && (
+        <p className="mt-2 text-[11px] text-field-400">
+          {history.map((m, i) => (
+            <span key={i}>
+              {i > 0 && <span className="text-field-600"> → </span>}
+              <span className="text-field-200">{nameOf(m.to)}</span> (Wk {m.week})
+            </span>
+          ))}
         </p>
-      ) : (
-        <p className="mt-2 text-sm text-field-300">Nobody holds it: nobody picked that game right.</p>
       )}
-      <p className="mt-1.5 text-xs text-field-400">
+
+      <p className="mt-2 text-xs text-field-200">
         {game && won && lost
-          ? <>Won with the best week among everyone who picked <span className="font-bold text-field-200">{CITY[won] ?? won}</span> to beat {CITY[lost] ?? lost} in {o.name} ({game.away_team} {game.away_score}, {game.home_team} {game.home_score}).</>
+          ? <>Won with the best week among everyone who picked {CITY[won] ?? won} to beat {CITY[lost] ?? lost} in {o.name} <span className="text-field-500">· {game.away_team} {game.away_score}, {game.home_team} {game.home_score}</span></>
           : <>Won with the best week among everyone who picked the {o.name} game right.</>}
       </p>
-      <p className="mt-1.5 text-xs text-field-400">It counts as a city (for Emperor and Iron Grip) until the season ends, and it can’t be attacked or traded.</p>
+      <p className="mt-2 text-[11px] text-field-400">
+        Counts as a city (for Emperor and Iron Grip) until the season ends, and can’t be attacked or traded. When the NFL comes back to {o.name}, that game’s winner takes it over.
+      </p>
     </div>
   )
 }
 
-function CityCard({ team, war, owners, besieged, log, userId, canOrder, myTarget, myClaim, onAttack, onFlag, busy, nameOf, colorOf, onClose }: {
+function CityCard({ team, war, owners, besieged, log, userId, canOrder, myTarget, myClaim, onAttack, onFlag, busy, nameOf, colorOf, onClose, className = 'mt-3' }: {
   team: string
   war: ConquestData
   owners: Record<string, string | null>
@@ -428,6 +457,8 @@ function CityCard({ team, war, owners, besieged, log, userId, canOrder, myTarget
   nameOf: (id: string | null) => string
   colorOf: (id: string) => string
   onClose: () => void
+  /** its spacing on the page (none floating over the full-screen map) */
+  className?: string
 }) {
   const owner = owners[team] ?? null
   const holder = owner ? war.players.find(p => p.userId === owner) : undefined
@@ -463,7 +494,7 @@ function CityCard({ team, war, owners, besieged, log, userId, canOrder, myTarget
   })()
 
   return (
-    <div className="mt-3 rounded-xl border border-field-700 bg-field-800/60 p-3 rise-in">
+    <div className={clsx(CARD, className)}>
       <div className="flex items-start gap-2">
         <div className="min-w-0">
           <p className="font-cond font-black uppercase text-white text-lg leading-tight">{CITY[team] ?? team} <span className="text-field-500 text-sm">{team}</span></p>
@@ -508,7 +539,7 @@ function CityCard({ team, war, owners, besieged, log, userId, canOrder, myTarget
               <li key={i} className="flex items-start gap-2 text-xs text-field-200">
                 <span className="shrink-0 w-10 text-field-500 font-bold">Wk {m.week}</span>
                 <span className="shrink-0">{h.icon}</span>
-                <span className="min-w-0">{h.text}{m.kind !== 'relief' && <span className="text-field-500"> · {m.score[0]}–{m.score[1]}</span>}</span>
+                <span className="min-w-0">{h.text}{SCORED.has(m.kind) && <span className="text-field-500"> · {m.score[0]}–{m.score[1]}</span>}</span>
               </li>
             )
           })}

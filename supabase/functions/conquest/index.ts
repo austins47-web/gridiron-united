@@ -519,15 +519,28 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
   const moves = [...after.moves]
   // Outposts: each game played abroad this week goes to the best week among those who
   // picked it right (level: the closer tiebreaker guess, then season win %); nobody
-  // right, and it's nobody's. It counts as a city to the season's end.
+  // right, and it's nobody's. It counts as a city to the season's end. One outpost a
+  // city: when the NFL goes back there, that game's winner takes it over (nobody
+  // right, and its holder keeps it).
   for (const g of games as (Game & { venue_city?: string | null; venue_country?: string | null })[]) {
     const op = outpostFor(g.venue_city, g.venue_country)
     if (!op || isVoid(g) || !isFinal(g)) continue
     const won = winnerOf(g)
     const right = won ? roster.filter(u => scores.picks[u]?.[g.id] === won) : []
     const best = right.sort((a, b) => (scores.correct[b] ?? 0) - (scores.correct[a] ?? 0) || tiebreak(scores, a, b) || a.localeCompare(b))[0] ?? null
+    const { data: held } = await admin.from('conquest_outposts').select('game_id, owner_id')
+      .eq('league_id', leagueId).eq('season', season).eq('key', op.key).maybeSingle()
+    if (held) {
+      // Back in a city the war's been to: the winner takes its outpost over
+      if (held.game_id === g.id || !best || best === held.owner_id) continue
+      const { error: tookErr } = await admin.from('conquest_outposts').update({ game_id: g.id, week, owner_id: best })
+        .eq('league_id', leagueId).eq('season', season).eq('key', op.key)
+      if (tookErr) throw tookErr
+      moves.push({ kind: 'outpost', team: op.key, from: (held.owner_id as string | null) ?? null, to: best, score: [scores.correct[best] ?? 0, 0], withTeam: op.name })
+      continue
+    }
     const { data: made } = await admin.from('conquest_outposts')
-      .upsert({ league_id: leagueId, season, game_id: g.id, key: op.key, name: op.name, week, owner_id: best }, { onConflict: 'league_id,season,game_id', ignoreDuplicates: true })
+      .upsert({ league_id: leagueId, season, game_id: g.id, key: op.key, name: op.name, week, owner_id: best }, { onConflict: 'league_id,season,key', ignoreDuplicates: true })
       .select('game_id')
     if (made?.length && best) moves.push({ kind: 'outpost', team: op.key, from: null, to: best, score: [scores.correct[best] ?? 0, 0], withTeam: op.name })
   }

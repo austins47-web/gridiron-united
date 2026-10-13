@@ -37,8 +37,21 @@ export interface ConquestMove {
   tactic?: 'ambush' | 'second' | 'cut' | null
 }
 
-/** An outpost abroad (a game played there): who won it, if anyone */
+/** An outpost abroad (one a city; the latest game played there): who holds it, if anyone, since `week` */
 export interface Outpost { key: string; name: string; week: number; owner: string | null; gameId: string }
+
+/**
+ * The outposts as they stood after a week (the history slider, a replay): each
+ * one's holder then, from the war log's outpost moves (an outpost changes hands
+ * when the NFL goes back to its city). One nobody's ever won shows from its week.
+ */
+export function outpostsAt(outposts: Outpost[], log: (ConquestMove & { week: number })[], week: number): Outpost[] {
+  return outposts.flatMap(o => {
+    const moves = log.filter(m => m.kind === 'outpost' && m.team === o.key && m.week <= week).sort((a, b) => a.week - b.week)
+    if (moves.length) return [{ ...o, owner: moves[moves.length - 1].to, week: moves[moves.length - 1].week }]
+    return !o.owner && o.week <= week ? [o] : []
+  })
+}
 
 /** The war as the TV gets it (shop-tv) and the app reads it. */
 export interface ConquestData {
@@ -191,7 +204,7 @@ export function headline(m: ConquestMove, nameOf: (id: string | null) => string)
     case 'trade':
       return { icon: '🤝', text: `${nameOf(m.from)} trades ${city} to ${nameOf(m.to)}${m.withTeam ? ` for ${CITY[m.withTeam] ?? m.withTeam}` : ''}` }
     case 'outpost':
-      return { icon: '🏝️', text: `${nameOf(m.to)} wins the ${m.withTeam ?? m.team} outpost, overseas` }
+      return { icon: '🏝️', text: m.from ? `${nameOf(m.to)} takes the ${m.withTeam ?? m.team} outpost from ${nameOf(m.from)}` : `${nameOf(m.to)} wins the ${m.withTeam ?? m.team} outpost, overseas` }
   }
 }
 
