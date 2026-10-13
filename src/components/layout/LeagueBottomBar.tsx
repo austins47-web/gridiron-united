@@ -22,7 +22,7 @@ interface Tab { to: string; label: string; icon: LucideIcon; badge?: boolean }
  * behind "More", which never grows the bar itself no matter how many
  * pages get added later.
  *
- * Pick'em leagues have far fewer destinations (Pick'Em, the war Map,
+ * Pick'em leagues have far fewer destinations (Pick'Em, Conquest (the war map),
  * Chat, Settings, and Commissioner for the commissioner) - those all fit
  * as primary tabs directly, so there's no "More" for them at all.
  */
@@ -41,7 +41,7 @@ export function LeagueBottomBar() {
   const primary: Tab[] = isPickEm
     ? [
         { to: '/app/pickem',   label: "Pick'Em",  icon: Goal },
-        { to: '/app/war',      label: 'Map',       icon: MapIcon },
+        { to: '/app/war',      label: 'Conquest',  icon: MapIcon },
         { to: '/app/chat',     label: 'Chat',      icon: MessageCircle, badge: hasUnreadChat },
         ...(isCommissioner ? [{ to: '/app/commissioner', label: 'Commish', icon: Shield }] : []),
         { to: '/app/settings', label: 'Settings', icon: Settings },

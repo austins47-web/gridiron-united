@@ -735,7 +735,7 @@ function PickEmWeekView({ calendar, view }: { calendar: PickemCalendar; view: 'p
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 text-center">
         <Trophy className="w-12 h-12 text-gold/40 mx-auto mb-4" />
-        <h2 className="text-white font-bold text-lg mb-2">{view === 'map' ? 'War Map' : 'Pick\'Em'}</h2>
+        <h2 className="text-white font-bold text-lg mb-2">{view === 'map' ? 'Conquest' : 'Pick\'Em'}</h2>
         <p className="text-field-400">{view === 'map' ? 'Select a Pick\'Em league to see its war.' : 'Select a Pick\'Em league to make your picks.'}</p>
       </div>
     )
@@ -749,8 +749,8 @@ function PickEmWeekView({ calendar, view }: { calendar: PickemCalendar; view: 'p
             <img src={activeLeague.brand_logo_url} alt="" className="w-12 h-12 object-contain shrink-0" />
           )}
           <div className="min-w-0">
-            <h1 className="section-title">War Map</h1>
-            <p className="text-field-400 text-sm truncate">{activeLeague.name} · {CURRENT_SEASON} Conquest</p>
+            <h1 className="section-title">Conquest</h1>
+            <p className="text-field-400 text-sm truncate">{activeLeague.name} · {CURRENT_SEASON} war map</p>
           </div>
         </div>
         <ConquestTab
