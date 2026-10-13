@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTickerGames } from '@/hooks/useHome'
 import { useAppStore } from '@/store/appStore'
@@ -97,6 +97,26 @@ function TickerScroller({ items, live }: { items: TickerItem[]; live: boolean })
   // constant no matter how many copies repeat had to add.
   const repeated = Array.from({ length: repeat }, () => items).flat()
 
+  // Held still while a finger's moving the page, and going again a moment after:
+  // some phones (a folding one, opened up) garble the pinned top of the screen pink,
+  // green and black when it's redrawn for a scroll while the ticker's moving in it
+  const trackRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    let resume: ReturnType<typeof setTimeout> | undefined
+    const hold = () => {
+      if (trackRef.current) trackRef.current.style.animationPlayState = 'paused'
+      clearTimeout(resume)
+      resume = setTimeout(() => { if (trackRef.current) trackRef.current.style.animationPlayState = '' }, 400)
+    }
+    window.addEventListener('touchmove', hold, { passive: true })
+    window.addEventListener('scroll', hold, { passive: true })
+    return () => {
+      clearTimeout(resume)
+      window.removeEventListener('touchmove', hold)
+      window.removeEventListener('scroll', hold)
+    }
+  }, [])
+
   return (
     <div className="app-shell-ticker flex items-center h-8 bg-field-900 border-b border-field-800 overflow-hidden shrink-0">
       <div className="flex items-center gap-1.5 px-3 h-full bg-field-800 shrink-0">
@@ -110,7 +130,8 @@ function TickerScroller({ items, live }: { items: TickerItem[]; live: boolean })
         )}
       </div>
 
-      <div ref={laneRef} className="flex-1 overflow-hidden relative h-full">
+      {/* Its own sealed-off layer: the ticker moving never redraws the pinned bar around it */}
+      <div ref={laneRef} className="flex-1 overflow-hidden relative h-full" style={{ contain: 'layout paint', transform: 'translateZ(0)' }}>
         {/* Invisible, unrepeated copy used only to measure one item
             set's natural width - not part of the visible layout. */}
         <div ref={measureRef} className="invisible absolute flex items-center whitespace-nowrap h-full pointer-events-none" aria-hidden>
@@ -120,6 +141,7 @@ function TickerScroller({ items, live }: { items: TickerItem[]; live: boolean })
         </div>
 
         <div
+          ref={trackRef}
           className="ticker-scroll-track flex items-center absolute whitespace-nowrap h-full"
           style={{ '--ticker-end': `-${100 / repeat}%` } as React.CSSProperties}
         >
