@@ -112,13 +112,17 @@ const LAND_BORDERS: Record<string, string[]> = {
 
 /**
  * Sea lanes, Risk style: routes across water that count as a border, so
- * the Florida cities (a peninsula with Miami a dead end) aren't boxed in.
- * The map draws them as dotted lines.
+ * the corners of the map aren't boxed in: the Florida cities (a peninsula
+ * with Miami a dead end), the Northeast's corner (New England and New
+ * York, from Week 6) and Green Bay. The map draws them as dotted lines.
  */
 export const SEA_LANES: [string, string][] = [
   ['CAR', 'MIA'], // the Atlantic, up the coast
   ['HOU', 'MIA'], // the southern Gulf
   ['NO', 'TB'],   // the northern Gulf
+  ['NE', 'BAL'],  // down the Atlantic coast
+  ['NYJ', 'PHI'], // Long Island to Atlantic City
+  ['GB', 'CLE'],  // the Great Lakes
 ]
 
 /** Each city's neighbors: its land borders and its sea lanes. */
