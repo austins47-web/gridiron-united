@@ -10,6 +10,8 @@ import { FilmLook, FILM_TONE, FILM_TONE_SOFT } from './FilmLook'
 import { MEDAL_INFO } from '../../../supabase/functions/_shared/conquest.ts'
 import type { ConquestData } from './conquestView'
 import { fetchVoices, type VoiceFrom } from './newsreelVoice'
+import { laneRoute, sailKeyframes } from './sea'
+import { Warship } from './Warship'
 
 /** The TV's music dips while the newsreel talks (ShopTV's Spotify speaker listens). */
 export const TV_DUCK = 'gu-tv-duck'
@@ -208,7 +210,8 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
         @keyframes gu-reel-medals { from { opacity: 0; transform: translateY(8%) scale(.9) } to { opacity: 1; transform: none } }
         .gu-reel-ring { transform-box: fill-box; transform-origin: center; animation: gu-reel-ring 1.4s ease-out infinite; }
         .gu-reel-march { animation: gu-reel-march .5s linear infinite; }
-        @media (prefers-reduced-motion: reduce) { .gu-reel-ring, .gu-reel-march { animation: none } }
+        .gu-reel-sail { animation: var(--sail) var(--sail-s, 4.5s) linear both; }
+        @media (prefers-reduced-motion: reduce) { .gu-reel-ring, .gu-reel-march, .gu-reel-sail { animation: none } }
       `}</style>
       {/* The film itself: toned, and (but on a Fire TV) weaving in the gate */}
       <div className={clsx('absolute -inset-[0.5%]', !lite && 'gu-film-weave')} style={{ filter: lite ? FILM_TONE : FILM_TONE_SOFT }}>
@@ -230,6 +233,28 @@ export function Newsreel({ war, story, autoPlay = false, lite = false, soundHint
           ))}
           {Object.entries(sieges).map(([t, by]) => M.territories[t] && <path key={t} d={M.territories[t]} fill={`url(#gu-reel-h-${by})`} />)}
           {arrows.map(a => {
+            // Across a sea lane: the arrow follows it, and a warship sails it once and lands
+            const route = a.sea ? laneRoute(a.from, a.to) : null
+            if (route) {
+              const name = `gu-reel-sail-${a.from}-${a.to}`
+              const place = (p: [number, number]) => `${p[0].toFixed(1)}px, ${p[1].toFixed(1)}px`
+              const first = route.pts[0], last = route.pts[route.pts.length - 1]
+              return (
+                <g key={a.key} opacity={a.now ? 1 : 0.45}>
+                  <style>{sailKeyframes(name, route, place, false)}</style>
+                  <g fill="none" strokeLinecap="round">
+                    <path d={route.d} stroke="#000" strokeWidth={6.5} />
+                    <path d={route.d} stroke="#fff" strokeWidth={3} strokeDasharray="7 5" className={a.now ? 'gu-reel-march' : undefined} />
+                  </g>
+                  <g
+                    className={a.now ? 'gu-reel-sail' : undefined}
+                    style={{ transform: `translate(${place(last)})`, ['--sail' as string]: name, ['--sail-s' as string]: `${Math.min(6, Math.max(3, route.length / 60)).toFixed(1)}s` }}
+                  >
+                    <Warship size={34 / z} fill="#fff" outline="#000" wake="#fff" flip={last[0] < first[0]} />
+                  </g>
+                </g>
+              )
+            }
             const p = M.stadium[a.from], q = M.stadium[a.to]
             if (!p || !q) return null
             const mx = (p[0] + q[0]) / 2 + (q[1] - p[1]) * 0.22, my = (p[1] + q[1]) / 2 - (q[0] - p[0]) * 0.22

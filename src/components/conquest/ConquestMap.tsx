@@ -1,6 +1,8 @@
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { TERRITORIES, ADJ, citiesOf, patternOf } from '../../../supabase/functions/_shared/conquest.ts'
+import { laneRoute, sailKeyframes, strikeFrom } from './sea'
+import { Warship } from './Warship'
 import { NORTHEAST_CITIES } from './usMap'
 import { M, NE, NE_SET, insetBox, viewOf, empireLabel, spreadLabels, frontTeeth, type MapLayout, type Rect, type LabelBox } from './mapGeometry'
 import { ICON, type IconName } from './icons'
@@ -25,7 +27,8 @@ export type { MapLayout } from './mapGeometry'
 // The map itself never moves (redrawing it is what a Fire TV can't keep
 // up with). The motion is separate layers laid over it: a radar sweep,
 // capitals pinging, ships on the sea lanes, this week's battles as
-// marching arrows, and contested cities flickering. The TV's lighter
+// marching arrows (one across a sea lane follows it, a warship sailing
+// it), and contested cities flickering. The TV's lighter
 // effects keep only what the GPU can move on its own (see index.css).
 //
 // Light mode (the app's, not the TV's) draws it as a daylight ops table.
@@ -406,7 +409,7 @@ function Blocks({ owners, colorOf, capitalOf, skip }: { owners: Record<string, s
 }
 
 interface Ping { team: string; x: number; y: number; color: string; siege: boolean }
-interface Arrow { key: string; fromTeam: string; toTeam: string; from: [number, number]; to: [number, number]; color: string; live: boolean }
+interface Arrow { key: string; fromTeam: string; toTeam: string; from: [number, number]; to: [number, number]; color: string; live: boolean; sea: boolean }
 interface Hot { team: string; color: string; siege: boolean }
 /** A battle's front: the attacker's teeth along the border, into the city at stake */
 interface Front { key: string; d: string; box: Rect; color: string; live: boolean }
@@ -520,6 +523,29 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
           ))}
           {/* This week's battles: attacker → the city at stake (faint while they're losing) */}
           {arrows.map(r => {
+            const route = r.sea ? laneRoute(r.fromTeam, r.toTeam) : null
+            if (route) {
+              // Across the water: along the lane, its head at the far shore
+              const n = route.pts.length - 1, tip = route.pts[n], back = route.pts[n - 2]
+              const l = Math.hypot(tip[0] - back[0], tip[1] - back[1]) || 1
+              const ux = (tip[0] - back[0]) / l, uy = (tip[1] - back[1]) / l, hl = 11 / zoom, hw = 6 / zoom
+              const base: [number, number] = [tip[0] - ux * hl, tip[1] - uy * hl]
+              const head = `M${tip[0]} ${tip[1]} L${base[0] - uy * hw} ${base[1] + ux * hw} L${base[0] + uy * hw} ${base[1] - ux * hw} Z`
+              const dash = 12 / zoom
+              return (
+                <g key={r.key} opacity={r.live ? 1 : 0.45}>
+                  <path d={route.d} fill="none" stroke={P.under} strokeWidth={5 / zoom} strokeLinecap="round" />
+                  <path d={head} fill={P.under} stroke={P.under} strokeWidth={3 / zoom} strokeLinejoin="round" />
+                  <path
+                    d={route.d} fill="none" stroke={r.color} strokeWidth={2.4 / zoom} strokeLinecap="round"
+                    strokeDasharray={`${dash * 0.6} ${dash * 0.4}`}
+                    className="cq-march"
+                    style={{ ['--cq-dash' as string]: String(-dash), animationDuration: r.live ? '0.9s' : '2.4s' }}
+                  />
+                  <path d={head} fill={r.color} />
+                </g>
+              )
+            }
             const [x1, y1] = r.from, [x2, y2] = r.to
             const dx = x2 - x1, dy = y2 - y1
             const cx = (x1 + x2) / 2 - dy * 0.22, cy = (y1 + y2) / 2 + dx * 0.22
@@ -548,6 +574,39 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes 
           })}
         </svg>
       )}
+
+      {/* A warship sailing each attack across a sea lane: its own layer over the lane, moved
+          (not redrawn) by its keyframes; held partway across when nothing moves */}
+      {arrows.map(r => {
+        const route = r.sea ? laneRoute(r.fromTeam, r.toTeam) : null
+        if (!route) return null
+        const len = 46 / zoom, pad = len
+        const b = { x: route.box.x - pad, y: route.box.y - pad, w: route.box.w + pad * 2, h: route.box.h + pad * 2 }
+        const place = (p: [number, number]) => `${(((p[0] - b.x) / b.w) * 100).toFixed(2)}%, ${(((p[1] - b.y) / b.h) * 100).toFixed(2)}%`
+        const name = `cq-sail-${r.fromTeam}-${r.toTeam}`
+        const first = route.pts[0], last = route.pts[route.pts.length - 1]
+        return (
+          <div key={`ship-${r.key}`} style={{ ...at(b.x, b.y, b.w, b.h), opacity: r.live ? 1 : 0.55 }}>
+            <style>{sailKeyframes(name, route, place, true)}</style>
+            <div
+              className="cq-sail"
+              style={{
+                position: 'absolute', inset: 0,
+                transform: `translate(${place(route.pts[Math.round((route.pts.length - 1) * 0.6)])})`,
+                ['--cq-sail' as string]: name,
+                ['--cq-sail-s' as string]: `${Math.max(5, route.length / 40).toFixed(1)}s`,
+              }}
+            >
+              <svg
+                viewBox="-1 -1 2 2" overflow="visible"
+                style={{ position: 'absolute', left: `${(-len / 2 / b.w) * 100}%`, top: `${(-len / 2 / b.h) * 100}%`, width: `${(len / b.w) * 100}%`, height: `${(len / b.h) * 100}%` }}
+              >
+                <Warship size={2} fill={r.color} outline={P.under} wake={P.accent} flip={last[0] < first[0]} />
+              </svg>
+            </div>
+          </div>
+        )
+      })}
 
       {/* Capitals ping as the sweep crosses them (a besieged one, fast and red, all the time) */}
       {pings.map(p => {
@@ -857,11 +916,9 @@ export const ConquestMap = memo(function ConquestMap({
   const hot: Hot[] = battles.filter(b => b.outcome !== 'hold' && b.city).map(b => ({ team: b.city!, color: colorOfUser(b.attacker), siege: b.outcome === 'siege' }))
   const arrows: Arrow[] = battles.flatMap(b => {
     if (!b.city) return []
-    const to = M.stadium[b.city]
-    // From the attacker's nearest city on that border
-    const dist = (n: string) => Math.hypot(M.stadium[n][0] - to[0], M.stadium[n][1] - to[1])
-    const fromTeam = ADJ[b.city].filter(n => owners[n] === b.attacker).sort((p, q) => dist(p) - dist(q))[0]
-    return fromTeam ? [{ key: b.attacker, fromTeam, toTeam: b.city, from: M.stadium[fromTeam], to, color: P.arrow(colorOfUser(b.attacker)), live: b.outcome !== 'hold' }] : []
+    // From the attacker's nearest city on that border (by land if they have one, else by sea)
+    const s = strikeFrom(b.city, n => owners[n] === b.attacker)
+    return s ? [{ key: b.attacker, fromTeam: s.from, toTeam: b.city, from: M.stadium[s.from], to: M.stadium[b.city], color: P.arrow(colorOfUser(b.attacker)), live: b.outcome !== 'hold', sea: s.sea }] : []
   })
   /** Each battle's front at a tooth size: along the city at stake's border with the attacker's land */
   const frontsAt = (scale: number, only?: (team: string) => boolean): Front[] => battles.flatMap(b => {
@@ -936,6 +993,12 @@ export const ConquestMap = memo(function ConquestMap({
                   target={orders?.target} flag={orders?.flag} flagColor={flagColor}
                   highlight={highlight} highlightColor={highlightColor} P={P} z={z}
                 />
+                {M.lanes.filter(l => NE_SET.has(l.a) && NE_SET.has(l.b)).map(l => (
+                  <g key={`${l.a}-${l.b}`} pointerEvents="none">
+                    <path d={l.d} fill="none" stroke={P.accent} strokeOpacity={0.65} strokeWidth={1.6 / z} strokeDasharray={`${3 / z} ${4 / z}`} strokeLinecap="round" />
+                    {l.ends.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={2.6 / z} fill={P.accent} />)}
+                  </g>
+                ))}
               </g>
             </g>
             <g pointerEvents="none">

@@ -5,6 +5,7 @@
 import { CITY, conquerorOf, weekMedals, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
 import { ownersBefore, type ConquestData, type ConquestMove } from './conquestView'
 import { M } from './mapGeometry'
+import { strikeFrom, waterBetween } from './sea'
 
 /** Where the camera looks: the map point it centers on and how far in (1 = the whole country) */
 export type Shot = { x: number; y: number; z: number }
@@ -15,8 +16,8 @@ export interface ReelLine {
   shot: Shot
   /** the moves this line reveals on the map (indexes into the story's moves) */
   reveals: number[]
-  /** attack arrows drawn with it: from a city to a city, in the attacker's color */
-  arrows: { from: string; to: string; color: string }[]
+  /** attack arrows drawn with it: from a city to a city, in the attacker's color (`sea`: across a sea lane, a warship sailing it) */
+  arrows: { from: string; to: string; color: string; sea?: boolean }[]
   /** cities named on screen while it plays */
   labels: string[]
   /** the medal ceremony: who's pinned with what */
@@ -36,7 +37,9 @@ export interface PosterSpec {
   ray: string
   /** the cities the map medallion frames */
   focus: string[]
-  arrow: { from: string; to: string } | null
+  arrow: { from: string; to: string; sea?: boolean } | null
+  /** the flag that flew over a fallen city: its old owner's color */
+  flag?: string
   label: string[]
 }
 
@@ -135,7 +138,15 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
     for (const m of ms) shown.add(idx(m))
     lines.push({ text, shot: teams.length ? shotOf(teams) : WHOLE_MAP, reveals: ms.map(idx), arrows, labels })
   }
+  // An attack with no land border to strike over sailed a sea lane: from that city, by ship
+  const sailed = (m: ConquestMove) => {
+    if (m.kind !== 'capture' && m.kind !== 'siege') return null
+    const s = strikeFrom(m.team, t => before[t] === m.to)
+    return s?.sea ? s.from : null
+  }
   const arrowFor = (m: ConquestMove) => {
+    const port = sailed(m)
+    if (port) return [{ from: port, to: m.team, color: color(m.to), sea: true }]
     const from = m.kind === 'rebellion' ? null : base(m.to)
     return from && from !== m.team ? [{ from, to: m.team, color: color(m.to) }] : []
   }
@@ -145,6 +156,16 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
   // always reads the same (its recordings are kept) but next week's sounds fresh.
   const say = (key: string, ways: string[], turn = 0) => ways[(hashOf(`${week}|${key}`) + turn) % ways.length]
   const where = (t: string) => EPITHET[t] ? `${cityName(t)}, ${EPITHET[t]}` : cityName(t)
+  const ahoy = (m: ConquestMove, who: string) => {
+    const port = sailed(m)
+    if (!port) return ''
+    const water = waterBetween(port, m.team)
+    return say(`sea|${m.team}`, [
+      `Anchors aweigh! ${who}'s fleet steams out of ${cityName(port)} across ${water}! `,
+      `Battleships on the horizon! ${who}'s navy crosses ${water} from ${cityName(port)}! `,
+      `Full steam ahead! ${who}'s warships sail from ${cityName(port)}! `,
+    ])
+  }
   const c = correct.get(hero)
   add(say('open', [
     `Gridiron United News! From the smoking battlefields of the gridiron, a dispatch from the front: Week ${week}${pending ? ', as it stands' : ''}!`,
@@ -172,7 +193,8 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
             `${H}'s armies storm the gates of ${where(m.team)}! ${L} falls, ${a} to ${b}!`,
             `${city} has fallen! ${H} crushes ${L}, ${a} to ${b}, in a triumph for the ages!`,
           ])
-    add(text, [...(base(hero) ? [base(hero)!] : []), m.team], [m], arrowFor(m))
+    const port = sailed(m)
+    add(ahoy(m, H) + text, [...(port ? [port] : base(hero) ? [base(hero)!] : []), m.team], [m], arrowFor(m))
   }
   if (heroClaims.length) {
     const list = andList(heroClaims.map(m => cityName(m.team)))
@@ -198,19 +220,19 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
       ], said), [m.team, next.team], [m, next], [...arrowFor(m), ...arrowFor(next)])
       i++
     } else if (m.kind === 'capture') {
-      add(m.exiled
+      add(ahoy(m, T) + (m.exiled
         ? `${city} falls to ${T}! The empire of ${L} is no more!`
         : say(`capture|${m.team}`, [
           `${T} storms ${where(m.team)}, smashing ${L} ${a} to ${b}!`,
           `Disaster for ${L}! ${T} seizes ${city}, ${a} to ${b}!`,
-        ], said), [m.team], [m], arrowFor(m))
+        ], said)), [...(sailed(m) ? [sailed(m)!] : []), m.team], [m], arrowFor(m))
     } else if (m.kind === 'rebellion') {
       add(`${T} rises from exile and takes back ${city}! What a comeback!`, [m.team], [m])
     } else if (m.kind === 'siege') {
-      add(say(`siege|${m.team}`, [
+      add(ahoy(m, T) + say(`siege|${m.team}`, [
         `${T}'s forces encircle ${where(m.team)}! The noose tightens!`,
         `${T} lays siege to ${city}! The defenders brace for the worst!`,
-      ], said), [m.team], [m], arrowFor(m))
+      ], said), [...(sailed(m) ? [sailed(m)!] : []), m.team], [m], arrowFor(m))
     } else {
       add(`In ${city}, ${T} breaks the siege! The defenders dance in the streets!`, [m.team], [m])
     }
@@ -261,7 +283,8 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
     : lead.kind === 'capture' ? `${LEAD} IS OURS!`
       : lead.kind === 'rebellion' ? `${LEAD} IS FREE!`
         : `PLANT THE FLAG IN ${LEAD}!`
-  const heroFocus = [...new Set([...(heroCap ? [heroCap] : []), ...heroBattles.map(m => m.team), ...heroClaims.map(m => m.team)])]
+  const leadPort = battle(lead) ? sailed(lead) : null
+  const heroFocus = [...new Set([...(heroCap ? [heroCap] : []), ...(leadPort ? [leadPort] : []), ...heroBattles.map(m => m.team), ...heroClaims.map(m => m.team)])]
   posters.push({
     key: 'hero',
     head: [H.toUpperCase(), 'WANTS YOU'],
@@ -271,7 +294,8 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
     fine: pending ? `AS IT STANDS · ${correct.get(hero)} CORRECT · WEEK ${week} · WAR OFFICE` : `${correct.get(hero)} CORRECT · WEEK ${week} · GRIDIRON UNITED WAR OFFICE`,
     ray: paperTint(color(hero)),
     focus: heroFocus,
-    arrow: battle(lead) && base(hero) && base(hero) !== lead.team ? { from: base(hero)!, to: lead.team } : null,
+    arrow: leadPort ? { from: leadPort, to: lead.team, sea: true }
+      : battle(lead) && base(hero) && base(hero) !== lead.team ? { from: base(hero)!, to: lead.team } : null,
     label: heroFocus,
   })
   // A capital that fell gets remembered; failing that, one under siege rallies
@@ -287,6 +311,7 @@ export function weekStory(war: ConquestData, pending = 0): WarStory | null {
       ribbonColor: '#2d3e5a',
       fine: `${CITY_UP} FELL TO ${name(fell.to).toUpperCase()} · WEEK ${week}`,
       ray: paperTint(color(fell.from)),
+      flag: color(fell.from),
       focus: [fell.team],
       arrow: null,
       label: [fell.team],

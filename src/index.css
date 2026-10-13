@@ -1397,6 +1397,8 @@
 .cq-march { animation: cq-march 0.9s linear infinite; }
 @keyframes cq-flow { to { stroke-dashoffset: -48; } }
 .cq-flow { animation: cq-flow 3.2s linear infinite; }
+/* A warship sailing an attack's sea lane (ConquestMap; its keyframes come with it) */
+.cq-sail { animation: var(--cq-sail) var(--cq-sail-s, 6s) linear infinite; will-change: transform; }
 
 .tv-lite .cq-radar,
 .tv-lite .cq-flow { display: none; }
@@ -1410,10 +1412,11 @@
 .tv-still .cq-flow { display: none; }
 .tv-still .cq-march,
 .tv-still .cq-flicker,
-.tv-still .cq-front { animation: none; }
+.tv-still .cq-front,
+.tv-still .cq-sail { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .cq-radar, .cq-scan, .cq-ping, .cq-ping-siege, .cq-flow { display: none !important; }
-  .cq-march, .cq-flicker, .cq-front { animation: none !important; }
+  .cq-march, .cq-flicker, .cq-front, .cq-sail { animation: none !important; }
 }
 
 /* Map labels and markers keep their size on screen as the map zooms: the
