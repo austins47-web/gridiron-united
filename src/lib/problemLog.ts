@@ -58,7 +58,10 @@ export function startProblemLog(sender: (row: ProblemRow) => Promise<unknown>) {
   send = sender
   // An old tab after a deploy asking for a chunk that's gone isn't a bug: pick up the
   // current build instead (src/lib/staleChunk.ts). Vite says so itself for what it fetches ahead.
-  window.addEventListener('vite:preloadError', e => { e.preventDefault(); reloadForStaleChunk() })
+  // Not preventDefault: that has the import resolve to undefined (so `m.PlayerCardHost` crashes
+  // before the reload lands); left alone, Vite throws its own error, which the boundary and the
+  // handlers below know for a stale chunk.
+  window.addEventListener('vite:preloadError', () => { reloadForStaleChunk() })
   window.addEventListener('error', e => {
     // Errors from other origins (extensions, embeds) carry no detail
     if (!e.message || e.message === 'Script error.') return
