@@ -5,6 +5,7 @@ import { laneRoute, sailKeyframes, strikeFrom } from './sea'
 import { cutOff } from '../../../supabase/functions/_shared/conquest.ts'
 import { Warship } from './Warship'
 import { SeaCreatures } from './SeaCreatures'
+import { TableProps } from './TableProps'
 import { usePoke } from './poke'
 import { usePaperGrain } from './paper'
 import { NORTHEAST_CITIES } from './usMap'
@@ -450,6 +451,13 @@ function LookFrame({ look, uid }: { look: MapLook; uid: string }) {
           <stop offset="0" stopColor="#6b4423" /><stop offset=".4" stopColor="#8a5a2f" /><stop offset=".7" stopColor="#5a381b" /><stop offset="1" stopColor="#7a4e27" />
         </linearGradient>
       </defs>
+      {/* Where a cup's been set down on the map, more than once */}
+      {[[742, 112, 24, 0.2, 30], [612, 600, 21, 0.16, 200], [742 + 9, 112 + 5, 23, 0.1, 120]].map(([x, y, r, o, a], i) => (
+        <g key={i} transform={`rotate(${a} ${x} ${y})`}>
+          <circle cx={x} cy={y} r={r} fill="none" stroke="#5a3a14" strokeOpacity={o} strokeWidth={1.6} />
+          <path d={`M${x - r} ${y}A${r} ${r} 0 0 1 ${x + r * 0.5} ${y - r * 0.87}`} fill="none" stroke="#5a3a14" strokeOpacity={o * 1.2} strokeWidth={2.6} />
+        </g>
+      ))}
       <rect x={0} y={0} width={M.width} height={M.height} rx={10} fill={`url(#cq-lamp-${uid})`} />
       <rect x={4} y={4} width={M.width - 8} height={M.height - 8} rx={8} fill="none" stroke={`url(#cq-wood-${uid})`} strokeWidth={9} />
       <rect x={9} y={9} width={M.width - 18} height={M.height - 18} rx={5} fill="none" stroke="#2b1a0b" strokeOpacity={0.6} strokeWidth={1} />
@@ -471,22 +479,32 @@ function treasureX(size: number): string {
   return stroke(-a, -a * 0.92, a * 0.96, a, 1.35) + stroke(a * 0.9, -a, -a, a * 0.88, 0.7)
 }
 
-/** The war room's markers: a wooden block in its empire's color on every held city, a taller one on a capital */
-function Blocks({ owners, colorOf, capitalOf, skip }: { owners: Record<string, string | null>; colorOf: (t: string) => string | null; capitalOf: (t: string) => boolean; skip: Set<string> | null }) {
+/**
+ * The war room's markers, as on the map rooms' walls: a glass-headed map pin in
+ * its empire's color stuck in every held city, its shadow thrown down and to the
+ * right by the lamp (a capital flies a paper flag on its pin instead: cityMark)
+ */
+function Pins({ owners, colorOf, capitalOf, skip, uid }: { owners: Record<string, string | null>; colorOf: (t: string) => string | null; capitalOf: (t: string) => boolean; skip: Set<string> | null; uid: string }) {
   return (
     <g pointerEvents="none">
-      {TERRITORIES.filter(t => owners[t] && !skip?.has(t)).map(t => {
+      <defs>
+        <radialGradient id={`cq-glass-${uid}`} cx="34%" cy="30%" r="72%">
+          <stop offset="0" stopColor="#fff" stopOpacity={0.6} />
+          <stop offset="0.42" stopColor="#fff" stopOpacity={0} />
+          <stop offset="1" stopColor="#000" stopOpacity={0.4} />
+        </radialGradient>
+      </defs>
+      {TERRITORIES.filter(t => owners[t] && !skip?.has(t) && !capitalOf(t)).map(t => {
         const c = colorOf(t) ?? '#888'
         const [x, y] = M.stadium[t]
-        const cap = capitalOf(t)
-        const w = cap ? 24 : 17, top = cap ? 10 : 8, side = cap ? 8 : 6
         return (
-          <g key={t} transform={`translate(${x - w / 2} ${y - top / 2 - side / 2})`}>
-            <rect x={1.2} y={side + 1.4} width={w} height={top} rx={1.6} fill="#000" opacity={0.28} />
-            <rect x={0} y={top * 0.5} width={w} height={side + top * 0.5} rx={1.4} fill={c} />
-            <rect x={0} y={top * 0.5} width={w} height={side + top * 0.5} rx={1.4} fill="#2b1a0b" opacity={0.42} />
-            <rect x={0} y={0} width={w} height={top} rx={1.4} fill={c} stroke="#2b1a0b" strokeOpacity={0.55} strokeWidth={0.6} />
-            <rect x={0.8} y={0.6} width={w - 1.6} height={1.2} rx={0.6} fill="#fff" opacity={0.3} />
+          <g key={t} transform={`translate(${x} ${y})`}>
+            <path d="M0 0L6 4.6" stroke="#000" strokeOpacity={0.28} strokeWidth={1} strokeLinecap="round" />
+            <ellipse cx={4.6} cy={3.2} rx={5} ry={3.8} fill="#000" opacity={0.2} />
+            <path d="M0 0L-1.6 -3.6" stroke="#9a9a9a" strokeWidth={0.8} strokeLinecap="round" />
+            <circle cx={-2.2} cy={-5.2} r={5} fill={c} stroke={inked(c, 40)} strokeWidth={0.6} />
+            <circle cx={-2.2} cy={-5.2} r={5} fill={`url(#cq-glass-${uid})`} />
+            <ellipse cx={-3.8} cy={-7} rx={1.6} ry={1.1} fill="#fff" opacity={0.85} transform="rotate(-30 -3.8 -7)" />
           </g>
         )
       })}
@@ -542,7 +560,7 @@ function useOnSweep() {
  * the Northeast inset). Each is its own element, so moving it never
  * redraws the map under it.
  */
-function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes, creatures = false }: {
+function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes, creatures = false, desk = false, strings = false }: {
   win: Rect
   zoom: number
   P: Palette
@@ -555,6 +573,10 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes,
   lanes: boolean
   /** the parchment's sea creatures */
   creatures?: boolean
+  /** what's on the war room's table: its clock, ashtray, coffee, telephone and dividers */
+  desk?: boolean
+  /** this week's battles as string stretched pin to pin (the war room), not arrows */
+  strings?: boolean
 }) {
   const at = (x: number, y: number, w: number, h: number): CSSProperties => ({
     position: 'absolute', left: pct(x - win.x, win.w), top: pct(y - win.y, win.h), width: pct(w, win.w), height: pct(h, win.h),
@@ -583,6 +605,7 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes,
       )}
 
       {creatures && <SeaCreatures at={at} />}
+      {desk && <TableProps at={at} />}
 
       {/* Cities changing hands as the week stands */}
       {hot.map(c => {
@@ -613,6 +636,21 @@ function Motion({ win, zoom, P, pings, ringR, hot, fronts, arrows, radar, lanes,
           ))}
           {/* This week's battles: attacker → the city at stake (faint while they're losing) */}
           {arrows.map(r => {
+            if (strings) {
+              // The war room: string stretched between the two pins, taut while the attacker's
+              // winning, gone slack while they're losing (and nothing moving, so nothing to redraw)
+              const [x1, y1] = r.from, [x2, y2] = r.to
+              const sag = r.live ? 0 : Math.hypot(x2 - x1, y2 - y1) * 0.14
+              const d = `M${x1} ${y1}Q${(x1 + x2) / 2} ${(y1 + y2) / 2 + sag} ${x2} ${y2}`
+              return (
+                <g key={r.key} opacity={r.live ? 1 : 0.7}>
+                  <path d={d} transform={`translate(${1.6 / zoom} ${2.2 / zoom})`} fill="none" stroke="#000" strokeOpacity={0.28} strokeWidth={1.6 / zoom} />
+                  <path d={d} fill="none" stroke={r.color} strokeWidth={1.6 / zoom} strokeLinecap="round" />
+                  <path d={d} fill="none" stroke="#fff" strokeOpacity={0.3} strokeWidth={0.5 / zoom} strokeDasharray={`${1.4 / zoom} ${1.4 / zoom}`} />
+                  {[r.from, r.to].map(([x, y], i) => <circle key={i} cx={x} cy={y} r={1.4 / zoom} fill={r.color} />)}
+                </g>
+              )
+            }
             const route = r.sea ? laneRoute(r.fromTeam, r.toTeam) : null
             if (route) {
               // Across the water: along the lane, its head at the far shore
@@ -933,7 +971,19 @@ export const ConquestMap = memo(function ConquestMap({
       <g key={`mark-${t}`}>
         {(capital || siege || t === youAt || caption) && held(sx, sy, (
           <>
-            {capital && (look === 'parchment' ? (
+            {capital && look === 'warroom' && (
+              // The war room's capital: a paper flag in its empire's color on a brass-headed pin
+              <>
+                {siege && <circle cx={0} cy={0} r={size * 0.92} fill="none" stroke={SIEGE} strokeWidth={1.2} strokeOpacity={0.85} strokeDasharray="2 1.6" />}
+                <path d={`M${-size * 0.3} ${size * 0.45}L${size * 0.25} ${size * 0.75}`} stroke="#000" strokeOpacity={0.3} strokeWidth={size * 0.08} strokeLinecap="round" />
+                <path d={`M${-size * 0.3 + size * 0.22} ${-size * 0.85 + size * 0.3}h${size * 1.15}l${-size * 0.32} ${size * 0.36}l${size * 0.32} ${size * 0.36}h${-size * 1.15}z`} fill="#000" opacity={0.18} />
+                <path d={`M${-size * 0.3} ${size * 0.45}V${-size * 0.85}`} stroke="#8a8a8a" strokeWidth={size * 0.07} strokeLinecap="round" />
+                <path d={`M${-size * 0.3} ${-size * 0.85}h${size * 1.15}l${-size * 0.32} ${size * 0.36}l${size * 0.32} ${size * 0.36}h${-size * 1.15}z`} fill={o!.color} stroke={P.ink} strokeWidth={size * 0.05} strokeLinejoin="round" />
+                <path d={`M${-size * 0.3} ${-size * 0.62}h${size * 0.95}`} stroke="#fff" strokeOpacity={0.35} strokeWidth={size * 0.06} />
+                <circle cx={-size * 0.3} cy={-size * 0.88} r={size * 0.15} fill="#c19a3d" stroke="#5c4a1c" strokeWidth={size * 0.03} />
+              </>
+            )}
+            {capital && look !== 'warroom' && (look === 'parchment' ? (
               // The parchment's capital: an X painted on the chart, as on a treasure map
               <>
                 {siege && <circle cx={0} cy={0} r={size * 0.92} fill="none" stroke={SIEGE} strokeWidth={1.2} strokeOpacity={0.85} strokeDasharray="2 1.6" />}
@@ -1074,7 +1124,7 @@ export const ConquestMap = memo(function ConquestMap({
           target={orders?.target} flag={orders?.flag} flagColor={flagColor}
           highlight={highlight} highlightColor={highlightColor} P={P}
         />
-        {look === 'warroom' && <Blocks owners={owners} colorOf={colorOf} capitalOf={t => ownerAt(t)?.capital === t} skip={box ? NE_SET : null} />}
+        {look === 'warroom' && <Pins owners={owners} colorOf={colorOf} capitalOf={t => ownerAt(t)?.capital === t} skip={box ? NE_SET : null} uid={uid} />}
         <g pointerEvents="none">
           {/* Sea lanes */}
           {M.lanes.map(l => (
@@ -1182,7 +1232,8 @@ export const ConquestMap = memo(function ConquestMap({
       <div ref={motion} className="absolute inset-0 pointer-events-none" aria-hidden>
         <div style={frame(MAIN, 10)}>
           <Motion
-            win={MAIN} zoom={1} P={P} radar={look === 'radar'} lanes={look !== 'parchment'} creatures={look === 'parchment'}
+            win={MAIN} zoom={1} P={P} radar={look === 'radar'} lanes={look === 'radar'} creatures={look === 'parchment'}
+            desk={look === 'warroom'} strings={look === 'warroom'}
             pings={pings.filter(p => mainCities.includes(p.team) && (look === 'radar' || p.siege))}
             ringR={12 * labelScale * 1.9}
             hot={hot}
@@ -1193,7 +1244,7 @@ export const ConquestMap = memo(function ConquestMap({
         {box && (
           <div style={frame(box, 8)}>
             <Motion
-              win={NE} zoom={z} P={P} radar={false} lanes={false}
+              win={NE} zoom={z} P={P} radar={false} lanes={false} strings={look === 'warroom'}
               pings={pings.filter(p => NE_SET.has(p.team) && (look === 'radar' || p.siege))}
               ringR={(14 * labelScale * 1.9) / z}
               hot={hot.filter(h => NE_SET.has(h.team))}
