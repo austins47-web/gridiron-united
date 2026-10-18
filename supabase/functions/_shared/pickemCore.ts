@@ -1110,8 +1110,19 @@ export function recentSlateLabel(slate: Game[]): string {
   return slate.some(isLive) ? `since ${name} kicked off` : `from ${name}`
 }
 
-/** Share of hidden picks assumed to go to the favorite (roughly how pick'em leagues pick). */
-const CHALK_RATE = 0.68
+/**
+ * Share of hidden picks assumed to go to a favorite with win chance `q`:
+ * the pickers' odds on the favorite are the game's odds to the 1.5 power,
+ * so a coin flip splits the league and a big favorite gets nearly all of
+ * it (fit to the app's picks on games with a line, Oct 2026: 59% of
+ * picks went to 50–60% favorites, 83% to 72–80% ones). A
+ * flat rate had everyone else taking a 15% dog a third of the time,
+ * which made the viewer, whose own picks are real, look far better off.
+ */
+const chalkRate = (q: number) => {
+  const odds = (q / (1 - q)) ** 1.5
+  return Math.min(0.95, odds / (1 + odds))
+}
 
 /** Small seeded PRNG, so the same inputs always give the same odds. */
 function mulberry32(seed: number) {
@@ -1134,8 +1145,8 @@ function mulberry32(seed: number) {
  *
  * Picks on games that haven't locked (`isOpen`) are hidden from other
  * players, so with `viewerId` set only the viewer's own are read:
- * everyone else is assumed to take the favorite CHALK_RATE of the time
- * and to guess near the over/under — the odds can't give a pick away
+ * everyone else is assumed to take the favorite as often as people do
+ * on a line that size (chalkRate) and to guess near the over/under — the odds can't give a pick away
  * (same idea as computeWhoCanWin's viewer). A viewerId that isn't a
  * player hides every open pick. Returns null until a game has kicked
  * off, and once the week is over.
@@ -1161,6 +1172,7 @@ export function computeWinOdds(
   const ou = tb?.over_under ?? 44
   const favorite = playable.map(g => (pregameHomeWinChance(g) >= 0.5 ? g.home_team : g.away_team))
   const underdog = playable.map((g, i) => (favorite[i] === g.home_team ? g.away_team : g.home_team))
+  const chalk = playable.map(g => chalkRate(Math.max(pregameHomeWinChance(g), 1 - pregameHomeWinChance(g))))
   // Each player's pick per game: the team, null for no pick, undefined when hidden
   const table = players.map(r => playable.map(g =>
     known(r.userId, g) ? pickOf.get(`${r.userId}:${g.id}`) ?? null : undefined))
@@ -1213,7 +1225,7 @@ export function computeWinOdds(
         let n = 0
         const row = table[u]
         for (let i = 0; i < playable.length; i++) {
-          const pick = row[i] === undefined ? (rand() < CHALK_RATE ? favorite[i] : underdog[i]) : row[i]
+          const pick = row[i] === undefined ? (rand() < chalk[i] ? favorite[i] : underdog[i]) : row[i]
           if (pick === winner[i]) n++
         }
         pts[u] = n
