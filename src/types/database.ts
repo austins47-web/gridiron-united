@@ -1507,7 +1507,7 @@ export interface Database {
       /** Whether a Spotify is connected for the Shop TV, and whose (commissioner only). */
       league_spotify_status: {
         Args: { p_league: string }
-        Returns: { connected: boolean; spotify_name: string | null; connected_at: string | null; can_play: boolean; tv_player: boolean }[]
+        Returns: { connected: boolean; spotify_name: string | null; connected_at: string | null; can_play: boolean; tv_player: boolean; can_control: boolean }[]
       }
       /** The Shop TV as a Spotify speaker, on or off (on needs a grant with playback). */
       set_league_spotify_tv_player: { Args: { p_league: string; p_on: boolean }; Returns: undefined }

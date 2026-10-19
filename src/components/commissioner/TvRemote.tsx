@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2, Clapperboard, BarChart3, Plus, MessageSquare, ChevronDown, Moon, Swords } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Megaphone, Mic, ListOrdered, LayoutGrid, X, RotateCw, Send, Loader2, Clapperboard, BarChart3, Plus, MessageSquare, ChevronDown, Moon, Swords, Speaker } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -8,13 +8,14 @@ import { TV_MOMENTS, type TvMoment } from '@/lib/holiday'
 import { useTvReactions } from '@/hooks/useTvReactions'
 import { TvChatBox } from '@/components/tv/TvReactions'
 import { WarOfficeRemote } from './WarOfficeRemote'
+import { startSpotifyConnect, useSpotifyStatus } from './leagueSpotify'
 
 type Action = 'roast' | 'standings' | 'board' | 'replay' | 'chat' | 'map' | 'poster' | 'newsreel' | 'sleep' | 'announce' | 'moment' | 'clear' | 'reload'
 
 /** What the TV's Spotify speaker is doing (its presence), worst news first. */
 const SPEAKER_ORDER = ['blocked', 'unsupported', 'premium', 'auth', 'error', 'connecting', 'ready']
 const SPEAKER_NOTES: Record<string, string> = {
-  ready: 'The TV is in Spotify’s list of devices. Pick it in Spotify to play the music there.',
+  ready: 'The TV is a Spotify speaker: press Play on the TV, or pick it in Spotify’s list of devices.',
   connecting: 'Connecting the TV to Spotify…',
   blocked: 'Spotify is sending music to the TV, but its browser is holding the sound back: click the TV screen (or press OK on its remote) once.',
   unsupported: 'This TV’s browser can’t play Spotify, so it can’t be the speaker (the song still shows). On a Fire TV, try the Spotify app: start the music there, then go back to the TV page in Silk.',
@@ -51,6 +52,8 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
   const [tvAsleep, setTvAsleep] = useState<'hours' | 'manual' | null>(null)
   // The TV's Spotify speaker (Music on the TV), the most useful one if there are a few
   const [speaker, setSpeaker] = useState<string | null>(null)
+  // A ready TV's Spotify device, for Play on the TV (TVs from before it don't say)
+  const [speakerDevice, setSpeakerDevice] = useState<string | null>(null)
   useEffect(() => {
     if (!hasTv) return
     let channel: ReturnType<typeof supabase.channel> | null = null
@@ -61,7 +64,7 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
       channel
         .on('presence', { event: 'sync' }, () => {
           // Every TV joins under the key 'tv': count them, not the keys
-          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string; fps?: number | null; asleep?: boolean; sleep?: 'hours' | 'manual' | null }[]
+          const tvs = Object.values(channel!.presenceState()).flat() as { fx?: string; speaker?: string; spotify?: string | null; fps?: number | null; asleep?: boolean; sleep?: 'hours' | 'manual' | null }[]
           setTvsOn(tvs.length)
           setTvLite(tvs.some(t => t.fx === 'lite' || t.fx === 'still'))
           setTvAsleep(tvs.length > 0 && tvs.every(t => t.asleep) ? (tvs.some(t => t.sleep === 'manual') ? 'manual' : 'hours') : null)
@@ -69,6 +72,7 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
           setTvFps(fps.length ? Math.min(...fps) : null)
           const states = tvs.map(t => t.speaker).filter((s): s is string => !!s && s !== 'off')
           setSpeaker(SPEAKER_ORDER.find(s => states.includes(s)) ?? null)
+          setSpeakerDevice(tvs.find(t => t.speaker === 'ready' && t.spotify)?.spotify ?? null)
         })
         .subscribe(status => { if (status === 'SUBSCRIBED') setTvsOn(n => n ?? 0) })
     })
@@ -87,6 +91,30 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
     toast.success(tvsOn === 0 ? `${done}. The TV looks off right now, though.` : done)
     return true
   }
+
+  // Play on the TV: the league's Spotify moves its music onto the TV's
+  // speaker (tv-spotify-play), from whatever's playing it now. A grant from
+  // before this can't: Spotify's asked again first.
+  const qc = useQueryClient()
+  const { data: spotify } = useSpotifyStatus(leagueId, hasTv)
+  const playOnTv = async () => {
+    setBusy('spotify')
+    if (!spotify?.can_control) {
+      if (!await startSpotifyConnect(leagueId, true)) setBusy(null)
+      return
+    }
+    const { data, error } = await supabase.functions.invoke('tv-spotify-play', { body: { league_id: leagueId, device_id: speakerDevice } })
+    setBusy(null)
+    if (error) {
+      const body = await (error as any)?.context?.json?.().catch(() => null) as { error?: string; reconnect?: boolean } | null
+      toast.error(body?.error ?? 'Couldn’t send the music to the TV. Try again.', { duration: 6000 })
+      if (body?.reconnect) qc.invalidateQueries({ queryKey: ['league-spotify', leagueId] })
+      return
+    }
+    if (data?.playing) toast.success('Playing on the TV')
+    else toast('The TV is picked in Spotify, but nothing’s playing. Start a song and it plays on the TV.', { icon: '🔈', duration: 6000 })
+  }
+
   const announce = async (e: FormEvent) => {
     e.preventDefault()
     if (text.trim() && await press('announce', { p_text: text.trim() }, 'Announced on the TV')) setText('')
@@ -125,6 +153,23 @@ export function TvRemote({ leagueId }: { leagueId: string }) {
         <p className={clsx('-mt-2 text-[11px]', speaker === 'ready' ? 'text-[#1DB954]' : speaker === 'connecting' ? 'text-field-400' : 'text-amber-300')}>
           🔊 {SPEAKER_NOTES[speaker]}
         </p>
+      )}
+      {!!tvsOn && spotify?.tv_player && speaker !== 'unsupported' && speaker !== 'premium' && (
+        <div>
+          <button
+            onClick={playOnTv}
+            disabled={!!busy}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#1DB954] px-4 py-2.5 text-sm font-bold text-black hover:brightness-110 disabled:opacity-60"
+          >
+            {busy === 'spotify' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Speaker className="w-4 h-4" />}
+            {spotify.can_control ? 'Play on the TV' : 'Allow Play on the TV'}
+          </button>
+          <p className="mt-1 text-[11px] text-field-500">
+            {spotify.can_control
+              ? `Moves whatever ${spotify.spotify_name ? `${spotify.spotify_name}’s` : 'the shop’s'} Spotify is playing onto the TV. Your phone doesn’t need the same Spotify.`
+              : 'Spotify asks you once more, for permission to send the music to the TV. Then this button plays it there.'}
+          </p>
+        </div>
       )}
       {!!tvsOn && tvLite && (
         <p className="-mt-2 text-[11px] text-field-400">

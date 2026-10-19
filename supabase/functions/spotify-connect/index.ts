@@ -11,7 +11,8 @@
 // Needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET (a Spotify developer
 // app whose redirect URI is this function's URL). Read-only scopes (what's
 // playing) unless it's for the TV's speaker: Spotify's Web Playback SDK
-// needs streaming, and the profile scopes it checks Premium with.
+// needs streaming, and the profile scopes it checks Premium with; the
+// remote's Play on the TV (tv-spotify-play) needs to move the playback.
 // ══════════════════════════════════════════════════════════════
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -25,7 +26,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } })
 
 const SCOPES = 'user-read-currently-playing user-read-playback-state'
-const PLAYER_SCOPES = `${SCOPES} streaming user-read-email user-read-private`
+const PLAYER_SCOPES = `${SCOPES} streaming user-read-email user-read-private user-modify-playback-state`
 const STATE_TTL_MS = 15 * 60_000
 
 serve(async (req) => {

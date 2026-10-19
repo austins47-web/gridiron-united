@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Music, Loader2, Unplug, Speaker } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
+import { startSpotifyConnect, useSpotifyStatus } from './leagueSpotify'
 
 /** What came back from Spotify (spotify-connect sends ?spotify=…). */
 const RETURN_MESSAGES: Record<string, [ok: boolean, text: string]> = {
@@ -13,7 +14,7 @@ const RETURN_MESSAGES: Record<string, [ok: boolean, text: string]> = {
   expired: [false, 'That took too long. Try connecting again.'],
   failed: [false, 'Spotify didn’t connect. Try again.'],
   'not-set-up': [false, 'Spotify isn’t set up for this app yet.'],
-  player: [true, 'The TV is a Spotify speaker now: pick it in Spotify’s list of devices.'],
+  player: [true, 'The TV is a Spotify speaker now: press Play on the TV in the remote, or pick it in Spotify’s list of devices.'],
   'no-player': [false, 'Spotify didn’t give permission to play music. Try again.'],
 }
 
@@ -28,14 +29,7 @@ const RETURN_MESSAGES: Record<string, [ok: boolean, text: string]> = {
 export function TvMusicSetting({ leagueId }: { leagueId: string }) {
   const qc = useQueryClient()
   const key = ['league-spotify', leagueId]
-  const { data: status, isLoading } = useQuery({
-    queryKey: key,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('league_spotify_status', { p_league: leagueId })
-      if (error) throw error
-      return data?.[0] ?? { connected: false, spotify_name: null, connected_at: null, can_play: false, tv_player: false }
-    },
-  })
+  const { data: status, isLoading } = useSpotifyStatus(leagueId)
 
   // Back from Spotify: say how it went, once
   const [params, setParams] = useSearchParams()
@@ -56,14 +50,7 @@ export function TvMusicSetting({ leagueId }: { leagueId: string }) {
   // player: also ask for permission to play music, for the TV's speaker
   const connect = async (player = false) => {
     setBusy(true)
-    const { data, error } = await supabase.functions.invoke('spotify-connect', { body: { league_id: leagueId, player } })
-    if (error || !data?.url) {
-      const msg = await (error as any)?.context?.json?.().then((b: any) => b?.error).catch(() => null)
-      toast.error(msg ?? 'Couldn’t start connecting Spotify')
-      setBusy(false)
-      return
-    }
-    window.location.href = data.url
+    if (!await startSpotifyConnect(leagueId, player)) setBusy(false)
   }
   const disconnect = async () => {
     setBusy(true)
@@ -79,7 +66,7 @@ export function TvMusicSetting({ leagueId }: { leagueId: string }) {
     setBusy(false)
     if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: key })
-    toast.success(on ? 'The TV is a Spotify speaker: pick it in Spotify’s list of devices.' : 'The TV stopped being a Spotify speaker.')
+    toast.success(on ? 'The TV is a Spotify speaker: press Play on the TV in the remote, or pick it in Spotify’s list of devices.' : 'The TV stopped being a Spotify speaker.')
   }
 
   return (
@@ -120,8 +107,8 @@ export function TvMusicSetting({ leagueId }: { leagueId: string }) {
                 <Speaker className="w-3.5 h-3.5 text-[#1DB954]" /> Play the music on the TV
               </p>
               <p className="text-xs text-field-400 mt-0.5">
-                The TV shows up in Spotify’s list of devices, like a speaker. Pick it on your phone and the music comes
-                out of the TV. Needs Spotify Premium.
+                The TV shows up in Spotify’s list of devices, like a speaker. Press Play on the TV in the remote (or pick
+                it in Spotify) and the music comes out of the TV. Needs Spotify Premium.
               </p>
             </div>
             {status.can_play ? (

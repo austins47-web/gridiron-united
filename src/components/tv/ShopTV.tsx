@@ -389,7 +389,7 @@ export function ShopTV() {
   // The song on the league's Spotify, when one's connected
   const song = useNowPlaying(code, !!board?.brand?.music && !asleep)
   // The TV as a Spotify speaker, when the commissioner's turned that on
-  const speaker = useSpotifySpeaker(code, !!board?.brand?.player, `${board?.league ?? 'Shop'} TV`)
+  const { state: speaker, device: speakerDevice } = useSpotifySpeaker(code, !!board?.brand?.player, `${board?.league ?? 'Shop'} TV`)
   const { lite, still, perf } = useLiteEffects()
 
   const goFull = () => {
@@ -424,7 +424,7 @@ export function ShopTV() {
         {board && !asleep && holiday && <HolidayScene theme={holiday} lite={lite} still={still} />}
         {/* Lite: a few falling pieces; still: none */}
         {board && !asleep && holiday && !still && <HolidayParticles theme={holiday} count={lite ? 6 : 14} />}
-        {status !== 'gone' && <LiveFromPhones code={code} status={{ lite, still, speaker, perf, asleep, sleep }} />}
+        {status !== 'gone' && <LiveFromPhones code={code} status={{ lite, still, speaker, speakerDevice, perf, asleep, sleep }} />}
         {speaker === 'blocked' && <SpeakerBlocked />}
         {board && <RemoteOverlay board={board} code={code} colors={holiday?.colors ?? [board.brand?.color ?? DEFAULT_GOLD, '#fde68a']} />}
         {board && !asleep && <ReplayShow board={board} />}
@@ -2203,10 +2203,10 @@ const CHAT_PREVIEW = [
   { name: 'Preview', text: '🔥🔥🔥 called it' },
 ]
 
-/** This TV's presence on its channel, for the commissioner's remote: on lighter effects, and its Spotify speaker. */
-interface TvStatus { lite: boolean; still: boolean; speaker: SpeakerState; perf: TvPerf | null; asleep: boolean; sleep: SleepReason | null }
+/** This TV's presence on its channel, for the commissioner's remote: on lighter effects, and its Spotify speaker (and device, for Play on the TV). */
+interface TvStatus { lite: boolean; still: boolean; speaker: SpeakerState; speakerDevice: string | null; perf: TvPerf | null; asleep: boolean; sleep: SleepReason | null }
 const tvPresence = (since: string, s: TvStatus) => ({
-  on: true, since, fx: s.still ? 'still' : s.lite ? 'lite' : 'full', speaker: s.speaker,
+  on: true, since, fx: s.still ? 'still' : s.lite ? 'lite' : 'full', speaker: s.speaker, spotify: s.speakerDevice,
   fps: s.perf?.fps ?? null, slow: s.perf?.slow ?? null, silk: SILK, asleep: s.asleep, sleep: s.sleep,
 })
 
@@ -2217,11 +2217,11 @@ function LiveFromPhones({ code, status }: { code: string; status: TvStatus }) {
   // speaker, its frames a second, asleep after hours
   const joined = useRef<{ channel: ReturnType<typeof supabase.channel>; since: string } | null>(null)
   const now = useRef(status)
-  const { lite, still, speaker, perf, asleep, sleep } = status
+  const { lite, still, speaker, speakerDevice, perf, asleep, sleep } = status
   useEffect(() => {
-    now.current = { lite, still, speaker, perf, asleep, sleep }
+    now.current = { lite, still, speaker, speakerDevice, perf, asleep, sleep }
     if (joined.current) void joined.current.channel.track(tvPresence(joined.current.since, now.current))
-  }, [lite, still, speaker, perf, asleep, sleep])
+  }, [lite, still, speaker, speakerDevice, perf, asleep, sleep])
   useEffect(() => {
     let n = 0
     const timers: ReturnType<typeof setTimeout>[] = []
@@ -2404,9 +2404,12 @@ function loadSpotifySdk(): Promise<SpotifyPlayerClass> {
   return spotifySdk
 }
 
-function useSpotifySpeaker(code: string, on: boolean, name: string): SpeakerState {
+/** The speaker's state, and its Spotify device while it's ready (the remote's Play on the TV sends the music there). */
+function useSpotifySpeaker(code: string, on: boolean, name: string): { state: SpeakerState; device: string | null } {
   const [state, setState] = useState<SpeakerState>('off')
+  const [device, setDevice] = useState<string | null>(null)
   useEffect(() => {
+    setDevice(null)
     if (!on) { setState('off'); return }
     let alive = true
     let player: SpotifyPlayer | null = null
@@ -2428,8 +2431,14 @@ function useSpotifySpeaker(code: string, on: boolean, name: string): SpeakerStat
     loadSpotifySdk().then(Player => {
       if (!alive) return
       player = new Player({ name, volume: 1, getOAuthToken: cb => { token().then(cb, () => set('auth')) } })
-      player.addListener('ready', () => set('ready'))
-      player.addListener('not_ready', () => set('connecting'))
+      player.addListener('ready', (d: { device_id?: string }) => {
+        if (alive) setDevice(d?.device_id ?? null)
+        set('ready')
+      })
+      player.addListener('not_ready', () => {
+        if (alive) setDevice(null)
+        set('connecting')
+      })
       player.addListener('initialization_error', () => set('unsupported'))
       player.addListener('authentication_error', () => set('auth'))
       player.addListener('account_error', () => set('premium'))
@@ -2462,7 +2471,7 @@ function useSpotifySpeaker(code: string, on: boolean, name: string): SpeakerStat
       player?.disconnect()
     }
   }, [code, on, name])
-  return state
+  return { state, device }
 }
 
 /** Spotify's sending music to the TV, but the browser needs a click before it plays sound. */
