@@ -15,8 +15,10 @@ import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, computeWhoCanWin, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
   computeWinOdds, computeUpsetWatch, computeBelt, keyInjuries, switchOutcome, beforeKickoff,
+  isLive, homeWinChance, gameClockLabel,
   type WeekRow, type InjuredStarter,
 } from './standings'
+import { useScoreTick } from '@/hooks/useScoreTick'
 import { BadgeFlair } from './BadgeFlair'
 import { useFlairMap } from '@/hooks/useFlairMap'
 import { WeekInProgress } from './WeekRecap'
@@ -1305,6 +1307,17 @@ function PickEmWeekView({ calendar, view }: { calendar: PickemCalendar; view: 'p
   )
 }
 
+/** A live game's clock: "Q3 13:41", "Halftime", "End of Q1", "4:02 left in the 4th". */
+function liveClock(g: { period?: number | null; clock?: string | null }): string {
+  const p = g.period ?? 0
+  if (g.clock && /^0?0:00$|^0\.0$/.test(g.clock)) {
+    if (p === 2) return 'Halftime'
+    if (p === 1 || p === 3) return `End of Q${p}`
+    if (p === 4) return 'End of regulation'
+  }
+  return gameClockLabel(g as any)
+}
+
 function GamePickCard({
   game, pickedTeam, onPick, deadline, odds, recordsByAbbr, recordsArePreseason, isTiebreaker, tiebreakerScore, onTiebreakerScore, tiebreakerWarning,
   reason, onReason, savedPick, injuries, threadCount = 0, onThread,
@@ -1351,6 +1364,15 @@ function GamePickCard({
   const homeInfo = TEAM_INFO[game.home_team] ?? { name: game.home_team }
   const awayInfo = TEAM_INFO[game.away_team] ?? { name: game.away_team }
   const isFinal = game.status === 'final'
+  // While it's on: the score (flashing when it moves), who has the ball,
+  // the live win chance, and how your pick is doing
+  const live = isLive(game) && !postponed
+  const awayTick = useScoreTick(game.away_score ?? 0)
+  const homeTick = useScoreTick(game.home_score ?? 0)
+  const liveHome = live ? homeWinChance(game) : null
+  const pickLead = live && pickedTeam
+    ? (pickedTeam === game.home_team ? 1 : -1) * ((game.home_score ?? 0) - (game.away_score ?? 0))
+    : null
   const winner = isFinal
     ? game.home_score > game.away_score ? game.home_team
       : game.away_score > game.home_score ? game.away_team
@@ -1387,6 +1409,11 @@ function GamePickCard({
         )}
         {postponed ? (
           <span className="text-xs text-field-300 font-bold">Postponed · doesn't count</span>
+        ) : live ? (
+          <span className="flex items-center gap-1.5 text-xs font-bold text-red-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+            LIVE <span className="text-field-200">· {liveClock(game)}</span>
+          </span>
         ) : locked && !isFinal && (
           <span className="flex items-center gap-1 text-xs text-gold font-bold">
             <Lock className="w-3 h-3" /> Locked
@@ -1401,7 +1428,7 @@ function GamePickCard({
             <Bot className="w-3 h-3" /> Autopilot
           </span>
         )}
-        {odds && !isFinal && (
+        {odds && !isFinal && !live && (
           <span className="flex items-center gap-1 text-xs text-field-500">
             <TrendingUp className="w-3 h-3 text-gold/50" />
             {odds.totalPoints != null
@@ -1428,22 +1455,24 @@ function GamePickCard({
         {[
           {
             team: game.away_team, info: awayInfo, label: 'Away',
-            score: game.away_score,
+            score: game.away_score, tick: awayTick,
             spread: formatSpread(awaySpread),
-            winPct: odds?.awayWinPct ?? null,
+            winPct: liveHome != null ? Math.round((1 - liveHome) * 100) : odds?.awayWinPct ?? null,
             ml: formatML(odds?.awayMoneyline ?? null),
           },
           {
             team: game.home_team, info: homeInfo, label: 'Home',
-            score: game.home_score,
+            score: game.home_score, tick: homeTick,
             spread: formatSpread(homeSpread),
-            winPct: odds?.homeWinPct ?? null,
+            winPct: liveHome != null ? Math.round(liveHome * 100) : odds?.homeWinPct ?? null,
             ml: formatML(odds?.homeMoneyline ?? null),
           },
-        ].map(({ team, info, label, score, spread, winPct, ml }) => {
+        ].map(({ team, info, label, score, tick, spread, winPct, ml }) => {
           const isPicked = pickedTeam === team
           const isWinner = winner === team
           const isLoser = isFinal && winner !== 'TIE' && winner !== team
+          const other = team === game.home_team ? game.away_score : game.home_score
+          const leading = live && (score ?? 0) > (other ?? 0)
 
           return (
             <button
@@ -1452,7 +1481,12 @@ function GamePickCard({
               disabled={locked}
               className={clsx(
                 'relative flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all',
-                isPicked && !isFinal
+                // Live, your pick is colored by how it's going: ahead, behind, level
+                isPicked && live && pickLead != null && pickLead > 0
+                  ? 'border-nfl bg-nfl/10 text-nfl'
+                  : isPicked && live && pickLead != null && pickLead < 0
+                  ? 'border-red-500/50 bg-red-500/10 text-red-300'
+                  : isPicked && !isFinal
                   ? 'border-gold bg-gold/15 text-gold scale-[1.02]'
                   : isPicked && isWinner
                   ? 'border-nfl bg-nfl/15 text-nfl'
@@ -1486,7 +1520,19 @@ function GamePickCard({
                   {recordsByAbbr.get(team)}
                 </span>
               )}
-              {!isFinal && (injuries?.get(team) ?? []).slice(0, 2).map(p => (
+              {live && game.possession === team && (
+                <span className="absolute top-2 left-2 text-sm leading-none" title="Has the ball">🏈</span>
+              )}
+              {live && (
+                <span className={clsx(
+                  'score-flash font-cond font-black text-3xl leading-none tabular-nums mt-0.5 px-1',
+                  tick.flashing && 'is-flashing',
+                  leading ? 'text-white' : 'text-field-300',
+                )}>
+                  {tick.display}
+                </span>
+              )}
+              {!isFinal && !live && (injuries?.get(team) ?? []).slice(0, 2).map(p => (
                 <span
                   key={p.id}
                   title={`${p.name} (${p.pos}) is ${p.status}`}
@@ -1499,10 +1545,10 @@ function GamePickCard({
                 </span>
               ))}
 
-              {/* Odds info — spread + win % */}
-              {odds && !isFinal && (
+              {/* Odds info — spread + win % (live: just the live win chance) */}
+              {(odds || live) && !isFinal && (
                 <div className="mt-1 flex flex-col items-center gap-0.5 w-full border-t border-white/10 pt-1.5">
-                  <div className="flex items-center gap-2 flex-wrap justify-center">
+                  {!live && <div className="flex items-center gap-2 flex-wrap justify-center">
                     {spread !== null && (
                       <span className={clsx(
                         'font-cond font-black text-sm',
@@ -1514,11 +1560,11 @@ function GamePickCard({
                     {ml !== null && (
                       <span className="font-cond text-xs text-field-400">{ml}</span>
                     )}
-                  </div>
+                  </div>}
                   {winPct !== null && (
                     <div className="w-full">
                       <div className="flex justify-between text-[11px] text-field-500 mb-0.5">
-                        <span>Win%</span>
+                        <span>{live ? 'Live win%' : 'Win%'}</span>
                         {/* Fixed per-side, not a percentage threshold
                             — the old version colored each bar based
                             on its own number crossing 60%/40%, so a
@@ -1571,6 +1617,31 @@ function GamePickCard({
         })}
       </div>
 
+      {live && (pickedTeam || game.down_distance || game.last_play) && (
+        <div className="rounded-lg border border-field-700 bg-field-900/60 px-3 py-2 space-y-1">
+          {pickedTeam && pickLead != null && liveHome != null && (() => {
+            const chance = Math.round((pickedTeam === game.home_team ? liveHome : 1 - liveHome) * 100)
+            return (
+              <p className={clsx('text-sm font-bold', pickLead > 0 ? 'text-emerald-300' : pickLead < 0 ? 'text-red-300' : 'text-gold')}>
+                {pickLead > 0 ? `${pickedTeam} leads by ${pickLead}` : pickLead < 0 ? `${pickedTeam} trails by ${-pickLead}` : `${pickedTeam} is level`}
+                <span className="font-normal text-field-400">
+                  {' · '}{chance}% {pickLead > 0 ? 'to hold on' : pickLead < 0 ? 'to come back' : 'to win'}
+                </span>
+              </p>
+            )
+          })()}
+          {(game.down_distance || game.red_zone) && (
+            <p className="flex items-center gap-2 text-xs">
+              {game.red_zone && <span className="rounded bg-red-600 text-white text-[10px] font-black px-1.5 py-0.5 tracking-wider">RED ZONE</span>}
+              <span className="text-field-200 font-bold">
+                {game.possession ? `${game.possession} ball` : ''}{game.possession && game.down_distance ? ' · ' : ''}{game.down_distance ?? ''}
+              </span>
+            </p>
+          )}
+          {game.last_play && <p className="text-xs text-field-400 line-clamp-2">{game.last_play}</p>}
+        </div>
+      )}
+
       {lineMove && (
         <p className={clsx('text-xs flex items-center gap-1', lineMove.now > lineMove.then ? 'text-red-300' : 'text-emerald-300')}>
           {lineMove.now > lineMove.then ? <TrendingDown className="w-3.5 h-3.5 shrink-0" /> : <TrendingUp className="w-3.5 h-3.5 shrink-0" />}
@@ -1608,6 +1679,22 @@ function GamePickCard({
               Vegas projects <span className="font-bold text-field-200">{odds.totalPoints}</span> combined points
             </p>
           )}
+          {/* Live or over: the total so far against your guess */}
+          {(live || isFinal) && (() => {
+            const total = (game.home_score ?? 0) + (game.away_score ?? 0)
+            const guess = tiebreakerScore ? Number(tiebreakerScore) : null
+            return (
+              <p className="text-sm text-field-300">
+                {isFinal ? 'Final total' : 'Total so far'} <span className="font-black text-white tabular-nums">{total}</span>
+                {guess != null && Number.isFinite(guess) && (
+                  <span className="text-field-400">
+                    {' · '}your guess {guess}
+                    {isFinal ? ` (off by ${Math.abs(total - guess)})` : total < guess ? ` · ${guess - total} to go` : total > guess ? ` · ${total - guess} over` : ' · right on it'}
+                  </span>
+                )}
+              </p>
+            )
+          })()}
           <input
             id="tiebreaker-guess"
             type="number"
