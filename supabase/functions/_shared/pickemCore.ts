@@ -80,7 +80,7 @@ export interface WeekRow {
   userId: string
   name: string
   correct: number
-  played: number          // games with a live-or-final score AND they picked
+  played: number          // games with a live-or-final winner, the same for everyone: a missed pick counts as wrong
   submitted: boolean      // did they get any picks in at all
   tiebreakerGuess: number | null
   tiebreakerDiff: number | null   // distance from the actual total
@@ -152,28 +152,27 @@ export function tiebreakerTotal(games: Game[]): number | null {
  * Ordering: most correct first, then closest tiebreaker guess.
  * Members who submitted nothing are included but flagged, so the
  * caller can choose to hide them.
+ *
+ * Everyone plays every game: a game with a winner counts for each
+ * member, and a missed pick on it counts as wrong (the commissioner's
+ * rule, so everyone's record covers the same games).
  */
 export function computeWeek(
   games: Game[],
   picks: Pick[],
   members: Member[],
 ): WeekRow[] {
-  const gameById = new Map(games.map(g => [g.id, g]))
   const actualTotal = tiebreakerTotal(games)
+  // Not finished, or a tie: counts for no one
+  const decided = games.flatMap(g => {
+    const w = winnerOf(g)
+    return w === null ? [] : [{ id: g.id, winner: w }]
+  })
 
   const rows: WeekRow[] = members.map(m => {
     const mine = picks.filter(p => p.user_id === m.user_id)
-
-    let correct = 0
-    let played  = 0
-    for (const p of mine) {
-      const g = gameById.get(p.game_id)
-      if (!g) continue
-      const w = winnerOf(g)
-      if (w === null) continue      // not finished, or a tie
-      played++
-      if (p.picked_team === w) correct++
-    }
+    const pickOf = new Map(mine.map(p => [p.game_id, p.picked_team]))
+    const correct = decided.filter(g => pickOf.get(g.id) === g.winner).length
 
     const tbPick = mine.find(p => p.tiebreaker_score != null)
     const guess  = tbPick?.tiebreaker_score ?? null
@@ -182,7 +181,7 @@ export function computeWeek(
       userId: m.user_id,
       name: nameOf(m),
       correct,
-      played,
+      played: decided.length,
       submitted: mine.length > 0,
       tiebreakerGuess: guess,
       tiebreakerDiff:
@@ -607,8 +606,9 @@ export interface StandingRow {
 /**
  * Season standings across every completed week.
  *
- * Built from the member list, so anyone who has just joined appears
- * at 0-0 rather than being missing until they make a pick.
+ * Built from the member list. Everyone's record covers the same games
+ * (computeWeek): a missed pick, or a week missed entirely, counts as
+ * wrong, even for someone who joined late.
  */
 export function computeStandings(
   games: Game[],
@@ -630,6 +630,8 @@ export function computeStandings(
     if (!wkGames.some(isDecided)) continue     // nothing on the board yet
 
     const rows = computeWeek(wkGames, wkPicks, members)
+    // A week nobody in the league picked (before the league started) counts for no one
+    if (!rows.some(r => r.submitted)) continue
 
     for (const r of rows) {
       const t = totals.get(r.userId)

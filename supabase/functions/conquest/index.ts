@@ -643,13 +643,18 @@ async function soFar(admin: SupabaseClient, leagueId: string) {
   }
 }
 
-/** Everyone's season win % through a week: correct picks over picks on finished games. */
+/**
+ * Everyone's season win % through a week, as in the standings: correct
+ * picks over every finished game in the weeks the league picked, so a
+ * missed pick counts as wrong.
+ */
 async function seasonWinPct(admin: SupabaseClient, leagueId: string, season: number, week: number): Promise<Record<string, number>> {
   const { data: games } = await admin.from('nfl_games')
     .select('id, week, season, home_team, away_team, home_score, away_score, status, game_date')
     .eq('season', season).lte('week', week)
-  const counted = new Map((games ?? []).filter(g => !isVoid(g as Game) && isFinal(g as Game)).map(g => [g.id, g as Game]))
-  const tally: Record<string, { won: number; played: number }> = {}
+  const counted = new Map((games ?? []).filter(g => isFinal(g as Game) && winnerOf(g as Game) != null).map(g => [g.id, g as Game]))
+  const won: Record<string, number> = {}
+  const weeksPicked = new Set<number>()
   for (let from = 0; ; from += 1000) {
     const { data: page, error } = await admin.from('pickem_picks').select('user_id, game_id, picked_team')
       .eq('league_id', leagueId).eq('season', season).lte('week', week).order('id').range(from, from + 999)
@@ -657,13 +662,13 @@ async function seasonWinPct(admin: SupabaseClient, leagueId: string, season: num
     for (const p of page ?? []) {
       const g = counted.get(p.game_id)
       if (!g || !p.picked_team) continue
-      const t = tally[p.user_id] ??= { won: 0, played: 0 }
-      t.played++
-      if (winnerOf(g) === p.picked_team) t.won++
+      weeksPicked.add(g.week)
+      won[p.user_id] = (won[p.user_id] ?? 0) + (winnerOf(g) === p.picked_team ? 1 : 0)
     }
     if (!page || page.length < 1000) break
   }
-  return Object.fromEntries(Object.entries(tally).map(([u, t]) => [u, t.played ? t.won / t.played : 0]))
+  const total = [...counted.values()].filter(g => weeksPicked.has(g.week)).length
+  return Object.fromEntries(Object.entries(won).map(([u, n]) => [u, total ? n / total : 0]))
 }
 
 /** The war's over: the season's titles, from the war log and the final map, kept for good. */

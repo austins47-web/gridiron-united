@@ -45,7 +45,7 @@ export function PickemWelcome({ league, memberCount, onClose }: {
         <div className="px-6 py-5 space-y-3.5">
           <div className="font-cond font-bold text-[11px] uppercase tracking-[0.2em] text-field-400">How it works</div>
           <Rule icon={<Target className="w-4 h-4" />}>
-            Pick the <b>winner of every NFL game</b>, every week.
+            Pick the <b>winner of every NFL game</b>, every week. A missed pick counts as wrong.
           </Rule>
           <Rule icon={<Lock className="w-4 h-4" />}>{lockRule}</Rule>
           <Rule icon={<Crosshair className="w-4 h-4" />}>
