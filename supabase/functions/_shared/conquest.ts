@@ -28,12 +28,14 @@
 //   other cities to the besieger and the siege lifts, before the battles.
 // - Trades: two players swap a city each (never a capital) when both agree,
 //   before the week's first kickoff (the conquest function, not the settle).
-// - Ambush (an order, instead of attacking): name an empire on your border;
-//   if it attacks you and you outscore it, you take one of its cities.
+// - Ambush (an order, instead of attacking): name an empire on your border.
+//   If it attacks you, you're ready for it: it needs a win by 2 (one more
+//   than it otherwise would), and if it doesn't get that, you strike back
+//   and take one of its cities, even on a level score or a loss by 1.
 // - Second front: an empire of 5 or more cities (outposts count) attacks a
 //   second neighbor too, taking a city only with a win by 2.
 // - Rout: a win by 5 more than the battle needed (5, or 6 against an empire
-//   dug in or on a second front) takes two cities.
+//   dug in, on a second front or into an ambush) takes two cities.
 // - Supply lines: a city cut off from its capital (not joined to it through
 //   your own cities, by land or sea) defends at -1: one point short takes it.
 // - Outposts: a game played abroad leaves an outpost, won by the best week
@@ -208,6 +210,10 @@ export interface Battle {
   score: [number, number]
   /** a second front (an empire of 5+ cities' second attack, outposts counted), or an ambush sprung (the defender striking back) */
   tactic?: 'second' | 'ambush'
+  /** walked into an ambush laid for the attacker: it needs one more to win */
+  ambushed?: boolean
+  /** what it needs to take a city, when it isn't the usual (an ambush's strike back: whatever beat the attack) */
+  need?: number
 }
 
 /** An empire this big (its cities and outposts) opens a second front each week */
@@ -215,9 +221,9 @@ export const SECOND_FRONT_AT = 5
 
 /** A rout: a win by this much (beyond what the battle needed to win at all, less one) takes a second city */
 export const ROUT_BY = 5
-/** Did this battle end in a rout? (margin 5 normally; 6 against an empire dug in or on a second front) */
-export const isRout = (b: Pick<Battle, 'defender' | 'tactic' | 'score'>, fortified: Set<string>) =>
-  b.score[0] - b.score[1] - marginNeeded(b, fortified) >= ROUT_BY - 1
+/** Did this battle end in a rout? (margin 5 normally, an ambush's strike back too; 6 against an empire dug in, on a second front or into an ambush) */
+export const isRout = (b: Pick<Battle, 'defender' | 'tactic' | 'score' | 'ambushed' | 'need'>, fortified: Set<string>) =>
+  b.score[0] - b.score[1] - Math.max(1, marginNeeded(b, fortified)) >= ROUT_BY - 1
 
 export type MoveKind = 'capture' | 'siege' | 'relief' | 'claim' | 'rebellion' | 'tribute' | 'trade' | 'outpost'
 
@@ -293,8 +299,10 @@ function median(values: number[]): number {
  * battle for an empire that agreed with every neighbor on everything. An
  * empire dug in, or lying in ambush, doesn't attack; one of 5 or more cities
  * (outposts count) opens a second front too (its chosen second target, else the next most
- * different neighbor). Then the ambushes sprung: an empire that attacked
- * someone lying in wait for it, and was outscored, is struck back.
+ * different neighbor). Then the ambushes: an attack on someone lying in
+ * wait for the attacker needs one more to win, and if it doesn't get it,
+ * the attacker is struck back (a battle that takes a city however close
+ * it was).
  */
 export function plannedBattles(state: ConquestState, week: WeekScores, players: string[], orders: Orders = {}, extra: WeekOrders = {}): Battle[] {
   const out: Battle[] = []
@@ -328,11 +336,17 @@ export function plannedBattles(state: ConquestState, week: WeekScores, players: 
       if (second) out.push(battle(a, second, { tactic: 'second', ...(chosen ? { ordered: true } : {}) }))
     }
   }
-  // Ambushes sprung: struck back by the empire it walked into
+  // Ambushes: an attack on an empire lying in wait for it needs one more to win.
+  // One that doesn't get it is struck back by the empire it walked into, and the
+  // strike takes a city whenever the attack failed: a level score, or a loss by
+  // less than the attack needed.
+  const fortified = new Set(extra.fortified ?? [])
   for (const b of [...out]) {
-    if (extra.ambushes?.[b.defender] === b.attacker && b.score[1] > b.score[0]) {
-      out.push(battle(b.defender, b.attacker, { tactic: 'ambush' }))
-    }
+    if (extra.ambushes?.[b.defender] !== b.attacker) continue
+    b.ambushed = true
+    const need = marginNeeded(b, fortified)
+    if (b.score[0] - b.score[1] >= need) continue
+    out.push(battle(b.defender, b.attacker, { tactic: 'ambush', need: 1 - need }))
   }
   return out
 }
@@ -378,9 +392,13 @@ export function cutOff(owners: Record<string, string | null>, capitals: Record<s
   return out
 }
 
-/** What a battle needs to take a city: a win by 1, by 2 against an empire dug in or on a second front (both: 3) */
-export const marginNeeded = (b: Pick<Battle, 'defender' | 'tactic'>, fortified: Set<string>) =>
-  1 + (fortified.has(b.defender) ? 1 : 0) + (b.tactic === 'second' ? 1 : 0)
+/**
+ * What a battle needs to take a city: a win by 1, and one more for each of
+ * an empire dug in, a second front and walking into an ambush. An ambush's
+ * strike back needs only that the attack it answers failed (`need`).
+ */
+export const marginNeeded = (b: Pick<Battle, 'defender' | 'tactic' | 'ambushed' | 'need'>, fortified: Set<string>) =>
+  b.need ?? 1 + (fortified.has(b.defender) ? 1 : 0) + (b.tactic === 'second' ? 1 : 0) + (b.ambushed ? 1 : 0)
 
 /** Settles a week: the moves, who owns what after them, and which capitals are under siege. */
 export function resolveWeek(

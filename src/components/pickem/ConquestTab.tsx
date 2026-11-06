@@ -179,6 +179,7 @@ export function ConquestTab({ leagueId, week, games, allPicks, weekRows, leagueM
         {b.tactic === 'ambush' ? <span className="shrink-0" title="An ambush, sprung">🪤</span>
           : b.ordered ? <ConquestIcon name="target" title="Chose this attack" className="w-3.5 h-3.5 text-red-400 shrink-0" /> : <Swords className="w-3.5 h-3.5 text-field-500 shrink-0" />}
         {b.tactic === 'second' && <span className="shrink-0 text-[10px] font-bold uppercase text-field-400" title="A second front: it needs a win by 2">2nd</span>}
+        {b.ambushed && <span className="shrink-0" title="Walked into an ambush: it needs one more to win, or it's struck back">🪤</span>}
         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={swatch(colorOf(b.defender))} />
         <span className="font-bold text-white truncate">{nameOf(b.defender)}</span>
         <span className={clsx('ml-auto shrink-0 font-cond font-black tabular-nums', ahead ? 'text-nfl' : 'text-field-300')}>{b.score[0]}–{b.score[1]}</span>
@@ -360,9 +361,9 @@ function RulesSheet({ onClose }: { onClose: () => void }) {
           <li>Capital under siege? Pay tribute: hand one of your other cities to the besieger and the siege lifts before the week’s battles, so your capital can’t fall that week.</li>
           <li>Trade a city for another player’s (never a capital) when you both agree. Trades happen before the week’s first kickoff.</li>
           <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire; on a tie, whoever held the most cities week by week all season), Warlord, Siege Master, Unbreakable, Comeback Kid and Iron Grip (the most cities held, added up week after week).</li>
-          <li>Lie in ambush instead of attacking: name an empire on your border, and if it attacks you and you outscore it, you take one of its cities.</li>
+          <li>Lie in ambush instead of attacking: name an empire on your border. If it attacks you, you’re ready for it: it needs a win by 2, and if it doesn’t get that, you strike back and take one of its cities, even on a level score or a loss by 1. If it doesn’t come, nothing happens.</li>
           <li>An empire of {SECOND_FRONT_AT} or more cities (outposts count) opens a second front: a second attack each week (yours to choose, or automatic) that takes a city only with a win by 2.</li>
-          <li>Rout: win a battle by 5 or more (6 against an empire that’s dug in, or on a second front) and the enemy breaks: you take two cities.</li>
+          <li>Rout: win a battle by 5 or more (6 against an empire that’s dug in, on a second front, or into an ambush) and the enemy breaks: you take two cities.</li>
           <li>Supply lines: a city cut off from its capital (not joined to it through your own cities, by land or sea lane) defends at −1, so one point short still takes it. It’s marked on the map with a broken link.</li>
           <li>Outposts: when the NFL plays abroad, an outpost appears off the coast. The best week among everyone who picked that game right wins it, and it counts as a city (for Emperor and Iron Grip) to the season’s end. It can’t be attacked, but when the NFL goes back to the same city, that game’s winner takes its outpost over.</li>
           <li>Cities that would change hands if the week ended now pulse on the map.</li>
@@ -487,7 +488,7 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
           <p>
             {dugIn ? <Shield className="inline w-3.5 h-3.5 mr-1 text-field-400" /> : <Swords className="inline w-3.5 h-3.5 mr-1 text-field-400" />}
             {dugIn ? <>Dug in: no attack, and anyone attacking you needs to win by 2.</>
-              : waitingFor ? <>🪤 Lying in wait for <span className="font-bold text-white">{player(waitingFor)?.name ?? 'Someone'}</span>: if they attack you and you outscore them, you take one of their cities.</>
+              : waitingFor ? <>🪤 Lying in wait for <span className="font-bold text-white">{player(waitingFor)?.name ?? 'Someone'}</span>: if they attack you, they need a win by 2, and if they don’t get it you take one of their cities.</>
               : target ? <>Attacking <span className="font-bold text-white">{player(target)?.name ?? 'Someone'}</span> (your choice).</> : 'Attack: automatic, the neighbor you pick most differently from.'}
           </p>
           {paying && (
@@ -528,7 +529,7 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
                     </span>
                   </button>
                 ))}
-                <p className="pt-1 text-[11px] text-field-500">Or lie in ambush (no attack): if they attack you and you outscore them, you take one of their cities.</p>
+                <p className="pt-1 text-[11px] text-field-500">Or lie in ambush (no attack): if they attack you, they need a win by 2, and if they don’t get it you take one of their cities, even on a level score or a loss by 1.</p>
                 {neighbors.map(n => (
                   <button key={`amb-${n.id}`} onClick={pick(() => ambush(n.id, n.name))} disabled={!!busy} className={row(waitingFor === n.id)}>
                     {busy === `amb:${n.id}` ? spin : <span className="shrink-0" aria-hidden>🪤</span>}

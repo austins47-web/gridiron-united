@@ -133,6 +133,8 @@ export interface LiveBattle {
   outcome: 'take' | 'siege' | 'hold'
   /** a second front, or an ambush sprung */
   tactic?: 'second' | 'ambush'
+  /** walked into an ambush laid for the attacker: it needs one more to win */
+  ambushed?: boolean
   /** won one point short: the city's cut off from its capital */
   cut?: boolean
   /** a rout: the second city that falls with it */
@@ -181,7 +183,7 @@ export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'pla
     if (city2) taken.add(city2)
     out.set(b, {
       attacker: b.attacker, defender: b.defender, ordered: b.ordered, score: b.score, city, outcome,
-      ...(b.tactic ? { tactic: b.tactic } : {}), ...(winning && margin < need ? { cut: true } : {}), ...(city2 ? { city2 } : {}),
+      ...(b.tactic ? { tactic: b.tactic } : {}), ...(b.ambushed ? { ambushed: true } : {}), ...(winning && margin < need ? { cut: true } : {}), ...(city2 ? { city2 } : {}),
     })
   }
   return battles.map(b => out.get(b)!)
