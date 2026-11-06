@@ -30,8 +30,8 @@
 //   before the week's first kickoff (the conquest function, not the settle).
 // - Ambush (an order, instead of attacking): name an empire on your border;
 //   if it attacks you and you outscore it, you take one of its cities.
-// - Second front: an empire of 5 or more cities attacks a second neighbor
-//   too, taking a city only with a win by 2.
+// - Second front: an empire of 5 or more cities (outposts count) attacks a
+//   second neighbor too, taking a city only with a win by 2.
 // - Rout: a win by 5 more than the battle needed (5, or 6 against an empire
 //   dug in or on a second front) takes two cities.
 // - Supply lines: a city cut off from its capital (not joined to it through
@@ -176,6 +176,8 @@ export interface ConquestState {
   capitals: Record<string, string>
   /** capital → who has it under siege (since last week) */
   besieged?: Record<string, string>
+  /** user id → outposts held abroad (each counts as a city toward a second front) */
+  outposts?: Record<string, number>
 }
 
 export interface WeekScores {
@@ -204,11 +206,11 @@ export interface Battle {
   disagree: number
   /** [attacker's correct, defender's correct] */
   score: [number, number]
-  /** a second front (an empire of 5+ cities' second attack), or an ambush sprung (the defender striking back) */
+  /** a second front (an empire of 5+ cities' second attack, outposts counted), or an ambush sprung (the defender striking back) */
   tactic?: 'second' | 'ambush'
 }
 
-/** An empire this big opens a second front each week */
+/** An empire this big (its cities and outposts) opens a second front each week */
 export const SECOND_FRONT_AT = 5
 
 /** A rout: a win by this much (beyond what the battle needed to win at all, less one) takes a second city */
@@ -240,6 +242,10 @@ export interface Move {
 
 export const citiesOf = (owners: Record<string, string | null>, user: string): string[] =>
   TERRITORIES.filter(t => owners[t] === user)
+
+/** An empire's size: its cities, and its outposts abroad (an outpost counts as a city). */
+export const empireSize = (state: Pick<ConquestState, 'owners' | 'outposts'>, user: string): number =>
+  citiesOf(state.owners, user).length + (state.outposts?.[user] ?? 0)
 
 /** The owners of the cities bordering someone's empire. */
 export function neighborsOf(owners: Record<string, string | null>, user: string): string[] {
@@ -286,7 +292,7 @@ function median(values: number[]): number {
  * picked most differently from (the bigger empire on a tie). No automatic
  * battle for an empire that agreed with every neighbor on everything. An
  * empire dug in, or lying in ambush, doesn't attack; one of 5 or more cities
- * opens a second front too (its chosen second target, else the next most
+ * (outposts count) opens a second front too (its chosen second target, else the next most
  * different neighbor). Then the ambushes sprung: an empire that attacked
  * someone lying in wait for it, and was outscored, is struck back.
  */
@@ -315,7 +321,7 @@ export function plannedBattles(state: ConquestState, week: WeekScores, players: 
     if (!first) continue
     out.push(battle(a, first, ordered ? { ordered: true } : {}))
     // A second front, for an empire this big
-    if (citiesOf(state.owners, a).length >= SECOND_FRONT_AT) {
+    if (empireSize(state, a) >= SECOND_FRONT_AT) {
       const want = extra.seconds?.[a]
       const chosen = want && want !== first && near.includes(want) ? want : null
       const second = chosen ?? auto(a, first)

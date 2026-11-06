@@ -40,6 +40,13 @@ export interface ConquestMove {
 /** An outpost abroad (one a city; the latest game played there): who holds it, if anyone, since `week` */
 export interface Outpost { key: string; name: string; week: number; owner: string | null; gameId: string }
 
+/** Outposts held, per player: each counts as a city, toward a second front too. */
+export function outpostCounts(outposts: Outpost[] = []): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const o of outposts) if (o.owner) out[o.owner] = (out[o.owner] ?? 0) + 1
+  return out
+}
+
 /**
  * The outposts as they stood after a week (the history slider, a replay): each
  * one's holder then, from the war log's outpost moves (an outpost changes hands
@@ -137,7 +144,7 @@ export interface LiveBattle {
  * picks so far) and what happens if it ends like this. A city wanted
  * twice goes to the bigger win, as when the week's settled.
  */
-export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'players' | 'orders' | 'fortified' | 'tributes' | 'ambushes' | 'seconds'>, week: WeekScores): LiveBattle[] {
+export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'players' | 'orders' | 'fortified' | 'tributes' | 'ambushes' | 'seconds' | 'outposts'>, week: WeekScores): LiveBattle[] {
   const capitals = Object.fromEntries(war.players.filter(p => p.capital).map(p => [p.userId, p.capital!]))
   // Tribute's paid before the battles: the week's fought on that map
   const owners = { ...war.owners }, besieged = { ...war.besieged }
@@ -148,7 +155,7 @@ export function liveBattles(war: Pick<ConquestData, 'owners' | 'besieged' | 'pla
     delete besieged[cap]
   }
   const fortified = new Set(war.fortified ?? [])
-  const state: ConquestState = { owners, capitals, besieged }
+  const state: ConquestState = { owners, capitals, besieged, outposts: outpostCounts(war.outposts) }
   const players = war.players.map(p => p.userId)
   const battles = plannedBattles(state, week, players, war.orders ?? {}, { fortified: [...fortified], ambushes: war.ambushes, seconds: war.seconds })
   const cut = cutOff(owners, capitals)

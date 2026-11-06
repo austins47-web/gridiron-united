@@ -6,9 +6,9 @@ import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { CURRENT_SEASON } from '@/lib/season'
-import { CITY, ADJ, TERRITORIES, MEDAL_INFO, SECOND_FRONT_AT, citiesOf, neighborsOf, startOdds, imbalance, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
+import { CITY, ADJ, TERRITORIES, MEDAL_INFO, SECOND_FRONT_AT, citiesOf, empireSize, neighborsOf, startOdds, imbalance, type MedalKind } from '../../../supabase/functions/_shared/conquest.ts'
 import { WarMap } from '@/components/conquest/WarMap'
-import { empires, liveBattles, headline, titles, seasonMedals, capitalsOf, swatch, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
+import { empires, liveBattles, headline, titles, seasonMedals, capitalsOf, swatch, outpostCounts, type ConquestData, type ConquestMove, type ConquestPlayer, type Title } from '@/components/conquest/conquestView'
 import { ConquestIcon } from '@/components/conquest/ConquestIcon'
 import { MedalBadge } from '@/components/conquest/MedalBadge'
 import { CipherOrders, cipherOf } from '@/components/conquest/CipherOrders'
@@ -361,7 +361,7 @@ function RulesSheet({ onClose }: { onClose: () => void }) {
           <li>Trade a city for another player’s (never a capital) when you both agree. Trades happen before the week’s first kickoff.</li>
           <li>Weeks settle once every game is final. After Week 18 the titles are crowned: Emperor (the biggest empire; on a tie, whoever held the most cities week by week all season), Warlord, Siege Master, Unbreakable, Comeback Kid and Iron Grip (the most cities held, added up week after week).</li>
           <li>Lie in ambush instead of attacking: name an empire on your border, and if it attacks you and you outscore it, you take one of its cities.</li>
-          <li>An empire of {SECOND_FRONT_AT} or more cities opens a second front: a second attack each week (yours to choose, or automatic) that takes a city only with a win by 2.</li>
+          <li>An empire of {SECOND_FRONT_AT} or more cities (outposts count) opens a second front: a second attack each week (yours to choose, or automatic) that takes a city only with a win by 2.</li>
           <li>Rout: win a battle by 5 or more (6 against an empire that’s dug in, or on a second front) and the enemy breaks: you take two cities.</li>
           <li>Supply lines: a city cut off from its capital (not joined to it through your own cities, by land or sea lane) defends at −1, so one point short still takes it. It’s marked on the map with a broken link.</li>
           <li>Outposts: when the NFL plays abroad, an outpost appears off the coast. The best week among everyone who picked that game right wins it, and it counts as a city (for Emperor and Iron Grip) to the season’s end. It can’t be attacked, but when the NFL goes back to the same city, that game’s winner takes its outpost over.</li>
@@ -421,6 +421,8 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
   const [editing, setEditing] = useState<'attack' | 'second' | 'tribute' | 'flag' | null>(null)
   const mine = citiesOf(war.owners, userId)
   if (!mine.length) return null
+  // Outposts count toward a second front
+  const secondFront = empireSize({ owners: war.owners, outposts: outpostCounts(war.outposts) }, userId) >= SECOND_FRONT_AT
   const lockAt = war.lockAt ? new Date(war.lockAt) : null
   const locked = !!lockAt && Date.now() >= lockAt.getTime()
   const target = war.orders?.[userId] ?? null
@@ -536,12 +538,12 @@ function OrdersCard({ war, userId, week, sender }: { war: War; userId: string; w
               </div>
             )}
 
-            {mine.length >= SECOND_FRONT_AT && (
+            {secondFront && (
               <>
                 {summary('second', <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />, '2nd front', secondTarget ? player(secondTarget)?.name ?? 'Someone' : 'Automatic')}
                 {editing === 'second' && (
                   <div className={choices}>
-                    <p className="text-[11px] text-field-500">An empire of {SECOND_FRONT_AT}+ cities attacks a second neighbor too: it takes a city only with a win by 2.</p>
+                    <p className="text-[11px] text-field-500">An empire of {SECOND_FRONT_AT}+ cities (outposts count) attacks a second neighbor too: it takes a city only with a win by 2.</p>
                     <button onClick={pick(() => second(null))} disabled={!!busy} className={row(!secondTarget)}>
                       {busy === 'sec:auto' ? spin : <Swords className="w-3.5 h-3.5 text-field-400 shrink-0" />}
                       <span className="font-bold text-white shrink-0 whitespace-nowrap">Automatic</span>

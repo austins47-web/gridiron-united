@@ -28,7 +28,7 @@ import { isFinal, isVoid, isWeekComplete, winnerOf, nflSeasonFor, tiebreakerTota
 import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
 import {
   TERRITORIES, POS, CITY, assignCapitals, balanceCapitals, startOdds, empireColor, outpostFor, tiebreak, SECOND_FRONT_AT, resolveWeek, citiesOf, neighborsOf, titles,
-  ADJ, type ConquestState, type WeekScores, type Orders, type Claims, type Move,
+  ADJ, empireSize, type ConquestState, type WeekScores, type Orders, type Claims, type Move,
 } from '../_shared/conquest.ts'
 
 const CORS = {
@@ -375,7 +375,8 @@ async function setOrder(admin: SupabaseClient, leagueId: string, userId: string,
   if (change.target && !neighborsOf(owners, userId).includes(change.target)) return json({ error: 'That empire isn’t on your border' }, 400)
   if (change.ambush && !neighborsOf(owners, userId).includes(change.ambush)) return json({ error: 'You can only lie in wait for an empire on your border' }, 400)
   if (change.target2) {
-    if (citiesOf(owners, userId).length < SECOND_FRONT_AT) return json({ error: `A second front takes an empire of ${SECOND_FRONT_AT} cities` }, 409)
+    const outposts = await outpostsHeld(admin, leagueId, season)
+    if (empireSize({ owners, outposts }, userId) < SECOND_FRONT_AT) return json({ error: `A second front takes an empire of ${SECOND_FRONT_AT} cities (outposts count)` }, 409)
     if (!neighborsOf(owners, userId).includes(change.target2)) return json({ error: 'That empire isn’t on your border' }, 400)
   }
   if (change.claim) {
@@ -508,6 +509,8 @@ async function settleWeek(admin: SupabaseClient, leagueId: string, season: numbe
     owners,
     capitals: Object.fromEntries(roster.map(u => [u, inWar.get(u)!.capital as string]).filter(([, c]) => !!c)),
     besieged,
+    // Held going into the week (this week's are handed out after the battles)
+    outposts: await outpostsHeld(admin, leagueId, season).catch(() => ({})),
   }
   // The week's attack orders (anyone's no longer on a border falls back to automatic)
   // The week's orders: attacks and flags (one no longer possible falls back to automatic)
@@ -630,6 +633,7 @@ async function soFar(admin: SupabaseClient, leagueId: string) {
     owners,
     capitals: Object.fromEntries((players ?? []).filter(p => roster.includes(p.user_id) && p.capital).map(p => [p.user_id, p.capital])),
     besieged,
+    outposts: await outpostsHeld(admin, leagueId, season).catch(() => ({})),
   }
   const orders: Orders = Object.fromEntries((orderRows ?? []).filter(o => o.target_id).map(o => [o.user_id, o.target_id]))
   const claims: Claims = Object.fromEntries((orderRows ?? []).filter(o => o.claim).map(o => [o.user_id, o.claim]))
@@ -641,6 +645,15 @@ async function soFar(admin: SupabaseClient, leagueId: string) {
     besieged: after.besieged,
     moves: after.moves.map(m => ({ kind: m.kind, team: m.team, from: m.from, to: m.to, score: m.score, exiled: !!m.exiled, withTeam: m.withTeam, tactic: m.tactic })),
   }
+}
+
+/** Outposts held abroad, per player: each counts as a city toward a second front. */
+async function outpostsHeld(admin: SupabaseClient, leagueId: string, season: number): Promise<Record<string, number>> {
+  const { data, error } = await admin.from('conquest_outposts').select('owner_id').eq('league_id', leagueId).eq('season', season)
+  if (error) throw error
+  const out: Record<string, number> = {}
+  for (const o of data ?? []) if (o.owner_id) out[o.owner_id] = (out[o.owner_id] ?? 0) + 1
+  return out
 }
 
 /**
