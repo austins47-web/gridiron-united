@@ -117,7 +117,8 @@ export function FixPicks({ leagueId }: { leagueId: string }) {
   const teamButton = (g: Game, team: string | null, label: string) => {
     const on = teamOf(g) === team
     const saved = (savedOf.get(g.id)?.picked_team ?? null) === team
-    const won = team != null && winnerOf(g) === team
+    // Only once it's over: a live game's leader can still lose
+    const won = team != null && isFinal(g) && winnerOf(g) === team
     return (
       <button
         key={label}

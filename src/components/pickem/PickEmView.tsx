@@ -2181,13 +2181,18 @@ function PicksBoard({
                         <span className="text-field-600 text-[10px] uppercase font-bold tracking-wider">No pick</span>
                       ) : (
                         <div className={clsx(
-                          'inline-flex items-center gap-1 rounded-md px-1.5 py-1',
+                          'relative inline-flex items-center gap-1 rounded-md px-1.5 py-1',
                           isCorrect ? 'bg-nfl/15 text-nfl' : isWrong ? 'bg-red-500/10 text-red-400' : 'text-field-200',
                         )}>
                           {logo && <img src={logo} alt="" className="w-4 h-4 object-contain" />}
                           <span className="font-cond font-black text-[11px]">{picked}</span>
                           {pick?.auto && <span title="Autopilot pick" className="flex"><Bot className="w-3 h-3 opacity-80" aria-label="Autopilot pick" /></span>}
-                          {pick?.entered_by && <span title="Entered by the commissioner (see Changed by the commissioner, below)" className="flex"><PenLine className="w-3 h-3 opacity-80" aria-label="Entered by the commissioner" /></span>}
+                          {/* On the corner, so the ✓ or ✗ keeps its room */}
+                          {pick?.entered_by && (
+                            <span title="Entered by the commissioner (see Changed by the commissioner, below)" className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-3.5 h-3.5 rounded-full bg-field-700 text-field-200 ring-1 ring-field-900">
+                              <PenLine className="w-2 h-2" aria-label="Entered by the commissioner" />
+                            </span>
+                          )}
                           {isCorrect && <Check className="w-3 h-3" />}
                           {isWrong && <X className="w-3 h-3" />}
                         </div>

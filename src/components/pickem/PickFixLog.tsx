@@ -18,8 +18,10 @@ interface PickEdit {
   new_tiebreaker: number | null
   note: string | null
   created_at: string
-  game: { away_team: string; home_team: string } | { away_team: string; home_team: string }[] | null
+  game: GameRef | GameRef[] | null
 }
+
+interface GameRef { away_team: string; home_team: string; game_date: string }
 
 /** One save in the commissioner's pick fixer: the same member, note and minute. */
 interface FixGroup { key: string; week: number; user: string; by: string | null; note: string | null; at: string; edits: PickEdit[] }
@@ -40,7 +42,7 @@ export function PickFixLog({ leagueId, week, empty, limit = 200 }: { leagueId: s
     enabled: !!leagueId,
     queryFn: async (): Promise<PickEdit[]> => {
       let q = supabase.from('pickem_pick_edits')
-        .select('id, week, game_id, user_id, by_user, old_team, new_team, old_tiebreaker, new_tiebreaker, note, created_at, game:nfl_games(away_team, home_team)')
+        .select('id, week, game_id, user_id, by_user, old_team, new_team, old_tiebreaker, new_tiebreaker, note, created_at, game:nfl_games(away_team, home_team, game_date)')
         .eq('league_id', leagueId!)
         .eq('season', CURRENT_SEASON)
         .order('created_at', { ascending: false })
@@ -66,6 +68,10 @@ export function PickFixLog({ leagueId, week, empty, limit = 200 }: { leagueId: s
     if (g) g.edits.push(e)
     else groups.push({ key, week: e.week, user: e.user_id, by: e.by_user, note: e.note, at: e.created_at, edits: [e] })
   }
+
+  // Each save's games in kickoff order
+  const kickoff = (e: PickEdit) => (Array.isArray(e.game) ? e.game[0] : e.game)?.game_date ?? ''
+  for (const g of groups) g.edits.sort((a, b) => kickoff(a).localeCompare(kickoff(b)))
 
   if (!groups.length) {
     return empty ? <p className="text-xs text-field-500">{empty}</p> : null
