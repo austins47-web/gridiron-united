@@ -29,7 +29,7 @@ import {
 import { renderEmail, ordinal, type RichEmail, type PickRow } from './email.ts'
 import { sendWebPush, type VapidKeys } from '../_shared/webPush.ts'
 import { partsInZone, weeklyDeadlineForWeek, stillPickable, weekDeadline } from '../_shared/pickLocks.ts'
-import { autopilotFills, type AutopilotRule } from '../_shared/autopilot.ts'
+import { autopilotFills } from '../_shared/autopilot.ts'
 import { CITY, weekMedals, MEDAL_INFO, type Move } from '../_shared/conquest.ts'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0'
 
@@ -444,9 +444,10 @@ serve(async (req) => {
     const roastErrors: string[] = []
 
     // ══ 0. AUTOPILOT ════════════════════════════════════════════
-    // Members who set a backup rule (pickem_autopilot) get every game
-    // they haven't picked filled in the 16 minutes before it locks, and
-    // an empty tiebreaker guess set to the Vegas total (_shared/autopilot.ts).
+    // Members who turned it on (pickem_autopilot) get every game they
+    // haven't picked filled with a coin flip in the 16 minutes before it
+    // locks, and an empty tiebreaker guess set to the Vegas total
+    // (_shared/autopilot.ts).
     // Both passes run it, before the reminders, so nobody's reminded
     // about a game autopilot just picked.
     const autopilot = { picks: 0, guesses: 0, errors: [] as string[] }
@@ -457,7 +458,7 @@ serve(async (req) => {
         // Only people still in the league
         const lgRules = (rules ?? []).filter(r => r.league_id === lg.id
           && (members ?? []).some(m => m.league_id === lg.id && m.user_id === r.user_id)) as
-          { user_id: string; rule: AutopilotRule; updated_at: string }[]
+          { user_id: string; updated_at: string }[]
         if (lgRules.length === 0 || !weeks) continue
         for (const [wk, wkGames] of weeks) {
           const override = (weekSettings ?? []).find(s => s.league_id === lg.id && s.season === season && s.week === wk)?.pick_deadline

@@ -645,12 +645,12 @@ export interface Database {
         Row: {
           league_id: string
           user_id: string
-          rule: 'favorites' | 'home' | 'majority'
+          rule: 'random'
           /** Set by the server; autopilot only fills games that locked after it. */
           updated_at: string
         }
-        Insert: { league_id: string; user_id: string; rule: 'favorites' | 'home' | 'majority' }
-        Update: { rule?: 'favorites' | 'home' | 'majority' }
+        Insert: { league_id: string; user_id: string; rule: 'random' }
+        Update: { rule?: 'random' }
         Relationships: []
       }
       pickem_nudges: {

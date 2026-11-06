@@ -1038,7 +1038,7 @@ function PickEmWeekView({ calendar, view }: { calendar: PickemCalendar; view: 'p
         </div>
       )}
 
-      {/* A backup rule for any game they don't get to */}
+      {/* Autopilot: a coin flip for any game they don't get to */}
       {tab === 'picks' && <AutopilotPanel leagueId={activeLeagueId} />}
 
       {/* Commissioner tools */}

@@ -3,12 +3,11 @@ import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/store/appStore'
 
-export type AutopilotRule = 'favorites' | 'home' | 'majority'
+/** Autopilot only picks at random (Favorites, Home teams and League majority were too strong). */
+export type AutopilotRule = 'random'
 
 export const AUTOPILOT_LABELS: Record<AutopilotRule, string> = {
-  favorites: 'Favorites',
-  home: 'Home teams',
-  majority: 'League majority',
+  random: 'Random',
 }
 
 /** Your autopilot rule in a league (pickem_autopilot), and changing it. */
@@ -38,7 +37,7 @@ export function useAutopilot(leagueId: string | null | undefined) {
       : await supabase.from('pickem_autopilot').delete().eq('league_id', leagueId).eq('user_id', user.id)
     if (error) { toast.error(`Couldn't save autopilot: ${error.message}`); return }
     qc.setQueryData(key, next)
-    toast.success(next ? `Autopilot on: ${AUTOPILOT_LABELS[next].toLowerCase()}` : 'Autopilot off')
+    toast.success(next ? 'Autopilot on: a coin flip for any game you miss' : 'Autopilot off')
   }
 
   return { rule, setRule, loading: isLoading }

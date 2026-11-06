@@ -7,16 +7,11 @@ const OPTIONS: { rule: AutopilotRule | null; label: string }[] = [
   ...(Object.keys(AUTOPILOT_LABELS) as AutopilotRule[]).map(rule => ({ rule, label: AUTOPILOT_LABELS[rule] })),
 ]
 
-const RULE_BLURB: Record<AutopilotRule, string> = {
-  favorites: 'the Vegas favorite',
-  home: 'the home team',
-  majority: 'whichever side most of the league took',
-}
-
 /**
- * Picks tab: a backup rule for any game you don't get to. Autopilot
- * (send-reminders) picks it in the last few minutes before it locks,
- * and fills an empty tiebreaker with the Vegas total.
+ * Picks tab: a backup for any game you don't get to. Autopilot
+ * (send-reminders) flips a coin for it in the last few minutes before it
+ * locks, and fills an empty tiebreaker with the Vegas total. Random is
+ * the only rule: smarter ones made forgetting as good as picking.
  */
 export function AutopilotPanel({ leagueId }: { leagueId: string }) {
   const { rule, setRule, loading } = useAutopilot(leagueId)
@@ -30,8 +25,8 @@ export function AutopilotPanel({ leagueId }: { leagueId: string }) {
         <p className="text-xs text-field-300 leading-snug">
           <span className="font-bold text-white">Autopilot</span>
           {rule
-            ? <> · Any game you haven't picked when it locks gets {RULE_BLURB[rule]}, and an empty tiebreaker gets the Vegas total. It shows a robot on the Board.</>
-            : <> · Never miss a game: pick a backup rule, and the app picks anything you forgot just before it locks.</>}
+            ? <> · Any game you haven't picked when it locks gets a random team, a coin flip, and an empty tiebreaker gets the Vegas total. It shows a robot on the Board.</>
+            : <> · Never miss a game: turn it on, and the app picks a random team for anything you forgot just before it locks.</>}
         </p>
       </div>
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Autopilot rule">
