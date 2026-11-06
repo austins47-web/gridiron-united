@@ -36,11 +36,12 @@ import { useThreadCounts } from '@/hooks/useGameThreads'
 import { PinnedBanner, PinComposer } from '@/components/chat/PinnedAnnouncement'
 import { TvReactionButton } from '@/components/tv/TvReactions'
 import { AutopilotPanel } from './Autopilot'
+import { PickFixLog } from './PickFixLog'
 import { HolidayRibbon } from '@/components/ui/Holiday'
 import { weatherLabel } from '@/lib/weather'
 import {
   Trophy, ChevronDown, ChevronLeft, ChevronRight, Lock, Check, X, Target, Settings, Clock, Calendar, TrendingUp, Shuffle,
-  TrendingDown, Home, Plane, Award, Quote, MessageSquare, Pin, Bot, Repeat2, BellRing
+  TrendingDown, Home, Plane, Award, Quote, MessageSquare, Pin, Bot, Repeat2, BellRing, PenLine
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -374,7 +375,7 @@ function PickEmWeekView({ calendar, view }: { calendar: PickemCalendar; view: 'p
 
   // Each saved pick, for the line it was made at (pick cards show the move since)
   const savedPickByGame = useMemo(
-    () => new Map((myPicks as any[]).map(p => [p.game_id, { picked_team: p.picked_team as string, spread_at_pick: (p.spread_at_pick ?? null) as number | null, auto: !!p.auto }])),
+    () => new Map((myPicks as any[]).map(p => [p.game_id, { picked_team: p.picked_team as string, spread_at_pick: (p.spread_at_pick ?? null) as number | null, auto: !!p.auto, entered_by: (p.entered_by ?? null) as string | null }])),
     [myPicks],
   )
 
@@ -1301,6 +1302,7 @@ function PickEmWeekView({ calendar, view }: { calendar: PickemCalendar; view: 'p
             onThread={id => navigate(`/app/chat?game=${id}`)}
           />
           <WeekReceipts games={games} allPicks={allPicks} leagueMembers={leagueMembers} userId={user?.id} deadline={weekDeadline} />
+          <PickFixLog leagueId={activeLeagueId} week={week} />
         </div>
       )}
     </div>
@@ -1336,8 +1338,8 @@ function GamePickCard({
   /** Pick receipt: why they picked it (optional), public at kickoff. */
   reason?: string
   onReason?: (val: string) => void
-  /** The pick as saved — its team, the line when it was made, and whether autopilot made it. */
-  savedPick?: { picked_team: string; spread_at_pick: number | null; auto?: boolean } | null
+  /** The pick as saved — its team, the line when it was made, and whether autopilot (or the commissioner) made it. */
+  savedPick?: { picked_team: string; spread_at_pick: number | null; auto?: boolean; entered_by?: string | null } | null
   /** Injured key players, by team (keyInjuries). */
   injuries?: Map<string, InjuredStarter[]>
   /** This game's chat thread: how many messages, and opening it. */
@@ -1426,6 +1428,14 @@ function GamePickCard({
             className="flex items-center gap-1 rounded-full border border-field-600 px-2 py-0.5 text-[11px] font-bold text-field-300"
           >
             <Bot className="w-3 h-3" /> Autopilot
+          </span>
+        )}
+        {savedPick?.entered_by && savedPick.picked_team === pickedTeam && (
+          <span
+            title="The commissioner entered this pick for you"
+            className="flex items-center gap-1 rounded-full border border-field-600 px-2 py-0.5 text-[11px] font-bold text-field-300"
+          >
+            <PenLine className="w-3 h-3" /> Commissioner
           </span>
         )}
         {odds && !isFinal && !live && (
@@ -2177,6 +2187,7 @@ function PicksBoard({
                           {logo && <img src={logo} alt="" className="w-4 h-4 object-contain" />}
                           <span className="font-cond font-black text-[11px]">{picked}</span>
                           {pick?.auto && <span title="Autopilot pick" className="flex"><Bot className="w-3 h-3 opacity-80" aria-label="Autopilot pick" /></span>}
+                          {pick?.entered_by && <span title="Entered by the commissioner (see Changed by the commissioner, below)" className="flex"><PenLine className="w-3 h-3 opacity-80" aria-label="Entered by the commissioner" /></span>}
                           {isCorrect && <Check className="w-3 h-3" />}
                           {isWrong && <X className="w-3 h-3" />}
                         </div>

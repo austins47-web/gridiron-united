@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import {
   X, Bell, CheckCheck, Trash2,
   ArrowLeftRight, XCircle, CheckCircle2, Clock, ShieldAlert, Vote,
-  MessageCircle, Target, ClipboardList, Trophy, Mail, Megaphone, BellRing,
+  MessageCircle, Target, ClipboardList, Trophy, Mail, Megaphone, BellRing, PenLine,
   type LucideIcon,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
@@ -27,6 +27,7 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   league_invite: Mail,
   nudge: BellRing,
   conquest_trade: ArrowLeftRight,
+  pick_fixed: PenLine,
   system: Megaphone,
 }
 

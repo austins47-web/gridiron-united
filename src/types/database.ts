@@ -552,6 +552,8 @@ export interface Database {
           tiebreaker_auto: boolean
           /** The team picked before the latest switch (set by trigger). */
           switched_from: string | null
+          /** The commissioner who entered this pick (commish_set_picks); null when it's the member's own. */
+          entered_by: string | null
           updated_at: string | null
           user_id: string | null
           week: number
@@ -651,6 +653,29 @@ export interface Database {
         }
         Insert: { league_id: string; user_id: string; rule: 'random' }
         Update: { rule?: 'random' }
+        Relationships: []
+      }
+      /** Every commissioner fix to a pick (commish_set_picks): the whole league reads it. */
+      pickem_pick_edits: {
+        Row: {
+          id: number
+          league_id: string
+          season: number
+          week: number
+          game_id: string
+          /** whose pick */
+          user_id: string
+          /** the commissioner who changed it */
+          by_user: string | null
+          old_team: string | null
+          new_team: string | null
+          old_tiebreaker: number | null
+          new_tiebreaker: number | null
+          note: string | null
+          created_at: string
+        }
+        Insert: never
+        Update: never
         Relationships: []
       }
       pickem_nudges: {
@@ -1512,6 +1537,16 @@ export interface Database {
       /** The Shop TV as a Spotify speaker, on or off (on needs a grant with playback). */
       set_league_spotify_tv_player: { Args: { p_league: string; p_on: boolean }; Returns: undefined }
       disconnect_league_spotify: { Args: { p_league: string }; Returns: undefined }
+      /**
+       * The commissioner enters, changes or clears a member's picks on games
+       * that have kicked off (team null: no pick; tiebreaker only on the
+       * tiebreaker game, null clears). Logged in pickem_pick_edits; returns
+       * how many changed.
+       */
+      commish_set_picks: {
+        Args: { p_league: string; p_user: string; p_changes: { game_id: string; team: string | null; tiebreaker?: number | null }[]; p_note?: string | null }
+        Returns: number
+      }
       /** A live poll on the Shop TV (and in the chat); returns the poll's id. */
       tv_poll: { Args: { p_league: string; p_question: string; p_options: string[]; p_minutes?: number }; Returns: string }
       /** The commissioner's TV remote: put something on the Shop TV now. */
