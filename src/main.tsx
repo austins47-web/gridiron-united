@@ -3,10 +3,20 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
+// The app's two typefaces, bundled with it: from Google Fonts, the app
+// couldn't start until a second site had answered
+import '@fontsource/barlow/400.css'
+import '@fontsource/barlow/500.css'
+import '@fontsource/barlow/600.css'
+import '@fontsource/barlow-condensed/400.css'
+import '@fontsource/barlow-condensed/600.css'
+import '@fontsource/barlow-condensed/700.css'
+import '@fontsource/barlow-condensed/900.css'
 import './index.css'
 import { registerServiceWorker } from '@/lib/push'
 import { applyCalm } from '@/lib/calm'
 import { logProblem } from '@/lib/problemLog'
+import { bootStep, watchFirstScreen } from '@/lib/bootTiming'
 // Catches the browser's one-time install offer (see lib/install.ts)
 import '@/lib/install'
 
@@ -17,12 +27,14 @@ import { useAppStore } from '@/store/appStore'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 
+bootStep('script')
+
 // Every page is its own chunk, downloaded the first time it's opened —
 // the whole app used to ship as one 1.46 MB file that phones had to
 // download before showing anything. The shell (AppShell, header, bottom
 // bar) stays in the main bundle so it paints immediately.
 const page = <K extends string>(load: () => Promise<Record<K, React.ComponentType<any>>>, name: K) =>
-  lazy(() => load().then(m => ({ default: m[name] })))
+  lazy(() => load().then(m => { bootStep('page'); return { default: m[name] } }))
 const LandingPage = page(() => import('@/components/landing/LandingPage'), 'LandingPage')
 const AuthPage = page(() => import('@/components/auth/AuthPage'), 'AuthPage')
 const RosterView = page(() => import('@/components/roster/RosterView'), 'RosterView')
@@ -69,9 +81,12 @@ const queryClient = new QueryClient({
     },
   },
 })
+watchFirstScreen(() => queryClient.isFetching() > 0)
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, authLoading } = useAppStore()
+  const open = !authLoading && !!user
+  useEffect(() => { if (open) bootStep('shell') }, [open])
   if (authLoading) return <LoadingScreen />
   if (!user) return <Navigate to="/auth" replace />
   return <>{children}</>
@@ -88,6 +103,7 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      bootStep('signedIn')
       setSession(session)
       setUser(session?.user ?? null)
 
@@ -136,23 +152,25 @@ function AppInitializer({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [setUser, setSession, setProfile, setAuthLoading, setNotifications])
 
-  // Realtime: push new notifications into store as they arrive
+  // Realtime: push new notifications into store as they arrive. Keyed on
+  // who's signed in: it used to run once at startup, before anyone was,
+  // so it never listened at all
+  const userId = useAppStore(s => s.user?.id)
   useEffect(() => {
-    const { user } = useAppStore.getState()
-    if (!user) return
+    if (!userId) return
     const channel = supabase
-      .channel(`notifications:${user.id}`)
+      .channel(`notifications:${userId}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'notifications',
-        filter: `user_id=eq.${user.id}`,
+        filter: `user_id=eq.${userId}`,
       }, (payload) => {
         addNotification(payload.new as any)
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [addNotification])
+  }, [userId, addNotification])
 
   return <>{children}</>
 }

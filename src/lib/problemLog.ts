@@ -100,7 +100,17 @@ function expected(url: URL, status: number, message: string, code?: string): boo
  * Dropped connections aren't logged; a phone losing signal isn't a bug.
  */
 export const problemLoggingFetch: typeof fetch = async (input, init) => {
-  const res = await fetch(input, init)
+  let res = await fetch(input, init)
+  // Just after the app refreshes someone's session (usually as it opens),
+  // the database can turn the new token away for a second as "issued at
+  // future". Nothing ran, so ask again shortly rather than fail the screen.
+  let waited = 0
+  for (const wait of [1000, 2000]) {
+    if (!(await issuedAtFuture(input, res))) break
+    await new Promise(r => setTimeout(r, wait))
+    waited += wait
+    res = await fetch(input, init)
+  }
   if (res.status < 400) return res
   try {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
@@ -115,8 +125,19 @@ export const problemLoggingFetch: typeof fetch = async (input, init) => {
         ...(body.code ? { code: body.code } : {}),
         ...(body.hint ? { hint: body.hint } : {}),
         ...(body.details ? { details: String(body.details).slice(0, 300) } : {}),
+        ...(waited ? { waited } : {}),
       })
     }
   } catch { /* logging must never break the request */ }
   return res
+}
+
+/** A database request turned away for a token "issued at future" (PGRST303), that can be sent again as it was. */
+async function issuedAtFuture(input: RequestInfo | URL, res: Response): Promise<boolean> {
+  // A Request's body can only be sent once; supabase-js sends a URL and options
+  if (res.status !== 401 || input instanceof Request) return false
+  try {
+    if (!new URL(String(input)).pathname.startsWith('/rest/v1/')) return false
+    return /issued at future/i.test(await res.clone().text())
+  } catch { return false }
 }

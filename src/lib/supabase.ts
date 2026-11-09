@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type User } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { problemLoggingFetch, startProblemLog } from './problemLog'
 
@@ -23,6 +23,22 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   // Requests the server refuses go to the problem log
   global: { fetch: problemLoggingFetch },
 })
+
+/**
+ * Who's signed in on this device, as supabase-js last saved it, read
+ * straight from storage so the app can open at once. The saved access
+ * token has usually expired by the time someone opens the app again;
+ * supabase-js refreshes it before answering anything, and holds every
+ * request until it has, so nothing goes out with the old one. Null if
+ * nobody's signed in (or it can't tell): the app waits for supabase-js.
+ */
+export function savedUser(): User | null {
+  try {
+    const key = (supabase.auth as unknown as { storageKey: string }).storageKey
+    const saved = JSON.parse(localStorage.getItem(key) ?? 'null')
+    return saved?.refresh_token && saved?.user?.id ? saved.user as User : null
+  } catch { return null }
+}
 
 // The problem log writes as the signed-in person (signed-out problems aren't kept)
 startProblemLog(async row => {

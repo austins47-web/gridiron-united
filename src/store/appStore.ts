@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase } from '@/lib/supabase'
+import { supabase, savedUser } from '@/lib/supabase'
 import { disablePush } from '@/lib/push'
 import type { Profile, League, LeagueMember, Notification } from '@/types/database'
 import type { User, Session } from '@supabase/supabase-js'
@@ -38,11 +38,15 @@ interface AppState {
   signOut: () => Promise<void>
 }
 
+// Someone signed in on this device opens straight into the app, without
+// waiting on their session to be refreshed first (see savedUser)
+const startingUser = typeof window !== 'undefined' ? savedUser() : null
+
 export const useAppStore = create<AppState>((set, get) => ({
-  user: null,
+  user: startingUser,
   session: null,
   profile: null,
-  authLoading: true,
+  authLoading: !startingUser,
   activeLeagueId: (typeof window !== 'undefined'
     ? localStorage.getItem('gu-active-league-id')
     : null),
@@ -55,7 +59,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     ? (localStorage.getItem('gu-theme') as 'dark' | 'light' | null) ?? 'dark'
     : 'dark'),
 
-  setUser: (user) => set({ user }),
+  // The same person, unchanged (an hourly token refresh, the saved user the
+  // app opened with), keeps the same object, so nothing re-runs for it
+  setUser: (user) => set(s => (
+    s.user && user && s.user.id === user.id && s.user.updated_at === user.updated_at ? {} : { user }
+  )),
   setSession: (session) => set({ session }),
   setProfile: (profile) => set({ profile }),
   setAuthLoading: (authLoading) => set({ authLoading }),

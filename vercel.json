@@ -4,6 +4,14 @@
       "includeFiles": "api/fonts/**"
     }
   },
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/join/:code",
@@ -14,7 +22,7 @@
       "destination": "https://sxktvztljzxcmhezphsq.supabase.co/functions/v1/calendar?token=:token"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/).*)",
       "destination": "/index.html"
     }
   ]
