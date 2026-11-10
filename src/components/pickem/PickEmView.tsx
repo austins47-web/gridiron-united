@@ -15,7 +15,7 @@ import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 import {
   computeWeek, computeStandings, computeWhoCanWin, isWeekComplete, tiebreakerTotal, isFinal, isVoid, winnerOf,
   computeWinOdds, computeUpsetWatch, computeBelt, keyInjuries, switchOutcome, beforeKickoff,
-  isLive, homeWinChance, gameClockLabel,
+  isLive, homeWinChance, gameClockLabel, computeShopCompass,
   type WeekRow, type InjuredStarter,
 } from './standings'
 import { useScoreTick } from '@/hooks/useScoreTick'
@@ -29,6 +29,7 @@ import { WinOddsPanel, UpsetWatchBanner, StakesPanel } from './WinOdds'
 import { BeltPanel, BeltIcon } from './Belt'
 import { useBeltHolders } from '@/hooks/useBeltHolders'
 import { SeasonAwardsPanel } from './SeasonAwards'
+import { ShopCompassPanel } from './ShopCompass'
 import { computeSeasonAwards } from './season'
 import { usePickemSeasonData, useLeagueMembersList } from '@/hooks/usePickemSeasonData'
 import { openPlayerCard } from '@/hooks/usePlayerCard'
@@ -324,6 +325,12 @@ function PickEmWeekView({ calendar, view }: { calendar: PickemCalendar; view: 'p
     () => (tab === 'standings' ? computeBelt(seasonGames as any, seasonPicks as any, leagueMembers as any) : null),
     [tab, seasonGames, seasonPicks, leagueMembers],
   )
+  // The Shop Compass: how everyone picks, the league on one chart
+  const compass = useMemo(
+    () => (tab === 'standings' ? computeShopCompass(seasonGames as any, seasonPicks as any, leagueMembers as any) : null),
+    [tab, seasonGames, seasonPicks, leagueMembers],
+  )
+  const avatarById = useMemo(() => new Map(standings.map(r => [r.userId, r.avatarUrl])), [standings])
   const beltHolders = useBeltHolders()
   const threadCounts = useThreadCounts(activeLeagueId)
   const [composingPin, setComposingPin] = useState(false)
@@ -1278,6 +1285,8 @@ function PickEmWeekView({ calendar, view }: { calendar: PickemCalendar; view: 'p
           />
 
           {belt && <BeltPanel belt={belt} currentUserId={user?.id} />}
+
+          {compass && <ShopCompassPanel compass={compass} currentUserId={user?.id} avatars={avatarById} onOpen={openPlayerCard} />}
 
           <SeasonAwardsPanel data={seasonAwards} />
         </div>

@@ -13,7 +13,7 @@ import { BeltIcon } from '@/components/pickem/Belt'
 import { useHolidayTheme, TV_MOMENTS, type HolidayTheme, type TvMoment } from '@/lib/holiday'
 import { HolidayPill, HolidayParticles } from '@/components/ui/Holiday'
 import { HolidayScene, PlayMoment, MOMENT_CSS, MOMENT_MS } from './HolidayScene'
-import { ACHIEVEMENTS } from '@/components/pickem/standings'
+import { ACHIEVEMENTS, compassCorner, compassXY, COMPASS_CORNERS, type CompassDot, type CompassSpot } from '@/components/pickem/standings'
 import { ACHIEVEMENT_ICONS } from '@/components/pickem/achievementIcons'
 import { TV_DUCK } from '@/components/conquest/Newsreel'
 import { readAloud } from '@/lib/readAloud'
@@ -66,6 +66,14 @@ interface TvSpotlight {
   twin: { name: string; agree: number } | null
   nemesis: { name: string; split: number; youRight: number; theyRight: number } | null
   beltWeeks: number[]
+}
+
+/** The Shop Compass (computeShopCompass), with everyone's picture. */
+interface TvCompass {
+  dots: (CompassDot & { avatarUrl: string | null })[]
+  center: CompassSpot
+  reach: CompassSpot
+  week: number
 }
 
 interface TvInjury { team: string; name: string; pos: string; status: 'out' | 'questionable' }
@@ -177,6 +185,7 @@ interface TvBoard {
   /** Who still owes picks, while any game can be picked. */
   shame?: { lockAt: string | null; open: number; rows: { name: string; missing: number; none: boolean; noTiebreaker: boolean }[] } | null
   spotlights?: TvSpotlight[]
+  compass?: TvCompass | null
   next_week?: { week: number; games: { away: string; home: string; kickoff: string; spread: number | null; total: number | null; homeChance: number }[] } | null
   injuries?: TvInjury[]
 }
@@ -1487,6 +1496,89 @@ function SpotlightCard({ p }: { p: TvSpotlight }) {
   )
 }
 
+/** The compass chart's size on the 1920×1080 board, and how far in a dot at the very edge sits. */
+const COMPASS_PX = 320
+const COMPASS_PAD = 18
+
+/**
+ * The Shop Compass: everyone's picture on one chart, favorites to
+ * underdogs across and home teams to road teams up and down, the
+ * league average in the middle. Each dot starts where it stood before
+ * the latest week and glides to where it is now (on still, it's just
+ * there); a thin line keeps the trail. The four corners list who's in
+ * them, furthest in first, since faces alone don't say who's who.
+ */
+function CompassCard({ c }: { c: TvCompass }) {
+  const still = useContext(StillFx)
+  const [moved, setMoved] = useState(still)
+  useEffect(() => {
+    if (still) return
+    const t = setTimeout(() => setMoved(true), 700)
+    return () => clearTimeout(t)
+  }, [still])
+  const px = (v: number) => COMPASS_PAD + ((v + 1) / 2) * (COMPASS_PX - 2 * COMPASS_PAD)
+  const spots = c.dots.map(d => ({ d, at: compassXY(d, c), was: d.before ? compassXY(d.before, c) : null }))
+  const corners = COMPASS_CORNERS.map(k => ({
+    k,
+    names: spots.filter(s => compassCorner(s.d, c.center) === k)
+      .sort((a, b) => Math.abs(b.at.x) + Math.abs(b.at.y) - (Math.abs(a.at.x) + Math.abs(a.at.y)))
+      .map(s => s.d.name),
+  }))
+  const half = COMPASS_PX / 2
+  return (
+    <div className="space-y-3">
+      <div className="relative mx-auto rounded-xl ring-2 ring-field-800 bg-field-950/60 overflow-hidden" style={{ width: COMPASS_PX, height: COMPASS_PX }}>
+        <svg width={COMPASS_PX} height={COMPASS_PX} className="absolute inset-0" aria-hidden>
+          <rect x={half} y={0} width={half} height={half} className="fill-field-800/60" />
+          <rect x={0} y={half} width={half} height={half} className="fill-field-800/60" />
+          <line x1={half} y1={0} x2={half} y2={COMPASS_PX} className="stroke-field-600" strokeWidth={1.5} strokeDasharray="6 6" />
+          <line x1={0} y1={half} x2={COMPASS_PX} y2={half} className="stroke-field-600" strokeWidth={1.5} strokeDasharray="6 6" />
+          {spots.map(({ d, at, was }) => was && (
+            <line key={d.userId} x1={px(was.x)} y1={px(-was.y)} x2={px(at.x)} y2={px(-at.y)} className="stroke-field-400" strokeWidth={1.5} />
+          ))}
+        </svg>
+        {COMPASS_CORNERS.map((k, i) => (
+          <span
+            key={k}
+            className={clsx('absolute font-cond font-bold uppercase tracking-[0.12em] text-[14px] text-field-400', i < 2 ? 'top-1.5' : 'bottom-1.5', i % 2 ? 'right-2.5' : 'left-2.5')}
+          >{k}</span>
+        ))}
+        {spots.map(({ d, at, was }) => {
+          const spot = moved || !was ? at : was
+          return (
+            <span
+              key={d.userId}
+              className="absolute left-0 top-0 w-[28px] h-[28px] rounded-full ring-2 ring-field-950 bg-field-700 overflow-hidden flex items-center justify-center text-[13px] font-black text-gold"
+              style={{
+                transform: `translate(${px(spot.x) - 14}px, ${px(-spot.y) - 14}px)`,
+                transition: still ? undefined : 'transform 1.8s ease-in-out',
+              }}
+            >
+              {d.avatarUrl ? <img src={d.avatarUrl} alt="" className="w-full h-full object-cover" /> : d.name[0]?.toUpperCase()}
+            </span>
+          )
+        })}
+      </div>
+      <div className="flex justify-between text-[14px] text-field-400">
+        <span>◀ Favorites</span>
+        <span>▲ Home · ▼ Road</span>
+        <span>Underdogs ▶</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {corners.map(({ k, names }) => (
+          <div key={k} className="rounded-lg border border-field-800 bg-field-950/40 px-2.5 py-1.5 min-w-0">
+            <p className="font-cond font-bold uppercase tracking-[0.12em] text-[14px] text-gold">{k}</p>
+            <p className="text-[14px] text-white leading-snug line-clamp-4">{names.length ? names.join(', ') : 'Nobody'}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-[14px] text-field-400 leading-snug">
+        The middle is the league average ({pct(c.center.favorites)} favorites, {pct(c.center.home)} home teams). Lines: how Week {c.week} moved everyone.
+      </p>
+    </div>
+  )
+}
+
 /**
  * Everyone's tiebreaker guess on a number line, with the tiebreaker
  * game's combined score climbing it live. Only once the guesses are
@@ -1798,6 +1890,9 @@ function panelsFor(b: TvBoard, spot: number): Panel[] {
         {l.basement.length > 0 && <Stat label="The basement" value={l.basement.map(x => `${x.name} ${rec(x)}`).join(' · ')} bad />}
       </div>
     ) })
+  }
+  if (b.compass && b.compass.dots.length >= 2) {
+    out.push({ key: 'compass', title: '🧭 The Shop Compass', body: <CompassCard c={b.compass} /> })
   }
   if (b.beats?.length) {
     out.push({ key: 'beats', title: '💔 Bad beats', body: (

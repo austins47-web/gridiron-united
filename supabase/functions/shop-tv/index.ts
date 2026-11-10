@@ -20,7 +20,7 @@ import {
   nflSeasonFor, isVoid, isFinal, isLive, computeWeek, computeWinOdds, recentSlateLabel, computeUpsetWatch, computeBelt,
   computeStandings, weekWinners, isWeekComplete, homeWinChance, gameClockLabel, winnerOf,
   computeWeekStats, describeWeekStats, computeWhoCanWin, computeBadBeats, computeAchievements, ACHIEVEMENTS,
-  computePickDNA, computePickMatches, keyInjuries, rankOf, tiebreakerTotal,
+  computePickDNA, computePickMatches, computeShopCompass, keyInjuries, rankOf, tiebreakerTotal,
   type Game, type Pick, type Member,
 } from '../_shared/pickemCore.ts'
 import { partsInZone, zonedTimeToUtc, stillPickable, weekDeadline } from '../_shared/pickLocks.ts'
@@ -471,6 +471,13 @@ serve(async (req) => {
       }
     })
 
+    // ── The Shop Compass: how everyone picks, the league on one chart ──
+    const shopCompass = computeShopCompass(seasonGames, lockedPicks, members)
+    const compass = shopCompass && {
+      ...shopCompass,
+      dots: shopCompass.dots.map(d => ({ ...d, avatarUrl: avatarOf.get(d.userId) ?? null })),
+    }
+
     // ── Next week, once this one's final ──
     const nextGames = complete
       ? games.filter(g => g.week === week + 1 && !isVoid(g)).sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime())
@@ -559,6 +566,7 @@ serve(async (req) => {
       board,
       shame,
       spotlights,
+      compass,
       next_week: nextWeek,
       injuries,
     })

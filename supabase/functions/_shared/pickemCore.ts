@@ -1664,3 +1664,78 @@ export function computePickMatches(games: Game[], picks: Pick[], members: Member
   const nemesis = [...matches].sort((a, b) => a.agree - b.agree || b.split - a.split)[0]
   return { twin, nemesis: nemesis.userId === twin.userId ? null : nemesis }
 }
+
+// ── The Shop Compass ──────────────────────────────────────────
+
+export interface CompassSpot {
+  /** Share of picks on the pregame favorite, 0–1. */
+  favorites: number
+  /** Share of picks on the home team, 0–1. */
+  home: number
+}
+
+export interface CompassDot extends CompassSpot {
+  userId: string
+  name: string
+  /** Where they stood before the latest week's games (null: not on the compass yet). */
+  before: CompassSpot | null
+}
+
+export interface ShopCompass {
+  dots: CompassDot[]
+  /** The league average: the middle of the compass. */
+  center: CompassSpot
+  /** How far each axis runs from the middle, each way. */
+  reach: CompassSpot
+  /** The latest week with a finished game; `before` is every week ahead of it. */
+  week: number
+}
+
+/** The compass never zooms in past ±6 points, so a hair's difference doesn't look like a mile. */
+const COMPASS_MIN_REACH = 0.06
+
+/**
+ * The whole league on one chart: favorites against underdogs one way,
+ * home teams against road teams the other, with the league average in
+ * the middle. It's Pick DNA's chalk and homer, from final games only,
+ * so every pick on it is public. Each dot also has where it stood
+ * before the latest week, to show who drifted. Anyone with too few
+ * picks to read is left off; null until two players are on it.
+ */
+export function computeShopCompass(games: Game[], picks: Pick[], members: Member[]): ShopCompass | null {
+  const finals = games.filter(g => !isVoid(g) && isFinal(g) && winnerOf(g) != null)
+  if (finals.length === 0) return null
+  const week = Math.max(...finals.map(g => g.week))
+  const spot = (p: PickDNA): CompassSpot | null =>
+    p.picks >= MIN_DNA_PICKS && p.chalk != null && p.homer != null ? { favorites: p.chalk, home: p.homer } : null
+  const now = computePickDNA(finals, picks, members)
+  const before = new Map(computePickDNA(finals.filter(g => g.week < week), picks, members).players
+    .map(p => [p.userId, spot(p)] as const))
+  const dots: CompassDot[] = now.players.flatMap(p => {
+    const s = spot(p)
+    return s ? [{ userId: p.userId, name: p.name.trim(), ...s, before: before.get(p.userId) ?? null }] : []
+  })
+  if (dots.length < 2) return null
+  const center = { favorites: now.league.chalk ?? 0.5, home: now.league.homer ?? 0.5 }
+  // Room for everyone, where they are and where they were
+  const reachOf = (k: keyof CompassSpot) => 1.1 * Math.max(COMPASS_MIN_REACH, ...dots.flatMap(d =>
+    [d[k], d.before?.[k]].filter((v): v is number => v != null).map(v => Math.abs(v - center[k]))))
+  return { dots, center, reach: { favorites: reachOf('favorites'), home: reachOf('home') }, week }
+}
+
+/** A spot's corner of the compass, against the league average: Home or Road, Chalk or Dogs. */
+export function compassCorner(s: CompassSpot, center: CompassSpot): string {
+  return `${s.home >= center.home ? 'Home' : 'Road'} ${s.favorites >= center.favorites ? 'Chalk' : 'Dogs'}`
+}
+
+/** The four corners, top left first (favorites left, home teams up). */
+export const COMPASS_CORNERS = ['Home Chalk', 'Home Dogs', 'Road Chalk', 'Road Dogs'] as const
+
+/** Where a spot sits on the compass, each axis −1 to 1: x toward the underdogs, y toward home teams. */
+export function compassXY(s: CompassSpot, c: { center: CompassSpot; reach: CompassSpot }): { x: number; y: number } {
+  const clamp = (v: number) => Math.max(-1, Math.min(1, v))
+  return {
+    x: clamp((c.center.favorites - s.favorites) / c.reach.favorites),
+    y: clamp((s.home - c.center.home) / c.reach.home),
+  }
+}
