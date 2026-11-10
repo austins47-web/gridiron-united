@@ -39,7 +39,8 @@
 //     second-half win chance, the score that decided it), from ESPN's
 //     game summary. Up to STORY_BATCH games per run; a game final
 //     before this existed also gets its pregame line from the summary.
-//     Backfill a past week with ?week=N.
+//     Backfill a past week with ?week=N (that also refills any of
+//     its finished games' lines from the summary).
 //
 // Query params:
 //   ?week=N       sync one week only (1–22)
@@ -149,12 +150,17 @@ serve(async (req) => {
   const errors: string[] = []
   let totalUpserted = 0
 
-  // The line stored so far — it freezes once a game kicks off
-  const { data: stored } = await supabase
+  // The line stored so far — it freezes once a game kicks off. ESPN has
+  // no line for a finished game, so writing without this would blank
+  // every finished game's line: a failed read stops the run
+  const { data: stored, error: storedErr } = await supabase
     .from('nfl_games')
     .select('espn_event_id, pregame_home_wp, spread, over_under')
     .eq('season', season)
     .in('week', targets.map(t => t.appWeek))
+  if (storedErr) {
+    return new Response(JSON.stringify({ ok: false, season, errors: [`stored lines: ${storedErr.message}`] }, null, 2), { status: 500, headers: CORS })
+  }
   type Line = { pregame_home_wp: number | null; spread: number | null; over_under: number | null }
   const storedLine = new Map<string, Line>((stored ?? []).map((r: Line & { espn_event_id: string }) => [String(r.espn_event_id), r]))
 
@@ -271,27 +277,32 @@ serve(async (req) => {
   }
 
   // Game stories for games that went final (and, for games final before
-  // stories existed, the pregame line ESPN keeps in the summary)
+  // stories existed, the pregame line ESPN keeps in the summary). A
+  // ?week=N or full run also refills a finished game's missing line,
+  // keeping the story it has
   let stories = 0
   if (!dryRun) {
-    const { data: needStory } = await supabase
+    const need = supabase
       .from('nfl_games')
-      .select('id, espn_event_id, home_team, away_team, home_score, away_score, pregame_home_wp')
+      .select('id, espn_event_id, home_team, away_team, home_score, away_score, pregame_home_wp, game_story')
       .eq('season', season)
       .in('week', targets.map(t => t.appWeek))
       .eq('status', 'final')
-      .is('game_story', null)
-      .limit(STORY_BATCH)
+    const { data: needStory } = await (oneWeek || fullSync
+      ? need.or('game_story.is.null,pregame_home_wp.is.null')
+      : need.is('game_story', null)
+    ).limit(STORY_BATCH)
     for (const g of needStory ?? []) {
       try {
         const res = await fetch(`${SUMMARY}?event=${g.espn_event_id}`, { headers: ESPN_HEADERS })
         if (!res.ok) { errors.push(`story ${g.espn_event_id}: ESPN ${res.status}`); continue }
         const d = await res.json()
-        const update: Record<string, unknown> = { game_story: gameStory(d, g) }
+        const update: Record<string, unknown> = g.game_story == null ? { game_story: gameStory(d, g) } : {}
         if (g.pregame_home_wp == null) {
           const line = pregameLine(d.pickcenter?.[0])
           if (line.pregame_home_wp != null) Object.assign(update, line)
         }
+        if (Object.keys(update).length === 0) continue
         const { error: stErr } = await supabase.from('nfl_games').update(update).eq('id', g.id)
         if (stErr) errors.push(`story ${g.espn_event_id}: ${stErr.message}`)
         else stories++
